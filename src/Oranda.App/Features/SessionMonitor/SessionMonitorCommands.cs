@@ -40,6 +40,9 @@ public static class SessionMonitorCommands
         "oranda.monitor.traceOff",
     ];
 
+    /// <summary>문맥 키: 보이는 세션의 DBMS 카탈로그에 <c>app.disconnect_session</c> 문장이 없으면 참(Tibero). 없는 키는 거짓이라 Oracle 동작은 그대로.</summary>
+    public const string NoDisconnectKey = "noDisconnectStatement";
+
     private static readonly ConditionalWeakTable<ContextKeyService, IDisposable> Attached = new();
 
     /// <summary>
@@ -161,7 +164,7 @@ public static class SessionMonitorCommands
     Placements = ["menu:monitor/detail@200", "context:monitor/detail@20"])]
 [OrandaCommand("oranda.monitor.killSession", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionSelected && canKillSession",
     Placements = ["menu:monitor/kill@210", "context:monitor/kill@30"])]
-[OrandaCommand("oranda.monitor.disconnectSession", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionSelected && canKillSession",
+[OrandaCommand("oranda.monitor.disconnectSession", CommandCategory.Monitor, When = "monitorFocus", Enablement = "monitorSessionSelected && canKillSession && !noDisconnectStatement",
     Placements = ["menu:monitor/disconnect@220", "context:monitor/disconnect@31"])]
 [OrandaCommand("oranda.monitor.traceOn", CommandCategory.Monitor, When = "monitorFocus", Enablement = "!unsupportedSessionTrace && monitorSessionSelected && canTraceSessions",
     Placements = ["menu:monitor/traceOn@230", "context:monitor/traceOn@40"])]

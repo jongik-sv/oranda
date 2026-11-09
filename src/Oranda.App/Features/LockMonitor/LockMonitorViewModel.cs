@@ -14,6 +14,7 @@ using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.ExecutionPlan;
 using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Shell;
+using Oranda.App.Shell.Features;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Language.Errors;
@@ -833,7 +834,8 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
             return Task.CompletedTask;
         }
 
-        if (DeadlockReason(current.Server.Version) is { } reason)
+        // 이 DBMS 에 데드락 기록 자체가 없으면(Tibero) 서버에 보내지 않고 이유만 보인다. NotSupportedException catch 는 마지막 방어선.
+        if ((DbmsFeatureKeys.Reason(current.Profile.Dbms, DbmsFeature.Deadlocks) ?? DeadlockReason(current.Server.Version)) is { } reason)
         {
             _deadlocksLoaded = true;
             Deadlocks.Clear();

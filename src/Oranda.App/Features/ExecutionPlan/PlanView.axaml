@@ -270,8 +270,8 @@
           <StackPanel x:Name="ReportTools" Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsReportToolbar}">
             <Button x:Name="ReportRefreshButton" Classes="toolbar" Content="보고서 새로 고침" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True"
                     IsEnabled="{Binding CanUseReport}" ToolTip.Tip="DBMS_SQLTUNE.REPORT_SQL_MONITOR 를 다시 읽습니다(SELECT, DB 에 쓰지 않음)" />
-            <Button x:Name="BrowserButton" Classes="tool" Content="브라우저로 열기" icons:ButtonIcon.Key="exportFile" IsEnabled="{Binding CanUseReport}"
-                    ToolTip.Tip="HTML 보고서를 임시 파일로 만들어 기본 브라우저로 엽니다" />
+            <Button x:Name="BrowserButton" Classes="tool" Content="브라우저로 열기" icons:ButtonIcon.Key="exportFile" IsEnabled="{Binding CanOpenReportInBrowser}"
+                    ToolTip.Tip="{Binding BrowserButtonTip}" />
             <Button x:Name="ReportCopyButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding IsReportReady}"
                     ToolTip.Tip="보고서 글을 클립보드에 복사" />
           </StackPanel>

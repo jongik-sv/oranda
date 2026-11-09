@@ -350,13 +350,20 @@ public sealed partial class ChildCursorsViewModel : ToolPanelViewModelBase, IDis
             rows = await tuning.GetChildCursorsAsync(session, sqlId, cts.Token).ConfigureAwait(true);
             if (rows.Count > 0)
             {
-                try
+                if (Oranda.App.Shell.Features.DbmsFeatureKeys.Reason(session.Profile.Dbms, Oranda.Core.Connection.DbmsFeature.SharedCursorReasons) is { } unsupported)
                 {
-                    reasons = await tuning.GetSharedCursorReasonsAsync(session, sqlId, cts.Token).ConfigureAwait(true);
+                    reasonError = unsupported; // 이 DBMS 에는 갈라진 사유 조회가 없다(Tibero) — 서버에 보내지 않고 이유만 보인다.
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+                else
                 {
-                    reasonError = FirstLine(ex.Message); // 사유를 못 읽어도 자식 목록은 보인다.
+                    try
+                    {
+                        reasons = await tuning.GetSharedCursorReasonsAsync(session, sqlId, cts.Token).ConfigureAwait(true);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+                    {
+                        reasonError = FirstLine(ex.Message); // 사유를 못 읽어도 자식 목록은 보인다.
+                    }
                 }
 
                 sqlText = await TrySqlTextAsync(session, rows[0], sqlId, cts.Token).ConfigureAwait(true);

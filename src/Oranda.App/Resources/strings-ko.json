@@ -322,6 +322,7 @@
   "Menu.disabled.lockWaiterSelected": "기다리는 세션(대기자)을 고르세요",
   "Menu.disabled.lockCanKillSession": "모니터 계정에 ALTER SYSTEM 권한이 필요합니다",
   "Menu.disabled.canQueryDdlLocks": "dba_ddl_locks 를 읽을 권한이 필요합니다",
+  "Menu.disabled.not.noDisconnectStatement": "이 DBMS 에는 연결 끊기(DISCONNECT) 문장이 없습니다. 세션 종료(Kill)를 쓰세요",
   "Menu.disabled.not.readOnlyDoc": "읽기 전용 문서에서는 쓸 수 없습니다",
   "Menu.disabled.not.readOnlySession": "읽기 전용 접속이나 조회 전용 Role 에서는 쓸 수 없습니다",
   "Menu.disabled.not.sessionBusy": "실행 중인 문장이 끝나야 쓸 수 있습니다",

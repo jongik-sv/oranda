@@ -98,7 +98,7 @@ public sealed partial class PlanViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsReportNoCursor), nameof(IsReportNoLicense), nameof(IsReportLoading), nameof(IsReportEmpty), nameof(IsReportError),
-        nameof(IsReportReady), nameof(CanUseReport))]
+        nameof(IsReportReady), nameof(CanUseReport), nameof(CanOpenReportInBrowser), nameof(BrowserButtonTip))]
     private PlanReportState _reportState;
 
     [ObservableProperty]
@@ -222,6 +222,16 @@ public sealed partial class PlanViewModel
 
     /// <summary>새로 고침·브라우저 단추를 켤 수 있는가(커서와 팩이 있음).</summary>
     public bool CanUseReport => ReportState is PlanReportState.Ready or PlanReportState.Empty or PlanReportState.Error;
+
+    /// <summary>HTML 보고서가 없는 DBMS(Tibero)면 그 이유, 아니면 null.</summary>
+    private string? HtmlReportReason => LastSession is { } s
+        ? Oranda.App.Shell.Features.DbmsFeatureKeys.Reason(s.Profile.Dbms, Oranda.Core.Connection.DbmsFeature.SqlMonitorReportHtml)
+        : null;
+
+    /// <summary>「브라우저로 열기」(HTML 보고서)를 켤 수 있는가: <see cref="CanUseReport"/> 이고 이 DBMS 에 HTML 보고서가 있어야 한다.</summary>
+    public bool CanOpenReportInBrowser => CanUseReport && HtmlReportReason is null;
+
+    public string BrowserButtonTip => HtmlReportReason is { } reason ? "HTML 보고서: " + reason : "HTML 보고서를 임시 파일로 만들어 기본 브라우저로 엽니다";
 
     public bool IsTreeToolbar => SelectedTabIndex is 0 or 1 or 2;
 
@@ -514,6 +524,12 @@ public sealed partial class PlanViewModel
         if (CurrentPlan?.Cursor is not { } cursor || LastSession is not { } session || !HasTuningPack(session))
         {
             ReportStatusText = "HTML 보고서는 실제 계획과 Tuning Pack 보유 선언이 있어야 합니다.";
+            return null;
+        }
+
+        if (HtmlReportReason is { } unsupported)
+        {
+            ReportStatusText = "HTML 보고서: " + unsupported; // 이 DBMS 의 보고서는 텍스트뿐(Tibero) — 서버에 보내지 않는다
             return null;
         }
 

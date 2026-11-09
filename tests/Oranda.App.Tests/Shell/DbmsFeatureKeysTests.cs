@@ -65,6 +65,37 @@ public class DbmsFeatureKeysTests
     }
 
     [Fact]
+    public void Trace_features_stay_off_on_tibero_and_on_for_oracle()
+    {
+        var keys = new ContextKeyService();
+        DbmsFeature[] traces = [DbmsFeature.SessionTrace, DbmsFeature.Tkprof, DbmsFeature.OptimizerTrace];
+        try
+        {
+            DbmsFeatureKeys.Apply(keys, Dbms.Tibero); // 10053·DBMS_MONITOR·TKPROF 가 Tibero 에 없다(P5c) — 켜려면 실측 근거가 필요
+            Assert.All(traces, f => Assert.False(keys.Evaluate(DbmsFeatureKeys.Enabled(f))));
+            DbmsFeatureKeys.Apply(keys, Dbms.Oracle);
+            Assert.All(traces, f => Assert.True(keys.Evaluate(DbmsFeatureKeys.Enabled(f))));
+        }
+        finally
+        {
+            DbmsFeatureKeys.Apply(keys, null);
+        }
+    }
+
+    [Theory]
+    [InlineData(DbmsFeature.SharedCursorReasons)]
+    [InlineData(DbmsFeature.PlanControls)]
+    [InlineData(DbmsFeature.Deadlocks)]
+    [InlineData(DbmsFeature.LiteralGroups)]
+    [InlineData(DbmsFeature.SqlMonitorReportHtml)]
+    public void Whole_feature_gaps_are_supported_on_oracle_and_explain_themselves_on_tibero(DbmsFeature feature)
+    {
+        Assert.Null(DbmsFeatureKeys.Reason(Dbms.Oracle, feature));
+        Assert.Equal(DbmsSupport.NotSupportedText(Dbms.Tibero), DbmsFeatureKeys.Reason(Dbms.Tibero, feature));
+        Assert.Equal("!unsupported" + feature, DbmsFeatureKeys.Enabled(feature));
+    }
+
+    [Fact]
     public void Command_enablement_literals_match_the_key_names()
     {
         Assert.Equal("!unsupportedSessionTrace", DbmsFeatureKeys.Enabled(DbmsFeature.SessionTrace));

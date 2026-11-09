@@ -262,6 +262,7 @@ public sealed partial class TuningRecommendationsViewModel : ObservableObject
         IsBusy = true;
         Exception? failure = null;
         TuningCandidateSet? set = null;
+        string? literalGroupsReason = null;
         var plans = new Dictionary<string, IReadOnlyList<PlanFindingLine>>(StringComparer.Ordinal);
         StatusText = "튜닝 추천: 공유 풀 통계를 읽는 중…";
         try
@@ -269,7 +270,9 @@ public sealed partial class TuningRecommendationsViewModel : ObservableObject
             var options = Options();
             await _owner.RunTuningAsync(async (tuning, session) =>
             {
-                set = await tuning.GetTuningCandidatesAsync(session, new TuningCandidateQuery(), ct);
+                // 이 DBMS 에 리터럴 묶음 조회가 없으면(Tibero) 서버에 묶음을 요청하지 않는다. 이유는 아래 상태 줄에 붙인다.
+                literalGroupsReason = Oranda.App.Shell.Features.DbmsFeatureKeys.Reason(session.Profile.Dbms, Oranda.Core.Connection.DbmsFeature.LiteralGroups);
+                set = await tuning.GetTuningCandidatesAsync(session, new TuningCandidateQuery { IncludeLiteralGroups = literalGroupsReason is null }, ct);
 
                 // 점수 상위 몇 개만 계획을 더 읽는다(부하 제한). 계획을 못 읽으면 계획 규칙만 건너뛴다.
                 foreach (var r in TuningRecommendationRules.Rank(set, options).Where(r => !r.Sql.IsLiteralGroup).Take(TuningRecommendationRules.PlanCheckCount))
@@ -308,6 +311,7 @@ public sealed partial class TuningRecommendationsViewModel : ObservableObject
             }
 
             _set = set;
+            _literalGroupsReason = literalGroupsReason;
             _plans.Clear();
             _extra.Clear();
             foreach (var p in plans)
@@ -399,8 +403,11 @@ public sealed partial class TuningRecommendationsViewModel : ObservableObject
         SelectedItem = (focus is not null ? Items.FirstOrDefault(i => i.SqlId == focus) : null)
             ?? (previous is { } k ? Items.FirstOrDefault(i => i.Key == k) : null);
         StatusText = string.Create(CultureInfo.InvariantCulture,
-            $"튜닝 추천 {ranked.Count}건 · 후보 {set.Rows.Count}줄·리터럴 묶음 {set.LiteralGroups.Count}개 중{(ExcludeInternal ? " · 내부 스키마 제외" : string.Empty)} · {DateTime.Now:HH:mm:ss} 조회");
+            $"튜닝 추천 {ranked.Count}건 · 후보 {set.Rows.Count}줄·{(_literalGroupsReason is { } reason ? $"리터럴 묶음 없음({reason})" : $"리터럴 묶음 {set.LiteralGroups.Count}개")} 중{(ExcludeInternal ? " · 내부 스키마 제외" : string.Empty)} · {DateTime.Now:HH:mm:ss} 조회");
     }
+
+    /// <summary>마지막 조회에서 이 DBMS 가 리터럴 묶음을 지원하지 않았다면 그 이유(Tibero). 지원하면 null.</summary>
+    private string? _literalGroupsReason;
 
     private bool Select(string sqlId)
     {

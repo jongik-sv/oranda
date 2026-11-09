@@ -178,6 +178,28 @@ public sealed class LockP2ViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Deadlock_tab_on_tibero_explains_instead_of_reading()
+    {
+        var caps = LockHarness.Dba;
+        var h = new LockHarness(caps);
+        var tibero = new ConnectionProfile("TB", "sys", "h:8629/tibero", Dbms: Dbms.Tibero) { Id = Guid.NewGuid() };
+        var session = new FakeLockSession(new ServerInfo("6.0", "tibero", "h", "tibero", "tibero", null, false, 1, caps), tibero);
+        var vm = new LockMonitorViewModel(h.Monitor, _ => Task.FromResult<Oranda.Core.Sessions.ISession?>(session))
+        {
+            PostToUi = a => a(),
+            StartAutoRefresh = false,
+        };
+        await vm.StartAsync();
+        vm.TopTabIndex = LockMonitorViewModel.DeadlockTab;
+        await Task.Yield();
+        Assert.Equal(0, h.Monitor.DeadlockCalls); // 서버에 보내지 않는다
+        Assert.True(vm.DeadlockUnsupported);
+        Assert.Equal(DbmsSupport.NotSupportedText(Dbms.Tibero), vm.DeadlockNotice);
+        Assert.False(vm.ShowNoDeadlocks);
+        Assert.False(vm.HasDeadlocks);
+    }
+
+    [Fact]
     public async Task No_deadlocks_shows_the_empty_screen()
     {
         var h = New();

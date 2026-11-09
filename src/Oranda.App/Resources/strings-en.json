@@ -322,6 +322,7 @@
   "Menu.disabled.lockWaiterSelected": "Select a waiting session",
   "Menu.disabled.lockCanKillSession": "The monitor account needs the ALTER SYSTEM privilege",
   "Menu.disabled.canQueryDdlLocks": "Requires the privilege to read dba_ddl_locks",
+  "Menu.disabled.not.noDisconnectStatement": "This DBMS has no DISCONNECT statement; use Kill Session instead",
   "Menu.disabled.not.readOnlyDoc": "Not available in a read-only document",
   "Menu.disabled.not.readOnlySession": "Not available on a read-only connection or with the viewer-only role",
   "Menu.disabled.not.sessionBusy": "Wait until the running statement finishes",

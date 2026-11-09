@@ -285,6 +285,7 @@ public sealed class ConnectionComboSwitchTests
         Assert.Same(tiberoTab, rig.Host.Active);
         var monitorOn = DbmsServiceKeys.Enabled(DbmsServiceArea.Monitor);
         var planOn = DbmsServiceKeys.Enabled(DbmsServiceArea.ExecutionPlan);
+        var noDisconnectOff = "!" + Oranda.App.Features.SessionMonitor.SessionMonitorCommands.NoDisconnectKey;
         try
         {
             Assert.True(keys.Evaluate(monitorOn)); // Oracle 탭
@@ -294,11 +295,13 @@ public sealed class ConnectionComboSwitchTests
             Assert.Same(current, rig.Fx.Service.ActiveSession); // 전용 세션 탭은 지금 접속을 바꾸지 않는다
             Assert.False(keys.Evaluate(monitorOn)); // 그래도 보이는 탭이 Tibero 라서 영역 키가 Tibero 기준
             Assert.False(keys.Evaluate(planOn));
+            Assert.False(keys.Evaluate(noDisconnectOff)); // DISCONNECT 문장이 카탈로그에 없는 DBMS 는 연결 끊기 메뉴가 꺼진다(P6)
 
             rig.Host.Active = oracleTab; // 활성 탭이 바뀌면 키도 따라간다(지금 접속은 처음부터 Oracle)
             Pump();
             Assert.True(keys.Evaluate(monitorOn));
             Assert.True(keys.Evaluate(planOn));
+            Assert.True(keys.Evaluate(noDisconnectOff)); // Oracle 은 그대로 켜짐
 
             rig.Host.Active = tiberoTab;
             Pump();

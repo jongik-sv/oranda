@@ -249,6 +249,12 @@ public sealed class TuningReportCollector
             return ReportPart<ReportCursors>.Fail(Reason(ex, en));
         }
 
+        if (children.Count > 0 && Oranda.App.Shell.Features.DbmsFeatureKeys.Reason(s.Profile.Dbms, DbmsFeature.SharedCursorReasons) is { } unsupported)
+        {
+            // 이 DBMS 에는 갈라진 사유 조회가 없다(Tibero) — 서버에 보내지 않고 이유만 적는다(자식 목록은 그대로).
+            return ReportPart<ReportCursors>.Ok(new ReportCursors(children, []) { ReasonsFailure = unsupported });
+        }
+
         try
         {
             var reasons = children.Count == 0 ? [] : await _tuning.GetSharedCursorReasonsAsync(s, sqlId, ct).ConfigureAwait(true);

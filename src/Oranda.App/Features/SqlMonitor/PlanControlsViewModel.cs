@@ -24,6 +24,9 @@ public enum PlanControlsState
     /// <summary>dba_sql_* 를 읽을 권한이 없다고 서버가 알렸다.</summary>
     Denied,
     Error,
+
+    /// <summary>이 DBMS 에는 계획 관리 보기가 없다(Tibero). 서버에 보내지 않고 이유만 보인다.</summary>
+    Unsupported,
 }
 
 /// <summary>
@@ -65,7 +68,7 @@ public sealed partial class PlanControlsViewModel : ObservableObject
 
     public bool IsDenied => State == PlanControlsState.Denied;
 
-    public bool HasMessage => State is PlanControlsState.NoSession or PlanControlsState.NoSql or PlanControlsState.Empty or PlanControlsState.Error;
+    public bool HasMessage => State is PlanControlsState.NoSession or PlanControlsState.NoSql or PlanControlsState.Empty or PlanControlsState.Error or PlanControlsState.Unsupported;
 
     /// <summary>표 아래 줄(출처·보기만).</summary>
     public string SourceText => _loadedFor is null
@@ -189,6 +192,14 @@ public sealed partial class PlanControlsViewModel : ObservableObject
             Message = "모니터 세션이 열려 있지 않습니다";
             HintText = "SQL 모니터를 열면 고른 SQL 에 걸린 Profile·Baseline·Patch 를 볼 수 있습니다.";
             State = PlanControlsState.NoSession;
+            return false;
+        }
+
+        if (Oranda.App.Shell.Features.DbmsFeatureKeys.Reason(_owner.MonitorSession.Profile.Dbms, Oranda.Core.Connection.DbmsFeature.PlanControls) is { } unsupported)
+        {
+            Message = "계획 관리 보기를 지원하지 않습니다";
+            HintText = unsupported;
+            State = PlanControlsState.Unsupported;
             return false;
         }
 

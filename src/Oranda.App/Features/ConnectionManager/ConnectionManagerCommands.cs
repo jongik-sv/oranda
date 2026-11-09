@@ -98,6 +98,10 @@ public static class ConnectionManagerCommands
         var dbms = shown?.Profile.Dbms;
         Shell.Features.DbmsFeatureKeys.Apply(keys, dbms);
         Shell.Features.DbmsServiceKeys.Apply(keys, services, dbms);
+
+        // 「연결 끊기(DISCONNECT)」: 그 DBMS 카탈로그에 문장이 없으면(Tibero) 메뉴를 끄고 이유를 보인다(Kill 로 바꾸지 않는다, t4-decision Q2).
+        keys.Set(SessionMonitor.SessionMonitorCommands.NoDisconnectKey,
+            shown is { Profile.Dbms: not Oranda.Core.Connection.Dbms.Oracle } && SessionMonitor.SessionMonitorCommands.DisconnectStatement(services, shown, new Oranda.Core.Monitoring.SessionKey(1, 1, 1), immediate: false, rac: false) is null);
     }
 
     /// <summary>
