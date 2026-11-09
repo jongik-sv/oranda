@@ -61,15 +61,16 @@
                 <Grid ColumnDefinitions="34,240,70,*" Opacity="{Binding IsAdded, Converter={x:Static dc:TableFinderWindow.AddedOpacity}}">
                   <CheckBox Grid.Column="0" HorizontalAlignment="Center" IsChecked="{Binding IsChecked, Mode=TwoWay}" IsEnabled="{Binding CanCheck}"
                             AutomationProperties.Name="{Binding Name}" />
-                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="6,0">
+                  <!-- 긴 이름은 칸 안에서 말줄임(가로 StackPanel 은 폭을 묶지 않아 유형 칸을 덮었다). 「이미 있음」은 칸 오른쪽. -->
+                  <DockPanel Grid.Column="1" Margin="6,0" ToolTip.Tip="{Binding Name}">
+                    <Border DockPanel.Dock="Right" IsVisible="{Binding IsAdded}" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1" CornerRadius="8"
+                            Padding="6,0" Margin="6,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Classes="added-chip" Text="이미 있음" />
+                    </Border>
                     <TextBlock Classes="mono" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                       <Run Text="{Binding NameBefore}" /><Run Classes="hit" Text="{Binding NameMatch}" /><Run Text="{Binding NameAfter}" />
                     </TextBlock>
-                    <Border IsVisible="{Binding IsAdded}" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1" CornerRadius="8"
-                            Padding="6,0" VerticalAlignment="Center">
-                      <TextBlock Classes="added-chip" Text="이미 있음" />
-                    </Border>
-                  </StackPanel>
+                  </DockPanel>
                   <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Center" Text="{Binding TypeText}" Opacity="0.75" />
                   <TextBlock Grid.Column="3" Padding="6,0,10,0" VerticalAlignment="Center" Text="{Binding Comment}" TextTrimming="CharacterEllipsis"
                              ToolTip.Tip="{Binding Comment}" />

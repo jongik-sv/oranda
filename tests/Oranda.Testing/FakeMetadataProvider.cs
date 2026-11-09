@@ -33,10 +33,21 @@ public sealed class FakeMetadataProvider : IMetadataProvider
     /// <summary>닫아 두면 객체 목록 조회가 열릴 때까지 끝나지 않는다(느린 첫 조회 흉내). 취소 토큰은 지킨다.</summary>
     public TaskCompletionSource? ListObjectsGate { get; set; }
 
+    /// <summary>마지막 객체 목록 조회 조건.</summary>
+    public ObjectQuery? LastObjectQuery { get; private set; }
+
+    /// <summary>계정 → (표 이름 → 테이블 명). 없는 계정은 빈 사전.</summary>
+    public Dictionary<string, Dictionary<string, string>> Comments { get; } = new(StringComparer.Ordinal);
+
+    public Task<IReadOnlyDictionary<string, string>> ListTableCommentsAsync(ISession s, string owner, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyDictionary<string, string>>(
+            Comments.TryGetValue(owner, out var byName) ? byName : new Dictionary<string, string>(StringComparer.Ordinal));
+
     public async Task<IReadOnlyList<DbObjectRef>> ListObjectsAsync(ISession s, ObjectQuery q, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(q);
         ListObjectsCalls++;
+        LastObjectQuery = q;
         if (ListObjectsGate is { } gate)
         {
             await gate.Task.WaitAsync(ct).ConfigureAwait(false);
