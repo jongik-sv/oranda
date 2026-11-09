@@ -599,9 +599,14 @@ public sealed partial class PlanViewModel
         }
     }
 
+    /// <summary>이번 계획의 0 이던 실제 열을 가렸다면 그 이유(<see cref="PlanActuals"/>). 아니면 null. <see cref="Apply"/> 직전에 정한다.</summary>
+    private string? _actualsNotice;
+
     /// <summary><see cref="Apply"/> 끝에서 부른다: 띠·그래프·보고서 상태를 새 계획에 맞춘다.</summary>
     private void AfterApply(CorePlan plan)
     {
+        var actualsNotice = _actualsNotice;
+        _actualsNotice = null; // 이번 Apply 한 번만 쓴다(직접 Apply 를 부르는 길에 남지 않게)
         IsEstimated = plan.Cursor is null;
         ShowStatisticsBand = NeedsStatisticsBand(plan);
         _collapsed = PlanGraphLayout.InitialCollapsed(plan.Steps);
@@ -632,7 +637,7 @@ public sealed partial class PlanViewModel
         }
         else if (ShowStatisticsBand)
         {
-            StatusText += " · A-Rows 없음(statistics_level = TYPICAL)";
+            StatusText += " · " + (actualsNotice ?? "A-Rows 없음(statistics_level = TYPICAL)");
             var last = ResolveLastStatement(); // 먼저 부른다: 새로 실행한 문장이면 자동 재실행 표시를 지운 뒤 아래 조건을 본다
             if (AlwaysHint && !_autoRerunTried && !IsRerunning && (last ?? CurrentStatement?.Invoke()) is { } stmt)
             {

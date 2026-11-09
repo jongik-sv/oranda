@@ -21,7 +21,7 @@ namespace Oranda.App.Features.Tuning.Trace;
 /// </summary>
 [OrandaCommand("oranda.tuning.optimizerTrace", CommandCategory.Sql, When = "sqlDocFocus", Enablement = "!unsupportedOptimizerTrace && !noImplTuning && hasSession && !sessionBusy",
     Icon = "bug", Placements = ["menu:tuning/optimizerTrace@310"])]
-[OrandaCommand("oranda.tuning.traceViewer", CommandCategory.Sql, Enablement = "hasSession && !noImplTuning",
+[OrandaCommand("oranda.tuning.traceViewer", CommandCategory.Sql, Enablement = "!unsupportedSessionTrace && hasSession && !noImplTuning",
     Icon = "console", Placements = ["menu:tuning/traceViewer@320"])]
 public sealed class TraceCommandHandler : ICommandHandler
 {

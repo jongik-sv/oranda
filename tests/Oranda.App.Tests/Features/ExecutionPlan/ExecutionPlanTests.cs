@@ -81,7 +81,8 @@ public class ExecutionPlanTests
     {
         public Guid Id => Guid.Empty;
 
-        public ConnectionProfile Profile => throw new NotSupportedException();
+        // ShowCursorAsync 가 DBMS 를 보려고 Profile 을 읽는다(P6b) — 기본 프로필은 Oracle.
+        public ConnectionProfile Profile { get; } = new("fake", "u", "h:1521/s");
 
         public ServerInfo Server => throw new NotSupportedException();
 
