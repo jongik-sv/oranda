@@ -415,3 +415,12 @@
 - **Risk**: plain http 서버면 값이 암호화 없이 사내망을 지나므로 화면에 경고한다. 민감 열 판단은 열 이름 기준이고, SQL 문장·주석에 직접 쓴 값은 열과 관계없이 그대로 간다. 대화 창에 입력한 글은 원래 가리지 않는다. Anthropic 형식 프로필은 claude 실행 파일을 거치므로 가리지 않은 값이 그 PC 의 대화 기록에 남을 수 있고, 저장한 레포트에도 문장의 값이 들어간다.
 - **Reversible**: yes(`IsLocalAi` 가 거짓을 돌려주면 모든 경로가 예전 동작으로 돌아간다. 설정 파일의 `localAiConfirmedUrl` 은 남아도 해가 없다)
 - **Source**: 사용자 결정 2026-11-05. 관련: D-039(시스템 CLI 의 운영 접속)
+
+## D-046 (2026-11-09T08:00:00Z)
+- **Phase**: 회차 밖(Tibero 지원)
+- **Decision needed**: PRD D-03 「Tibero 지원 안 함」(2026-10-19)을 유지할지
+- **Decision made**: Tibero 를 지원한다. 범위 = Oracle 과 같은 수준 전체(접속, 편집·실행·취소, 스키마 브라우저, 실행 계획, 모니터, 튜닝, 데이터 복사·내보내기·가져오기). 대상 버전 = Tibero 6(시험 서버 6.2.15)과 Tibero 7. 접속은 TmaxTibero 의 .NET 공급자 TDP.NET Core(`Tibero.DataAccess`, 관리 코드)로 한다. 접속 프로필에 DBMS 종류를 두고, 기능마다 DBMS 별 지원 여부를 보인다. 사용자가 드라이버를 따로 설치하거나 지정하지 않아도 되게 한다(사용자 요청). 설계와 단계 = `docs/design/tibero.md`
+- **Rationale**: 사용자 결정 2026-11-09. 국내 사용처에서 Oracle 과 Tibero 를 함께 쓰며, 지금은 JDBC 도구를 따로 쓴다
+- **Risk**: TDP.NET 은 nuget.org 에 없고 tibero.com 로그인 뒤에 받는다. 재배포 조건이 확인되지 않았다(배포본에 넣기 전에 확인 필요). 문서상 지원 OS 는 Windows 뿐이라 macOS arm64 는 실측해야 한다. CI 용 공개 Tibero 컨테이너가 없다
+- **Reversible**: yes(DBMS 종류가 Oracle 인 프로필은 지금 동작 그대로. Tibero 공급자 어셈블리를 빼면 Oracle 전용으로 돌아간다)
+- **Source**: 사용자 결정 2026-11-09(Mac 조정 세션 전달, win30 진행). 관련: PRD D-03
