@@ -55,6 +55,47 @@ public class TiberoEmbeddedCatalogTests
         Assert.Contains("@PFX@_users", merged.Get("meta.schemas", 7, Dbms.Tibero).Sql, StringComparison.Ordinal);
     }
 
+    private const string OverloadRule =
+        "CASE WHEN COUNT(*) OVER (PARTITION BY p.owner, p.object_name, p.procedure_name) > 1 " +
+        "THEN TO_CHAR(ROW_NUMBER() OVER (PARTITION BY p.owner, p.object_name, p.procedure_name ORDER BY p.member_no)) END";
+
+    [Fact]
+    public void Procedures_and_arguments_number_overloads_by_the_same_rule_and_arguments_end_with_subprogram_id()
+    {
+        // 멤버(procedures)와 인자(arguments)가 (이름, overload) 로 묶이려면 두 문장이 overload 를 같은 식으로 만들어야 한다.
+        var catalog = TiberoEmbeddedCatalog.Load();
+        var procedures = Normalize(catalog.Get("meta.procedures", 6, Dbms.Tibero).Sql);
+        var arguments = Normalize(catalog.Get("meta.arguments", 6, Dbms.Tibero).Sql);
+
+        Assert.Contains(OverloadRule, procedures, StringComparison.Ordinal);
+        Assert.Contains(OverloadRule, arguments, StringComparison.Ordinal);
+        Assert.Contains("p.member_no AS subprogram_id, o.object_type FROM", procedures, StringComparison.Ordinal);
+        Assert.Contains("a.overload AS subprogram_id FROM all_arguments a", arguments, StringComparison.Ordinal); // 맨 끝 열
+        Assert.DoesNotContain("a.overload,", arguments[..arguments.IndexOf("FROM all_arguments", StringComparison.Ordinal)], StringComparison.Ordinal); // 원래 번호를 overload 로 내지 않는다
+    }
+
+    [Fact]
+    public void Objects_by_prefix_filters_like_objects_and_takes_pattern_and_max_rows()
+    {
+        var catalog = TiberoEmbeddedCatalog.Load();
+        var byPrefix = catalog.Get("meta.objects_by_prefix", 6, Dbms.Tibero);
+        var objects = catalog.Get("meta.objects", 6, Dbms.Tibero);
+
+        Assert.Equal(Dbms.Tibero, byPrefix.Header.Dbms);
+        Assert.Contains("LIKE :pattern ESCAPE '\\'", byPrefix.Sql, StringComparison.Ordinal);
+        Assert.Contains("ROWNUM <= :max_rows", byPrefix.Sql, StringComparison.Ordinal);
+        Assert.Contains("@PFX@_objects", byPrefix.Sql, StringComparison.Ordinal);
+
+        // 같은 객체 집합: 제외하는 유형·이름 조건이 meta.objects 와 같다.
+        var exclusion = Normalize(byPrefix.Sql);
+        var start = exclusion.IndexOf("o.object_type NOT IN", StringComparison.Ordinal);
+        var end = exclusion.IndexOf("ORDER BY", start, StringComparison.Ordinal);
+        Assert.True(start > 0 && end > start);
+        Assert.Contains(exclusion[start..end].Trim(), Normalize(objects.Sql), StringComparison.Ordinal);
+    }
+
+    private static string Normalize(string sql) => System.Text.RegularExpressions.Regex.Replace(sql, @"\s+", " ").Trim();
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
