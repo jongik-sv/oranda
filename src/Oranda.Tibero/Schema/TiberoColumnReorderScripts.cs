@@ -23,9 +23,9 @@ internal sealed class TiberoColumnReorderScripts : IColumnReorderScripts
     /// <summary>
     /// 다시 만들기 스크립트를 Tibero 서버로 실측했는가. 다시 만들기는 <c>DependentPart</c> 로 표의 종속 객체 DDL(제약·인덱스·트리거·권한·주석, D2b)을 떼어
     /// CTAS 로 만든 새 표에 다시 붙이고 <c>ALTER TABLE … RENAME TO</c>·<c>MODIFY (… DEFAULT …)</c>·가상 열 <c>ADD (… AS (…))</c> 를 쓴다.
-    /// 이 문장들과 종속 객체 옮기기를 쓰기 IT 로 확인하기 전까지는 false(표 정의를 잃을 수 있는 작업이라 막는다). 실측 IT 가 통과하면 true 로 바꾼다.
+    /// 이 문장들과 종속 객체 옮기기는 Tibero 6 서버에서 <c>TiberoColumnReorderRebuildIt</c>(D4b)로 실측했다(표 정의를 잃을 수 있는 작업이라 실측 전에는 막았다).
     /// </summary>
-    internal const bool DependentDdlReady = false;
+    internal const bool DependentDdlReady = true;
 
     internal const string InvisibleNotSupported = "Tibero 는 INVISIBLE 열 DDL 을 아직 확인하지 못해 이 방식을 쓰지 않는다. 다시 만들기(방식 ②)를 쓴다";
 
