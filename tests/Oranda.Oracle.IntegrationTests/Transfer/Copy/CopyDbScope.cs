@@ -114,8 +114,38 @@ internal sealed class CopyDbScope : IAsyncDisposable
     public Task<ISession> OpenUserAsync(string user, ConnectionEnvironment env, bool readOnly = false)
         => OpenAsync(user, $"cp-{Tag}-{user}-{env}".ToUpperInvariant(), env, readOnly);
 
+    /// <summary>
+    /// 마지막 DDL 뒤 세션을 열기까지 기다리는 시간. 복사는 원본을 <c>SET TRANSACTION READ ONLY</c> 로 읽는데, DDL 시각→SCN 대응이 초 단위라
+    /// 방금 만든(바꾼) 표는 몇 초 동안 ORA-01466 으로 읽지 못한다(서버 규칙, 26ai·11.2 에서 CREATE TABLE 뒤 1~2초 잼, CI 는 더 느릴 수 있다).
+    /// </summary>
+    private static readonly TimeSpan DdlSettle = TimeSpan.FromSeconds(3);
+
+    private long _lastDdl;
+
+    private static bool IsDdl(string sql) =>
+        System.Text.RegularExpressions.Regex.IsMatch(sql, @"^\s*(CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE|RENAME|COMMENT)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private void NoteDdl(string sql)
+    {
+        if (IsDdl(sql))
+        {
+            _lastDdl = System.Diagnostics.Stopwatch.GetTimestamp();
+        }
+    }
+
+    // 마지막 DDL 뒤 DdlSettle 이 지나지 않았으면 남은 만큼 기다린다(그 뒤에 여는 읽기 전용 트랜잭션이 ORA-01466 을 내지 않게).
+    private async Task SettleAfterDdlAsync()
+    {
+        if (_lastDdl != 0 && System.Diagnostics.Stopwatch.GetElapsedTime(_lastDdl) is var since && since < DdlSettle)
+        {
+            await Task.Delay(DdlSettle - since);
+        }
+    }
+
     private async Task<ISession> OpenAsync(string user, string name, ConnectionEnvironment env, bool readOnly)
     {
+        await SettleAfterDdlAsync();
         var profile = new ConnectionProfile(name, user, _dataSource, Environment: env, ReadOnly: readOnly);
         using var cred = new SecureCredential(Password);
         return await _manager.OpenAsync(profile, cred, SessionPurpose.Dedicated, default);
@@ -159,6 +189,7 @@ internal sealed class CopyDbScope : IAsyncDisposable
     {
         await using var conn = await OpenAdminAsync();
         await ExecAsync(conn, sql);
+        NoteDdl(sql);
     }
 
     /// <summary>원본 소유자 스키마에 표를 만든다. <paramref name="columns"/> 는 괄호 안의 열·제약 정의.</summary>
@@ -242,6 +273,7 @@ internal sealed class CopyDbScope : IAsyncDisposable
         await using var conn = new ConnectionProfile("direct", user, _dataSource).CreateConnection(Password);
         await conn.OpenAsync();
         await ExecAsync(conn, sql);
+        NoteDdl(sql);
     }
 
     private static async Task ExecAsync(OracleConnection conn, string sql)
