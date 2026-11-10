@@ -30,7 +30,7 @@
 | D12 [제품] | Recreate 교차 | Tibero→Oracle 만. Oracle→Tibero 는 막힘 유지(`RecreateBlockedReason`). |
 | D13 | 문자셋(Tibero CP949) | XC5 실측: 시험 DB 는 UTF-8 이라 손실이 없었다. 클라이언트 인코딩 검사는 하지 않고 안내만 한다(`CrossCharset`). CP949 DB 에서의 동작은 미실측. |
 | D14 [제품] | 앱 진입 | 「DBMS 다름」 막음을 「지원 쌍 아님」으로 바꿨다(`DataCopyServices.IsPairSupported`: 같은 DBMS 는 항상 참, 다른 DBMS 는 Oracle↔Tibero 이고 두 DBMS 의 교차 부품이 등록돼 있을 때 참). Tibero 활성 세션에서도 메뉴를 켠다. |
-| D15 | 등록 | 초안(XC10 녹색 뒤 한꺼번에 등록)에서 바뀜. XC0 이 Tibero 대량 실행(`TiberoBulkExecutionService`)·복사 실행기·사전 점검을 `Dbms.Tibero` 키로 먼저 등록했다(Tibero→Tibero 를 켜기 위해). 교차 부품 `TiberoCopyParts`(`ICopyDbmsParts`)의 키 등록은 XC11 이 교차 IT 통과 뒤에 한다(`[OrandaService(typeof(ICopyDbmsParts), Dbms = Dbms.Tibero)]`). 등록 뒤 앱에서 Oracle↔Tibero 쌍이 열리고, 그 전에는 앱에서 교차 쌍이 막힌다. |
+| D15 | 등록 | 초안(XC10 녹색 뒤 한꺼번에 등록)에서 바뀜. XC0 이 Tibero 대량 실행(`TiberoBulkExecutionService`)·복사 실행기·사전 점검을 `Dbms.Tibero` 키로 먼저 등록했다(Tibero→Tibero 를 켜기 위해). 교차 부품 `TiberoCopyParts`(`ICopyDbmsParts`)의 키 등록은 XC11 이 교차 IT 통과 뒤에 했다(`[OrandaService(typeof(ICopyDbmsParts), Dbms = Dbms.Tibero)]`). 등록 뒤 앱에서 Oracle↔Tibero 쌍이 열린다. |
 | D16 | 문서 | 공개 설명서(`site/` 아래)·릴리스 노트에 Tibero·교차 복사 언급 없음(기록된 결정). 이 문서와 `docs/user/tibero.md`(사내)만 쓴다. |
 | D17 | 길이 0 BLOB → Tibero | 길이 0 BLOB 은 Tibero 에서 NULL 이 된다. 받아들이고, 복사 열에 BLOB 이 있으면 사전 점검(`BlobEmptyToNull`, 통과 항목)으로 안내한다. |
 | D18 | 같은 DB 판정 | DBMS 가 다르면 DbKey 비교 전에 다른 DB 로 본다. |

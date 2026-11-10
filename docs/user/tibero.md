@@ -40,7 +40,6 @@ Tibero 드라이버(TDP.NET Core, `Tibero.DataAccess.dll`)는 TmaxTibero 라이�
 
 - 쌍: Oracle→Tibero, Tibero→Oracle, Tibero→Tibero. 그 밖의 다른 DBMS 쌍은 「복사할 수 없습니다」 안내가 나오고 막힙니다.
 - Tibero→Tibero 는 같은 DBMS 끼리라 값을 바꾸지 않고 그대로 옮깁니다. Oracle→Oracle 복사 동작도 바뀌지 않았습니다.
-- Oracle↔Tibero 는 Tibero 쪽 복사 부품이 앱에 등록돼야 열립니다. 등록되기 전에는 Oracle↔Tibero 쌍을 고르면 「복사할 수 없습니다」 안내가 나오고 사전 점검·실행이 막힙니다(Tibero→Tibero 는 이미 됩니다).
 - 「없으면 만들기」: 대상에 테이블이 없으면 원본 구조로 만든 뒤 넣습니다(양방향 범위).
 - 「테이블 다시 만들기」: **Tibero→Oracle 만** 됩니다. Oracle→Tibero 는 막힙니다. 옛 테이블을 지운 뒤 새 테이블을 만들지 못하면(이름 충돌 등) 그 자리에서 휴지통에서 되살려 옛 테이블과 데이터를 그대로 돌려놓고 결과에 알립니다(같은 DBMS 끼리의 다시 만들기도 같습니다).
 - 한 번에 읽고 쓰다가 배치가 실패하면 한 행씩 다시 넣는 방식, 실패 행 기록·재시도, 중지는 같은 DBMS 복사와 같습니다.

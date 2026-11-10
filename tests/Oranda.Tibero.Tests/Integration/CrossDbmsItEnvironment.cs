@@ -32,7 +32,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// 없으면 「건너뜀」, <c>ORANDA_IT_REQUIRE=1</c> 이면 실패한다.</item>
 /// <item>Oracle 쪽 표는 시험마다 만드는 임시 사용자(<c>ORA_XC10_…</c>) 소유이고 끝에 사용자째 지운다. Tibero 쪽 표·시퀀스는 <c>ORT_</c> 이름만 쓰고
 /// 처음과 끝에 <c>DROP … PURGE</c> 한다. 복사 표 이름은 두 쪽이 같다(복사는 같은 이름 표로 넣는다).</item>
-/// <item>부품 구성: Tibero 의 <see cref="ICopyDbmsParts"/> 키 등록은 뒤 항목(XC11)이라 디스패처(<c>CopyRunnerDispatcher</c>)를 거치지 않고
+/// <item>부품 구성: Tibero 의 <see cref="ICopyDbmsParts"/> 키 등록은 XC11 이 했지만 이 시험은 디스패처(<c>CopyRunnerDispatcher</c>)를 거치지 않고
 /// <see cref="CopyRunner"/>·<see cref="CopyPrecheckService"/> 에 원본 벌·대상 벌을 직접 넣는다. 대량 실행·실행 엔진·메타데이터는 앱 조립처럼
 /// 키 없는 디스패처(세션 DBMS 로 고름)에 두 DBMS 구현을 꽂은 <see cref="DbmsServiceTable"/> 을 준다. Oracle 구현은 internal 이라 형식 이름으로 만든다.</item>
 /// <item>접속 정보(주소·계정·비밀번호·DB 이름)는 어디에도 찍지 않는다. 관찰 줄·단언 메시지는 <see cref="Scrub"/> 을 거친다.</item>
