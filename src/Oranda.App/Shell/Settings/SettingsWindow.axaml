@@ -301,7 +301,7 @@
 
       <TabItem Header="{Binding Strings[tab.history]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+          <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
             <TextBlock Grid.Row="0" Text="{Binding Strings[history]}" />
             <CheckBox Grid.Row="0" Grid.Column="1" Content="{Binding Strings[historyOn]}" IsChecked="{Binding HistoryEnabled}" />
             <TextBlock Grid.Row="1" Text="{Binding Strings[binds]}" />
@@ -315,6 +315,9 @@
             <TextBlock Grid.Row="4" Text="{Binding Strings[cache]}" />
             <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="1" Maximum="365" Increment="1" FormatString="0"
                            Value="{Binding CacheRetentionDays}" AutomationProperties.Name="{Binding Strings[cacheName]}" />
+            <TextBlock Grid.Row="5" Text="{Binding Strings[listMaxAge]}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="0" Maximum="365" Increment="1" FormatString="0"
+                           Value="{Binding ObjectListMaxAgeDays}" AutomationProperties.Name="{Binding Strings[listMaxAgeName]}" />
           </Grid>
         </ScrollViewer>
       </TabItem>

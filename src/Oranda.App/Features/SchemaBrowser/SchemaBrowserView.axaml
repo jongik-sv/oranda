@@ -45,7 +45,13 @@
                    VerticalAlignment="Bottom" AutomationProperties.Name="객체 목록을 읽는 중" />
     </Panel>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
-      <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+      <DockPanel>
+        <!-- 목록 기준 시각(객체 목록 캐시를 서버에서 마지막으로 받은 때). 갱신되면 바뀐다. -->
+        <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" Opacity="0.7" Text="{Binding ListBaseTimeText}"
+                   IsVisible="{Binding ListBaseTimeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   ToolTip.Tip="스키마 브라우저 객체 목록을 서버에서 마지막으로 받은 때(로컬 시각). 유형 범주(함수 등)에서 F5 를 누르면 그 유형만 바로 다시 받는다" />
+        <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
     </Border>
     <!-- 위: 객체 트리 / 아래: 고른 객체의 속성(오렌지 Property 창). 나누기 막대로 높이를 바꾼다. -->
     <Grid RowDefinitions="*,Auto,240">

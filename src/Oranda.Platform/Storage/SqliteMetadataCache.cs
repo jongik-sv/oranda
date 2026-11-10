@@ -195,9 +195,21 @@ public sealed class SqliteMetadataCache : IMetadataCache, IDisposable
         }, ct);
     }
 
+    /// <summary>
+    /// 객체 목록의 최대 유효기간. 설정(<see cref="MetadataCacheSettings.ObjectListMaxAgeDays"/>)은 <see cref="PruneAsync"/> 가 받을 때마다 따른다
+    /// (시작 뒤 한 번·설정을 바꿀 때마다, <c>MetadataCachePruner</c>). 그 전에는 기본값(1일).
+    /// </summary>
+    public TimeSpan? ObjectListMaxAge => _objectListMaxAge;
+
+    private TimeSpan? _objectListMaxAge = MaxAgeOf(new MetadataCacheSettings());
+
+    private static TimeSpan? MaxAgeOf(MetadataCacheSettings settings)
+        => settings.ObjectListMaxAgeDays > 0 ? TimeSpan.FromDays(settings.ObjectListMaxAgeDays) : null;
+
     public async Task PruneAsync(MetadataCacheSettings settings, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        _objectListMaxAge = MaxAgeOf(settings);
         var cutoff = OrandaDatabase.ToText(DateTimeOffset.UtcNow.AddDays(-settings.RetentionDays));
         await RunAsync<object?>(async c =>
         {

@@ -289,6 +289,43 @@ public sealed class MetadataProviderIntegrationTests : IAsyncLifetime
         Assert.Contains(table.Columns, c => c.Name == "NOTE");
     }
 
+    /// <summary>MC1: 캐시를 만든 뒤 다른 접속에서 만든 함수는 캐시로 답하는 동안 안 보이고, 유형 새로 고침(함수 범주 F5)으로 보이며 DROP 뒤 다시 하면 사라진다.</summary>
+    [Fact]
+    public async Task Type_refresh_brings_a_function_created_after_the_cache_and_removes_it_after_drop()
+    {
+        var provider = NewProvider(out _, out var bus);
+        var s = await OpenAsync("system", _db.SystemPassword);
+        var functions = new ObjectQuery { Owner = _owner, ObjectTypes = ["FUNCTION"] };
+        Assert.Equal(["F"], (await provider.ListObjectsAsync(s, functions, default)).Select(o => o.Name)); // 캐시를 만든다
+        var listTime = await provider.GetObjectListRefreshedAtAsync(s, default);
+        Assert.NotNull(listTime);
+
+        await using (var conn = await OpenSystemAsync())
+        {
+            await ExecAsync(conn, $"CREATE FUNCTION {_owner}.f_new RETURN NUMBER AS BEGIN RETURN 1; END;");
+        }
+
+        Assert.Equal(["F"], (await provider.ListObjectsAsync(s, functions, default)).Select(o => o.Name)); // 아직 캐시로 답한다
+
+        var added = await provider.RefreshObjectTypeAsync(s, _owner, "FUNCTION", default);
+
+        Assert.Equal(new ObjectListChange(1, 0, 0), added);
+        Assert.Equal(["F", "F_NEW"], (await provider.ListObjectsAsync(s, functions, default)).Select(o => o.Name));
+        Assert.Contains(await provider.ListObjectsAsync(s, new ObjectQuery { Owner = _owner, ObjectTypes = ["TABLE"] }, default), o => o.Name == "DEPT"); // 다른 유형은 그대로
+        Assert.Equal(listTime, await provider.GetObjectListRefreshedAtAsync(s, default)); // 전체 목록 시각은 그대로
+        Assert.Contains(new DbObjectRef(_owner, "F_NEW", "FUNCTION"), Assert.Single(bus.Events.OfType<MetadataInvalidated>()).Objects);
+
+        await using (var conn = await OpenSystemAsync())
+        {
+            await ExecAsync(conn, $"DROP FUNCTION {_owner}.f_new");
+        }
+
+        var removed = await provider.RefreshObjectTypeAsync(s, _owner, "FUNCTION", default);
+
+        Assert.Equal(new ObjectListChange(0, 0, 1), removed);
+        Assert.Equal(["F"], (await provider.ListObjectsAsync(s, functions, default)).Select(o => o.Name));
+    }
+
     [Fact]
     public async Task Table_comments_of_an_owner_are_read_at_once_for_dba_and_non_dba()
     {

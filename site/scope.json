@@ -226,6 +226,7 @@
     {"id": "oranda.schema.newSqlWithSelect", "page": "schema/browser"},
     {"id": "oranda.schema.objectSearch", "page": "schema/browser"},
     {"id": "oranda.schema.openDetail", "page": "schema/browser"},
+    {"id": "oranda.schema.resetMetadataCache", "page": "schema/browser"},
     {"id": "oranda.schema.recyclebinFlashback", "page": "schema/browser"},
     {"id": "oranda.schema.recyclebinPurge", "page": "schema/browser"},
     {"id": "oranda.schema.refresh", "page": "schema/browser"},

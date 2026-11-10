@@ -118,4 +118,10 @@ public interface IMetadataCache
     Task InvalidateAsync(string dbKey, IReadOnlyList<DbObjectRef> objects, CancellationToken ct);
 
     Task PruneAsync(MetadataCacheSettings settings, CancellationToken ct);
+
+    /// <summary>
+    /// 객체 목록(<c>meta_source.refreshed_at</c>)의 최대 유효기간(설정 <see cref="MetadataCacheSettings.ObjectListMaxAgeDays"/>). 넘은 목록으로 답하면
+    /// 메타데이터 제공자가 갱신 간격과 상관없이 뒤에서 전체 목록을 다시 받는다. null = 기한 없음. 기본 구현은 null.
+    /// </summary>
+    TimeSpan? ObjectListMaxAge => null;
 }

@@ -34,10 +34,12 @@ public sealed class SessionCommandGate
                 throw new SessionBusyException();
             }
 
+            SessionWait.NoteEntered();
             return;
         }
 
         await _semaphore.WaitAsync(ct).ConfigureAwait(false);
+        SessionWait.NoteEntered();
     }
 
     /// <summary>
@@ -52,20 +54,44 @@ public sealed class SessionCommandGate
                 throw new SessionBusyException();
             }
 
+            SessionWait.NoteEntered();
             return;
         }
 
         _semaphore.Wait(ct);
+        SessionWait.NoteEntered();
     }
 
     /// <summary>정리(커서 닫기 등)용: <see cref="SessionWait.Brief"/> 범위와 상관없이 차례가 올 때까지 기다린다. 취소하지 않는다.</summary>
-    public Task EnterForCleanupAsync() => _semaphore.WaitAsync();
+    public async Task EnterForCleanupAsync()
+    {
+        await _semaphore.WaitAsync().ConfigureAwait(false);
+        SessionWait.NoteEntered();
+    }
 
     /// <summary><see cref="EnterForCleanupAsync"/> 의 동기판(Stream.Dispose 등).</summary>
-    public void EnterForCleanup() => _semaphore.Wait();
+    public void EnterForCleanup()
+    {
+        _semaphore.Wait();
+        SessionWait.NoteEntered();
+    }
 
     /// <summary>바로 잡을 수 있을 때만 잡는다(Keep Alive: 바쁘면 그 자체가 활동이다).</summary>
-    public bool TryEnter() => _semaphore.Wait(0);
+    public bool TryEnter()
+    {
+        if (!_semaphore.Wait(0))
+        {
+            return false;
+        }
 
-    public void Release() => _semaphore.Release();
+        SessionWait.NoteEntered();
+        return true;
+    }
+
+    /// <summary>놓는다. 잡은 흐름에 <see cref="SessionWait.MeasureHold"/> 가 있으면 쥔 시간을 더한다.</summary>
+    public void Release()
+    {
+        SessionWait.NoteReleased();
+        _semaphore.Release();
+    }
 }

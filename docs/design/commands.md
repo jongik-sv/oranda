@@ -525,7 +525,8 @@
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
-| `oranda.schema.refresh` | 새로 고침 | `F5` | `schemaFocus` | `hasSession` | TSK-07-02 |
+| `oranda.schema.refresh` | 새로 고침 (유형 범주 노드면 그 유형 목록만 서버에서 다시 받는다) | `F5` | `schemaFocus` | `hasSession` | TSK-07-02 |
+| `oranda.schema.resetMetadataCache` | 메타데이터 캐시 초기화 (이 접속의 객체 목록 캐시를 비우고 전체 목록을 다시 받는다) | - | `schemaFocus` | `hasSession` | MC1 |
 | `oranda.schema.filter` | 객체 필터 | `Ctrl+F` | `schemaFocus` | `hasSession` | TSK-07-02 |
 | `oranda.schema.editFilters` | 스키마 브라우저 필터 편집… (저장 필터: 스키마·객체 유형·이름 패턴) | - | - | - | TSK-13-10 |
 | `oranda.schema.toggleFavorite` | 즐겨찾기 추가/빼기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-07-02 |

@@ -109,6 +109,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             _subscriptions.Add(bus.Subscribe<SessionOpened>(this, e => PostToUi(() => _ = OnSessionOpenedAsync(e))));
             _subscriptions.Add(bus.Subscribe<SessionClosed>(this, e => PostToUi(() => _ = OnSessionClosedAsync(e))));
             _subscriptions.Add(bus.Subscribe<MetadataInvalidated>(this, e => PostToUi(() => _ = OnMetadataInvalidatedAsync(e))));
+            _subscriptions.Add(bus.Subscribe<ObjectListRefreshed>(this, e => PostToUi(() => OnObjectListRefreshed(e))));
         }
 
         // 패널은 처음 보일 때 만들어진다(같은 자리의 스크립트 창 등 다른 탭 뒤에 있었으면 접속한 뒤). 그 전에 연 접속은 SessionOpened 를
@@ -205,7 +206,21 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         if (CurrentSession is { } s && string.Equals(s.DbKey, e.DbKey, StringComparison.Ordinal))
         {
             _dragColumns.Clear(); // 표 구조가 바뀌었을 수 있다.
+            if (_ownListRefreshes > 0)
+            {
+                return; // 이 창이 부른 유형 새로 고침·캐시 초기화: 끝난 뒤 스스로 다시 그린다(두 번 읽지 않게)
+            }
+
             await ApplyFilterAsync();
+        }
+    }
+
+    /// <summary>뒤 갱신·초기화로 서버의 전체 목록을 다시 받았다: 「목록 기준 시각」을 바꾼다.</summary>
+    private void OnObjectListRefreshed(ObjectListRefreshed e)
+    {
+        if (CurrentSession is { } s && string.Equals(s.DbKey, e.DbKey, StringComparison.Ordinal))
+        {
+            ListBaseTimeText = ListBaseTimeLabel(e.RefreshedAt);
         }
     }
 
@@ -261,6 +276,13 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
     [ObservableProperty]
     private string _statusText = string.Empty;
+
+    /// <summary>상태 줄 오른쪽 「목록 기준 시각: yyyy-MM-dd HH:mm」(로컬 시각, 객체 목록 캐시의 <c>refreshed_at</c>). 모르면 빈 글.</summary>
+    [ObservableProperty]
+    private string _listBaseTimeText = string.Empty;
+
+    /// <summary>이 창이 부른 유형 새로 고침·캐시 초기화 수(그동안 <see cref="MetadataInvalidated"/> 로 다시 그리지 않는다).</summary>
+    private int _ownListRefreshes;
 
     [ObservableProperty]
     private bool _isBusy;

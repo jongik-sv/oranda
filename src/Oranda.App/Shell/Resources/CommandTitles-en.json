@@ -243,6 +243,7 @@
   "Cmd.oranda.schema.recyclebinPurge": "Purge Recycle Bin",
   "Cmd.oranda.schema.refresh": "Refresh",
   "Cmd.oranda.schema.reorderColumns": "Reorder Columns…",
+  "Cmd.oranda.schema.resetMetadataCache": "Reset Metadata Cache",
   "Cmd.oranda.schema.reveal": "Select in Schema Browser",
   "Cmd.oranda.schema.showDdl": "Show DDL",
   "Cmd.oranda.schema.tableSpec": "Table Specification…",

@@ -8,6 +8,7 @@ namespace Oranda.Platform.Storage;
 /// <summary>
 /// 메타데이터 캐시 보관 일수(<c>metadataCache.retentionDays</c>, 설정 「이력·캐시」)를 적용한다: 첫 화면 뒤 한 번, 설정을 바꿀 때마다
 /// 그 일수보다 오래 쓰지 않은 DB 의 캐시를 지운다(<see cref="IMetadataCache.PruneAsync"/>). SQLite 만 쓰므로 Oracle 어셈블리를 깨우지 않는다.
+/// 같은 때 객체 목록 최대 유효기간(<c>metadataCache.objectListMaxAgeDays</c>)도 캐시에 넘어간다(<see cref="IMetadataCache.ObjectListMaxAge"/>).
 /// </summary>
 [OrandaService(typeof(IStartupTask))]
 internal sealed class MetadataCachePruner : IStartupTask

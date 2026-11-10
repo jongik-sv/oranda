@@ -39,15 +39,15 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     internal static readonly Dictionary<string, Config> Configs = new(StringComparer.Ordinal)
     {
-        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 282, 11, ["view/도구 창=17", "sql=27", "result=18", "database=23", "monitor=21", "tuning=24"], 18, 21, 21, 5, 17, 232, 297, 275, 11),
-        ["none(default-R1)"] = new(null, 213, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 199, 220, 210, 10),
-        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 213, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 199, 220, 210, 10),
-        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 226, 10, ["sql=24", "result=18", "database=20"], 18, 19, 19, 5, 15, 207, 233, 220, 10),
-        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 220, 10, ["view/도구 창=16", "sql=26", "result=17"], 17, 17, 17, 5, 16, 197, 233, 217, 10),
-        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 246, 11, ["sql=23", "result=16", "database=18", "monitor=21", "tuning=24"], 16, 21, 21, 5, 14, 207, 253, 240, 11),
-        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 264, 11, ["sql=24", "result=18", "database=22", "monitor=21", "tuning=21"], 18, 21, 21, 5, 15, 223, 271, 257, 11),
-        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 185, 9, ["sql=22", "result=16"], 16, 14, 16, 5, 12, 171, 192, 184, 9),
-        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 264, 11, ["sql=24", "result=18", "database=20", "monitor=21", "tuning=24"], 18, 21, 21, 5, 15, 224, 273, 258, 11),
+        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 283, 11, ["view/도구 창=17", "sql=27", "result=18", "database=24", "monitor=21", "tuning=24"], 18, 21, 21, 5, 17, 233, 298, 275, 11),
+        ["none(default-R1)"] = new(null, 214, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 200, 221, 210, 10),
+        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 214, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 200, 221, 210, 10),
+        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 227, 10, ["sql=24", "result=18", "database=21"], 18, 19, 19, 5, 15, 208, 234, 220, 10),
+        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 221, 10, ["view/도구 창=16", "sql=26", "result=17"], 17, 17, 17, 5, 16, 198, 234, 217, 10),
+        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 247, 11, ["sql=23", "result=16", "database=19", "monitor=21", "tuning=24"], 16, 21, 21, 5, 14, 208, 254, 240, 11),
+        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 265, 11, ["sql=24", "result=18", "database=23", "monitor=21", "tuning=21"], 18, 21, 21, 5, 15, 224, 272, 257, 11),
+        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 186, 9, ["sql=22", "result=16"], 16, 14, 16, 5, 12, 172, 193, 184, 9),
+        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 265, 11, ["sql=24", "result=18", "database=21", "monitor=21", "tuning=24"], 18, 21, 21, 5, 15, 225, 274, 258, 11),
         // AI 튜닝 기본 켬(2026-10-29): 조회 전용(R6)·Role 0개를 뺀 구성은 툴바 AI 단추 1·튜닝 메뉴 「AI 튜닝」 1·보기 > 도구 창 ▸ AI 대화 토글 1(항목 +2, 툴바 +1, 도구 창 등록 +1, 팔레트 +5).
         // TSK-14-17: SQL 모니터 기능이 있는 구성(all-features·R4·R5·R1+R4)은 튜닝 메뉴 「튜닝 추천」 한 줄이 늘었다(항목·tuning·SQL 탭·팔레트 +1).
         // 실행하고 실제 계획(oranda.plan.runActual): 툴바 +1·튜닝 메뉴 +1(튜닝 메뉴가 없는 R6·roles-empty 는 항목 그대로)·팔레트 +1.
@@ -57,13 +57,14 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
         // 복사 형식 ▸ 「줄 단위 IN 목록으로 복사」: 모든 구성의 항목·SQL 탭·팔레트 +1.
         // 드라이버 설정 열기(oranda.settings.openDrivers, 메뉴 없음, DU2): 모든 구성의 팔레트 +1.
         // 데이터 복사(EXP-04): 도구 ▸ 「데이터 복사…」·스키마 표 오른쪽 클릭 「데이터 복사에 추가」: 모든 구성의 항목·SQL 탭·팔레트 +2, database 한 단계 +1(database 가 15줄을 넘는 구성).
-        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 178, 9, ["sql=22"], 12, 16, 16, 5, 11, 167, 185, 176, 9),
+        // 메타데이터 캐시 초기화(oranda.schema.resetMetadataCache, MC1): 스키마 브라우저 오른쪽 클릭 1줄 — 모든 구성의 항목·SQL 탭·팔레트 +1, database 한 단계 +1(database 가 15줄을 넘는 구성).
+        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 179, 9, ["sql=22"], 12, 16, 16, 5, 11, 168, 186, 176, 9),
     };
 
     /// <summary>조사(413a33d) 뒤 모든 구성에 더해진 메뉴 줄: 보기 &gt; 도구 창 ▸ 「세션」 토글(TSK-14-04) 1, 도움말 「새 기능(릴리스 노트)」 1, 도움말 「사용자 문서」 1,
     /// 결과 &gt; 열 ▸ 「오름차순 정렬」·「내림차순 정렬」·「정렬 해제」 3(열 필터를 끈 결과의 머리글 오른쪽 클릭 정렬),
-    /// 결과 &gt; 복사 형식 ▸ 「줄 단위 IN 목록으로 복사」 1, 도구 ▸ 「데이터 복사…」 1, 스키마 표 오른쪽 클릭 「데이터 복사에 추가」 1.</summary>
-    private const int AddedSinceSurvey = 9;
+    /// 결과 &gt; 복사 형식 ▸ 「줄 단위 IN 목록으로 복사」 1, 도구 ▸ 「데이터 복사…」 1, 스키마 표 오른쪽 클릭 「데이터 복사에 추가」 1, 스키마 브라우저 오른쪽 클릭 「메타데이터 캐시 초기화」 1.</summary>
+    private const int AddedSinceSurvey = 10;
 
     /// <summary>AI 튜닝(aiTuning)이 켜진 구성이 더하는 메뉴 줄: 튜닝 메뉴 「AI 튜닝」 1, 보기 &gt; 도구 창 ▸ 「AI 대화」 토글 1.</summary>
     private const int AiMenuItems = 2;

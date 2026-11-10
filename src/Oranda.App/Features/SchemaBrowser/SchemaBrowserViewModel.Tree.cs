@@ -1,3 +1,4 @@
+using System.Globalization;
 using Oranda.App.Features.Localization;
 using Oranda.App.Shell.Features;
 using Oranda.Core.Metadata;
@@ -67,6 +68,8 @@ public sealed partial class SchemaBrowserViewModel
         _commentsByOwner.Clear(); // 새로 고침: 주석도 서버에서 다시 읽는다
         _favoritesNode = null;
         SelectedNode = null;
+        // 이전 접속(또는 짓기 전)의 목록 기준 시각을 남기지 않는다: 접속을 바꾸는 동안·짓기에 실패한 뒤에도 다른 접속의 시각이 보이지 않게.
+        ListBaseTimeText = string.Empty;
         OnPropertyChanged(nameof(HasSession));
         var session = CurrentSession;
         if (session is null || _meta is null)
@@ -117,6 +120,11 @@ public sealed partial class SchemaBrowserViewModel
                 own.IsExpandedSilently = true;
                 await ExpandAsync(own, ct);
             }
+
+            if (gen == _buildGeneration)
+            {
+                await ShowListBaseTimeAsync(session, ct);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -133,6 +141,151 @@ public sealed partial class SchemaBrowserViewModel
             }
         }
     }
+
+    /// <summary>
+    /// 새로 고침(F5·툴바 단추, <c>oranda.schema.refresh</c>). 유형 범주 노드(함수 등)면 그 유형 목록을 서버에서 다시 받아 캐시를 바꾼 뒤 다시 그린다
+    /// (사용자가 기다린다, 세션이 바쁘면 차례를 기다린다). 그 밖의 노드면 트리를 처음부터 다시 만든다(<see cref="LoadAsync"/>: 캐시로 그리고 뒤에서 전체 목록을 맞춘다).
+    /// </summary>
+    /// <param name="node">대상 노드. null 이면 고른 노드.</param>
+    public async Task RefreshAsync(SchemaNode? node, CancellationToken ct = default)
+    {
+        node ??= SelectedNode;
+        if (node is { Kind: SchemaNodeKind.Category, CategoryType: { } type, Owner: { } owner })
+        {
+            await RefreshCategoryAsync(owner, type, ct);
+            return;
+        }
+
+        await LoadAsync(ct);
+    }
+
+    /// <summary>범주 하나(소유자·유형)를 서버에서 다시 받는다. 끝나면 펼쳐 둔 범주와 고른 노드를 그대로 두고 다시 그린다.</summary>
+    private async Task RefreshCategoryAsync(string owner, string type, CancellationToken ct)
+    {
+        ResolveServices();
+        var session = CurrentSession;
+        if (session is null || _meta is null)
+        {
+            return;
+        }
+
+        string status;
+        BeginLoad();
+        _ownListRefreshes++;
+        try
+        {
+            // Java 저장 객체는 캐시에 없고 스키마를 펼칠 때마다 서버에 묻는다: 다시 그리기만 하면 된다.
+            var change = IsJavaType(type) ? ObjectListChange.None : await _meta.RefreshObjectTypeAsync(session, owner, type, ct);
+            status = UiText.Format("Shell.schemaBrowser.typeRefreshed", "{0} 목록을 서버에서 다시 받았다: 추가 {1} · 바뀜 {2} · 지움 {3}",
+                owner + " " + type, change.Added, change.Changed, change.Removed);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            StatusText = UiText.Format("Shell.schemaBrowser.typeRefreshFailed", "목록을 서버에서 다시 받지 못했다: {0}", ex.Message);
+            return;
+        }
+        finally
+        {
+            _ownListRefreshes--;
+            EndLoad();
+        }
+
+        // 다시 그리면 범주 노드가 새로 만들어진다: 고른 범주를 다시 골라 F5 를 이어 누를 수 있게. 다시 고르는 범주는 받는 동안 바뀐 선택을 따른다
+        // (긴 F5 동안 다른 범주를 골랐으면 그 범주, 고른 것이 없으면 F5 한 범주). 범주가 아닌 노드를 골랐으면 다시 그리기가 그 객체를 다시 고른다.
+        var (pickOwner, pickType) = SelectedNode switch
+        {
+            null => (owner, type),
+            { Kind: SchemaNodeKind.Category, Owner: { } o, CategoryType: { } t } => (o, t),
+            _ => ((string?)null, (string?)null),
+        };
+        await ApplyFilterAsync(ct);
+        if (pickOwner is not null && (SelectedNode is null || SelectedNode.Kind == SchemaNodeKind.Category))
+        {
+            var again = Roots.FirstOrDefault(r => r.Kind == SchemaNodeKind.Schema && string.Equals(r.Owner, pickOwner, StringComparison.Ordinal))?
+                .Children.FirstOrDefault(c => c.Kind == SchemaNodeKind.Category && string.Equals(c.CategoryType, pickType, StringComparison.Ordinal));
+            if (again is not null)
+            {
+                SelectedNode = again;
+            }
+        }
+
+        StatusText = status;
+    }
+
+    private static bool IsJavaType(string type) => type is "JAVA SOURCE" or "JAVA CLASS" or "JAVA RESOURCE";
+
+    /// <summary>
+    /// 「메타데이터 캐시 초기화」(<c>oranda.schema.resetMetadataCache</c>): 이 접속의 객체 목록 캐시를 비우고 서버의 전체 목록을 다시 받은 뒤 트리를 다시 만든다.
+    /// 전체 목록 읽기는 계정·서버에 따라 분 단위다(그동안 진행 막대).
+    /// </summary>
+    public async Task ResetMetadataCacheAsync(CancellationToken ct = default)
+    {
+        ResolveServices();
+        var session = CurrentSession;
+        if (session is null || _meta is null || NotImplementedReason(session) is not null)
+        {
+            return;
+        }
+
+        StatusText = UiText.Get("Shell.schemaBrowser.cacheResetting", "메타데이터 캐시를 비우고 객체 목록을 서버에서 다시 받는 중…");
+        ObjectListChange change;
+        BeginLoad();
+        _ownListRefreshes++;
+        try
+        {
+            change = await _meta.ResetObjectListCacheAsync(session, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            StatusText = UiText.Format("Shell.schemaBrowser.cacheResetFailed", "메타데이터 캐시를 초기화하지 못했다: {0}", ex.Message);
+            return;
+        }
+        finally
+        {
+            _ownListRefreshes--;
+            EndLoad();
+        }
+
+        await LoadAsync(ct);
+        StatusText = UiText.Format("Shell.schemaBrowser.cacheReset", "메타데이터 캐시를 초기화했다: 객체 {0}개를 서버에서 다시 받았다", change.Added + change.Changed);
+    }
+
+    /// <summary>캐시의 목록 기준 시각을 읽어 상태 줄에 보인다. 읽지 못하면 비운다(트리는 그대로).</summary>
+    private async Task ShowListBaseTimeAsync(ISession session, CancellationToken ct)
+    {
+        DateTimeOffset? at;
+        try
+        {
+            at = await _meta!.GetObjectListRefreshedAtAsync(session, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            at = null;
+        }
+
+        if (ReferenceEquals(CurrentSession, session))
+        {
+            ListBaseTimeText = ListBaseTimeLabel(at);
+        }
+    }
+
+    /// <summary>「목록 기준 시각: yyyy-MM-dd HH:mm」(로컬 시각). 모르면 빈 글.</summary>
+    internal static string ListBaseTimeLabel(DateTimeOffset? refreshedAt)
+        => refreshedAt is { } at
+            ? UiText.Format("Shell.schemaBrowser.listBaseTime", "목록 기준 시각: {0}", at.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture))
+            : string.Empty;
 
     /// <summary>세션의 DBMS 에 <see cref="DbmsServiceArea.Metadata"/> 구현이 없을 때의 이유 문구(현재 언어). 있으면 null.</summary>
     private string? NotImplementedReason(ISession session)

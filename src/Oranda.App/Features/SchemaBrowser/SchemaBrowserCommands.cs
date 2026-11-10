@@ -14,6 +14,9 @@ namespace Oranda.App.Features.SchemaBrowser;
 /// </summary>
 [OrandaCommand("oranda.schema.refresh", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession && !noImplMetadata",
     Placements = ["context:schema/refresh@10"])]
+// 이 접속(DbKey)의 객체 목록 캐시를 비우고 전체 목록을 다시 받는다(MC1). 어느 노드에서 불러도 접속 전체가 대상이다.
+[OrandaCommand("oranda.schema.resetMetadataCache", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession && !noImplMetadata",
+    Placements = ["context:schema/refresh@12"])]
 [OrandaCommand("oranda.schema.filter", CommandCategory.Database, When = "schemaFocus", Enablement = "hasSession && !noImplMetadata")]
 [OrandaCommand("oranda.schema.editFilters", CommandCategory.Database, Placements = ["context:schema/refresh@15"])]
 [OrandaCommand("oranda.schema.toggleFavorite", CommandCategory.Database, When = "schemaFocus", Enablement = "schemaNodeSelected",
@@ -55,7 +58,11 @@ public sealed class SchemaBrowserCommandHandler : ICommandHandler
         switch (context.CommandId)
         {
             case "oranda.schema.refresh":
-                await vm.LoadAsync(cancellationToken);
+                // 유형 범주 노드(함수 등)면 그 유형만 서버에서 다시 받고, 그 밖에는 트리를 다시 만든다.
+                await vm.RefreshAsync(node, cancellationToken);
+                break;
+            case "oranda.schema.resetMetadataCache":
+                await vm.ResetMetadataCacheAsync(cancellationToken);
                 break;
             case "oranda.schema.filter":
                 vm.RequestFilterFocus();

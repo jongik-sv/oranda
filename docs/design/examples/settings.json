@@ -29,7 +29,8 @@
     "maxAgeDays": 180
   },
   "metadataCache": {
-    "retentionDays": 30
+    "retentionDays": 30,
+    "objectListMaxAgeDays": 1
   },
   "monitor": {
     "refreshSeconds": 5

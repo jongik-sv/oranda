@@ -153,6 +153,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private decimal _cacheRetentionDays;
 
+    /// <summary>객체 목록 최대 유효기간(일, <c>metadataCache.objectListMaxAgeDays</c>). 넘으면 뒤에서 전체 목록을 다시 받는다. 0 = 기한 없음.</summary>
+    [ObservableProperty]
+    private decimal _objectListMaxAgeDays;
+
     /// <summary>스키마 브라우저: 객체를 한 번 누르면 미리보기 문서로 연다.</summary>
     [ObservableProperty]
     private bool _schemaSingleClickPreview;
@@ -292,6 +296,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _restoreOnStartup = s.Workspace.RestoreOnStartup;
         _sessionPerWorkspace = s.Workspace.SessionPerWorkspace;
         _cacheRetentionDays = s.MetadataCache.RetentionDays;
+        _objectListMaxAgeDays = s.MetadataCache.ObjectListMaxAgeDays;
         _schemaSingleClickPreview = s.SchemaBrowser.SingleClickPreview;
         _updateCheckOnStartup = s.Update.CheckOnStartup;
         _updateAutoDownload = s.Update.AutoDownload;
@@ -606,7 +611,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     RestoreOnStartup = RestoreOnStartup,
                     SessionPerWorkspace = SessionPerWorkspace,
                 },
-                MetadataCache = s.MetadataCache with { RetentionDays = (int)CacheRetentionDays },
+                MetadataCache = s.MetadataCache with
+                {
+                    RetentionDays = (int)CacheRetentionDays,
+                    ObjectListMaxAgeDays = Math.Clamp((int)ObjectListMaxAgeDays, 0, 365),
+                },
                 SchemaBrowser = s.SchemaBrowser with { SingleClickPreview = SchemaSingleClickPreview },
                 // 건너뛴 버전·마지막 확인 시각은 백그라운드 확인이 쓸 수 있어 지운 경우에만 덮어쓴다.
                 Update = s.Update with

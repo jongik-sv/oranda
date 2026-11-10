@@ -477,6 +477,12 @@ public sealed record HistorySettings
 public sealed record MetadataCacheSettings
 {
     public int RetentionDays { get; init; } = 30;
+
+    /// <summary>
+    /// 객체 목록의 최대 유효기간(일, <c>metadataCache.objectListMaxAgeDays</c>). 서버의 전체 목록을 받은 지(<c>refreshed_at</c>) 이보다 오래면
+    /// 캐시로 답할 때 뒤에서 전체 목록을 다시 받는다. 0 = 기한 없음. 선택 필드라 스키마 버전은 그대로.
+    /// </summary>
+    public int ObjectListMaxAgeDays { get; init; } = 1;
 }
 
 public sealed record MonitorSettings

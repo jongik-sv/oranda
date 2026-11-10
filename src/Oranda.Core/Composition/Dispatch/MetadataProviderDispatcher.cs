@@ -56,4 +56,13 @@ public sealed class MetadataProviderDispatcher : IMetadataProvider
 
     public Task<bool> IsJavaAvailableAsync(ISession s, CancellationToken ct) =>
         _selector.For<IMetadataProvider>(s).IsJavaAvailableAsync(s, ct);
+
+    public Task<DateTimeOffset?> GetObjectListRefreshedAtAsync(ISession s, CancellationToken ct) =>
+        _selector.For<IMetadataProvider>(s).GetObjectListRefreshedAtAsync(s, ct);
+
+    public Task<ObjectListChange> RefreshObjectTypeAsync(ISession s, string owner, string objectType, CancellationToken ct) =>
+        _selector.For<IMetadataProvider>(s).RefreshObjectTypeAsync(s, owner, objectType, ct);
+
+    public Task<ObjectListChange> ResetObjectListCacheAsync(ISession s, CancellationToken ct) =>
+        _selector.For<IMetadataProvider>(s).ResetObjectListCacheAsync(s, ct);
 }

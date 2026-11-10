@@ -74,6 +74,25 @@ public interface IMetadataProvider
 
     /// <summary>서버에 Java(JVM, <c>SYS.DBMS_JAVA</c>)가 있나. 없으면 Java 객체를 컴파일하지 않는다(TSK-14-23). 기본 구현은 false(모른다 = 없다).</summary>
     Task<bool> IsJavaAvailableAsync(ISession s, CancellationToken ct) => Task.FromResult(false);
+
+    /// <summary>
+    /// 객체 목록 캐시의 기준 시각: 서버의 전체 목록을 마지막으로 받아 맞춘 때(UTC, <c>meta_source.refreshed_at</c>). 스키마 브라우저가 「목록 기준 시각」으로 보인다.
+    /// 캐시가 없거나(무효화 포함) 캐시를 쓰지 않는 구현은 null. 기본 구현은 늘 null.
+    /// </summary>
+    Task<DateTimeOffset?> GetObjectListRefreshedAtAsync(ISession s, CancellationToken ct) => Task.FromResult<DateTimeOffset?>(null);
+
+    /// <summary>
+    /// 소유자 <paramref name="owner"/> 의 유형 <paramref name="objectType"/> 객체 목록만 서버에서 다시 받아 캐시의 그 유형 행을 바꾼다
+    /// (새로 생긴 것은 넣고 사라진 것은 지운다. 스키마 브라우저의 범주 노드 새로 고침). 세션이 바쁘면 보통 명령처럼 차례를 기다린다.
+    /// 기본 구현은 할 일이 없다(캐시가 없으면 목록 조회가 늘 서버를 읽는다): 바뀐 것 없음.
+    /// </summary>
+    Task<ObjectListChange> RefreshObjectTypeAsync(ISession s, string owner, string objectType, CancellationToken ct) => Task.FromResult(ObjectListChange.None);
+
+    /// <summary>
+    /// 이 접속(<see cref="ISession.DbKey"/>)의 객체 목록 캐시를 모두 비우고 서버의 전체 목록을 바로 다시 받는다(「메타데이터 캐시 초기화」).
+    /// 세션이 바쁘면 보통 명령처럼 차례를 기다린다. 기본 구현은 할 일이 없다: 바뀐 것 없음.
+    /// </summary>
+    Task<ObjectListChange> ResetObjectListCacheAsync(ISession s, CancellationToken ct) => Task.FromResult(ObjectListChange.None);
 }
 
 /// <summary>

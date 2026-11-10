@@ -183,12 +183,35 @@ public sealed class MetadataCacheTests : IDisposable
         Assert.Empty(await cache.GetObjectsAsync("OTHER/-/X", null, null, default));
     }
 
+    [Fact]
+    public async Task Object_list_max_age_defaults_to_one_day_and_follows_the_setting_through_the_pruner()
+    {
+        using var cache = SqliteMetadataCache.InMemory();
+        Assert.Equal(TimeSpan.FromDays(1), cache.ObjectListMaxAge); // 설정을 받기 전 기본값
+        var settings = new RetentionSettings { Days = 30, MaxAgeDays = 3 };
+        var bus = new Oranda.Testing.FakeEventBus();
+        var pruner = new MetadataCachePruner(bus, cache, settings);
+
+        await pruner.RunAsync(default);
+        Assert.Equal(TimeSpan.FromDays(3), cache.ObjectListMaxAge);
+
+        settings.MaxAgeDays = 0; // 기한 없음
+        bus.Publish(new Oranda.Core.Events.SettingsChanged("metadataCache"));
+        await pruner.DrainAsync();
+        Assert.Null(cache.ObjectListMaxAge);
+    }
+
     private sealed class RetentionSettings : Oranda.Core.Storage.ISettingsStore
     {
         public int Days { get; set; }
 
+        public int MaxAgeDays { get; set; } = 1;
+
         public Task<Oranda.Core.Storage.StoredDocument<AppSettings>> LoadAsync(CancellationToken ct)
-            => Task.FromResult(new Oranda.Core.Storage.StoredDocument<AppSettings>(new AppSettings { MetadataCache = new MetadataCacheSettings { RetentionDays = Days } }));
+            => Task.FromResult(new Oranda.Core.Storage.StoredDocument<AppSettings>(new AppSettings
+            {
+                MetadataCache = new MetadataCacheSettings { RetentionDays = Days, ObjectListMaxAgeDays = MaxAgeDays },
+            }));
 
         public Task SaveAsync(AppSettings settings, CancellationToken ct) => Task.CompletedTask;
     }

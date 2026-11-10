@@ -152,6 +152,8 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
         // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다. 결과 집합처럼 커서를 연 뒤에는 행 하나 읽는 동안만 쥔다:
         // 전체 목록 읽기(11g 비 DBA 의 all_objects 는 분 단위)가 그 사이 사용자의 실행을 끝까지 막지 않는다(서버 왕복 사이에 실행이 돈다).
         // 즉시성 범위(백그라운드 갱신·자동 완성)에서는 읽는 사이에 실행이 잠금을 잡으면 다음 행에서 바쁨으로 그만두고 실행에 양보한다.
+        // 커서를 여는 첫 잠금은 지금 흐름의 한도(SessionWait.CurrentLimit)로, 행마다 다시 잡는 이어 잠금은 이어 읽기 한도(SessionWait.Resume)로 기다린다:
+        // 뒤 갱신은 시작을 0 으로 두어 사용자 실행 뒤에 줄을 서지 않고(D-041), 시작한 읽기는 짧은 질의 하나에 끊기지 않는다.
         var gate = session.CommandGate;
         OracleCommand? cmd = null;
         OracleDataReader? reader = null;
@@ -181,6 +183,7 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
 
         try
         {
+            using var resume = SessionWait.Resume(); // 이미 연 커서의 이어 읽기
             var rows = new List<object?[]>();
             while (true)
             {

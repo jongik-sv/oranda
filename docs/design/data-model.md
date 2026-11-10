@@ -93,6 +93,7 @@
 | `history.maxEntries` | int | ○ | 50000 | 3.4 보존 정책 |
 | `history.maxAgeDays` | int | ○ | 180 | 3.4 보존 정책 |
 | `metadataCache.retentionDays` | int | ○ | 30 | 쓰지 않은 접속의 캐시 삭제 |
+| `metadataCache.objectListMaxAgeDays` | int | ○ | 1 | 객체 목록(`meta_source.refreshed_at`)이 이보다 오래되면 캐시로 답한 뒤 뒤에서 전체 목록을 다시 받음(0 = 기한 없음) |
 | `monitor.refreshSeconds` | int | ○ | 5 | 2~60 |
 | `monitor.lockAlert` | object | ○ | 아래 값 | Lock 모니터 「알림 설정」(oranda1 TSK-05-04): `enabled`(true), `waitSeconds`(120, 1~86400), `waiters`(5, 1~1000) — 「대기 N 초 이상 또는 대기자 M 명 이상」, `saveSnapshot`(true, 그 시점 보유자·대기자 SQL 을 데이터 폴더 `lock-history/` 텍스트로), `notifyWhenHidden`(true), `historyMinutes`(30, 5~720, 이력 띠 메모리 보관), `saveHistoryFile`(false, `lock-history/` CSV). DB 에 쓰지 않는다. 선택 필드 추가라 스키마 버전은 그대로 |
 | `workspace.autosaveSeconds` | int | ○ | 10 | 1~10 (PRD 복구 요구: 10 s 이하) |
@@ -728,7 +729,7 @@ public sealed record ConnectionsDocument
 | `ExecutionSettings` | `AutoCommit`(false), `DbmsOutput`(true), `ScriptErrorMode`(ScriptErrorMode=Ask — TRD 6장 `ScriptErrorMode` 와 같은 형식), `SplitOnBlankLine`(false) |
 | `GridSettings` | `PageSize`(500), `MemoryLimitMb`(200), `InitialLobFetchSize`(4000) |
 | `HistorySettings` | `Enabled`(true), `SaveBindValues`(false), `MaxEntries`(50000), `MaxAgeDays`(180) |
-| `MetadataCacheSettings` | `RetentionDays`(30) |
+| `MetadataCacheSettings` | `RetentionDays`(30), `ObjectListMaxAgeDays`(1) |
 | `MonitorSettings` | `RefreshSeconds`(5) |
 | `WorkspaceSettings` | `AutosaveSeconds`(10), `RestoreOnStartup`(true), `LastWorkspaceId`(string="default") |
 | `FormatterProfile` | `SchemaVersion`(1), `Id`(string, required), `Name`(string, required), `Options`(FormatterOptions=new) |

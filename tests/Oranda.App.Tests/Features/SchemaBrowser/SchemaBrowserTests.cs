@@ -648,6 +648,48 @@ public class SchemaBrowserTests
 
         public int ListObjectsCalls { get; private set; }
 
+        /// <summary>서버에만 있고 캐시(<see cref="Objects"/>)에는 아직 없는 객체. 유형 새로 고침·캐시 초기화가 <see cref="Objects"/> 로 옮긴다.</summary>
+        public List<DbObjectRef> ServerOnly { get; } = [];
+
+        /// <summary>유형 새로 고침 요청(소유자, 유형) 순서대로.</summary>
+        public List<(string Owner, string Type)> TypeRefreshes { get; } = [];
+
+        public int ResetCalls { get; private set; }
+
+        /// <summary>객체 목록 캐시의 기준 시각(UTC). null = 모름.</summary>
+        public DateTimeOffset? RefreshedAt { get; set; }
+
+        /// <summary>캐시 초기화가 끝나면 <see cref="RefreshedAt"/> 이 되는 시각.</summary>
+        public DateTimeOffset ResetTime { get; set; } = new(2026, 11, 10, 4, 30, 0, TimeSpan.Zero);
+
+        public Task<DateTimeOffset?> GetObjectListRefreshedAtAsync(ISession s, CancellationToken ct) => Task.FromResult(RefreshedAt);
+
+        /// <summary>유형 새로 고침이 서버를 읽는 동안 부른다(긴 F5 동안 사용자가 하는 일).</summary>
+        public Action? DuringTypeRefresh { get; set; }
+
+        public Task<ObjectListChange> RefreshObjectTypeAsync(ISession s, string owner, string objectType, CancellationToken ct)
+        {
+            TypeRefreshes.Add((owner, objectType));
+            DuringTypeRefresh?.Invoke();
+            var fresh = ServerOnly.Where(o => o.Owner == owner && o.ObjectType == objectType).ToList();
+            foreach (var o in fresh)
+            {
+                ServerOnly.Remove(o);
+                Objects.Add(o);
+            }
+
+            return Task.FromResult(new ObjectListChange(fresh.Count, 0, 0));
+        }
+
+        public Task<ObjectListChange> ResetObjectListCacheAsync(ISession s, CancellationToken ct)
+        {
+            ResetCalls++;
+            Objects.AddRange(ServerOnly);
+            ServerOnly.Clear();
+            RefreshedAt = ResetTime;
+            return Task.FromResult(new ObjectListChange(Objects.Count, 0, 0));
+        }
+
         /// <summary>테이블·뷰 주석(소유자, 이름) → 주석. 트리 줄의 「테이블 명」.</summary>
         public Dictionary<(string Owner, string Name), string> Comments { get; } = [];
 

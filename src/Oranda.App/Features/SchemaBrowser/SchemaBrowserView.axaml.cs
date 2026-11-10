@@ -38,7 +38,7 @@ public partial class SchemaBrowserView : UserControl
         {
             if (DataContext is SchemaBrowserViewModel vm)
             {
-                await vm.LoadAsync();
+                await vm.RefreshAsync(null); // F5 와 같다: 유형 범주를 골랐으면 그 유형만 서버에서 다시 받는다
             }
         };
         FilterBox.InnerLeftContent = ShellIcons.Create("find", 14);
