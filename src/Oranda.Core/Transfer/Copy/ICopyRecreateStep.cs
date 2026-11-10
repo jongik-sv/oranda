@@ -1,3 +1,4 @@
+using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
 namespace Oranda.Core.Transfer.Copy;
@@ -23,6 +24,13 @@ public interface ICopyRecreateStep
     /// 휴지통에 이 원래 이름으로 있는 표의 휴지통 이름. DROP 전후를 비교하면 이번 DROP 이 만든 이름을 안다. 비면 휴지통에 남지 않았다(영구 삭제).
     /// </summary>
     Task<HashSet<string>> RecycleBinAsync(ISession target, string table, CancellationToken ct);
+
+    /// <summary>
+    /// 원본 표 인덱스 하나의 열(위치 순, 함수 기반 인덱스는 식)을 원본 세션에서 읽는다(SQ2: 새 표에 함수 기반 인덱스를 만들 때). 기본 = 읽지 못함(null).
+    /// DBMS 어셈블리는 그 DBMS 의 <see cref="ITableKeyDetailProvider"/>(Oracle 은 LONG 식을 끝까지 읽는다)로 구현한다.
+    /// </summary>
+    Task<IReadOnlyList<IndexColumnDetail>?> IndexColumnsAsync(ISession source, DbObjectRef table, string indexName, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<IndexColumnDetail>?>(null);
 }
 
 /// <summary>

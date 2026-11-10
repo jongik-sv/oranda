@@ -137,7 +137,7 @@
 
 - Oracle `CHAR(n CHAR)` → Tibero: Oracle 은 CHAR 를 바이트로, Tibero 는 글자 수로 공백을 채워 뒤 공백 수가 달라질 수 있다(점검 `CharPadDiffers`, 통과 안내).
 - Tibero `VARCHAR(n CHAR)` → Oracle: DDL 은 `VARCHAR2(n CHAR)` 그대로이나 Oracle 은 4000바이트를 넘는 값을 받지 못해 그 행이 실패한다(ORA-12899). 점검 `CrossStringBytes`(확인): 복사 열의 짧은 쪽 길이 × 4바이트(UTF-8 최대) > 4000 인 VARCHAR2 열을 알린다(MAX_STRING_SIZE 는 읽지 않고 STANDARD 로 봄).
-- 기본값 `시퀀스.NEXTVAL`(양방향 테이블 만들기): 시퀀스 이름을 대상 스키마 `ALL_SEQUENCES` 에서 찾아 없으면 그 열의 DEFAULT 만 빼고 만든다(점검 `SequenceDefaultDropped`, 확인). 미리 보기·실행 DDL 은 같은 계획 구조에서 나온다. 같은 DBMS 복사는 바꾸지 않는다. 대상이 Oracle 11g(주 버전 11 이하)이면 시퀀스가 있어도 DEFAULT 시퀀스.NEXTVAL 을 쓸 수 없어(12c 부터, ORA-00984) 모든 시퀀스 기본값을 빼고 같은 항목(`SequenceDefaultDropped`)으로 알린다(XC8e).
+- 기본값 `시퀀스.NEXTVAL`(양방향 테이블 만들기, 같은 DBMS 포함 — 조정 결정 76 이 결정 50 을 대신함): 원본 테이블에 연결된 시퀀스(열 DEFAULT + 「없으면 만들기」 표는 그 표 트리거가 참조하는 시퀀스, `copy.trigger_sequences`)를 대상 스키마 `ALL_SEQUENCES` 에서 찾아 없으면 테이블보다 먼저 원본 속성(`copy.sequence_attrs`)으로 만든다(점검 `SequenceCreated`, 계획 `CopyTablePlan.CreateSequences`, 문장 `CopySequenceDdl`). 만들 수 없으면(CREATE SEQUENCE 권한 없음·속성 못 읽음·다른 계정 시퀀스) 그 열의 DEFAULT 만 빼고 만든다(`SequenceDefaultDropped`). 대상에 이미 있으면 건드리지 않고 다음 값이 원본 키 최댓값 이하면 `SequenceBehind`. 실행기는 적재 뒤 키 최댓값이 START WITH 이상이면 `ALTER SEQUENCE … INCREMENT BY` 로 맞추고(DROP 없음), 쓰는 표를 모두 지우면 `DROP SEQUENCE`(미리 보기에 있음). 미리 보기·실행 DDL 은 같은 계획 구조에서 나온다. 같은 DBMS 복사는 바꾸지 않는다. 대상이 Oracle 11g(주 버전 11 이하)이면 시퀀스가 있어도 DEFAULT 시퀀스.NEXTVAL 을 쓸 수 없어(12c 부터, ORA-00984) 모든 시퀀스 기본값을 빼고 같은 항목(`SequenceDefaultDropped`)으로 알린다(XC8e).
 
 ## 4. 실측이 필요했던 가정(XC5) — 결과는 `tibero-driver-transfer.md` §5
 
@@ -165,7 +165,9 @@
 
 - **Tibero VARCHAR(n CHAR) 다바이트 값 → Oracle 4000B 초과**: 만든 열은 `VARCHAR2(n CHAR)` 그대로이고 4000바이트를 넘는 행은 ORA-12899 로 그 행만 실패한다(PartiallyFailed). 결정(xc-core XC8d): 열은 그대로 두고 사전 점검 안내를 낸다.
 - **Oracle CHAR(n CHAR) → Tibero**: Oracle 은 바이트로, Tibero 는 글자로 채워 뒤 공백 수가 다르다(값은 같음). 결정: 안내 + 문서(값을 맞추지 않음).
-- **Tibero DEFAULT seq.NEXTVAL → Oracle**: 카탈로그 저장 모양은 `이름.NEXTVAL`(소유자·따옴표 없음) → Oracle 대상 스키마의 같은 이름 시퀀스를 가리킨다. 대상에 시퀀스가 없으면 CREATE 가 ORA-02289 로 실패하고 점검 안내도 없었다. 결정: 그 DEFAULT 를 빼고 테이블을 만들고 안내한다.
+- **Tibero DEFAULT seq.NEXTVAL → Oracle**: 카탈로그 저장 모양은 `이름.NEXTVAL`(소유자·따옴표 없음) → Oracle 대상 스키마의 같은 이름 시퀀스를 가리킨다. 대상에 시퀀스가 없으면 CREATE 가 ORA-02289 로 실패하고 점검 안내도 없었다. 결정: 그 DEFAULT 를 빼고 테이블을 만들고 안내한다. 뒤의 결정 76(SQ1): 시퀀스를 먼저 만들고 DEFAULT 는 그대로 둔다(만들 수 없을 때만 뺀다).
+- **새 테이블에 딸린 객체(SQ2, 결정 78)**: 적재 뒤 함수 기반 인덱스(`ICopyRecreateStep.IndexColumnsAsync` = 객체 상세의 인덱스 열 조회)·원본 트리거·원본 권한(「없으면 만들기」만, 원본 세션 `CaptureAsync`)·작업 밖 부모 FK(대상에 부모가 있을 때, NOVALIDATE 로 바꾸지 않음)를 만든다(`CompanionDdl`, 점검 `CompanionObjects`). 못 만든 것은 부분 실패 알림.
+- **새 테이블 PK·UK·인덱스는 적재 뒤(PF4a, 결정 74)**: `CreateTableDdl.Build(…, keysAfterLoad: true)` 가 떼어 낸 `AfterLoad` 문장을 되살리기 맨 앞에서 보낸다. PK·UK 실패 = 표 실패.
 - **VARCHAR2(32767 CHAR)** 는 EXTENDED 가 아닌 Oracle 26ai 에서는 원본을 만들 수 없어 측정하지 못했다. 임시 사용자는 `V$PARAMETER` 를 못 읽는다(MAX_STRING_SIZE 조회 ORA-00942).
 - Oracle 다시 만들기(Tibero→Oracle)는 PURGE 없이 옛 테이블을 휴지통에 남긴다(FLASHBACK 안내가 나온다).
 

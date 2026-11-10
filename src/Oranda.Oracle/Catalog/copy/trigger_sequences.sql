@@ -1,0 +1,6 @@
+-- 복사(없으면 만들기): 원본 테이블에 걸린 트리거가 참조하는 시퀀스(ALL_DEPENDENCIES). 열 = REFERENCED_OWNER, REFERENCED_NAME. 바인드: OWN, TBL.
+-- id: copy.trigger_sequences
+-- min-version: 11
+-- requires: all_dependencies, all_triggers
+-- license: none
+SELECT DISTINCT d.REFERENCED_OWNER, d.REFERENCED_NAME FROM ALL_DEPENDENCIES d JOIN ALL_TRIGGERS t ON t.OWNER = d.OWNER AND t.TRIGGER_NAME = d.NAME WHERE d.TYPE = 'TRIGGER' AND d.REFERENCED_TYPE = 'SEQUENCE' AND t.TABLE_OWNER = :OWN AND t.TABLE_NAME = :TBL ORDER BY d.REFERENCED_OWNER, d.REFERENCED_NAME

@@ -22,7 +22,11 @@ public sealed record MappedTable(TableInfo Target, IReadOnlyList<string> Notes, 
 }
 
 /// <summary><see cref="CrossTableMap.Build"/> 의 결과: <see cref="CreateTableDdl.Build"/> 문장 + <see cref="MappedTable"/> 의 안내·빠진 제약.</summary>
-public sealed record CrossCreate(IReadOnlyList<string> Statements, IReadOnlyList<string> Notes, IReadOnlySet<string> OmittedConstraints);
+public sealed record CrossCreate(IReadOnlyList<string> Statements, IReadOnlyList<string> Notes, IReadOnlySet<string> OmittedConstraints)
+{
+    /// <summary>적재 뒤에 보낼 PK·UK·인덱스 문장(새 표 적재를 빠르게, PF4). <see cref="CrossTableMap.Build"/> 에 <c>keysAfterLoad</c> 를 주지 않으면 비어 있다.</summary>
+    public IReadOnlyList<string> AfterLoad { get; init; } = [];
+}
 
 /// <summary>
 /// 교차 복사의 표 만들기·다시 만들기 DDL 입력(xdb-copy XC8, 순수 함수): 열마다 <see cref="CrossTypeMap"/> 으로 옮기고,
@@ -196,11 +200,13 @@ public static class CrossTableMap
     /// 만들 표의 문장(<see cref="CreateTableDdl.Build"/> 의 순서). 같은 DBMS 는 <see cref="CreateTableDdl.Build"/> 그대로이고,
     /// 다르면 <see cref="MapTable"/> 로 옮긴 구조로 만든다. 실행기와 사전 점검 미리 보기가 함께 쓴다.
     /// </summary>
+    /// <param name="keysAfterLoad">PK·UK·인덱스를 CREATE TABLE 에서 떼어 <see cref="CrossCreate.AfterLoad"/> 로(새 표는 인덱스 유지 없이 넣는다, PF4)</param>
     public static CrossCreate Build(Dbms source, Dbms target, TableInfo table, string targetOwner, IReadOnlySet<string> tablesInJob,
-                                    Func<string, bool>? isServerName = null, IBulkValueCodec? sourceCodec = null)
+                                    Func<string, bool>? isServerName = null, IBulkValueCodec? sourceCodec = null, bool keysAfterLoad = false)
     {
         var mapped = MapTable(source, target, table, sourceCodec);
-        return new CrossCreate(CreateTableDdl.Build(mapped.Target, targetOwner, tablesInJob, isServerName), mapped.Notes, mapped.OmittedConstraints);
+        var (now, afterLoad) = CreateTableDdl.Build(mapped.Target, targetOwner, tablesInJob, isServerName, keysAfterLoad);
+        return new CrossCreate(now, mapped.Notes, mapped.OmittedConstraints) { AfterLoad = afterLoad };
     }
 
     // ---- 작업 안 FK ----

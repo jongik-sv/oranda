@@ -803,7 +803,7 @@ public sealed class CrossCreateTableTests
 
     private sealed class FakeRecreateStep(IReadOnlyList<(string Parent, string Ddl, string? Name)> sourceForeignKeys) : ICopyRecreateStep
     {
-        public Task<PreservedDdl> CaptureAsync(ISession target, string owner, string table, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PreservedDdl> CaptureAsync(ISession target, string owner, string table, CancellationToken ct) => Task.FromResult(PreservedDdl.Empty); // 원본 트리거·권한(SQ2)도 이것으로 읽는다: 없음
 
         public Task<IReadOnlyList<(string Parent, string Ddl, string? Name)>> SourceForeignKeysAsync(ISession source, string sourceOwner, string table,
             IReadOnlySet<string> parents, string targetOwner, CancellationToken ct) =>

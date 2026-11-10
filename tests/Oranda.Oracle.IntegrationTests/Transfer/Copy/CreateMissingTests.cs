@@ -14,8 +14,10 @@ namespace Oranda.Oracle.IntegrationTests.Transfer.Copy;
 // 이 PC 에서는 컴파일까지만 확인한다. 실행은 CI·다른 PC 의 컨테이너에서 한다.
 
 /// <summary>
-/// 대상 계정에 표가 없으면 원본 구조로 만든 뒤 넣는다: 만들기 → 적재 → (두 번째 실행은 표가 있으니 만들지 않음), 트리거·권한은 안 만듦,
+/// 대상 계정에 표가 없으면 원본 구조로 만든 뒤 넣는다: 만들기 → 적재 → (두 번째 실행은 표가 있으니 만들지 않음),
+/// 연결된 시퀀스를 표보다 먼저 만들고 적재 뒤 키 최댓값 위로 맞춤(SQ1), PK 는 적재 뒤(PF4a), 함수 기반 인덱스·트리거·권한·작업 밖 부모 FK 는 적재 뒤 함께 만듦(SQ2),
 /// 개발 접속이 아니면 막힘, 적재 실패 시 만든 표를 PURGE 로 지움(휴지통에 안 남음).
+/// 이 클래스는 26ai(<see cref="OracleFreeFixture"/>)만 쓴다: 시퀀스 열 기본값(12c 부터)을 그대로 둔다. 11g 대상은 DEFAULT 를 빼는 쪽이라 이 시험의 대상이 아니다.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(OracleFreeShared.Name)]
@@ -86,8 +88,9 @@ public sealed class CreateMissingTests
         Assert.Equal("1:one:5,2:two:6", await ListAsync($"SELECT ID || ':' || NAME || ':' || AMT FROM {dst}.CM_PARENT ORDER BY ID"));
         Assert.Equal("10,11", await ListAsync($"SELECT ID FROM {dst}.CM_CHILD ORDER BY ID"));
 
-        // 트리거·권한은 만들지 않는다.
-        Assert.Equal(0, await CountAsync($"SELECT COUNT(*) FROM DBA_TRIGGERS WHERE OWNER = '{dst}' AND TABLE_NAME = 'CM_PARENT'"));
+        // 원본 트리거는 적재 뒤 함께 만든다(SQ2). 원본에서 준 권한이 없으니 권한도 없다.
+        Assert.Equal("CM_PARENT_TRG:ENABLED",
+            await ListAsync($"SELECT TRIGGER_NAME || ':' || STATUS FROM DBA_TRIGGERS WHERE OWNER = '{dst}' AND TABLE_NAME = 'CM_PARENT'"));
         Assert.Equal(0, await CountAsync($"SELECT COUNT(*) FROM DBA_TAB_PRIVS WHERE OWNER = '{dst}' AND TABLE_NAME = 'CM_PARENT'"));
 
         // 두 번째 실행: 표가 이미 있으니 선택을 무시한다(만들지 않고 규칙대로 넣는다).
@@ -100,6 +103,120 @@ public sealed class CreateMissingTests
         var second = await RunAsync(scope, again, job, secondReport);
         Assert.True(second.Outcome == CopyOutcome.Succeeded, Describe(second));
         Assert.Equal("10,11", await ListAsync($"SELECT ID FROM {dst}.CM_CHILD ORDER BY ID"));
+    }
+
+    [Fact]
+    public async Task Creates_the_linked_sequence_first_then_adds_the_key_and_the_companion_objects_after_the_load()
+    {
+        // CopyDbScope 의 원본·대상 소유자는 CREATE TABLE·TRIGGER·SEQUENCE 권한이 있다(대상 세션 = 대상 소유자). 권한 받을 계정 = 쓰기 계정(같은 DB 라 대상에도 있다).
+        await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
+        var dst = scope.DstUser;
+        var writer = scope.WriterUser;
+
+        // 원본: 시퀀스(NOCACHE: 다음 값 = LAST_NUMBER 가 정확하다), 작업 밖 부모, 시퀀스 기본값 열·이름 있는 PK·작업 밖 FK 를 가진 표,
+        // 함수 기반 인덱스, 시퀀스를 쓰는 BEFORE INSERT 트리거, 쓰기 계정에 준 SELECT.
+        await scope.ExecSourceAsync("CREATE SEQUENCE CM_SQ_SEQ START WITH 1 INCREMENT BY 1 NOCACHE");
+        await scope.ExecSourceAsync("CREATE TABLE CM_SQ_OUTER (ID NUMBER CONSTRAINT CM_SQ_OUTER_PK PRIMARY KEY)");
+        await scope.ExecSourceAsync(
+            "CREATE TABLE CM_SQ (ID NUMBER DEFAULT CM_SQ_SEQ.NEXTVAL CONSTRAINT CM_SQ_PK PRIMARY KEY, NAME VARCHAR2(30), NOTE VARCHAR2(30),"
+            + " OUTER_ID NUMBER CONSTRAINT CM_SQ_OUTER_FK REFERENCES CM_SQ_OUTER (ID))");
+        await scope.ExecSourceAsync("CREATE INDEX CM_SQ_UP_IX ON CM_SQ (UPPER(NAME))");
+        await scope.ExecSourceAsync("CREATE TRIGGER CM_SQ_TRG BEFORE INSERT ON CM_SQ FOR EACH ROW BEGIN"
+                                    + " IF :NEW.ID IS NULL THEN :NEW.ID := CM_SQ_SEQ.NEXTVAL; END IF; :NEW.NOTE := NVL(:NEW.NOTE, 'trg'); END;");
+        await scope.ExecSourceAsync($"GRANT SELECT ON CM_SQ TO {writer}");
+        await scope.ExecSourceAsync(Block(
+            "INSERT INTO CM_SQ_OUTER VALUES (1)",
+            "INSERT INTO CM_SQ (NAME, NOTE, OUTER_ID) VALUES ('alpha', 'a', 1)", // 기본값 → ID 1 (원본 시퀀스 다음 값은 최댓값 200 보다 작다: 적재 뒤 맞춘다)
+            "INSERT INTO CM_SQ (ID, NAME, NOTE, OUTER_ID) VALUES (100, 'beta', 'b', 1)",
+            "INSERT INTO CM_SQ (ID, NAME, NOTE, OUTER_ID) VALUES (200, 'gamma', 'c', 1)"));
+
+        // 대상: 작업 밖 부모만 있다(같은 행). 시퀀스·CM_SQ 는 없다.
+        await scope.CreateTargetTableAsync("CM_SQ_OUTER", "ID NUMBER CONSTRAINT CM_SQ_OUTER_PK PRIMARY KEY");
+        await scope.ExecTargetAsync(Block("INSERT INTO CM_SQ_OUTER VALUES (1)"));
+
+        var sourceNext = await ScalarAsync($"SELECT TO_CHAR(LAST_NUMBER) FROM DBA_SEQUENCES WHERE SEQUENCE_OWNER = '{scope.SrcUser}' AND SEQUENCE_NAME = 'CM_SQ_SEQ'");
+        Assert.NotNull(sourceNext);
+
+        var job = scope.Job(new TableRule("CM_SQ", RuleKind.All, TargetAction.AppendOnly) { CreateIfMissing = true });
+        var sessions = await scope.OpenSessionsAsync(env: ConnectionEnvironment.Development);
+        var report = await PrecheckAsync(scope, sessions, job); // 오류 없음
+
+        // 사전 점검: 시퀀스를 만든다(SQ1) — 원본 다음 값으로 시작, 맞추기 기준 = 기본값 열 ID.
+        Assert.Contains(report.Items, i => i.Code == CopyCheckCodes.CreateTable && i.Level == CheckLevel.Confirm);
+        Assert.Contains(report.Items, i => i.Code == CopyCheckCodes.SequenceCreated && i.Level == CheckLevel.Confirm);
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.SequenceDefaultDropped);
+        var plan = Assert.Single(report.Order);
+        Assert.True(plan.CreateMissing);
+        var sequence = Assert.Single(plan.CreateSequences);
+        Assert.Equal((dst, "CM_SQ_SEQ", sourceNext), (sequence.Owner, sequence.Name, sequence.Spec.StartWith)); // START WITH = 원본 LAST_NUMBER
+        Assert.Equal(["ID"], sequence.KeyColumns);
+
+        // 사전 점검: 함께 만드는 객체(SQ2) — 빼는 것이 없어 통과 항목이다.
+        var companions = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.CompanionObjects);
+        Assert.Equal(CheckLevel.Pass, companions.Level);
+        foreach (var part in new[] { "함수 기반 인덱스 CM_SQ_UP_IX", "트리거 CM_SQ_TRG", $"권한 → {writer}", "FK CM_SQ_OUTER_FK" })
+        {
+            Assert.Contains(part, companions.Message, StringComparison.Ordinal);
+        }
+
+        // 미리 보기: CREATE SEQUENCE → CREATE TABLE(PK 없이, DEFAULT 는 대상 시퀀스) → 적재 뒤 PK(PF4a) → 딸린 객체. 만든 시퀀스를 지우는 DROP 도 미리 받는다.
+        var sql = report.Preview.Select(p => p.Sql).ToList();
+        var createSequence = sql.IndexOf(sequence.CreateDdl);
+        Assert.Equal($"CREATE SEQUENCE \"{dst}\".\"CM_SQ_SEQ\" MINVALUE 1 NOMAXVALUE INCREMENT BY 1 START WITH {sourceNext} NOCACHE NOORDER NOCYCLE", sequence.CreateDdl);
+        var createTable = sql.FindIndex(s => s.StartsWith($"CREATE TABLE \"{dst}\".\"CM_SQ\"", StringComparison.Ordinal));
+        var addKey = sql.FindIndex(s => s.StartsWith($"ALTER TABLE \"{dst}\".\"CM_SQ\" ADD CONSTRAINT \"CM_SQ_PK\" PRIMARY KEY", StringComparison.Ordinal));
+        Assert.True(createSequence >= 0 && createSequence < createTable && createTable < addKey, string.Join(Environment.NewLine, sql));
+        Assert.DoesNotContain("PRIMARY KEY", sql[createTable], StringComparison.Ordinal);
+        Assert.Contains($"\"{dst}\".\"CM_SQ_SEQ\"", sql[createTable], StringComparison.Ordinal);
+        Assert.DoesNotContain(scope.SrcUser, sql[createTable], StringComparison.Ordinal);
+        Assert.Contains(report.Preview, p => p.Sql == $"DROP SEQUENCE \"{dst}\".\"CM_SQ_SEQ\"" && p.Policy == PolicyDecisionKind.Confirm);
+        Assert.Contains(sql, s => s.StartsWith($"CREATE INDEX \"{dst}\".\"CM_SQ_UP_IX\" ON \"{dst}\".\"CM_SQ\" (", StringComparison.Ordinal)
+                                  && s.Contains("UPPER", StringComparison.Ordinal));
+        Assert.Contains(sql, s => s.Contains("TRIGGER", StringComparison.Ordinal) && s.Contains($"\"{dst}\".\"CM_SQ_TRG\"", StringComparison.Ordinal));
+        Assert.Contains($"GRANT SELECT ON \"{dst}\".\"CM_SQ\" TO \"{writer}\"", sql);
+        Assert.Contains(sql, s => s.StartsWith($"ALTER TABLE \"{dst}\".\"CM_SQ\" ADD CONSTRAINT \"CM_SQ_OUTER_FK\" FOREIGN KEY", StringComparison.Ordinal)
+                                  && s.Contains($"REFERENCES \"{dst}\".\"CM_SQ_OUTER\"", StringComparison.Ordinal));
+
+        var result = await RunAsync(scope, sessions, job, report);
+
+        // 딸린 객체 하나라도 못 만들면 부분 실패가 되므로, 성공 = 모두 만들었다.
+        Assert.True(result.Outcome == CopyOutcome.Succeeded && result.FailedRows.Count == 0, Describe(result));
+        Assert.Empty(scope.Ui.Confirms);
+        Assert.Contains(result.Notices, n => n.Contains("CM_SQ_SEQ", StringComparison.Ordinal) && n.Contains("뒤로 맞췄습니다", StringComparison.Ordinal));
+        Assert.Equal("1:a,100:b,200:c", await ListAsync($"SELECT ID || ':' || NOTE FROM {dst}.CM_SQ ORDER BY ID"));
+
+        // SQ1: 시퀀스(증가값은 맞춘 뒤 원래값으로 돌아옴)와 대상 시퀀스를 가리키는 기본값.
+        Assert.Equal("1:0", await ScalarAsync($"SELECT INCREMENT_BY || ':' || CACHE_SIZE FROM DBA_SEQUENCES WHERE SEQUENCE_OWNER = '{dst}' AND SEQUENCE_NAME = 'CM_SQ_SEQ'"));
+        var idDefault = await ScalarAsync($"SELECT DATA_DEFAULT_VC FROM DBA_TAB_COLUMNS WHERE OWNER = '{dst}' AND TABLE_NAME = 'CM_SQ' AND COLUMN_NAME = 'ID'");
+        Assert.NotNull(idDefault);
+        Assert.Contains("CM_SQ_SEQ", idDefault, StringComparison.Ordinal);
+        Assert.Contains("NEXTVAL", idDefault, StringComparison.Ordinal);
+        Assert.DoesNotContain(scope.SrcUser, idDefault, StringComparison.Ordinal);
+
+        // PF4a: 적재 뒤 붙인 이름 있는 PK.
+        Assert.Equal("ENABLED:VALIDATED", await ScalarAsync($"SELECT STATUS || ':' || VALIDATED FROM DBA_CONSTRAINTS WHERE OWNER = '{dst}'"
+                                                            + " AND TABLE_NAME = 'CM_SQ' AND CONSTRAINT_NAME = 'CM_SQ_PK' AND CONSTRAINT_TYPE = 'P'"));
+
+        // SQ2: 함수 기반 인덱스, 켜진 VALID 트리거, 쓰기 계정 권한, 대상에 있던 작업 밖 부모를 참조하는 FK.
+        Assert.Equal("FUNCTION-BASED NORMAL", await ScalarAsync($"SELECT INDEX_TYPE FROM DBA_INDEXES WHERE OWNER = '{dst}' AND INDEX_NAME = 'CM_SQ_UP_IX'"
+                                                                + $" AND TABLE_OWNER = '{dst}' AND TABLE_NAME = 'CM_SQ'"));
+        Assert.Equal(1, await CountAsync($"SELECT COUNT(*) FROM DBA_IND_EXPRESSIONS WHERE INDEX_OWNER = '{dst}' AND INDEX_NAME = 'CM_SQ_UP_IX'"));
+        Assert.Equal("ENABLED:VALID", await ScalarAsync("SELECT t.STATUS || ':' || o.STATUS FROM DBA_TRIGGERS t"
+                                                        + " JOIN DBA_OBJECTS o ON o.OWNER = t.OWNER AND o.OBJECT_NAME = t.TRIGGER_NAME AND o.OBJECT_TYPE = 'TRIGGER'"
+                                                        + $" WHERE t.OWNER = '{dst}' AND t.TRIGGER_NAME = 'CM_SQ_TRG' AND t.TABLE_OWNER = '{dst}' AND t.TABLE_NAME = 'CM_SQ'"));
+        Assert.Equal(1, await CountAsync($"SELECT COUNT(*) FROM DBA_TAB_PRIVS WHERE OWNER = '{dst}' AND TABLE_NAME = 'CM_SQ'"
+                                         + $" AND GRANTEE = '{writer}' AND PRIVILEGE = 'SELECT'"));
+        Assert.Equal($"ENABLED:VALIDATED:{dst}:CM_SQ_OUTER_PK", await ScalarAsync("SELECT STATUS || ':' || VALIDATED || ':' || R_OWNER || ':' || R_CONSTRAINT_NAME"
+                                                                                  + $" FROM DBA_CONSTRAINTS WHERE OWNER = '{dst}' AND TABLE_NAME = 'CM_SQ'"
+                                                                                  + " AND CONSTRAINT_NAME = 'CM_SQ_OUTER_FK' AND CONSTRAINT_TYPE = 'R'"));
+
+        // 새 행(ID 없이): 기본값의 시퀀스가 복사한 최댓값(200) 뒤에서 나오고, 트리거가 NOTE 를 채운다.
+        await scope.ExecTargetAsync("INSERT INTO CM_SQ (NAME, OUTER_ID) VALUES ('new', 1)");
+        var added = await ScalarAsync($"SELECT ID || ':' || NOTE FROM {dst}.CM_SQ WHERE NAME = 'new'");
+        Assert.NotNull(added);
+        var parts = added.Split(':');
+        Assert.True(long.Parse(parts[0], CultureInfo.InvariantCulture) > 200, added);
+        Assert.Equal("trg", parts[1]);
     }
 
     [Fact]

@@ -73,7 +73,10 @@ public static class CopyCheckCodes
     /// <summary>통과 안내(교차 복사로 Oracle CHAR 를 Tibero 에 넣을 때, 표마다 한 항목): Tibero 는 CHAR(n CHAR) 를 글자 수로 공백을 채워 뒤 공백 수가 달라질 수 있다.</summary>
     public const string CharPadDiffers = "CharPadDiffers";
 
-    /// <summary>확인 필요(교차 복사로 표를 만들 때, 열마다 한 항목): 기본값이 가리키는 시퀀스가 대상에 없어 그 열의 DEFAULT 를 빼고 만든다.</summary>
+    /// <summary>
+    /// 확인 필요(표를 만들 때, 열마다 한 항목): 그 열의 DEFAULT 시퀀스.NEXTVAL 을 빼고 만든다 — 시퀀스가 다른 계정에 있는데 대상에 없음,
+    /// 대상에 만들 수 없음(CREATE SEQUENCE 권한 없음·원본 속성을 못 읽음), 대상 서버가 시퀀스 기본값을 받지 않음(Oracle 11g, 시퀀스는 만든다).
+    /// </summary>
     public const string SequenceDefaultDropped = "SequenceDefaultDropped";
 
     /// <summary>
@@ -81,6 +84,21 @@ public static class CopyCheckCodes
     /// 동시 수를 2 이상 골랐지만 한 테이블씩 돌면 통과 안내(그 이유, <see cref="CopyConcurrency.Effective"/>).
     /// </summary>
     public const string ConcurrentCopy = "ConcurrentCopy";
+
+    /// <summary>
+    /// 확인 필요(표를 만들 때, 표마다 한 항목): 원본 테이블에 연결된 시퀀스(열 DEFAULT·그 테이블 트리거가 쓰는 시퀀스)가 대상 스키마에 없어 테이블보다 먼저 원본 속성으로 만든다
+    /// (START WITH = 원본 다음 값, 적재 뒤 키 최댓값 위로 맞춤). 만드는 문장은 미리 보기에 있다(조정 결정 76).
+    /// </summary>
+    public const string SequenceCreated = "SequenceCreated";
+
+    /// <summary>확인 필요(표를 만들 때): 대상에 이미 있는 같은 이름 시퀀스는 건드리지 않는데, 그 다음 값이 원본 키 최댓값 이하라 새 행의 키가 겹칠 수 있다.</summary>
+    public const string SequenceBehind = "SequenceBehind";
+
+    /// <summary>
+    /// 표를 만들 때(표마다 한 항목): 적재 뒤 함께 만드는 객체(트리거·권한·함수 기반 인덱스·작업 밖 부모 FK, <see cref="CopyTablePlan.Companions"/>)와 만들지 않는 것.
+    /// 빼는 것이 있으면 확인 필요, 없으면 통과(조정 결정 78).
+    /// </summary>
+    public const string CompanionObjects = "CompanionObjects";
 }
 
 public enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }
@@ -103,6 +121,21 @@ public sealed record CopyTablePlan(TableRule Rule, TableInfo Source, TableInfo T
     /// 새 표라 지우기를 건너뛰고(INSERT 로 넣는다) 제약·트리거·권한 점검을 하지 않는다.
     /// </summary>
     public bool CreateMissing { get; init; }
+
+    /// <summary>
+    /// 이 표를 만들기 전에 대상에 만드는 시퀀스(<see cref="CopyCheckCodes.SequenceCreated"/>, 「없으면 만들기」·「다시 만들기」만). 여러 표가 같은 시퀀스를 쓰면 표마다 들어 있고 실행기는 한 번만 만든다.
+    /// </summary>
+    public IReadOnlyList<CopySequencePlan> CreateSequences { get; init; } = [];
+
+    /// <summary>
+    /// 작업의 시퀀스 보정 연결(<see cref="SequenceRule"/>)이 쓰는데 대상에 없어 적재 전에 만드는 시퀀스(SQ3, 결정 84, <see cref="CopyCheckCodes.SequenceCreated"/>).
+    /// 원본 계정에 같은 이름 시퀀스가 있으면 그 속성, 없으면 기본 속성(<see cref="SequenceSpec.Defaults"/>)이다. 만든 뒤 적재 뒤 보정은 지금과 같다.
+    /// <see cref="CreateSequences"/> 에 이미 있는 시퀀스는 들어 있지 않다.
+    /// </summary>
+    public IReadOnlyList<CopySequencePlan> RuleSequences { get; init; } = [];
+
+    /// <summary>만드는 표에 적재 뒤 함께 만드는 객체(<see cref="CopyCheckCodes.CompanionObjects"/>). 만들지 않는 표는 비어 있다.</summary>
+    public CompanionDdl Companions { get; init; } = CompanionDdl.Empty;
 
     public bool CanDisableTriggers { get; init; }
     public IReadOnlyList<string> Triggers { get; init; } = [];

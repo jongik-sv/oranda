@@ -43,6 +43,9 @@ public partial class TiberoCopyCatalogIt
         ("copy.mview_log_count", 1),
         ("copy.vpd_policy_count", 1),
         ("copy.wait_cause", 7),
+        ("copy.sequence_attrs", 7),
+        ("copy.trigger_sequences", 2),
+        ("copy.user_exists", 1),
     ];
 
     [TiberoItFact]
@@ -288,8 +291,9 @@ public partial class TiberoCopyCatalogIt
     {
         "copy.session_user" or "copy.session_roles" or "copy.session_privs" => [],
         "copy.sequence_names" => [("OWN", owner)],
-        "copy.sequence_info" => [("OWN", owner), ("SEQ", name)],
+        "copy.sequence_info" or "copy.sequence_attrs" => [("OWN", owner), ("SEQ", name)],
         "copy.parameter_value" => [("PNAME", name)],
+        "copy.user_exists" => [("NAME", name)],
         "copy.constraint_owner" or "copy.index_owner" or "copy.object_exists" => [("OWN", owner), ("NAME", name)],
         "copy.table_exists" or "copy.sequence_increment" or "copy.fk_columns" => [("OWNER", owner), ("NAME", name)],
         "copy.wait_cause" => [("SID", "-1"), ("INST", name)], // 없는 SID·없는 인스턴스 이름: 0행이어도 열 수는 나온다

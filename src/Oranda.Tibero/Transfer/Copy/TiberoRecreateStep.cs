@@ -139,6 +139,13 @@ internal sealed partial class TiberoRecreateStep : ICopyRecreateStep
         return rows.Select(r => Text(r[0])).OfType<string>().ToHashSet(StringComparer.Ordinal);
     }
 
+    /// <summary>원본 인덱스 열(함수 기반 식 포함, SQ2). 객체 상세와 같은 조회(<see cref="TiberoTableKeyDetailProvider"/>). 볼 수 없으면 null.</summary>
+    public async Task<IReadOnlyList<IndexColumnDetail>?> IndexColumnsAsync(ISession source, DbObjectRef table, string indexName, CancellationToken ct)
+    {
+        var result = await new TiberoTableKeyDetailProvider().GetIndexColumnsAsync(source, table, indexName, ct).ConfigureAwait(false);
+        return result.Denied ? null : result.Items;
+    }
+
     /// <summary>
     /// 서버가 지은 이름인가. 6.2.15 실측(#76): 이름 없는 제약은 <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>. 문서에 나오는 <c>_SYS_…</c> 와
     /// Core 가 보는 Oracle 모양(<c>SYS_…</c>, <c>BIN$…</c>)도 서버 이름으로 본다.

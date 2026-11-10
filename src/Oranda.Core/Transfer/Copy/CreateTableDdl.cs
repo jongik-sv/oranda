@@ -20,6 +20,18 @@ public static class CreateTableDdl
     /// <param name="isServerName">서버가 지은 이름인가(그 이름은 명시하지 않고 대상 서버가 새로 짓게 둔다). null = Oracle 판정(<see cref="IsServerName(string)"/>)</param>
     public static IReadOnlyList<string> Build(TableInfo source, string targetOwner, IReadOnlySet<string> tablesInJob, Func<string, bool>? isServerName = null)
     {
+        var (now, _) = Build(source, targetOwner, tablesInJob, isServerName, keysAfterLoad: false);
+        return now;
+    }
+
+    /// <summary>
+    /// <see cref="Build(TableInfo, string, IReadOnlySet{string}, Func{string, bool}?)"/> 와 같되, <paramref name="keysAfterLoad"/> 이면 PK·UK·인덱스를 CREATE TABLE 에서 떼어
+    /// 적재 뒤 보낼 문장(<c>AfterLoad</c>: <c>ALTER TABLE … ADD [CONSTRAINT n] PRIMARY KEY|UNIQUE (…)</c> → <c>CREATE INDEX</c>)으로 돌려준다(PF4, 조정 결정 74: 새 표는 인덱스 유지 없이 넣는다).
+    /// <c>Now</c> = CREATE TABLE(열·CHECK) → 작업 안 FK → COMMENT. 떼지 않으면 <c>AfterLoad</c> 는 비고 <c>Now</c> 가 예전 <see cref="Build(TableInfo, string, IReadOnlySet{string}, Func{string, bool}?)"/> 와 같다.
+    /// </summary>
+    public static (IReadOnlyList<string> Now, IReadOnlyList<string> AfterLoad) Build(TableInfo source, string targetOwner, IReadOnlySet<string> tablesInJob,
+                                                                                    Func<string, bool>? isServerName, bool keysAfterLoad)
+    {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetOwner);
         ArgumentNullException.ThrowIfNull(tablesInJob);
@@ -27,6 +39,7 @@ public static class CreateTableDdl
 
         var table = Qualified(targetOwner, source.Table.Name);
         var statements = new List<string>();
+        var afterLoad = new List<string>();
 
         var parts = source.Columns.OrderBy(c => c.Position)
             .Select(c => ColumnDefinition(c with { DefaultValue = Reowned(c.DefaultValue, source.Table.Owner, targetOwner) }))
@@ -40,9 +53,19 @@ public static class CreateTableDdl
                 ConstraintKind.Check when !string.IsNullOrWhiteSpace(c.Condition) => $"CHECK ({c.Condition})",
                 _ => null,
             };
-            if (body is not null)
+            if (body is null)
             {
-                parts.Add(ConstraintPrefix(c, server) + body + (c.IsEnabled ? string.Empty : " DISABLE"));
+                continue;
+            }
+
+            var definition = ConstraintPrefix(c, server) + body + (c.IsEnabled ? string.Empty : " DISABLE");
+            if (keysAfterLoad && c.Kind is ConstraintKind.PrimaryKey or ConstraintKind.Unique)
+            {
+                afterLoad.Add($"ALTER TABLE {table} ADD {definition}");
+            }
+            else
+            {
+                parts.Add(definition);
             }
         }
 
@@ -62,8 +85,8 @@ public static class CreateTableDdl
 
         foreach (var index in CreatedIndexes(source, server))
         {
-            statements.Add($"CREATE {(index.IsUnique ? "UNIQUE " : string.Empty)}INDEX {Qualified(targetOwner, index.Name)}"
-                           + $" ON {table} ({Quoted(index.Columns)})");
+            (keysAfterLoad ? afterLoad : statements).Add($"CREATE {(index.IsUnique ? "UNIQUE " : string.Empty)}INDEX {Qualified(targetOwner, index.Name)}"
+                                                        + $" ON {table} ({Quoted(index.Columns)})");
         }
 
         if (!string.IsNullOrEmpty(source.Comment))
@@ -76,8 +99,11 @@ public static class CreateTableDdl
             statements.Add($"COMMENT ON COLUMN {table}.{SqlIdentifier.QuoteAlways(c.Name)} IS {Literal(c.Comment!)}");
         }
 
-        return statements;
+        return (statements, afterLoad);
     }
+
+    /// <summary>적재 뒤 문장(<c>AfterLoad</c>) 가운데 PK·UK 를 붙이는 것인가(실패하면 키 없는 표가 남으므로 실패로 본다. 인덱스는 알림만).</summary>
+    public static bool IsKeyStatement(string text) => text.StartsWith("ALTER TABLE ", StringComparison.Ordinal);
 
     /// <summary>
     /// <see cref="Build"/> 가 대상 소유자 스키마에 이름을 지정해 만드는 제약·인덱스 이름(FK 제외). PK·UK 는 같은 이름의 인덱스도 만든다.

@@ -279,6 +279,16 @@ internal sealed class CrossDbmsItEnvironment : IAsyncDisposable
         }
     }
 
+    /// <summary>복사가 만들 시퀀스(SQ1)가 그 쪽에 없게 한다. Tibero 는 남은 시퀀스를 지우고 끝에 다시 지운다. Oracle 은 시험마다 새 임시 사용자라 할 일이 없다.</summary>
+    public async Task EnsureSequenceMissingAsync(Dbms dbms, string sequence)
+    {
+        if (dbms == Dbms.Tibero)
+        {
+            await SilentTiberoAsync($"DROP SEQUENCE {sequence}");
+            _tiberoSequences.Add(sequence);
+        }
+    }
+
     /// <summary>그 쪽에 시퀀스를 만든다(1 부터 1씩). Tibero 는 끝에 지운다.</summary>
     public async Task CreateSequenceAsync(Dbms dbms, string sequence)
     {

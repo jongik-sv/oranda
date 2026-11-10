@@ -47,6 +47,21 @@ public sealed partial class CopyCatalogTextTests
             "SELECT SEQUENCE_NAME FROM ALL_SEQUENCES WHERE SEQUENCE_OWNER = :OWN ORDER BY SEQUENCE_NAME", ["OWN"]),
         ["copy.parameter_value"] = ("SELECT VALUE FROM V$PARAMETER WHERE NAME = :PNAME", ["PNAME"]),
 
+        // xc-ddl SQ1: 표를 만들 때 함께 만드는 시퀀스(원본 속성·원본 트리거가 쓰는 시퀀스). 옮긴 상수가 아니라 새 글이다.
+        ["copy.sequence_attrs"] = (
+            "SELECT TO_CHAR(MIN_VALUE), TO_CHAR(MAX_VALUE), TO_CHAR(INCREMENT_BY), CYCLE_FLAG, ORDER_FLAG, TO_CHAR(CACHE_SIZE), TO_CHAR(LAST_NUMBER)"
+            + " FROM ALL_SEQUENCES WHERE SEQUENCE_OWNER = :OWN AND SEQUENCE_NAME = :SEQ",
+            ["OWN", "SEQ"]),
+        ["copy.trigger_sequences"] = (
+            "SELECT DISTINCT d.REFERENCED_OWNER, d.REFERENCED_NAME FROM ALL_DEPENDENCIES d"
+            + " JOIN ALL_TRIGGERS t ON t.OWNER = d.OWNER AND t.TRIGGER_NAME = d.NAME"
+            + " WHERE d.TYPE = 'TRIGGER' AND d.REFERENCED_TYPE = 'SEQUENCE' AND t.TABLE_OWNER = :OWN AND t.TABLE_NAME = :TBL"
+            + " ORDER BY d.REFERENCED_OWNER, d.REFERENCED_NAME",
+            ["OWN", "TBL"]),
+
+        // xc-ddl SQ2: 원본 권한을 받을 사용자가 대상에 있는가.
+        ["copy.user_exists"] = ("SELECT COUNT(*) FROM ALL_USERS WHERE USERNAME = :NAME", ["NAME"]),
+
         // CopyPrecheckService.cs
         ["copy.tablespace"] = ("SELECT tablespace_name FROM all_tables WHERE owner = :OWN AND table_name = :TBL", ["OWN", "TBL"]),
         ["copy.constraint_owner"] = ("SELECT table_name FROM all_constraints WHERE owner = :OWN AND constraint_name = :NAME", ["OWN", "NAME"]),
@@ -151,6 +166,7 @@ public sealed partial class CopyCatalogTextTests
         "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.cs",
         "src/Oranda.Oracle/Transfer/Copy/OracleCopyPrecheckDialect.cs",
         "src/Oranda.Core/Transfer/Copy/CopyRunner.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyRunner.Create.cs",
         "src/Oranda.Oracle/Transfer/Copy/RecreateStep.cs",
         "src/Oranda.Core/Transfer/Copy/CopyWaitProbe.cs",
     ];

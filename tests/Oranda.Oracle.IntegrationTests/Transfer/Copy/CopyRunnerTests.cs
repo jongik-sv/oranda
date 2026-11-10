@@ -654,6 +654,47 @@ public sealed class CopyRunnerTests
         Assert.True(nextB >= 101m, "SQ_B_SEQ 다음 값 " + nextB.ToString(CultureInfo.InvariantCulture));
     }
 
+    /// <summary>
+    /// SQ3(결정 84): 시퀀스 보정 연결의 시퀀스가 대상 계정에 없으면 적재 전에 만들고 보정한다. SQ_C_SEQ 는 원본 계정에 있어 그 속성(INCREMENT BY 2, CACHE 10)으로,
+    /// SQ_D_SEQ 는 원본에도 없어 기본 속성(INCREMENT BY 1)으로 만든다. 두 시퀀스 모두 다음 값이 적재한 키 최댓값 뒤다. 표는 이미 있으니 적재 뒤에도 시퀀스는 남는다.
+    /// </summary>
+    [Fact]
+    public async Task Missing_rule_sequence_is_created_before_the_load_and_ends_after_the_loaded_keys()
+    {
+        await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
+        await BothAsync(scope, "SQ_C", "ID NUMBER PRIMARY KEY, V VARCHAR2(10)");
+        await BothAsync(scope, "SQ_D", "ID NUMBER PRIMARY KEY, V VARCHAR2(10)");
+        await scope.ExecSourceAsync(Block(
+            "INSERT INTO SQ_C SELECT LEVEL, 'c' FROM DUAL CONNECT BY LEVEL <= 300",
+            "INSERT INTO SQ_D SELECT LEVEL, 'd' FROM DUAL CONNECT BY LEVEL <= 40"));
+        await scope.ExecSourceAsync("CREATE SEQUENCE SQ_C_SEQ START WITH 7 INCREMENT BY 2 CACHE 10");
+        var job = scope.Job(
+            new TableRule("SQ_C", RuleKind.All, TargetAction.DeleteAllInsert),
+            new TableRule("SQ_D", RuleKind.All, TargetAction.DeleteAllInsert)) with
+        {
+            Sequences = [new SequenceRule("SQ_C_SEQ", "SQ_C", "ID"), new SequenceRule("SQ_D_SEQ", "SQ_D", "ID")],
+        };
+        var sessions = await scope.OpenSessionsAsync();
+        var report = await PrecheckAsync(scope, sessions, job, NoPeriod);
+
+        var created = report.Items.Where(i => i.Code == CopyCheckCodes.SequenceCreated).ToList();
+        Assert.Equal(2, created.Count);
+        Assert.Contains(created, i => i.Sequence == "SQ_C_SEQ" && i.Message.Contains("원본 시퀀스", StringComparison.Ordinal));
+        Assert.Contains(created, i => i.Sequence == "SQ_D_SEQ" && i.Message.Contains("기본 속성", StringComparison.Ordinal));
+        Assert.DoesNotContain(report.Items, i => i.Code == "SequenceGap" && i.Message.Contains("볼 수 없어", StringComparison.Ordinal));
+        Assert.Contains(report.Preview, p => p.Sql.StartsWith($"CREATE SEQUENCE \"{scope.DstUser}\".\"SQ_C_SEQ\"", StringComparison.Ordinal) && p.Sql.Contains("INCREMENT BY 2", StringComparison.Ordinal));
+
+        var result = await RunAsync(scope, sessions, job, report, NoPeriod, new RecordingRunLog());
+
+        AssertSucceeded(result);
+        Assert.Equal(1m, decimal.Parse(await ScalarAsAsync(scope, scope.DstUser, "SELECT COUNT(*) FROM USER_SEQUENCES WHERE SEQUENCE_NAME = 'SQ_C_SEQ' AND INCREMENT_BY = 2 AND CACHE_SIZE = 10") ?? "0", CultureInfo.InvariantCulture));
+        Assert.Equal(1m, decimal.Parse(await ScalarAsAsync(scope, scope.DstUser, "SELECT COUNT(*) FROM USER_SEQUENCES WHERE SEQUENCE_NAME = 'SQ_D_SEQ' AND INCREMENT_BY = 1") ?? "0", CultureInfo.InvariantCulture));
+        var nextC = decimal.Parse(await ScalarAsAsync(scope, scope.DstUser, "SELECT SQ_C_SEQ.NEXTVAL FROM DUAL") ?? "0", CultureInfo.InvariantCulture);
+        var nextD = decimal.Parse(await ScalarAsAsync(scope, scope.DstUser, "SELECT SQ_D_SEQ.NEXTVAL FROM DUAL") ?? "0", CultureInfo.InvariantCulture);
+        Assert.True(nextC >= 301m, "SQ_C_SEQ 다음 값 " + nextC.ToString(CultureInfo.InvariantCulture));
+        Assert.True(nextD >= 41m, "SQ_D_SEQ 다음 값 " + nextD.ToString(CultureInfo.InvariantCulture));
+    }
+
     [Fact]
     public async Task Readonly_target_profile_is_denied()
     {

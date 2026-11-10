@@ -73,6 +73,18 @@ public static class CopyCommonStatements
             ChangeTarget = new ChangeTarget(owner, table, "TABLE", ChangeOperation.Drop),
         };
 
+    /// <summary>
+    /// 이번 실행이 테이블보다 먼저 만든 시퀀스(<see cref="CopySequencePlan"/>)를, 그 시퀀스를 쓰는 테이블을 모두 만들지 못했거나 적재를 끝내지 못해 지웠을 때 함께 지우는 DROP.
+    /// 정책의 위험 명령이라 사전 점검 미리 보기에 같은 글이 들어 있어 미리 받은 확인으로 넘어간다.
+    /// </summary>
+    public static SqlStatement DropCreatedSequence(string owner, string sequence) =>
+        new($"DROP SEQUENCE {Qualified(owner, sequence)}", default, StatementKind.Ddl)
+        {
+            Verb = "DROP",
+            DangerousTarget = sequence,
+            ChangeTarget = new ChangeTarget(owner, sequence, "SEQUENCE", ChangeOperation.Drop),
+        };
+
     /// <summary>다시 만들기·되살리기 DDL(CREATE TABLE·INDEX, COMMENT, ALTER TABLE ADD, CREATE TRIGGER, GRANT). 글은 만든 쪽 그대로 보낸다.</summary>
     public static SqlStatement RecreateDdl(string text)
     {

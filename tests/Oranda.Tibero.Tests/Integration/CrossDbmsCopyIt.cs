@@ -506,6 +506,61 @@ public class CrossDbmsCopyIt(ITestOutputHelper output)
         Assert.True(value > 125, "the target sequence was not advanced past the copied maximum ID 125");
     }
 
+    /// <summary>
+    /// SQ3(결정 84): 표에 연결한 시퀀스가 대상에 없으면 적재 전에 만들고 복사한 ID 최대값(125) 뒤로 보정한다(대상 DBMS 문법·카탈로그로).
+    /// Oracle→Tibero 는 원본에 같은 이름 시퀀스(INCREMENT BY 3)가 있어 그 속성으로, Tibero→Oracle 은 원본에도 없어 기본 속성(INCREMENT BY 1)으로 만든다.
+    /// Tibero 는 첫 계정에만 만들고 끝에 지운다(Oracle 은 시험마다 새 임시 사용자).
+    /// </summary>
+    [CrossDbmsTheory]
+    [InlineData(Dbms.Oracle, true)]
+    [InlineData(Dbms.Tibero, false)]
+    public async Task Linked_sequence_missing_in_the_target_is_created_then_advanced_past_the_copied_maximum(Dbms source, bool sourceHasSequence)
+    {
+        await using var env = await CrossDbmsItEnvironment.CreateAsync();
+        if (env is null)
+        {
+            return;
+        }
+
+        var target = Other(source);
+        var item = "sequence_created." + Dir(source);
+        var t = CrossDbmsItEnvironment.Name("SQ3_" + Dir(source));
+        var sequence = CrossDbmsItEnvironment.Name("SQ3_SQ_" + Dir(source));
+        const string ddl = "ID NUMBER(10) PRIMARY KEY, V VARCHAR2(20)";
+        await env.CreateTableAsync(source, t, ddl);
+        await env.CreateTableAsync(target, t, ddl);
+        await env.EnsureSequenceMissingAsync(target, sequence); // 복사가 만든 시퀀스도 끝에 지운다(Tibero)
+        if (sourceHasSequence)
+        {
+            await env.ExecAsync(source, $"CREATE SEQUENCE {sequence} START WITH 1 INCREMENT BY 3");
+        }
+        else
+        {
+            await env.EnsureSequenceMissingAsync(source, sequence);
+        }
+
+        await env.ExecAsync(source, $"INSERT INTO {t} (ID, V) SELECT 100 + LEVEL, 'v' || LEVEL FROM DUAL CONNECT BY LEVEL <= 25");
+
+        var ctx = await PrecheckAsync(env, source, target, new TableRule(t, RuleKind.All, TargetAction.AppendOnly),
+            sequences: [new SequenceRule(sequence, t, "ID")]);
+        var created = Assert.Single(ctx.Report.Items, i => i.Code == CopyCheckCodes.SequenceCreated);
+        Note(env, item + ".precheck", created.Message);
+        Assert.Contains(sourceHasSequence ? "원본 시퀀스" : "기본 속성", created.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(ctx.Report.Items, i => i.Code == "SequenceGap" && i.Message.Contains("볼 수 없어", StringComparison.Ordinal));
+
+        var result = await RunAsync(env, ctx, new CrossMemoryRunLog());
+        NoteResult(env, item, result);
+        Assert.Equal(CopyOutcome.Succeeded, Assert.Single(result.Tables).Outcome);
+
+        var increment = Assert.Single(await env.QueryAsync(target, $"SELECT INCREMENT_BY FROM USER_SEQUENCES WHERE SEQUENCE_NAME = '{sequence}'"))[0];
+        Note(env, item + ".increment", increment ?? "<null>");
+        Assert.Equal(sourceHasSequence ? 3m : 1m, decimal.Parse(increment!, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture));
+        var next = await env.QueryAsync(target, $"SELECT {sequence}.NEXTVAL FROM DUAL");
+        var value = decimal.Parse(next[0][0]!, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture);
+        Note(env, item + ".nextval", "복사 뒤 NEXTVAL " + next[0][0]);
+        Assert.True(value > 125, "the created target sequence was not advanced past the copied maximum ID 125");
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // 중지
     // ---------------------------------------------------------------------------------------------------------------

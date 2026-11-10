@@ -100,8 +100,11 @@ public sealed class CheckItemViewModel
         [CopyCheckCodes.BlobEmptyToNull] = "빈 BLOB 은 NULL",
         [CopyCheckCodes.CrossStringBytes] = "Oracle 바이트 한도 넘을 수 있음",
         [CopyCheckCodes.CharPadDiffers] = "CHAR 뒤 공백 달라짐",
-        [CopyCheckCodes.SequenceDefaultDropped] = "없는 시퀀스 기본값 뺌",
+        [CopyCheckCodes.SequenceDefaultDropped] = "시퀀스 기본값 뺌",
         [CopyCheckCodes.ConcurrentCopy] = "동시 복사 안내",
+        [CopyCheckCodes.SequenceCreated] = "시퀀스 함께 만듦",
+        [CopyCheckCodes.SequenceBehind] = "대상 시퀀스가 키보다 뒤",
+        [CopyCheckCodes.CompanionObjects] = "함께 만드는 객체",
     };
 
     public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices, string? tableText = null)

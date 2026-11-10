@@ -88,6 +88,9 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
         /// <summary>대상에 표가 없어 이번 실행이 만들 표의 규칙 키(「없으면 만들기」, <see cref="CopyTablePlan.CreateMissing"/>).</summary>
         private readonly HashSet<string> _creating = new(StringComparer.Ordinal);
+
+        /// <summary>규칙 키 → 표를 만들기 전에 대상에 만드는 시퀀스(<see cref="PlanLinkedSequencesAsync"/>). 만드는 표만 들어 있다.</summary>
+        private readonly Dictionary<string, IReadOnlyList<CopySequencePlan>> _sequencePlans = new(StringComparer.Ordinal);
         private SessionAccess _sourceAccess = null!;
         private SessionAccess _targetAccess = null!;
         private CopySqlBuilder _builder = null!;
@@ -142,7 +145,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 _items.Add(concurrency); // 동시 테이블 수(PF2)
             }
 
-            await CheckSequencesAsync(plans, ct).ConfigureAwait(false);
+            order = await CheckSequencesAsync(plans, order, ct).ConfigureAwait(false);
             await CheckReadConsistencyAsync(ct).ConfigureAwait(false);
             var preview = await BuildPreviewAsync(order, ct).ConfigureAwait(false);
             return new PrecheckReport(_items, order, preview, _estimated) { Stages = _stages };
@@ -187,7 +190,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                     createRefused = await CreateRefusedAsync(targetOwner, rule.Table, ct).ConfigureAwait(false);
                     if (createRefused is null)
                     {
-                        source = await DropMissingSequenceDefaultsAsync(rule, key, source, ct).ConfigureAwait(false);
+                        source = await PlanLinkedSequencesAsync(rule, key, source, creating: true, ct).ConfigureAwait(false);
                         _sourceTables[key] = source;
                         _targetTables[key] = PrecheckRules.AsRecreated(source, targetOwner);
                         _creating.Add(key);
@@ -210,7 +213,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
                 if (IsRecreate(rule) && CanRecreate)
                 {
-                    source = await DropMissingSequenceDefaultsAsync(rule, key, source, ct).ConfigureAwait(false);
+                    source = await PlanLinkedSequencesAsync(rule, key, source, creating: false, ct).ConfigureAwait(false);
                 }
 
                 _sourceTables[key] = source;
@@ -222,60 +225,213 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         }
 
         /// <summary>
-        /// 교차 복사로 표를 만들 때(없으면 만들기·다시 만들기): 열 기본값이 <c>시퀀스.NEXTVAL</c> 인데 그 시퀀스가 대상에 없으면 그 열의 DEFAULT 만 빼고 만든다
-        /// (<see cref="CopyCheckCodes.SequenceDefaultDropped"/> 확인 항목). 뺀 구조를 점검 계획(<see cref="CopyTablePlan.Source"/>)에 담으므로 미리 보기 DDL 과 실행 DDL 이 같다.
-        /// 소유자 접두가 없으면 대상 소유자, 원본 소유자면 대상 소유자로 바뀌는 쪽(<see cref="CreateTableDdl"/> 의 소유자 치환), 다른 소유자는 그 소유자에서 찾는다.
-        /// 시퀀스 목록을 읽지 못하면 있는 것으로 보고 기본값을 둔다(같은 DBMS 복사는 바꾸지 않는다).
+        /// 표를 만들 때(없으면 만들기·다시 만들기, 같은 DBMS·교차 모두) 원본 테이블에 연결된 시퀀스를 정한다(조정 결정 76, 결정 50 을 대신함).
+        /// 연결된 시퀀스 = 열 DEFAULT 의 <c>시퀀스.NEXTVAL</c> + (<paramref name="creating"/> 일 때) 그 테이블 트리거가 참조하는 시퀀스(ALL_DEPENDENCIES — 원본 트리거는 새 표에만 만든다).
+        /// 원본 소유자(또는 소유자 없음)의 시퀀스가 대상 소유자에 없으면 테이블보다 먼저 원본 속성으로 만든다(<see cref="CopySequencePlan"/>, <see cref="CopyCheckCodes.SequenceCreated"/>).
+        /// 만들 수 없으면(CREATE SEQUENCE 권한 없음·원본 속성 못 읽음) 그 열의 DEFAULT 만 빼고 만든다(<see cref="CopyCheckCodes.SequenceDefaultDropped"/>).
+        /// 다른 소유자의 시퀀스는 만들지 않는다: 대상에 없으면 DEFAULT 를 뺀다. 대상에 이미 있으면 건드리지 않고, 다음 값이 원본 키 최댓값 이하면 알린다(<see cref="CopyCheckCodes.SequenceBehind"/>).
+        /// Oracle 11g 대상은 시퀀스 기본값을 쓸 수 없어(12c 부터, ORA-00984) DEFAULT 는 빼되 시퀀스는 만든다(조정 결정 66). 시퀀스 목록을 읽지 못하면 있는 것으로 보고 그대로 둔다.
+        /// 뺀 구조를 점검 계획(<see cref="CopyTablePlan.Source"/>)에 담으므로 미리 보기 DDL 과 실행 DDL 이 같다.
         /// </summary>
-        private async Task<TableInfo> DropMissingSequenceDefaultsAsync(TableRule rule, string key, TableInfo source, CancellationToken ct)
+        private async Task<TableInfo> PlanLinkedSequencesAsync(TableRule rule, string key, TableInfo source, bool creating, CancellationToken ct)
         {
-            if (sourceParts.Dbms == targetDbms)
+            var targetOwner = TargetOwner(rule);
+            var sourceOwner = SourceOwner(rule);
+            var oldOracleTarget = targetDbms == Dbms.Oracle && Target.Server.MajorVersion is > 0 and < 12;
+            var canCreate = _targetAccess.Has("CREATE SEQUENCE") || _targetAccess.Has("CREATE ANY SEQUENCE");
+
+            // (열 이름 또는 null = 트리거, 소유자, 시퀀스) — 나온 순서.
+            var uses = new List<(string? Column, string? Owner, string Name)>();
+            foreach (var c in source.Columns.Where(c => !c.IsVirtual && !c.IsIdentity))
+            {
+                uses.AddRange(PrecheckRules.SequenceReferences(c.DefaultValue).Select(r => ((string?)c.Name, r.Owner, r.Name)));
+            }
+
+            if (creating)
+            {
+                uses.AddRange((await TriggerSequencesAsync(sourceOwner, rule.Table, ct).ConfigureAwait(false)).Select(r => ((string?)null, (string?)r.Owner, r.Name)));
+            }
+
+            _sequencePlans[key] = [];
+            if (uses.Count == 0)
             {
                 return source;
             }
 
-            var targetOwner = TargetOwner(rule);
-            var sourceOwner = SourceOwner(rule);
             var known = new Dictionary<string, HashSet<string>?>(CopyOwners.OwnerComparer);
             var drop = new HashSet<string>(StringComparer.Ordinal);
-            // Oracle 11g 는 시퀀스.NEXTVAL 을 열 기본값으로 쓸 수 없다(12c 부터, ORA-00984). 버전을 알면(주 버전 11 이하) 시퀀스가 있어도 그 DEFAULT 를 뺀다.
-            var oldOracleTarget = targetDbms == Dbms.Oracle && Target.Server.MajorVersion is > 0 and < 12;
-            foreach (var c in source.Columns.Where(c => !c.IsVirtual && !c.IsIdentity))
+            var plans = new List<CopySequencePlan>();
+            var linkedColumns = new HashSet<string>(StringComparer.Ordinal); // 대상 스키마에 있거나 만드는 시퀀스를 쓰는 기본값 열
+            foreach (var group in uses.GroupBy(u => (Linked: IsLinkedSequenceOwner(u.Owner, sourceOwner), Owner: IsLinkedSequenceOwner(u.Owner, sourceOwner) ? targetOwner : u.Owner!, u.Name)))
             {
-                foreach (var (owner, name) in PrecheckRules.SequenceReferences(c.DefaultValue))
+                var (linked, owner, name) = group.Key;
+                var columns = group.Select(u => u.Column).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+                if (!known.TryGetValue(owner, out var names))
                 {
-                    if (oldOracleTarget)
-                    {
-                        drop.Add(c.Name);
-                        _items.Add(new CheckItem(key, CopyCheckCodes.SequenceDefaultDropped, CheckLevel.Confirm,
-                            $"{key}: 대상 서버(Oracle {Target.Server.MajorVersion})는 시퀀스를 열 기본값으로 쓸 수 없어(12c 부터 가능) 열 {c.Name} 의 기본값({c.DefaultValue!.Trim()})을 빼고 만듭니다. 값은 그대로 복사되며, 새 행에 값을 채우려면 트리거 등으로 따로 처리해야 합니다.")
-                        {
-                            Column = c.Name,
-                        });
-                        break;
-                    }
+                    names = await ReadSequenceNamesAsync(owner, ct).ConfigureAwait(false);
+                    known[owner] = names;
+                }
 
-                    var resolved = owner is null || CopyOwners.SameOwner(owner, sourceOwner) ? targetOwner : owner;
-                    if (!known.TryGetValue(resolved, out var names))
-                    {
-                        names = await ReadSequenceNamesAsync(resolved, ct).ConfigureAwait(false);
-                        known[resolved] = names;
-                    }
+                if (names is null)
+                {
+                    continue; // 목록을 읽지 못했다: 있는 것으로 보고 그대로 둔다(결정 50 과 같다)
+                }
 
-                    if (names is not null && !names.Contains(name))
+                var keyColumns = columns.Count > 0 ? columns : TriggerKeyColumn(source);
+                if (names.Contains(name))
+                {
+                    linkedColumns.UnionWith(columns);
+                    await CheckExistingSequenceAsync(rule, key, owner, name, keyColumns, ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                string? reason = null;
+                SequenceSpec? spec = null;
+                if (!linked)
+                {
+                    reason = $"대상 {owner} 에 시퀀스 {name} 이(가) 없어(다른 계정의 시퀀스는 만들지 않습니다)";
+                }
+                else if (!canCreate)
+                {
+                    reason = $"대상 {owner} 에 시퀀스 {name} 이(가) 없고 CREATE SEQUENCE 권한이 없어 만들 수 없으므로";
+                }
+                else
+                {
+                    spec = await ReadSourceSequenceAsync(sourceOwner, name, ct).ConfigureAwait(false);
+                    reason = spec is null ? $"대상 {owner} 에 시퀀스 {name} 이(가) 없고 원본 시퀀스 {sourceOwner}.{name} 의 속성을 읽지 못해 만들 수 없으므로" : null;
+                }
+
+                if (spec is not null)
+                {
+                    plans.Add(new CopySequencePlan(owner, name, spec) { KeyColumns = keyColumns, DefaultColumns = columns });
+                    linkedColumns.UnionWith(columns);
+                    continue;
+                }
+
+                foreach (var column in columns.Where(drop.Add))
+                {
+                    var value = source.Columns.First(c => c.Name == column).DefaultValue!.Trim();
+                    _items.Add(new CheckItem(key, CopyCheckCodes.SequenceDefaultDropped, CheckLevel.Confirm,
+                        $"{key}: {reason} 열 {column} 의 기본값({value})을 빼고 만듭니다. 시퀀스를 만든 뒤 기본값을 다시 걸어야 합니다.")
                     {
-                        drop.Add(c.Name);
-                        _items.Add(new CheckItem(key, CopyCheckCodes.SequenceDefaultDropped, CheckLevel.Confirm,
-                            $"{key}: 대상 {resolved} 에 시퀀스 {name} 이(가) 없어 열 {c.Name} 의 기본값({c.DefaultValue!.Trim()})을 빼고 만듭니다. 시퀀스를 만든 뒤 기본값을 다시 걸어야 합니다.")
-                        {
-                            Column = c.Name,
-                        });
-                        break;
-                    }
+                        Column = column,
+                    });
                 }
             }
 
+            if (oldOracleTarget)
+            {
+                foreach (var column in linkedColumns.Where(c => !drop.Contains(c)).Order(StringComparer.Ordinal).ToList())
+                {
+                    drop.Add(column);
+                    var value = source.Columns.First(c => c.Name == column).DefaultValue!.Trim();
+                    var made = plans.Any(p => p.DefaultColumns.Contains(column, StringComparer.Ordinal)) ? " 시퀀스는 만듭니다." : string.Empty;
+                    _items.Add(new CheckItem(key, CopyCheckCodes.SequenceDefaultDropped, CheckLevel.Confirm,
+                        $"{key}: 대상 서버(Oracle {Target.Server.MajorVersion})는 시퀀스를 열 기본값으로 쓸 수 없어(12c 부터 가능) 열 {column} 의 기본값({value})을 빼고 만듭니다.{made} 값은 그대로 복사되며, 새 행에 값을 채우려면 트리거 등으로 따로 처리해야 합니다.")
+                    {
+                        Column = column,
+                    });
+                }
+            }
+
+            if (plans.Count > 0)
+            {
+                var list = string.Join(", ", plans.Select(p => $"{p.Owner}.{p.Name}(START WITH {p.Spec.StartWith})"));
+                _items.Add(new CheckItem(key, CopyCheckCodes.SequenceCreated, CheckLevel.Confirm,
+                    $"{key}: 원본 테이블에 연결된 시퀀스 {list} 이(가) 대상에 없어 테이블보다 먼저 원본 속성(증가·최소·최대·캐시·순환·순서)으로 만듭니다."
+                    + " START WITH 는 원본 다음 값이고, 적재 뒤 키 최댓값이 그 이상이면 그 위로 맞춥니다. 테이블을 만들지 못하거나 적재를 끝내지 못해 지우면 이 시퀀스도 지웁니다(만드는 문장은 미리 보기에 있습니다)."));
+            }
+
+            _sequencePlans[key] = plans;
             return PrecheckRules.WithoutDefaults(source, drop);
+        }
+
+        /// <summary>시퀀스 소유자가 없거나 원본 소유자인가(대상 소유자의 같은 이름 시퀀스를 쓰게 되어 없으면 만든다).</summary>
+        private static bool IsLinkedSequenceOwner(string? owner, string sourceOwner) => owner is null || CopyOwners.SameOwner(owner, sourceOwner);
+
+        /// <summary>트리거만 쓰는 시퀀스의 맞추기 기준 열: 숫자 단일 PK 열(없으면 빈 목록 = 맞추지 않는다).</summary>
+        private static IReadOnlyList<string> TriggerKeyColumn(TableInfo source)
+        {
+            var pk = source.Constraints.FirstOrDefault(c => c.Kind == ConstraintKind.PrimaryKey);
+            return pk is { Columns.Count: 1 } && IsNumber(source, pk.Columns[0]) ? pk.Columns : [];
+        }
+
+        /// <summary>원본 테이블 트리거가 참조하는 시퀀스(<c>copy.trigger_sequences</c>, 원본 세션). 읽지 못하면 빈 목록.</summary>
+        private async Task<IReadOnlyList<(string Owner, string Name)>> TriggerSequencesAsync(string owner, string table, CancellationToken ct)
+        {
+            try
+            {
+                var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, SourceSql("copy.trigger_sequences"), ct, ("OWN", owner), ("TBL", table)).ConfigureAwait(false);
+                var result = new List<(string Owner, string Name)>();
+                foreach (var row in rows)
+                {
+                    if (sourceParts.Codec.ToText(row[0]) is { } o && sourceParts.Codec.ToText(row[1]) is { } n)
+                    {
+                        result.Add((o, n));
+                    }
+                }
+
+                return result;
+            }
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
+            {
+                return [];
+            }
+        }
+
+        /// <summary>원본 시퀀스 속성(<c>copy.sequence_attrs</c>, 원본 세션). 없거나 읽지 못하면 null.</summary>
+        private async Task<SequenceSpec?> ReadSourceSequenceAsync(string owner, string name, CancellationToken ct)
+        {
+            try
+            {
+                var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, SourceSql("copy.sequence_attrs"), ct, ("OWN", owner), ("SEQ", name)).ConfigureAwait(false);
+                return rows.Count == 0 ? null : CopySequenceDdl.FromRow(rows[0], v => sourceParts.Codec.ToText(v));
+            }
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 대상에 이미 있는 시퀀스(건드리지 않는다): 다음 값(LAST_NUMBER)이 원본 키 열 최댓값 이하면 확인 항목을 낸다(새 행의 키가 겹칠 수 있다).
+        /// 작업에 이 표·시퀀스가 연결돼 있으면 복사 뒤 맞추므로 내지 않는다. 읽지 못하면 아무것도 내지 않는다.
+        /// </summary>
+        private async Task CheckExistingSequenceAsync(TableRule rule, string key, string owner, string name, IReadOnlyList<string> keyColumns, CancellationToken ct)
+        {
+            if (keyColumns.Count == 0 || job.Sequences.Any(s => s.Table == key && string.Equals(s.Sequence, name, StringComparison.Ordinal)))
+            {
+                return;
+            }
+
+            try
+            {
+                var info = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.sequence_info"), ct, ("OWN", owner), ("SEQ", name)).ConfigureAwait(false);
+                if (info.Count == 0 || codec.NumberText(info[0][0]) is not { } nextText || !CopySequenceDdl.TryNumber(nextText, out var next))
+                {
+                    return;
+                }
+
+                foreach (var column in keyColumns)
+                {
+                    var max = await CopyCatalogQueries.QueryAsync(bulk, Source,
+                        $"SELECT MAX({SqlIdentifier.QuoteAlways(column)}) FROM {CopyCommonStatements.Qualified(SourceOwner(rule), rule.Table)}", ct).ConfigureAwait(false);
+                    if (max.Count > 0 && sourceParts.Codec.NumberText(max[0][0]) is { } topText && CopySequenceDdl.TryNumber(topText, out var top) && next <= top)
+                    {
+                        _items.Add(new CheckItem(key, CopyCheckCodes.SequenceBehind, CheckLevel.Confirm,
+                            $"{key}: 대상에 이미 있는 시퀀스 {owner}.{name} 은(는) 건드리지 않습니다. 그 다음 값({nextText})이 원본 {column} 최댓값({topText}) 이하라 복사 뒤 새 행의 키가 겹칠 수 있습니다. 작업에 이 시퀀스를 연결하면 복사 뒤 값을 맞춥니다.")
+                        {
+                            Column = column,
+                            Sequence = name,
+                        });
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
+            {
+                // 알 수 없으면 알리지 않는다(시퀀스는 건드리지 않는다).
+            }
         }
 
         /// <summary>한 소유자의 시퀀스 이름(<c>copy.sequence_names</c>, ALL_SEQUENCES). 읽지 못하면 null.</summary>
@@ -456,6 +612,9 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
 
             IReadOnlyList<DisabledObject> disablable = creating ? [] : await CheckChildForeignKeysAsync(rule, keys, ct).ConfigureAwait(false);
+            var companions = creating || (IsRecreate(rule) && CanRecreate)
+                ? await PlanCompanionsAsync(rule, key, source, creating, ct).ConfigureAwait(false)
+                : CompanionDdl.Empty;
 
             if (readable)
             {
@@ -466,6 +625,8 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             return new CopyTablePlan(rule, source, target, columns, keys)
             {
                 CreateMissing = creating,
+                CreateSequences = _sequencePlans.GetValueOrDefault(key) ?? [],
+                Companions = companions,
                 CanDisableTriggers = canDisableTriggers,
                 Triggers = triggers,
                 DisablableForeignKeys = disablable,
@@ -559,19 +720,12 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
             var tablespace = codec.ToText((await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.tablespace"), ct,
                 ("OWN", owner), ("TBL", rule.Table)).ConfigureAwait(false)).FirstOrDefault()?[0]);
-            var skipped = source.Constraints
-                .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && !IsLinkedParent(p, rule, linked))
-                .Select(c => $"{c.Name}(→{c.ReferencedTable!.Name})")
-                .ToList();
             var message = $"{key}: 대상 테이블 {owner}.{rule.Table} 을(를) 지우고 원본 구조로 다시 만든 뒤 넣습니다."
                           + dialect.RecycleBinNote(tablespace)
                           + " DROP·CREATE 는 DDL 이라 커밋 방식과 상관없이 되돌릴 수 없습니다."
                           + $" 대상의 트리거 {Number(triggerCount)}개·다른 계정에 준 권한·이 테이블을 참조하던 FK 는 적재 뒤 되살립니다"
                           + "(참조 FK 는 지우기 전에 떼어 내고, 대상 계정에 보이지 않는 FK 가 있으면 지우지 않고 멈춥니다).";
-            if (skipped.Count > 0)
-            {
-                message += $" 함께 다시 만들지 않는 테이블을 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
-            }
+            message += " 원본의 함수 기반 인덱스·작업 밖 부모 FK 는 적재 뒤 함께 만듭니다(「함께 만드는 객체」 항목). 파티션·압축·테이블스페이스·저장 속성은 대상 기본값을 씁니다.";
 
             message += CrossSkippedForeignKeyNote(rule, source, linked);
             message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null)) + CrossCreateNote(source);
@@ -632,21 +786,196 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 return;
             }
 
-            var skipped = source.Constraints
-                .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && !IsLinkedParent(p, rule, linked))
-                .Select(c => $"{c.Name}(→{c.ReferencedTable!.Name})")
-                .ToList();
             var message = $"{key}: 대상에 테이블 {owner}.{rule.Table} 이(가) 없어 원본 구조로 만든 뒤 넣습니다(만드는 문장은 미리 보기에 있습니다). 새 표라 대상을 지우지 않습니다."
                           + " 넣기가 실패하면 만든 테이블을 휴지통 없이 지웁니다(DROP … PURGE)."
-                          + " 만들지 않는 것: 트리거·다른 계정에 준 권한·시노님(원본 것을 가져오지 않습니다).";
-            if (skipped.Count > 0)
-            {
-                message += $" 함께 만들지 않는 테이블을 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
-            }
+                          + " 원본의 트리거·권한·함수 기반 인덱스·작업 밖 부모 FK 는 적재 뒤 함께 만듭니다(「함께 만드는 객체」 항목)."
+                          + " 만들지 않는 것: 시노님, 파티션·압축·테이블스페이스·저장 속성(대상 기본값을 씁니다).";
 
             message += CrossSkippedForeignKeyNote(rule, source, linked);
             message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null)) + CrossCreateNote(source);
             _items.Add(new CheckItem(key, CopyCheckCodes.CreateTable, CheckLevel.Confirm, message));
+        }
+
+        // ---- 새 표에 딸린 객체(SQ2, 조정 결정 78) ----
+
+        /// <summary>
+        /// 만드는 표에 적재 뒤 함께 만들 객체(<see cref="CompanionDdl"/>)를 원본 카탈로그로 정하고 「함께 만드는 객체」 항목 하나로 알린다(<see cref="CopyCheckCodes.CompanionObjects"/>).
+        /// 함수 기반 인덱스·작업 밖 부모 FK 는 만드는 표 모두, 트리거·권한은 「없으면 만들기」 표만(<paramref name="creating"/>; 「다시 만들기」는 대상 쪽 받아 두기·되살리기가 우선한다).
+        /// 시노님·파티션·압축·테이블스페이스·저장 속성은 만들지 않는다(대상 기본값, 항목 글에 적는다). 원본을 읽지 못한 것은 빼고 그 까닭을 적는다.
+        /// </summary>
+        private async Task<CompanionDdl> PlanCompanionsAsync(TableRule rule, string key, TableInfo source, bool creating, CancellationToken ct)
+        {
+            var sourceOwner = SourceOwner(rule);
+            var targetOwner = TargetOwner(rule);
+            var cross = sourceParts.Dbms != targetDbms;
+            var made = new List<string>();
+            var skipped = new List<string>();
+            var mapped = CrossTableMap.MapTable(sourceParts.Dbms, targetDbms, source, sourceParts.Codec);
+            var removed = source.Columns.Select(c => c.Name).Except(mapped.Target.Columns.Select(c => c.Name), StringComparer.Ordinal)
+                .Concat(mapped.LobMappedColumns.Keys).ToHashSet(StringComparer.Ordinal);
+
+            // 1. 함수 기반 인덱스: 식은 원본 세션의 인덱스 열 조회로 읽는다(TableInfo 에는 식이 없다).
+            var indexes = new List<string>();
+            foreach (var index in source.Indexes.Where(CopyCompanions.IsFunctionIndex))
+            {
+                IReadOnlyList<IndexColumnDetail>? columns = null;
+                try
+                {
+                    columns = await sourceParts.Recreate.IndexColumnsAsync(Source, source.Table, index.Name, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
+                {
+                    // 읽지 못함: 아래에서 뺀다.
+                }
+
+                if (columns is not { Count: > 0 })
+                {
+                    skipped.Add($"함수 기반 인덱스 {index.Name}(식을 읽지 못함)");
+                }
+                else if (CopyCompanions.UsesColumn(columns, removed) is { } column)
+                {
+                    skipped.Add($"함수 기반 인덱스 {index.Name}(대상에 만들지 않거나 LOB 로 옮기는 열 {column} 을 씀)");
+                }
+                else if (CopyCompanions.FunctionIndex(targetOwner, rule.Table, index, columns, sourceOwner) is { } ddl)
+                {
+                    indexes.Add(ddl);
+                    made.Add($"함수 기반 인덱스 {index.Name}");
+                }
+            }
+
+            // 2. 트리거·권한(새 표만): 원본 세션으로 받아 두기(다시 만들기의 대상 받아 두기와 같은 조회)를 하고 대상 소유자 이름으로 바꾼다.
+            var triggers = new List<string>();
+            var triggerObjects = new List<DisabledObject>();
+            var grants = new List<string>();
+            if (creating)
+            {
+                PreservedDdl? kept = null;
+                try
+                {
+                    kept = await sourceParts.Recreate.CaptureAsync(Source, sourceOwner, rule.Table, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (CopyErrors.IsServer(errors, ex) || ex is InvalidOperationException or BulkDeniedException)
+                {
+                    skipped.Add($"원본 트리거·권한(읽지 못함: {CopyRunner.SafeError(ex.Message)})");
+                }
+
+                if (kept is not null)
+                {
+                    var canTrigger = _targetAccess.Has("CREATE TRIGGER") || _targetAccess.Has("CREATE ANY TRIGGER");
+                    for (var i = 0; i < kept.Triggers.Count && i < kept.TriggerObjects.Count; i++)
+                    {
+                        var obj = kept.TriggerObjects[i];
+                        if (!CopyOwners.SameOwner(obj.Owner, sourceOwner))
+                        {
+                            if (i == 0 || kept.TriggerObjects[i - 1] != obj)
+                            {
+                                skipped.Add($"트리거 {obj.Owner}.{obj.Name}(다른 계정의 트리거)");
+                            }
+
+                            continue;
+                        }
+
+                        if (!canTrigger)
+                        {
+                            if (i == 0 || kept.TriggerObjects[i - 1] != obj)
+                            {
+                                skipped.Add($"트리거 {obj.Name}(CREATE TRIGGER 권한 없음)");
+                            }
+
+                            continue;
+                        }
+
+                        if (i == 0 || kept.TriggerObjects[i - 1] != obj)
+                        {
+                            made.Add($"트리거 {obj.Name}");
+                        }
+
+                        triggers.Add(CopyCompanions.Reowned(kept.Triggers[i], sourceOwner, targetOwner));
+                        triggerObjects.Add(new DisabledObject(DisabledKind.Trigger, targetOwner, rule.Table, obj.Name));
+                    }
+
+                    foreach (var grant in kept.Grants)
+                    {
+                        var grantee = CopyCompanions.Grantee(grant);
+                        if (grantee is null || CopyOwners.SameOwner(grantee, targetOwner))
+                        {
+                            skipped.Add($"권한 {grant}({(grantee is null ? "받는 쪽을 읽지 못함" : "대상 소유자 자신")})");
+                            continue;
+                        }
+
+                        var text = CopyCompanions.Reowned(grant, sourceOwner, targetOwner);
+                        if (grantee != "PUBLIC"
+                            && await TryCountAsync(TargetSql("copy.user_exists"), ct, ("NAME", grantee)).ConfigureAwait(false) is not > 0)
+                        {
+                            made.Add($"권한 → {grantee}(대상에서 사용자로 확인되지 않음: 롤이면 붙고, 없으면 실행 때 알림)");
+                        }
+                        else
+                        {
+                            made.Add($"권한 → {grantee}");
+                        }
+
+                        grants.Add(text);
+                    }
+                }
+            }
+
+            // 3. 작업 밖 부모 FK: 부모가 같은 원본 계정의 표이고 대상 소유자에 그 표가 있으면 적재 뒤 붙여 본다(실패하면 뺀다, NOVALIDATE 로 바꾸지 않는다).
+            var outer = new List<(string Parent, string Ddl, string? Name)>();
+            var linked = BuiltTables(targetOwner, sourceOwner);
+            var parents = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var fk in source.Constraints.Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && !IsLinkedParent(p, rule, linked)))
+            {
+                var parent = fk.ReferencedTable!;
+                if (!CopyOwners.SameOwner(parent.Owner, sourceOwner))
+                {
+                    skipped.Add($"FK {fk.Name}(→{parent.Owner}.{parent.Name}: 다른 계정의 부모)");
+                }
+                else if (await TryCountAsync(TargetSql("copy.target_is_table"), ct, ("OWN", targetOwner), ("TBL", parent.Name)).ConfigureAwait(false) is > 0)
+                {
+                    parents.Add(parent.Name);
+                }
+                else
+                {
+                    skipped.Add($"FK {fk.Name}(→{parent.Name}: 대상 {targetOwner} 에 부모 테이블 없음)");
+                }
+            }
+
+            if (parents.Count > 0)
+            {
+                try
+                {
+                    var ddls = (await sourceParts.Recreate.SourceForeignKeysAsync(Source, sourceOwner, rule.Table, parents, targetOwner, ct).ConfigureAwait(false))
+                        .Where(f => parents.Contains(f.Parent)).ToList();
+                    var (keptFks, skippedFks) = CrossTableMap.FilterForeignKeys(sourceParts.Dbms, targetDbms, source, sourceParts.Codec, ddls, _ => null);
+                    outer.AddRange(keptFks);
+                    made.AddRange(keptFks.Select(f => $"FK {f.Name ?? "(서버 이름)"}(→{f.Parent}, 작업 밖 부모)"));
+                    skipped.AddRange(skippedFks.Select(x => "FK " + x));
+                }
+                catch (Exception ex) when (CopyErrors.IsServer(errors, ex) || ex is InvalidOperationException or BulkDeniedException)
+                {
+                    skipped.Add($"작업 밖 부모 FK(원본에서 읽지 못함: {CopyRunner.SafeError(ex.Message)})");
+                }
+            }
+
+            var companions = new CompanionDdl(triggers, triggerObjects, grants, indexes, outer);
+            if (made.Count > 0 || skipped.Count > 0)
+            {
+                var message = $"{key}: 적재가 끝난 뒤 함께 만듭니다: {(made.Count == 0 ? "없음" : string.Join(", ", made))}.";
+                if (skipped.Count > 0)
+                {
+                    message += $" 만들지 않는 것: {string.Join(", ", skipped)}.";
+                }
+
+                if (cross && (triggers.Count > 0 || indexes.Count > 0))
+                {
+                    message += $" {targetDbms} 로 옮기는 트리거 본문·인덱스 식은 대상에서 맞지 않을 수 있습니다: 컴파일 오류 트리거는 남겨 두되 끄고, 만들지 못한 인덱스는 빼고 알립니다.";
+                }
+
+                message += " 함께 만들지 못한 것이 있어도 테이블은 실패로 보지 않고 알림에 문장을 남깁니다(만드는 문장은 미리 보기에 있습니다).";
+                _items.Add(new CheckItem(key, CopyCheckCodes.CompanionObjects, skipped.Count > 0 ? CheckLevel.Confirm : CheckLevel.Pass, message));
+            }
+
+            return companions;
         }
 
         /// <summary>교차 복사로 만드는 표가 원본과 달라지는 것(<see cref="CrossTableMap"/>)을 확인 글에 덧붙일 문장(앞 공백 포함). 같은 DBMS 거나 달라지는 것이 없으면 빈 글.</summary>
@@ -739,7 +1068,9 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 .SelectMany(c => CreateTableDdl.ReferencedObjects(c.DefaultValue, SourceOwner(rule)).Select(o => (Column: c.Name, Object: o)))
                 .ToList();
             var missingObjects = new List<string>();
-            foreach (var name in referenced.Select(x => x.Object).Distinct(StringComparer.Ordinal))
+            var creatingSequences = _sequencePlans.GetValueOrDefault(Key(rule)) ?? [];
+            foreach (var name in referenced.Select(x => x.Object).Distinct(StringComparer.Ordinal)
+                         .Where(n => !creatingSequences.Any(p => string.Equals(p.Name, n, StringComparison.Ordinal))))
             {
                 if (await TryCountAsync(TargetSql("copy.object_exists"), ct, ("OWN", owner), ("NAME", name)).ConfigureAwait(false) is not > 0)
                 {
@@ -1132,8 +1463,12 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
         // ---- 시퀀스 ----
 
-        private async Task CheckSequencesAsync(IReadOnlyList<CopyTablePlan> plans, CancellationToken ct)
+        /// <summary>
+        /// 작업의 시퀀스 보정 연결을 점검하고, 대상에 없어 만들 시퀀스(SQ3, 결정 84)를 그 표 계획의 <see cref="CopyTablePlan.RuleSequences"/> 에 담은 순서를 돌려준다.
+        /// </summary>
+        private async Task<IReadOnlyList<CopyTablePlan>> CheckSequencesAsync(IReadOnlyList<CopyTablePlan> plans, IReadOnlyList<CopyTablePlan> order, CancellationToken ct)
         {
+            var making = new Dictionary<string, List<CopySequencePlan>>(StringComparer.Ordinal);
             foreach (var rule in job.Sequences)
             {
                 var plan = plans.FirstOrDefault(p => string.Equals(Key(p.Rule), rule.Table, StringComparison.Ordinal));
@@ -1143,14 +1478,21 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 }
 
                 progress?.Report($"시퀀스 {rule.Sequence}: 점검 중");
-                await CheckSequenceAsync(rule, ct).ConfigureAwait(false);
+                if (await CheckSequenceAsync(rule, plan, making, ct).ConfigureAwait(false) is { } made)
+                {
+                    (making.TryGetValue(rule.Table, out var list) ? list : making[rule.Table] = []).Add(made);
+                }
             }
 
             await SuggestSequencesAsync(plans, ct).ConfigureAwait(false);
+            return making.Count == 0
+                ? order
+                : [.. order.Select(p => making.TryGetValue(Key(p.Rule), out var list) ? p with { RuleSequences = list } : p)];
         }
 
         // NEXTVAL 을 부르지 않는다(부작용, 메모 D16). LAST_NUMBER 와 원본 범위의 최대값으로 어림한다.
-        private async Task CheckSequenceAsync(SequenceRule rule, CancellationToken ct)
+        // 대상에 시퀀스가 없으면 만들 계획을 돌려준다(SQ3). 그 밖에는 null.
+        private async Task<CopySequencePlan?> CheckSequenceAsync(SequenceRule rule, CopyTablePlan plan, Dictionary<string, List<CopySequencePlan>> making, CancellationToken ct)
         {
             var cannot = new CheckItem(rule.Table, "SequenceGap", CheckLevel.Confirm,
                 $"{rule.Table}.{rule.Column}: 시퀀스 {rule.Sequence} 를 볼 수 없어(없거나 SELECT 권한 없음) 보정하지 않습니다. 테스트 중 PK 충돌이 날 수 있습니다.")
@@ -1161,12 +1503,30 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             var owner = CopyOwners.SequenceOwner(job, rule);
             var info = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.sequence_info"), ct,
                 ("OWN", owner), ("SEQ", rule.Sequence)).ConfigureAwait(false);
+            if (info.Count == 0)
+            {
+                // 표를 만들 때 함께 만드는 시퀀스(SQ1)이거나 이 작업의 다른 연결이 이미 만들기로 정한 시퀀스: 만든 뒤 지금처럼 보정한다.
+                if (plan.CreateSequences.Any(p => SameSequence(p, owner, rule.Sequence))
+                    || making.Values.SelectMany(l => l).Any(p => SameSequence(p, owner, rule.Sequence)))
+                {
+                    return null;
+                }
+
+                if (await PlanRuleSequenceAsync(rule, plan, owner, ct).ConfigureAwait(false) is { } made)
+                {
+                    return made;
+                }
+
+                _items.Add(cannot);
+                return null;
+            }
+
             var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Target, _targetAccess, owner, rule.Sequence, "SEQUENCE", dialect.SupportsReadPrivilege, ct)
                 .ConfigureAwait(false);
-            if (info.Count == 0 || !held.Contains("SELECT"))
+            if (!held.Contains("SELECT"))
             {
                 _items.Add(cannot);
-                return;
+                return null;
             }
 
             var next = codec.ToInt64(info[0][0]) ?? 0;
@@ -1174,7 +1534,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             var count = Build(rule.Table, () => _builder.SourceCount(rule.Table));
             if (count is null || !count.Sql.StartsWith(CountPrefix, StringComparison.Ordinal))
             {
-                return;
+                return null;
             }
 
             long max;
@@ -1191,13 +1551,13 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 {
                     Column = rule.Column,
                 });
-                return;
+                return null;
             }
 
             var gap = PrecheckRules.SequenceGap(next, max, increment);
             if (gap <= 0)
             {
-                return;
+                return null;
             }
 
             var large = gap >= job.Options.SequenceGapConfirm;
@@ -1209,6 +1569,84 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 Column = rule.Column,
                 Choices = large ? [CheckChoice.ProceedSequenceGap] : [],
             });
+            return null;
+        }
+
+        private static bool SameSequence(CopySequencePlan plan, string owner, string name)
+            => CopyOwners.SameOwner(plan.Owner, owner) && string.Equals(plan.Name, name, StringComparison.Ordinal);
+
+        /// <summary>
+        /// 시퀀스 보정 연결의 시퀀스가 대상 계정에 없을 때 만들 계획(SQ3, 결정 84). 원본 표 계정에 같은 이름 시퀀스가 있으면 그 속성(START WITH 는 원본 다음 값,
+        /// 원본 키 최댓값이 그 이상이면 최댓값 + 증가값 — 적재 뒤 보정이 NEXTVAL 을 덜 쓰게), 없거나 읽지 못하면 기본 속성(START WITH 원본 키 최댓값 + 1, INCREMENT BY 1, 캐시는 DBMS 기본).
+        /// 대상이 읽기 전용이거나 CREATE SEQUENCE(다른 계정이면 CREATE ANY SEQUENCE) 권한이 없으면 null(지금처럼 SequenceGap 안내).
+        /// 대상 시퀀스 목록에 이미 있으면(보이기만 하고 정보를 못 읽음) 만들지 않는다.
+        /// </summary>
+        private async Task<CopySequencePlan?> PlanRuleSequenceAsync(SequenceRule rule, CopyTablePlan plan, string owner, CancellationToken ct)
+        {
+            var canCreate = _targetAccess.IsOwner(owner)
+                ? _targetAccess.Has("CREATE SEQUENCE") || _targetAccess.Has("CREATE ANY SEQUENCE")
+                : _targetAccess.Has("CREATE ANY SEQUENCE");
+            if (Target.Profile.ReadOnly || !canCreate)
+            {
+                return null;
+            }
+
+            if (await ReadSequenceNamesAsync(owner, ct).ConfigureAwait(false) is not { } names || names.Contains(rule.Sequence))
+            {
+                return null; // 목록을 읽지 못했거나 있다: 만들지 않는다(볼 수 없어 보정하지 않는다는 안내 그대로)
+            }
+
+            var sourceOwner = SourceOwner(plan.Rule);
+            var max = await SourceKeyMaxAsync(rule, ct).ConfigureAwait(false);
+            var fromSource = await ReadSourceSequenceAsync(sourceOwner, rule.Sequence, ct).ConfigureAwait(false);
+            SequenceSpec spec;
+            string origin;
+            if (fromSource is not null)
+            {
+                spec = fromSource;
+                if (max is { } top && CopySequenceDdl.TryNumber(spec.StartWith, out var start) && CopySequenceDdl.TryNumber(spec.Increment, out var step) && step > 0 && top >= start)
+                {
+                    spec = spec with { StartWith = (top + step).ToString(CultureInfo.InvariantCulture) };
+                }
+
+                origin = $"원본 시퀀스 {sourceOwner}.{rule.Sequence} 의 속성(증가·최소·최대·캐시·순환·순서)";
+            }
+            else
+            {
+                spec = SequenceSpec.Defaults(((max ?? 0) + 1).ToString(CultureInfo.InvariantCulture));
+                origin = $"원본 {sourceOwner} 에도 없어 기본 속성(INCREMENT BY 1, 캐시는 DBMS 기본)";
+            }
+
+            var made = new CopySequencePlan(owner, rule.Sequence, spec) { KeyColumns = [rule.Column] };
+            _items.Add(new CheckItem(rule.Table, CopyCheckCodes.SequenceCreated, CheckLevel.Confirm,
+                $"{rule.Table}.{rule.Column}: 시퀀스 {owner}.{rule.Sequence} 이(가) 대상에 없어 적재 전에 {origin}으로 만들고(START WITH {spec.StartWith}) 복사 뒤 값을 맞춥니다."
+                + " 만드는 문장은 미리 보기에 있습니다.")
+            {
+                Column = rule.Column,
+                Sequence = rule.Sequence,
+            });
+            return made;
+        }
+
+        /// <summary>시퀀스 보정 연결 열의 원본 최댓값(작업 범위). 범위를 만들 수 없거나 읽지 못하거나 비었으면 null.</summary>
+        private async Task<decimal?> SourceKeyMaxAsync(SequenceRule rule, CancellationToken ct)
+        {
+            var count = Build(rule.Table, () => _builder.SourceCount(rule.Table));
+            if (count is null || !count.Sql.StartsWith(CountPrefix, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            try
+            {
+                var sql = $"SELECT MAX({SqlIdentifier.QuoteAlways(rule.Column)}){count.Sql[CountPrefix.Length..]}";
+                var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, sql, count.Binds, ct).ConfigureAwait(false);
+                return sourceParts.Codec.NumberText(rows.FirstOrDefault()?[0]) is { } text && CopySequenceDdl.TryNumber(text, out var value) ? value : null;
+            }
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
+            {
+                return null;
+            }
         }
 
         // 작업에 시퀀스 규칙이 없는 숫자 키 열에 이름 규칙 후보를 알려 준다(통과 항목, 사용자가 작업에 연결하면 보정 대상이 된다).
@@ -1321,6 +1759,33 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 }
             }
 
+            // 표보다 먼저 만드는 시퀀스(다시 만들기·없으면 만들기, 부모 → 자식, 같은 시퀀스는 한 번), 그리고 쓰는 표를 모두 지우게 되면 함께 지우는 DROP SEQUENCE(위험 명령).
+            var sequences = order.Where(p => p.CreateMissing || (IsRecreate(p.Rule) && CanRecreate)).SelectMany(p => p.CreateSequences)
+                .DistinctBy(p => (p.Owner, p.Name)).ToList();
+            foreach (var sequence in sequences)
+            {
+                list.Add(await PreviewAsync(Target, CopyCommonStatements.RecreateDdl(sequence.CreateDdl), PreviewSide.Target, ct).ConfigureAwait(false));
+            }
+
+            foreach (var sequence in Enumerable.Reverse(sequences))
+            {
+                list.Add(await PreviewAsync(Target, CopyCommonStatements.DropCreatedSequence(sequence.Owner, sequence.Name), PreviewSide.Target, ct).ConfigureAwait(false));
+            }
+
+            // 시퀀스 보정 연결이 쓰는데 대상에 없어 적재 전에 만드는 시퀀스(SQ3). 쓰는 표가 모두 이번에 만드는 표면 그 표를 지울 때 함께 지운다(SQ1 과 같은 DROP SEQUENCE).
+            var ruleSequences = order.SelectMany(p => p.RuleSequences.Select(s => (Plan: p, Sequence: s)))
+                .Where(x => !sequences.Any(c => SameSequence(c, x.Sequence.Owner, x.Sequence.Name)))
+                .GroupBy(x => (x.Sequence.Owner, x.Sequence.Name)).ToList();
+            foreach (var group in ruleSequences)
+            {
+                list.Add(await PreviewAsync(Target, CopyCommonStatements.RecreateDdl(group.First().Sequence.CreateDdl), PreviewSide.Target, ct).ConfigureAwait(false));
+            }
+
+            foreach (var group in Enumerable.Reverse(ruleSequences).Where(g => g.All(x => x.Plan.CreateMissing || (IsRecreate(x.Plan.Rule) && CanRecreate))))
+            {
+                list.Add(await PreviewAsync(Target, CopyCommonStatements.DropCreatedSequence(group.Key.Owner, group.Key.Name), PreviewSide.Target, ct).ConfigureAwait(false));
+            }
+
             // 대상에 없어 만들 표(부모 → 자식): 만드는 문장 전부, 그리고 적재가 실패하면 만든 표를 지우는 DROP … PURGE(자식 → 부모).
             // 지우는 문장은 위험 명령이라 실행 중에 확인을 받을 수 없다: 여기 들어 있어야 화면이 미리 받은 확인으로 넘어간다.
             var created = order.Where(p => p.CreateMissing).ToList();
@@ -1328,8 +1793,10 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             {
                 var owner = TargetOwner(plan.Rule);
                 // 실행기(CopyRunner.CreateMissingTablesAsync)와 같은 함수·같은 입력이라 보여 주는 문장과 보내는 문장이 같다(교차면 대상 DBMS 로 옮긴 구조).
-                foreach (var text in CrossTableMap.Build(sourceParts.Dbms, targetDbms, plan.Source, owner, new HashSet<string>(StringComparer.Ordinal),
-                             name => sourceParts.PrecheckDialect.IsServerName(name, SourceOwner(plan.Rule)), sourceParts.Codec).Statements)
+                // 새 표는 PK·UK·인덱스를 적재 뒤에 만든다(PF4a): 그 문장은 CREATE 문장 뒤에 이어서 보인다.
+                var built = CrossTableMap.Build(sourceParts.Dbms, targetDbms, plan.Source, owner, new HashSet<string>(StringComparer.Ordinal),
+                    name => sourceParts.PrecheckDialect.IsServerName(name, SourceOwner(plan.Rule)), sourceParts.Codec, keysAfterLoad: true);
+                foreach (var text in built.Statements.Concat(built.AfterLoad))
                 {
                     list.Add(await PreviewAsync(Target, CopyCommonStatements.RecreateDdl(text), PreviewSide.Target, ct).ConfigureAwait(false));
                 }
@@ -1338,6 +1805,15 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             foreach (var plan in Enumerable.Reverse(created))
             {
                 list.Add(await PreviewAsync(Target, statements.DropCreatedTable(TargetOwner(plan.Rule), plan.Rule.Table), PreviewSide.Target, ct).ConfigureAwait(false));
+            }
+
+            // 만드는 표에 적재 뒤 함께 만드는 객체(SQ2): 실행기가 같은 글을 보낸다.
+            foreach (var plan in order.Where(p => !p.Companions.IsEmpty))
+            {
+                foreach (var text in plan.Companions.Statements)
+                {
+                    list.Add(await PreviewAsync(Target, CopyCommonStatements.RecreateDdl(text), PreviewSide.Target, ct).ConfigureAwait(false));
+                }
             }
 
             foreach (var plan in order.Where(p => p.CanDisableTriggers))

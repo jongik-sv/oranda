@@ -1,9 +1,11 @@
 using System.Text;
 using Oranda.Core.Execution;
+using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Text;
 using Oranda.Core.Transfer.Copy;
 using Oranda.Oracle.Catalog;
+using Oranda.Oracle.Metadata;
 
 namespace Oranda.Oracle.Transfer.Copy;
 
@@ -101,6 +103,13 @@ internal sealed class RecreateStep : ICopyRecreateStep
     {
         var rows = await CopyCatalogQueries.QueryAsync(_bulk, target, EmbeddedCatalog.Text("copy.recreate_recycle_bin"), ct, ("TBL", table));
         return rows.Select(r => OracleBulkValueCodec.Text(r[0])).OfType<string>().ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>원본 인덱스 열(함수 기반 식 포함, SQ2). 객체 상세와 같은 조회(<see cref="OracleTableKeyDetailProvider"/>, LONG 식을 끝까지 읽는다). 볼 수 없으면 null.</summary>
+    public async Task<IReadOnlyList<IndexColumnDetail>?> IndexColumnsAsync(ISession source, DbObjectRef table, string indexName, CancellationToken ct)
+    {
+        var result = await new OracleTableKeyDetailProvider().GetIndexColumnsAsync(source, table, indexName, ct);
+        return result.Denied ? null : result.Items;
     }
 
     /// <summary>

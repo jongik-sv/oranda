@@ -471,7 +471,6 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         var item = "default_seq." + suffix;
         // Oracle 11g 는 시퀀스.NEXTVAL 을 열 기본값으로 쓸 수 없다(12c 부터, ORA-00984): 대상 시퀀스가 있어도 DEFAULT 를 빼고 만들고 안내한다(XC8e).
         var legacyOracle = await env.OracleMajorVersionAsync() is > 0 and < 12;
-        var keepsDefault = targetSequence && !legacyOracle;
         Note(env, item + ".oracle_major", legacyOracle ? "11 이하" : "12 이상(또는 모름)");
         var t = CrossDbmsItEnvironment.Name("XC10_DS_" + suffix);
         var sequence = CrossDbmsItEnvironment.Name("XC10_DSQ_" + suffix);
@@ -496,7 +495,16 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         var rule = recreate
             ? new TableRule(t, RuleKind.All, TargetAction.Recreate)
             : new TableRule(t, RuleKind.All, TargetAction.AppendOnly) { CreateIfMissing = true };
-        var ctx = await PrecheckAsync(env, source, target, [rule], requireNoErrors: true, label: item); // XC8d: 없는 시퀀스 기본값은 오류가 아니라 DEFAULT 를 빼고 만든다
+        var ctx = await PrecheckAsync(env, source, target, [rule], requireNoErrors: true, label: item); // 없는 시퀀스는 오류가 아니다: 만들거나(SQ1) DEFAULT 를 빼고 만든다(XC8d)
+        // SQ1(결정 76): 대상에 시퀀스가 없으면 테이블보다 먼저 원본 속성으로 만든다(대상 계정에 CREATE SEQUENCE 가 있을 때). 없으면 지금처럼 DEFAULT 를 뺀다.
+        var created = ctx.Report.Items.Any(i => i.Table == t && i.Code == CopyCheckCodes.SequenceCreated);
+        Note(env, item + ".sequence_created", created ? "만듦" : "만들지 않음");
+        if (targetSequence)
+        {
+            Assert.False(created, "an existing target sequence must not be created again");
+        }
+
+        var keepsDefault = (targetSequence || created) && !legacyOracle;
         if (!keepsDefault)
         {
             var dropped = Assert.Single(ctx.Report.Items, i => i.Table == t && i.Code == CopyCheckCodes.SequenceDefaultDropped);
@@ -532,12 +540,79 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         Assert.False(pointsToSource, env.Scrub("the Oracle default points to the Tibero source schema: " + oracleDefault));
         Assert.Equal(3, await env.CountAsync(target, t));
 
-        // 새 행은 대상 스키마의 시퀀스(1000 부터) 값을 받는다.
+        // 새 행은 대상 스키마의 시퀀스 값을 받는다: 있던 시퀀스는 1000 부터, 복사가 만든 시퀀스는 적재한 키(1~3) 뒤다.
         await env.ExecAsync(target, $"INSERT INTO {t} (V) VALUES ('new')");
         var id = (await env.QueryAsync(target, $"SELECT ID FROM {t} WHERE V = 'new'"))[0][0];
         Note(env, item + ".oracle_new_row_id", id ?? "<null>");
-        Assert.True(decimal.Parse(id!, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture) >= 1000,
+        Assert.True(decimal.Parse(id!, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture) >= (targetSequence ? 1000 : 4),
             "the new Oracle row did not take its ID from the target schema sequence");
+    }
+
+    /// <summary>
+    /// SQ1(결정 76)의 Tibero 대상 쪽: 원본 열 <c>DEFAULT seq.NEXTVAL</c> 의 시퀀스가 대상 Tibero 스키마(첫 계정)에 없으면 「없으면 만들기」가 테이블보다 먼저
+    /// 그 시퀀스를 만들고(Tibero CREATE SEQUENCE), DEFAULT 를 대상 스키마 시퀀스로 두고, 적재한 키 뒤로 시퀀스를 맞춘다.
+    /// Tibero→Tibero 같은 DBMS 「없으면 만들기」가 TBR-8034(시퀀스 없음)로 실패하던 실사용 사례(dev d55f4231)의 대상 쪽이다:
+    /// Tibero 는 같은 계정 복사가 막혀 있고 두 번째 계정에는 시퀀스를 만들지 않으므로(결정 59) 원본을 Oracle(12c 이상)로 둔다.
+    /// 원본 쪽(Tibero 시퀀스 속성 읽기)은 <see cref="Tibero_default_sequence_nextval_shape_and_the_oracle_default_it_becomes"/> 가, 같은 DBMS 판정은 Core 단위 시험이 본다.
+    /// </summary>
+    [CrossDbmsFact]
+    public async Task Oracle_sequence_default_into_tibero_creates_the_missing_target_sequence_before_the_table()
+    {
+        await using var env = await CrossDbmsItEnvironment.CreateAsync();
+        if (env is null)
+        {
+            return;
+        }
+
+        const Dbms source = Dbms.Oracle;
+        const Dbms target = Dbms.Tibero;
+        const string item = "default_seq.O2T";
+        if (await env.OracleMajorVersionAsync() is > 0 and < 12)
+        {
+            Note(env, item, "건너뜀: Oracle 11g 원본은 시퀀스.NEXTVAL 을 열 기본값으로 쓸 수 없다(ORA-00984)");
+            return;
+        }
+
+        var t = CrossDbmsItEnvironment.Name("SQ1_O2T");
+        var sequence = CrossDbmsItEnvironment.Name("SQ1_O2TQ");
+        await env.EnsureMissingAsync(target, t);
+        await env.EnsureSequenceMissingAsync(target, sequence); // 복사가 만든 시퀀스도 끝에 지운다
+        await env.CreateSequenceAsync(source, sequence);
+        await env.CreateTableAsync(source, t, $"ID NUMBER(10) DEFAULT {sequence}.NEXTVAL, V VARCHAR2(20), CONSTRAINT {CrossDbmsItEnvironment.Name("SQ1_O2TPK")} PRIMARY KEY (ID)");
+        foreach (var v in new[] { "a", "b", "c" })
+        {
+            await env.ExecAsync(source, $"INSERT INTO {t} (V) VALUES ('{v}')");
+        }
+
+        Assert.Equal(0, await env.CountAsync(target, "USER_SEQUENCES", $"SEQUENCE_NAME = '{sequence}'"));
+        var ctx = await PrecheckAsync(env, source, target, [new TableRule(t, RuleKind.All, TargetAction.AppendOnly) { CreateIfMissing = true }], label: item);
+        var created = ctx.Report.Items.SingleOrDefault(i => i.Table == t && i.Code == CopyCheckCodes.SequenceCreated);
+        Assert.True(created is not null, env.Scrub("the missing Tibero sequence was not planned (CREATE SEQUENCE privilege of the first account?): "
+                                                   + string.Join(" | ", ctx.Report.Items.Where(i => i.Table == t).Select(i => i.Code + " " + i.Message))));
+        Assert.DoesNotContain(ctx.Report.Items, i => i.Table == t && i.Code == CopyCheckCodes.SequenceDefaultDropped);
+        Assert.Contains(ctx.Report.Preview, p => p.Side == PreviewSide.Target && p.Sql.StartsWith("CREATE SEQUENCE", StringComparison.Ordinal)
+                                                 && p.Sql.Contains(sequence, StringComparison.Ordinal));
+
+        var result = await RunAsync(env, ctx, new CrossMemoryRunLog());
+        NoteResult(env, item, result);
+        Assert.Equal(CopyOutcome.Succeeded, Assert.Single(result.Tables).Outcome);
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Equal(1, await env.CountAsync(target, "USER_SEQUENCES", $"SEQUENCE_NAME = '{sequence}'"));
+        Assert.Equal(1, await env.CountAsync(target, "USER_TABLES", $"TABLE_NAME = '{t}'"));
+        Assert.Equal(3, await env.CountAsync(target, t));
+
+        var sourceOwner = CrossDbmsItEnvironment.Owner(ctx.Sessions.Source);
+        var tiberoDefault = Text(await env.QueryAsync(target, $"SELECT DATA_DEFAULT FROM USER_TAB_COLUMNS WHERE TABLE_NAME = '{t}' AND COLUMN_NAME = 'ID'"));
+        Note(env, item + ".tibero_default", tiberoDefault);
+        Assert.Contains(sequence, tiberoDefault, StringComparison.OrdinalIgnoreCase);
+        Assert.False(tiberoDefault.Contains(sourceOwner, StringComparison.OrdinalIgnoreCase), env.Scrub("the Tibero default points to the Oracle source schema: " + tiberoDefault));
+
+        // 새 행은 복사가 만든 대상 시퀀스 값을 받는다: 적재한 키(1~3) 뒤다(START WITH = 원본 LAST_NUMBER, 적재 뒤 키 최댓값 위로 맞춤).
+        await env.ExecAsync(target, $"INSERT INTO {t} (V) VALUES ('new')");
+        var id = (await env.QueryAsync(target, $"SELECT ID FROM {t} WHERE V = 'new'"))[0][0];
+        Note(env, item + ".tibero_new_row_id", id ?? "<null>");
+        Assert.True(decimal.Parse(id!, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture) >= 4,
+            "the new Tibero row did not take its ID from the sequence the copy created after the loaded keys");
     }
 
     /// <summary>
