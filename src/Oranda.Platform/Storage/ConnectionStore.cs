@@ -160,7 +160,7 @@ internal sealed class ConnectionStore : IConnectionStore, IDisposable
                 return;
             }
 
-            var normalized = new ConnectionsDocument { SchemaVersion = SchemaVersions.Connections, Profiles = profiles, Folders = ConnectionFolders.Distinct(document.Folders) };
+            var normalized = new ConnectionsDocument { SchemaVersion = SchemaVersions.Connections, Profiles = profiles, Folders = ConnectionFolders.Distinct(document.Folders), FolderOrder = ConnectionFolders.Distinct(document.FolderOrder) };
             await JsonDocumentFile.WriteAsync(_paths.ConnectionsFile, normalized, OrandaJsonContext.Default.ConnectionsDocument, ct).ConfigureAwait(false);
         }
         finally

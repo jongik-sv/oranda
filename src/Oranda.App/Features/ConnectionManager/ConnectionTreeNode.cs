@@ -28,6 +28,13 @@ public sealed partial class ConnectionTreeNode : ObservableObject
     [ObservableProperty]
     private bool _isDropTarget;
 
+    /// <summary>직접 정렬로 끌어 놓을 자리 표시: 이 줄 바로 위 / 바로 아래.</summary>
+    [ObservableProperty]
+    private bool _isDropBefore;
+
+    [ObservableProperty]
+    private bool _isDropAfter;
+
     public ConnectionTreeNode(string title, ConnectionProfile? profile = null, string? path = null)
     {
         Title = title;

@@ -153,6 +153,7 @@ public sealed partial class ConnectionManagerViewModel
     {
         _profiles = [.. doc.Profiles];
         _allFolders = ConnectionFolders.All(doc);
+        _folderOrder = doc.FolderOrder;
         OnPropertyChanged(nameof(AllFolders));
         if (Editor is { } editor)
         {
@@ -173,9 +174,12 @@ public sealed partial class ConnectionManagerViewModel
         ConnectionTreeNode? selectNode = null;
         ConnectionTreeNode? folderNode = null;
         var visible = _profiles.Where(p => Matches(p, SearchText));
-        var ordered = (SortOrder == ConnectionSortOrder.RecentlyConnected
-            ? visible.OrderByDescending(p => p.LastConnectedAt.HasValue).ThenByDescending(p => p.LastConnectedAt).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-            : visible.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+        var ordered = (SortOrder switch
+        {
+            ConnectionSortOrder.RecentlyConnected => visible.OrderByDescending(p => p.LastConnectedAt.HasValue).ThenByDescending(p => p.LastConnectedAt).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase),
+            ConnectionSortOrder.Manual => ConnectionFolders.OrderManually(visible),
+            _ => visible.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase),
+        }).ToList();
 
         // 찾는 중에는 맞는 접속이 있는 폴더만, 아니면 빈 폴더까지 모두 보인다.
         IReadOnlyList<string> paths = filtering
@@ -257,10 +261,14 @@ public sealed partial class ConnectionManagerViewModel
         }
     }
 
-    /// <summary><paramref name="parent"/> 바로 아래 폴더 경로, 이름순(null = 맨 위).</summary>
-    private static IEnumerable<string> ChildFolders(IReadOnlyList<string> paths, string? parent) =>
-        paths.Where(p => ConnectionFolders.PathEquals(ConnectionFolders.Parent(p), parent))
-            .OrderBy(ConnectionFolders.NameOf, StringComparer.OrdinalIgnoreCase);
+    /// <summary><paramref name="parent"/> 바로 아래 폴더 경로, 이름순(직접 정렬이면 저장된 폴더 순서). null = 맨 위.</summary>
+    private IEnumerable<string> ChildFolders(IReadOnlyList<string> paths, string? parent)
+    {
+        var children = paths.Where(p => ConnectionFolders.PathEquals(ConnectionFolders.Parent(p), parent));
+        return SortOrder == ConnectionSortOrder.Manual
+            ? ConnectionFolders.OrderManually(children, _folderOrder)
+            : children.OrderBy(ConnectionFolders.NameOf, StringComparer.OrdinalIgnoreCase);
+    }
 
     private void OnFolderChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {

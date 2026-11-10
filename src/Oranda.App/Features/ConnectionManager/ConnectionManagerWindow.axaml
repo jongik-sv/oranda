@@ -110,6 +110,9 @@
               <!-- 칩 · 이름 · 변경 표시 · user@접속(남는 폭, 말줄임) · 마지막 접속 시각(오른쪽). -->
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8" AutomationProperties.Name="{Binding AccessibleName}"
                     Classes.drop="{Binding IsDropTarget}" ToolTip.Tip="{Binding Tip}">
+                <!-- 직접 정렬: 놓을 자리 줄 표시(줄 위·아래). -->
+                <Border Grid.ColumnSpan="5" Height="2" VerticalAlignment="Top" IsVisible="{Binding IsDropBefore}" Background="{DynamicResource OrandaFocusBrush}" />
+                <Border Grid.ColumnSpan="5" Height="2" VerticalAlignment="Bottom" IsVisible="{Binding IsDropAfter}" Background="{DynamicResource OrandaFocusBrush}" />
                 <Border Grid.Column="0" IsVisible="{Binding HasChip}" Background="{Binding EnvironmentColor}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
                   <TextBlock Text="{Binding EnvironmentLabel}" Foreground="White" FontSize="12" />
                 </Border>

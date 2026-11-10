@@ -158,6 +158,82 @@ public sealed partial class ConnectionManagerViewModel
             : !ConnectionFolders.PathEquals(ConnectionFolders.Normalize(node.Profile?.Group), target);
     }
 
+    /// <summary>
+    /// 끌어 놓을 자리를 정한다. 직접 정렬이고 찾는 중이 아니며 같은 폴더 안의 같은 종류 줄 위면 줄 사이(위쪽 반 = 앞, 아래쪽 반 = 뒤; 폴더 줄은 위·아래 4분의 1만)에 놓아
+    /// 순서를 바꾸고, 그 밖에는 지금처럼 폴더로 옮긴다. <paramref name="relativeY"/> = 목표 줄 안의 세로 위치(0 = 위, 1 = 아래).
+    /// </summary>
+    public DropIntent ResolveDrop(ConnectionTreeNode dragged, ConnectionTreeNode? target, double relativeY)
+    {
+        ArgumentNullException.ThrowIfNull(dragged);
+        if (target is not null && !ReferenceEquals(target, dragged) && SortOrder == ConnectionSortOrder.Manual
+            && string.IsNullOrWhiteSpace(SearchText) && target.IsFolder == dragged.IsFolder
+            && ConnectionFolders.PathEquals(ParentFolderOf(dragged), ParentFolderOf(target)))
+        {
+            var edge = dragged.IsFolder ? 0.25 : 0.5;
+            if (relativeY < edge)
+            {
+                return new DropIntent(DropPlacement.Before, null);
+            }
+
+            if (relativeY >= 1 - edge)
+            {
+                return new DropIntent(DropPlacement.After, null);
+            }
+        }
+
+        var folder = target switch
+        {
+            { IsFolder: true } f => f.Path,
+            { Profile: { } profile } => ConnectionFolders.Normalize(profile.Group),
+            _ => null,
+        };
+        return CanDrop(dragged, folder) ? new DropIntent(DropPlacement.IntoFolder, folder) : new DropIntent(DropPlacement.None, null);
+    }
+
+    private static string? ParentFolderOf(ConnectionTreeNode node) =>
+        node.IsFolder ? ConnectionFolders.Parent(node.Path) : ConnectionFolders.Normalize(node.Profile?.Group);
+
+    /// <summary>
+    /// 직접 정렬: <paramref name="dragged"/> 를 같은 폴더의 <paramref name="target"/> 앞(<paramref name="after"/> 가 false)이나 뒤로 옮기고 순서를 파일에 저장한다.
+    /// 같은 종류(접속끼리, 폴더끼리)·같은 폴더 안일 때만 된다.
+    /// </summary>
+    public async Task<bool> ReorderAsync(ConnectionTreeNode dragged, ConnectionTreeNode target, bool after)
+    {
+        ArgumentNullException.ThrowIfNull(dragged);
+        ArgumentNullException.ThrowIfNull(target);
+        if (SortOrder != ConnectionSortOrder.Manual || dragged.IsFolder != target.IsFolder || ReferenceEquals(dragged, target)
+            || !ConnectionFolders.PathEquals(ParentFolderOf(dragged), ParentFolderOf(target)))
+        {
+            return false;
+        }
+
+        var parent = ParentFolderOf(target);
+        var siblings = (parent is null ? Tree : FindFolder(parent)?.Children)?.Where(n => n.IsFolder == dragged.IsFolder).ToList();
+        if (siblings is null || !siblings.Contains(dragged) || !siblings.Contains(target))
+        {
+            return false;
+        }
+
+        if (dragged.Profile is { } profile
+            && Editor is { IsNew: false, IsDirty: true } editor && editor.Original.Id == profile.Id && !await ResolveUnsavedAsync().ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        siblings.Remove(dragged);
+        siblings.Insert(siblings.IndexOf(target) + (after ? 1 : 0), dragged);
+        if (!await TryEditFoldersAsync(doc => dragged.IsFolder
+                ? ConnectionFolders.SetFolderOrder(doc, [.. siblings.Select(n => n.Path)])
+                : ConnectionFolders.SetProfileOrder(doc, [.. siblings.Select(n => n.Profile!.Id)])).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        await ReloadAsync(dragged.Profile?.Id, dragged.IsFolder ? dragged.Path : null, parent).ConfigureAwait(true);
+        SetStatus(StatusKind.Info, $"'{dragged.Title}' 의 순서를 바꿨습니다.");
+        return true;
+    }
+
     /// <summary>접속 또는 폴더를 폴더로 옮긴다(끌어 놓기·「폴더로 이동」). <paramref name="targetFolder"/> 가 null 이면 맨 위.</summary>
     public async Task<bool> MoveNodeAsync(ConnectionTreeNode node, string? targetFolder)
     {
@@ -247,3 +323,22 @@ public sealed partial class ConnectionManagerViewModel
 
     /// <summary>화면 코드가 상태 줄에 오류를 알린다.</summary>
 }
+
+/// <summary>끌어 놓을 자리의 종류.</summary>
+public enum DropPlacement
+{
+    /// <summary>놓을 수 없다.</summary>
+    None,
+
+    /// <summary>폴더 안으로(맨 위 = <see cref="DropIntent.Folder"/> 가 null).</summary>
+    IntoFolder,
+
+    /// <summary>같은 폴더의 목표 줄 앞에(직접 정렬).</summary>
+    Before,
+
+    /// <summary>같은 폴더의 목표 줄 뒤에(직접 정렬).</summary>
+    After,
+}
+
+/// <summary>끌어 놓을 자리 판정 결과(<see cref="ConnectionManagerViewModel.ResolveDrop"/>).</summary>
+public readonly record struct DropIntent(DropPlacement Placement, string? Folder);

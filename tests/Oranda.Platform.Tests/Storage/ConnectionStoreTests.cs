@@ -79,6 +79,25 @@ public sealed class ConnectionStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Manual_sort_order_round_trips_and_a_file_without_it_loads_unordered()
+    {
+        File.WriteAllText(
+            Path.Combine(_dir, "connections.json"),
+            """{"schemaVersion":1,"profiles":[{"name":"old","user":"scott","dataSource":"db:1521/s"}]}""");
+        using var store = NewStore();
+        var old = (await store.LoadAsync(CancellationToken.None)).Value;
+        Assert.Null(Assert.Single(old.Profiles).SortIndex);
+        Assert.Empty(old.FolderOrder);
+
+        await store.SaveAsync(
+            old with { Profiles = [old.Profiles[0] with { SortIndex = 2 }], Folders = ["x", "y"], FolderOrder = ["y", " x "] },
+            CancellationToken.None);
+        var loaded = (await store.LoadAsync(CancellationToken.None)).Value;
+        Assert.Equal(2, loaded.Profiles[0].SortIndex);
+        Assert.Equal(["y", "x"], loaded.FolderOrder.ToArray());
+    }
+
+    [Fact]
     public async Task Save_assigns_ids_and_round_trips_all_fields()
     {
         using var store = NewStore();

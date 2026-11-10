@@ -13,11 +13,14 @@ using Oranda.Platform.Storage;
 
 namespace Oranda.App.Features.ConnectionManager;
 
-/// <summary>접속 목록 정렬(이름 또는 최근 접속이 먼저).</summary>
+/// <summary>접속 목록 정렬(이름 또는 최근 접속이 먼저, 또는 사용자가 끌어 정한 순서).</summary>
 public enum ConnectionSortOrder
 {
     Name,
     RecentlyConnected,
+
+    /// <summary>직접 정렬: 같은 폴더 안에서 접속·폴더를 끌어 바꾼 순서(파일에 저장).</summary>
+    Manual,
 }
 
 /// <summary>
@@ -64,6 +67,9 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     /// <summary>마지막으로 읽은 폴더 경로 전체(빈 폴더와 접속이 가리키는 폴더, 상위 폴더 포함).</summary>
     private IReadOnlyList<string> _allFolders = [];
 
+    /// <summary>마지막으로 읽은 직접 정렬 폴더 순서(<see cref="ConnectionsDocument.FolderOrder"/>).</summary>
+    private IReadOnlyList<string> _folderOrder = [];
+
     private Func<Task<bool>>? _importConnections;
 
     private Func<Task<bool>>? _exportConnections;
@@ -86,6 +92,7 @@ public sealed partial class ConnectionManagerViewModel : ViewModelBase
     [
         new(ConnectionSortOrder.Name, "이름순"),
         new(ConnectionSortOrder.RecentlyConnected, "최근 접속순"),
+        new(ConnectionSortOrder.Manual, "직접 정렬"),
     ];
 
     /// <summary>접속 성공 뒤 대화상자를 닫으라는 신호.</summary>

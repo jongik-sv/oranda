@@ -429,8 +429,12 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             var index = list.FindIndex(p => p.Id == id);
             if (index >= 0)
             {
-                // 편집기가 모르는 값(마지막 접속 시각)은 이어 받는다.
-                next = next with { LastConnectedAt = next.LastConnectedAt ?? list[index].LastConnectedAt };
+                // 편집기가 모르는 값(마지막 접속 시각)은 이어 받는다. 폴더를 바꾸면 직접 정렬 자리는 맨 뒤로(null).
+                next = next with
+                {
+                    LastConnectedAt = next.LastConnectedAt ?? list[index].LastConnectedAt,
+                    SortIndex = ConnectionFolders.PathEquals(ConnectionFolders.Normalize(next.Group), ConnectionFolders.Normalize(list[index].Group)) ? list[index].SortIndex : null,
+                };
                 list[index] = next;
             }
             else
@@ -941,9 +945,11 @@ public sealed class ConnectionService : IConnectionService, IDisposable
         {
             var version = probe.ServerVersion ?? "(알 수 없음)";
             var label = ServerLabel(version);
+            // 성공이어도 구현이 안내를 실을 수 있다(예: 버전 뷰를 볼 권한이 없어 드라이버가 알려 준 버전으로 대신함).
+            var notice = FirstLine(probe.Message ?? string.Empty).Replace(secret, "***", StringComparison.Ordinal);
             return new ConnectionTestOutcome(
                 ConnectStatus.Connected,
-                $"접속 시험 성공: 서버 {version}{(label is null ? string.Empty : $"({label})")}, {watch.Elapsed.TotalMilliseconds:0} ms 걸림.",
+                $"접속 시험 성공: 서버 {version}{(label is null ? string.Empty : $"({label})")}, {watch.Elapsed.TotalMilliseconds:0} ms 걸림.{(notice.Length == 0 ? string.Empty : " " + notice)}",
                 version,
                 watch.Elapsed);
         }

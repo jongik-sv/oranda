@@ -3,6 +3,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
@@ -205,6 +206,7 @@ public partial class ConnectionManagerWindow : Window
         {
             _dragNode = null;
             SetHoverFolder(null);
+            SetDropMark(null, DropPlacement.None);
         }
     }
 
@@ -229,6 +231,45 @@ public partial class ConnectionManagerWindow : Window
         }
 
         return true;
+    }
+
+    /// <summary>끌고 있는 줄을 놓을 자리: 목표 줄과 그 줄 안의 세로 위치(0~1). 목록 밖이면 false, 빈 곳이면 목표 null.</summary>
+    private bool TryGetDropTarget(DragEventArgs e, out ConnectionTreeNode? target, out double relativeY)
+    {
+        target = null;
+        relativeY = 0.5;
+        var p = e.GetPosition(ConnectionTree);
+        if (p.X < 0 || p.Y < 0 || p.X > ConnectionTree.Bounds.Width || p.Y > ConnectionTree.Bounds.Height)
+        {
+            return false;
+        }
+
+        if ((e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<Grid>().FirstOrDefault(g => g.DataContext is ConnectionTreeNode) is { } row)
+        {
+            target = (ConnectionTreeNode)row.DataContext!;
+            relativeY = row.Bounds.Height > 0 ? Math.Clamp(e.GetPosition(row).Y / row.Bounds.Height, 0, 1) : 0.5;
+        }
+
+        return true;
+    }
+
+    private ConnectionTreeNode? _markedRow;
+
+    /// <summary>직접 정렬의 놓을 자리 표시(줄 위·아래 선)를 옮긴다. <paramref name="row"/> 가 null 이면 지운다.</summary>
+    private void SetDropMark(ConnectionTreeNode? row, DropPlacement placement)
+    {
+        if (_markedRow is not null && !ReferenceEquals(_markedRow, row))
+        {
+            _markedRow.IsDropBefore = false;
+            _markedRow.IsDropAfter = false;
+        }
+
+        _markedRow = row;
+        if (row is not null)
+        {
+            row.IsDropBefore = placement == DropPlacement.Before;
+            row.IsDropAfter = placement == DropPlacement.After;
+        }
     }
 
     private void SetHoverFolder(ConnectionTreeNode? folder)
@@ -315,9 +356,13 @@ public partial class ConnectionManagerWindow : Window
     {
         if (_dragNode is { } node)
         {
-            var ok = TryGetDropFolder(e, out var folder) && ConnectionManagerViewModel.CanDrop(node, folder);
-            SetHoverFolder(ok && folder is not null ? Model?.FindFolder(folder) : null);
-            e.DragEffects = ok ? DragDropEffects.Move : DragDropEffects.None;
+            var intent = TryGetDropTarget(e, out var target, out var y) && Model is { } vm
+                ? vm.ResolveDrop(node, target, y)
+                : new DropIntent(DropPlacement.None, null);
+            var reorder = intent.Placement is DropPlacement.Before or DropPlacement.After;
+            SetHoverFolder(intent is { Placement: DropPlacement.IntoFolder, Folder: { } folder } ? Model?.FindFolder(folder) : null);
+            SetDropMark(reorder ? target : null, intent.Placement);
+            e.DragEffects = intent.Placement == DropPlacement.None ? DragDropEffects.None : DragDropEffects.Move;
             e.Handled = true;
             return;
         }
@@ -325,7 +370,11 @@ public partial class ConnectionManagerWindow : Window
         e.DragEffects = FirstZip(e) is null ? DragDropEffects.None : DragDropEffects.Copy;
     }
 
-    private void OnDragLeave(object? sender, DragEventArgs e) => SetHoverFolder(null);
+    private void OnDragLeave(object? sender, DragEventArgs e)
+    {
+        SetHoverFolder(null);
+        SetDropMark(null, DropPlacement.None);
+    }
 
     private async void OnDrop(object? sender, DragEventArgs e)
     {
@@ -333,9 +382,23 @@ public partial class ConnectionManagerWindow : Window
         {
             e.Handled = true;
             SetHoverFolder(null);
-            if (TryGetDropFolder(e, out var folder))
+            SetDropMark(null, DropPlacement.None);
+            if (TryGetDropTarget(e, out var target, out var y))
             {
-                await moving.MoveNodeAsync(node, folder).ConfigureAwait(true);
+                var intent = moving.ResolveDrop(node, target, y);
+                switch (intent.Placement)
+                {
+                    case DropPlacement.Before or DropPlacement.After:
+                        await moving.ReorderAsync(node, target!, after: intent.Placement == DropPlacement.After).ConfigureAwait(true);
+                        break;
+                    default:
+                        if (TryGetDropFolder(e, out var folder))
+                        {
+                            await moving.MoveNodeAsync(node, folder).ConfigureAwait(true); // 막힌 이유(자기 하위 등)는 이 호출이 알린다
+                        }
+
+                        break;
+                }
             }
 
             return;

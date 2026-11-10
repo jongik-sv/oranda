@@ -35,7 +35,7 @@ public static class ConnectionExport
     public static ConnectionProfile Strip(ConnectionProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        return profile with { CredentialRef = null, LastConnectedAt = null, AiAccess = null, AllowExplainPlan = null };
+        return profile with { CredentialRef = null, LastConnectedAt = null, SortIndex = null, AiAccess = null, AllowExplainPlan = null };
     }
 
     /// <summary>고른 접속을 내보내기 파일 본문(JSON)으로.</summary>

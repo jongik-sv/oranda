@@ -54,6 +54,7 @@ public sealed record NlsSettings
 /// <see cref="AiAccess"/> 는 AI 허용 수준, <see cref="AllowExplainPlan"/> 은 AI 의 EXPLAIN PLAN 허용 여부 — 둘 다 null 이면 환경 라벨의 기본값
 /// (<see cref="AiAccessPolicy"/>, 옛 JSON 도 null 로 읽힌다).
 /// <see cref="Dbms"/> 는 접속 대상 DBMS 종류(D-046). 옛 JSON(키 없음)은 <see cref="Connection.Dbms.Oracle"/> 로 읽힌다.
+/// <see cref="SortIndex"/> 는 접속 관리자 「직접 정렬」 의 같은 폴더 안 순서(작을수록 위). 옛 JSON(키 없음)은 null 로 읽혀 이름순 뒤에 놓인다.
 /// D-004: 위치 매개변수 record 를 유지하고 새 매개변수는 끝에 기본값과 함께 덧붙인다.
 /// </summary>
 public sealed record ConnectionProfile(
@@ -78,7 +79,8 @@ public sealed record ConnectionProfile(
     string? Comment = null,
     AiAccessLevel? AiAccess = null,
     bool? AllowExplainPlan = null,
-    Dbms Dbms = Dbms.Oracle);
+    Dbms Dbms = Dbms.Oracle,
+    int? SortIndex = null);
 
 /// <summary><c>connections.json</c> 루트.</summary>
 public sealed record ConnectionsDocument
@@ -92,4 +94,10 @@ public sealed record ConnectionsDocument
     /// 이전 형식 파일에는 없고, 없으면 빈 목록이다.
     /// </summary>
     public IReadOnlyList<string> Folders { get; init; } = [];
+
+    /// <summary>
+    /// 접속 관리자 「직접 정렬」 의 폴더 순서: 같은 부모 아래 형제 폴더는 이 목록에서의 위치 순서로 보이고, 목록에 없는 폴더는 뒤에 이름순으로 놓인다.
+    /// 이전 형식 파일에는 없고, 없으면 빈 목록(이름순)이다.
+    /// </summary>
+    public IReadOnlyList<string> FolderOrder { get; init; } = [];
 }

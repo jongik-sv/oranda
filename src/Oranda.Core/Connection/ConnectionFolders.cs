@@ -122,6 +122,7 @@ public static class ConnectionFolders
         ArgumentNullException.ThrowIfNull(doc);
         var target = Normalize(path) ?? throw new ConnectionFolderException("지울 폴더가 없다.");
         var parent = Parent(target);
+        doc = doc with { FolderOrder = [.. doc.FolderOrder.Where(f => !PathEquals(Normalize(f), target))] }; // 지운 폴더 자리는 부모 자리로 옮기지 않는다
         return Rewrite(doc, p => Replace(p, target, parent), includeParentsOfTarget: null);
     }
 
@@ -130,7 +131,53 @@ public static class ConnectionFolders
     {
         ArgumentNullException.ThrowIfNull(doc);
         var group = Normalize(folder);
-        return doc with { Profiles = [.. doc.Profiles.Select(p => p.Id == id ? p with { Group = group } : p)] };
+        return doc with { Profiles = [.. doc.Profiles.Select(p => p.Id == id ? p with { Group = group, SortIndex = null } : p)] }; // 새 폴더에서는 직접 정렬 맨 뒤
+    }
+
+    /// <summary>
+    /// 직접 정렬: 같은 폴더의 접속 순서. <paramref name="orderedIds"/> 의 순서대로 <see cref="ConnectionProfile.SortIndex"/> 를 0부터 매긴다
+    /// (목록에 없는 접속은 건드리지 않는다).
+    /// </summary>
+    public static ConnectionsDocument SetProfileOrder(ConnectionsDocument doc, IReadOnlyList<Guid> orderedIds)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(orderedIds);
+        var index = new Dictionary<Guid, int>();
+        foreach (var id in orderedIds)
+        {
+            index.TryAdd(id, index.Count);
+        }
+
+        return doc with { Profiles = [.. doc.Profiles.Select(p => index.TryGetValue(p.Id, out var i) ? p with { SortIndex = i } : p)] };
+    }
+
+    /// <summary>
+    /// 직접 정렬: 같은 부모 아래 형제 폴더의 순서. 이 형제들의 옛 자리를 <see cref="ConnectionsDocument.FolderOrder"/> 에서 빼고
+    /// <paramref name="orderedPaths"/> 순서로 덧붙인다(다른 부모의 순서는 그대로).
+    /// </summary>
+    public static ConnectionsDocument SetFolderOrder(ConnectionsDocument doc, IReadOnlyList<string> orderedPaths)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(orderedPaths);
+        var normalized = Distinct(orderedPaths);
+        var rest = doc.FolderOrder.Select(Normalize).OfType<string>().Where(p => !normalized.Contains(p, Comparer));
+        return doc with { FolderOrder = [.. rest, .. normalized] };
+    }
+
+    /// <summary>직접 정렬 순서로 접속을 놓는다: <see cref="ConnectionProfile.SortIndex"/> 순, 없는 접속은 뒤에 이름순.</summary>
+    public static IEnumerable<ConnectionProfile> OrderManually(IEnumerable<ConnectionProfile> profiles) =>
+        profiles.OrderBy(p => p.SortIndex ?? int.MaxValue).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>직접 정렬 순서로 폴더 경로를 놓는다: <paramref name="folderOrder"/> 에 있는 순서, 없는 폴더는 뒤에 이름순.</summary>
+    public static IEnumerable<string> OrderManually(IEnumerable<string> paths, IReadOnlyList<string> folderOrder)
+    {
+        var position = new Dictionary<string, int>(Comparer);
+        foreach (var p in folderOrder.Select(Normalize).OfType<string>())
+        {
+            position.TryAdd(p, position.Count);
+        }
+
+        return paths.OrderBy(p => position.TryGetValue(p, out var i) ? i : int.MaxValue).ThenBy(NameOf, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary><paramref name="path"/> 가 <paramref name="from"/> 아래면 <paramref name="to"/> 로 접두어를 바꾼다.</summary>
@@ -162,7 +209,8 @@ public static class ConnectionFolders
         }
 
         var profiles = doc.Profiles.Select(p => p with { Group = map(Normalize(p.Group)) }).ToList();
-        return doc with { Folders = Distinct(folders), Profiles = profiles };
+        var order = doc.FolderOrder.Select(Normalize).OfType<string>().Select(f => map(f)).OfType<string>().ToList(); // 직접 정렬 순서도 새 경로로
+        return doc with { Folders = Distinct(folders), Profiles = profiles, FolderOrder = Distinct(order) };
     }
 
     /// <summary>대소문자를 무시하고 겹침을 없앤다(먼저 나온 철자를 남긴다).</summary>

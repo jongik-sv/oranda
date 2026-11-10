@@ -831,6 +831,23 @@ public sealed class ConnectionManagerTests
     }
 
     [Fact]
+    public async Task Test_connection_success_shows_the_notice_the_probe_attached()
+    {
+        using var fx = new ServiceFixture();
+        var tibero = new StubConnectionTester
+        {
+            Behavior = (_, _, _) => Task.FromResult(new ServerProbeResult(true, "7.2.0", null, "V$VERSION 을 볼 권한이 없어 드라이버가 알려 준 버전을 보입니다.\n둘째 줄")),
+        };
+        fx.Selector.Add<IConnectionProbe>(Dbms.Tibero, () => new FakeConnectionProbe(tibero, new StubPasswordChanger()) { Dbms = Dbms.Tibero });
+
+        var outcome = await fx.Service.TestConnectionAsync(TiberoProfile(), "pw", CancellationToken.None);
+
+        Assert.True(outcome.Succeeded);
+        Assert.StartsWith("접속 시험 성공: 서버 7.2.0", outcome.Message, StringComparison.Ordinal);
+        Assert.EndsWith(" V$VERSION 을 볼 권한이 없어 드라이버가 알려 준 버전을 보입니다.", outcome.Message, StringComparison.Ordinal); // 첫 줄만
+    }
+
+    [Fact]
     public async Task Test_connection_failure_from_the_probe_is_reported_with_the_dbms_error_code()
     {
         using var fx = new ServiceFixture();
