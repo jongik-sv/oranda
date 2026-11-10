@@ -56,6 +56,13 @@ internal sealed class OracleBulkValueCodec : IBulkValueCodec
         ? ToLongExact(d)
         : throw new InvalidCastException("NUMBER 값이 아닙니다.");
 
+    /// <summary>읽어서 이식 값으로 낼 수 있는 형식 = 기본(<see cref="IsSupported"/>)과 같다. LTZ 는 교차 판정(<c>CrossTypeMap</c>)이 따로 뗀다(D8).</summary>
+    public bool IsReadable(string serverType) => IsSupported(serverType);
+
+    public object? ToPortable(object? value, string serverType) => OraclePortable.ToPortable(value, serverType);
+
+    public object? FromPortable(object? portable, string bindType) => OraclePortable.FromPortable(portable, bindType);
+
     /// <summary>NUMBER → long. 범위를 넘으면 <see cref="OverflowException"/>(호출한 쪽이 알림으로 바꾼다). 예전 실행기 <c>ToLong(OracleDecimal)</c> 본문 그대로.</summary>
     internal static long ToLongExact(OracleDecimal value)
     {

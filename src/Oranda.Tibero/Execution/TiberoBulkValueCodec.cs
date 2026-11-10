@@ -11,7 +11,7 @@ namespace Oranda.Tibero.Execution;
 /// Tibero 전용 멤버 <see cref="BindExpression"/>·<see cref="ToBindText"/>·<see cref="ToBindBytes"/> 는 배열 DML 의 값 자리 글과 바인드 값(글자)을 정한다.
 /// 등록하지 않는다(키 서비스 아님, Tibero 복사 하위 형식 <c>TiberoCopyRunner</c>·<c>TiberoCopyPrecheckService</c>(TI1b)가 넘긴다).
 /// </summary>
-internal sealed class TiberoBulkValueCodec : IBulkValueCodec
+internal sealed partial class TiberoBulkValueCodec : IBulkValueCodec
 {
     public static readonly TiberoBulkValueCodec Instance = new();
 

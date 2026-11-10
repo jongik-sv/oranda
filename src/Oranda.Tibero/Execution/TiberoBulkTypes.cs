@@ -145,6 +145,8 @@ internal static partial class TiberoBulkTypes
     private static readonly TiberoBulkShape BinaryDoubleShape =
         new(TiberoBulkType.BinaryDouble, false, BulkKind.Other, BindDataType.BinaryDouble, TiberoParamKind.Varchar2, "TO_BINARY_DOUBLE(", ")", true);
 
+    // 교차 복사(XC4)는 이 후보 감싸기를 TiberoBulkValueCodec.CrossBindExpression·CrossBindText 우회로 쓴다(IsSupported 는 꺼진 채).
+    // XC5(실측 IT)가 서식을 검증하고 녹색이면 그때 IsSupported 를 켠다.
     private static readonly TiberoBulkShape TimestampTzShape =
         new(TiberoBulkType.TimestampTz, false, BulkKind.Other, BindDataType.TimestampTz, TiberoParamKind.Varchar2,
             "TO_TIMESTAMP_TZ(", ", '" + TimestampFormat + " TZH:TZM')", true);
