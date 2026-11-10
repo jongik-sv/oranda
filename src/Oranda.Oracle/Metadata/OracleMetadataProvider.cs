@@ -296,6 +296,7 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
         IsInvisible = Yes(r[10]),
         Domain = Str(r[11]),
         Comment = Str(r[12]),
+        ByteLength = r.Length > 13 ? Int(r[13]) : null, // 문자 열의 data_length(바이트, TR1). 열이 없는 예전 행 모양이면 모름
     };
 
     /// <summary>

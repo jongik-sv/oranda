@@ -1,4 +1,6 @@
 using System.Runtime.ExceptionServices;
+using Oranda.Core.Connection;
+using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Text;
@@ -20,7 +22,12 @@ namespace Oranda.Tibero.Tests.Integration;
 /// → <see cref="CreateTableDdl"/> 로 다시 만들기(휴지통에 간 옛 표의 PK·인덱스 이름과 겹치지 않는가) → 행 넣기 → 트리거·권한·참조 FK 되살리기(상태·VALID·발동)
 /// → 실행기 안내 문장 그대로 BIN 이름으로 <c>FLASHBACK TABLE … TO BEFORE DROP RENAME TO "표_OLD"</c>(옛 행이 돌아오는가).</item>
 /// <item>시험 2: <c>VARCHAR2(4000 BYTE)</c> 열과 서버 이름 제약(PK·CHECK)이 CHAR 길이로 쓰는 다시 만들기 DDL 로 돌아오고 4000바이트 값이 다시 들어가는가.
-/// 최대 바이트 길이(65532 BYTE) 열은 결과만 출력에 남긴다(단언하지 않음).</item>
+/// 서버 이름 제약은 이름 없이 만들어져 새 서버 이름을 받는다(TR1 위험 5). 최대 바이트 길이(65532 BYTE) 열은 BYTE 그대로 만들어지고 65532바이트 값이 들어간다(TR1 위험 2),
+/// 같은 열을 글자 단위(65532 CHAR)로 만들면 서버가 무엇을 하는지는 출력만 한다.</item>
+/// <item>시험 3(TR1): 실행기 경로(<c>CopyRunner.RecreateAndRestoreForTestAsync</c>, 실제 대량·실행 서비스)로 부모·자식을 함께 다시 만든다. 자식 FK 를 첫 DROP 전에 떼므로
+/// 부모 DROP 이 휴지통의 자식 FK 에 막히지 않고(위험 3), 자식 FK 는 원본 정의로 다시 붙는다. 지금 INVALID 인 트리거는 그대로 다시 만들어져 꺼지고 알림만 남는다(위험 1).</item>
+/// <item>시험 4(TR1, 출력만): 자식 FK 를 떼지 않고 자식 → 부모를 지우면 서버가 부모 DROP 을 받는지(휴지통의 자식 FK), DEFERRABLE FK 의 지연 여부를 읽을 수 있는 후보
+/// (<c>ALL_CONSTRAINTS.DEFERRABLE</c>·<c>DEFERRED</c>, <c>DBMS_METADATA.GET_DDL('REF_CONSTRAINT'|'TABLE')</c>, <c>USER_CONSTRAINTS</c> 의 열 목록)가 무엇을 주는지(위험 4).</item>
 /// </list>
 /// 접속 값(계정·DB·호스트)은 단언 메시지·출력에 넣지 않는다: 참·거짓 단언만 쓰고, 예외는 형식 이름·오류 번호만 남긴다.
 /// 휴지통은 이 시험의 ORT_ 표 항목만 BIN 이름으로 <c>PURGE TABLE</c> 한다(<c>PURGE RECYCLEBIN</c> 금지).
@@ -43,6 +50,14 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
     private static readonly string ByteTable = TiberoItSessions.ObjectName("RCS_B");
     private static readonly string ByteMaxTable = TiberoItSessions.ObjectName("RCS_BMAX");
     private static readonly string BadTrigger = TiberoItSessions.ObjectName("RCS_TRG_BAD");
+    private static readonly string FkParent = TiberoItSessions.ObjectName("RCS_FP");
+    private static readonly string FkChild = TiberoItSessions.ObjectName("RCS_FC");
+    private static readonly string FkName = TiberoItSessions.ObjectName("RCS_FFK");
+    private static readonly string FkTrigger = TiberoItSessions.ObjectName("RCS_FP_TRG");
+    private static readonly string FkBadTrigger = TiberoItSessions.ObjectName("RCS_FP_BAD");
+    private static readonly string DeferParent = TiberoItSessions.ObjectName("RCS_DP");
+    private static readonly string DeferChild = TiberoItSessions.ObjectName("RCS_DC");
+    private static readonly string DeferFk = TiberoItSessions.ObjectName("RCS_DFK");
 
     [TiberoWriteFact]
     public Task Recreate_captures_drops_into_the_bin_recreates_restores_and_flashes_back_the_old_table() =>
@@ -51,6 +66,155 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
     [TiberoWriteFact]
     public Task Byte_length_varchar2_and_server_named_constraints_round_trip_through_the_recreate_ddl() =>
         WriteAsync([ByteTable, ByteMaxTable], ByteAsync);
+
+    [TiberoWriteFact]
+    public Task Runner_recreates_parent_and_child_together_detaching_the_child_fk_first_and_disables_a_trigger_that_was_invalid_before() =>
+        WriteAsync([FkChild, FkParent], RunnerAsync);
+
+    [TiberoWriteFact]
+    public Task Recycle_bin_child_fk_and_deferrable_catalog_candidates_are_printed() =>
+        WriteAsync([FkChild, FkParent, DeferChild, DeferParent], ProbeAsync);
+
+    /// <summary>
+    /// TR1 위험 3·1 을 실행기 경로 그대로(실제 Tibero 대량·실행 서비스, 받아 두기 = <see cref="TiberoRecreateStep"/>)로 돈다. 적재는 하지 않는다(다시 만든 표는 빈다).
+    /// 원본 = 대상(같은 계정): 같은 계정 복사 전체는 Core 가 막으므로 다시 만들기·되살리기 단계만 시험용 통로로 부른다.
+    /// </summary>
+    private async Task RunnerAsync(TiberoItSessions it, TiberoSession session, string owner)
+    {
+        var ct = CancellationToken.None;
+        string[] setup =
+        [
+            $"CREATE TABLE {FkParent} (ID NUMBER PRIMARY KEY, V VARCHAR2(20))",
+            $"CREATE TABLE {FkChild} (ID NUMBER PRIMARY KEY, PID NUMBER, CONSTRAINT {FkName} FOREIGN KEY (PID) REFERENCES {FkParent} (ID) ON DELETE CASCADE)",
+            $"INSERT INTO {FkParent} (ID, V) VALUES (1, 'a')",
+            $"INSERT INTO {FkChild} (ID, PID) VALUES (1, 1)",
+            "COMMIT",
+            $"CREATE TRIGGER {FkTrigger} BEFORE INSERT ON {FkParent} FOR EACH ROW\nBEGIN\n  :NEW.V := UPPER(:NEW.V);\nEND;",
+        ];
+        for (var i = 0; i < setup.Length; i++)
+        {
+            await ExecQuietAsync(session, "setup statement " + i, setup[i]);
+        }
+
+        var bad = await TryExecAsync(session, $"CREATE TRIGGER {FkBadTrigger} BEFORE INSERT ON {FkParent} FOR EACH ROW\nBEGIN\n  :NEW.NO_SUCH_COLUMN := 1;\nEND;");
+        var badStatus = await TryScalarAsync(session, $"SELECT status FROM user_objects WHERE object_name = '{FkBadTrigger}' AND object_type = 'TRIGGER'");
+        output.WriteLine($"trigger with a compile error before the recreate: {bad ?? "accepted"}; object status = {badStatus}");
+        var badInvalid = badStatus == "INVALID";
+
+        var provider = new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync);
+        var parentInfo = await QuietAsync("GetTableAsync(parent)", () => provider.GetTableAsync(session, new DbObjectRef(owner, FkParent, "TABLE"), ct));
+        var childInfo = await QuietAsync("GetTableAsync(child)", () => provider.GetTableAsync(session, new DbObjectRef(owner, FkChild, "TABLE"), ct));
+        var parentRule = new TableRule(FkParent, RuleKind.All, TargetAction.Recreate);
+        var childRule = new TableRule(FkChild, RuleKind.All, TargetAction.Recreate);
+        var job = new CopyJob
+        {
+            Id = "tr1-it", Name = "tr1-it", Source = new ConnectionRef("tr1", owner), Target = new ConnectionRef("tr1", owner),
+            SourceOwner = owner, TargetOwner = owner, MaskSalt = "AA==", Tables = [parentRule, childRule],
+        };
+        CopyTablePlan Plan(TableRule rule, TableInfo info) => new(rule, info, info, [.. info.Columns.Select(c => c.Name)], ["ID"]);
+
+        var policy = new AllowAll();
+        var runner = new TiberoCopyRunner(new TiberoBulkExecutionService(policy, new NoQuestions(), it.Events),
+            new TiberoExecutionService(policy, new NoQuestions(), it.Events, null, dbmsOutput: false), new NoRunLog());
+        var (tables, notices) = await QuietAsync("RecreateAndRestoreForTestAsync",
+            () => runner.RecreateAndRestoreForTestAsync(new CopySessions(session, session), job, [Plan(parentRule, parentInfo), Plan(childRule, childInfo)]));
+        foreach (var notice in notices)
+        {
+            output.WriteLine("runner notice: " + notice.Replace(owner, "<OWNER>", StringComparison.OrdinalIgnoreCase));
+        }
+
+        Assert.True(tables.All(t => t.Dropped && t.Created && !t.Flashbacked),
+            "the runner did not drop and recreate both tables (a parent DROP blocked by the child foreign key in the recycle bin?)");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_constraints WHERE table_name = '{FkChild}' AND constraint_type = 'R'") == 1,
+            "the recreated child does not have exactly one foreign key");
+        Assert.True(await CountAsync(session,
+                $"SELECT COUNT(*) FROM user_constraints c JOIN user_constraints p ON p.constraint_name = c.r_constraint_name WHERE c.table_name = '{FkChild}' AND c.constraint_name = '{FkName}' AND c.status = 'ENABLED' AND c.delete_rule = 'CASCADE' AND p.table_name = '{FkParent}' AND p.constraint_type = 'P'") == 1,
+            "the child foreign key is not back under its source name with ON DELETE CASCADE, enabled, referencing the recreated parent primary key");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_triggers WHERE trigger_name = '{FkTrigger}' AND table_name = '{FkParent}' AND status = 'ENABLED'") == 1,
+            "the valid trigger is not back enabled");
+        if (badInvalid)
+        {
+            Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_triggers WHERE trigger_name = '{FkBadTrigger}' AND table_name = '{FkParent}' AND status = 'DISABLED'") == 1,
+                "the trigger that was invalid before is not back disabled");
+            Assert.True(notices.Any(n => n.Contains(FkBadTrigger + " 은 다시 만들기 전부터 컴파일 오류로 INVALID 였습니다", StringComparison.Ordinal)),
+                "no notice says the trigger was invalid before the recreate");
+        }
+
+        foreach (var t in new[] { FkParent, FkChild })
+        {
+            output.WriteLine($"recycle bin entries for {t}: " + await TryScalarAsync(session, $"SELECT TO_CHAR(COUNT(*)) FROM user_recyclebin WHERE original_name = '{t}'"));
+        }
+
+        await ExecQuietAsync(session, "insert after restore", $"INSERT INTO {FkParent} (ID, V) VALUES (5, 'abc')");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM {FkParent} WHERE ID = 5 AND V = 'ABC'") == 1, "the restored valid trigger did not fire");
+        await ExecQuietAsync(session, "rollback test row", "ROLLBACK");
+    }
+
+    /// <summary>TR1 위험 3·4 의 서버 동작을 출력만 한다(단언 없음).</summary>
+    private async Task ProbeAsync(TiberoSession session, string owner)
+    {
+        // 위험 3: 자식 FK 를 떼지 않고 자식 → 부모를 지우면(TR1 전 순서) 부모 DROP 을 서버가 받는가.
+        await ExecQuietAsync(session, "create probe parent", $"CREATE TABLE {FkParent} (ID NUMBER PRIMARY KEY)");
+        await ExecQuietAsync(session, "create probe child", $"CREATE TABLE {FkChild} (ID NUMBER PRIMARY KEY, PID NUMBER, CONSTRAINT {FkName} FOREIGN KEY (PID) REFERENCES {FkParent} (ID))");
+        await ExecQuietAsync(session, "RecycleBinOn", Dialect.RecycleBinOn().Text);
+        await ExecQuietAsync(session, "drop child without detaching its fk", Dialect.DropTable(owner, FkChild).Text);
+        output.WriteLine("constraints still referencing the parent after the child went to the recycle bin: "
+                         + await TryScalarAsync(session, $"SELECT TO_CHAR(COUNT(*)) FROM user_constraints c JOIN user_constraints p ON p.constraint_name = c.r_constraint_name WHERE p.table_name = '{FkParent}'"));
+        var parentDrop = await TryExecAsync(session, Dialect.DropTable(owner, FkParent).Text);
+        output.WriteLine("parent DROP after the child was dropped with its fk (no detach): " + (parentDrop ?? "accepted"));
+        await CleanupAsync(session, [FkChild, FkParent]);
+
+        // 위험 4: DEFERRABLE INITIALLY DEFERRED FK 의 지연 여부를 읽을 수 있는 후보.
+        await ExecQuietAsync(session, "create defer parent", $"CREATE TABLE {DeferParent} (ID NUMBER PRIMARY KEY)");
+        var deferCreate = await TryExecAsync(session,
+            $"CREATE TABLE {DeferChild} (ID NUMBER PRIMARY KEY, PID NUMBER, CONSTRAINT {DeferFk} FOREIGN KEY (PID) REFERENCES {DeferParent} (ID) DEFERRABLE INITIALLY DEFERRED)");
+        output.WriteLine("create a DEFERRABLE INITIALLY DEFERRED fk: " + (deferCreate ?? "accepted"));
+        if (deferCreate is not null)
+        {
+            return;
+        }
+
+        foreach (var (what, sql) in new[]
+                 {
+                     ("all_constraints.deferrable", $"SELECT deferrable FROM all_constraints WHERE owner = USER AND constraint_name = '{DeferFk}'"),
+                     ("all_constraints.deferred", $"SELECT deferred FROM all_constraints WHERE owner = USER AND constraint_name = '{DeferFk}'"),
+                     ("user_constraints.deferrable", $"SELECT deferrable FROM user_constraints WHERE constraint_name = '{DeferFk}'"),
+                 })
+        {
+            output.WriteLine($"deferrable via {what}: " + await TryScalarAsync(session, sql));
+        }
+
+        foreach (var (what, sql) in new[]
+                 {
+                     ("GET_DDL('REF_CONSTRAINT')", $"SELECT DBMS_METADATA.GET_DDL('REF_CONSTRAINT', '{DeferFk}') FROM DUAL"),
+                     ("GET_DDL('CONSTRAINT')", $"SELECT DBMS_METADATA.GET_DDL('CONSTRAINT', '{DeferFk}') FROM DUAL"),
+                     ("GET_DDL('TABLE')", $"SELECT DBMS_METADATA.GET_DDL('TABLE', '{DeferChild}') FROM DUAL"),
+                 })
+        {
+            var text = await TryScalarAsync(session, sql);
+            output.WriteLine($"deferrable via {what}: "
+                             + (text.StartsWith("unreadable", StringComparison.Ordinal)
+                                 ? text
+                                 : $"read {text.Length} chars, DEFERRABLE = {text.Contains("DEFERRABLE", StringComparison.OrdinalIgnoreCase)}, DEFERRED = {text.Contains("INITIALLY DEFERRED", StringComparison.OrdinalIgnoreCase)}"));
+        }
+
+        try
+        {
+            var all = await TiberoSessionQuery.RunAsync(session, $"SELECT * FROM user_constraints WHERE constraint_name = '{DeferFk}'");
+            output.WriteLine("user_constraints columns: " + string.Join(", ", all.Columns));
+        }
+#pragma warning disable CA1031 // 출력용: 실패를 글로 바꾼다.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            output.WriteLine("user_constraints columns: unreadable " + Describe(ex));
+        }
+
+        // 지연 FK 로 만들어졌는지: 지연이면 커밋 전까지 고아 행이 들어간다.
+        var orphan = await TryExecAsync(session, $"INSERT INTO {DeferChild} (ID, PID) VALUES (1, 999)");
+        output.WriteLine("orphan insert into the DEFERRABLE INITIALLY DEFERRED fk before commit: " + (orphan ?? "accepted (deferred)"));
+        await IgnoreAsync(session, "ROLLBACK");
+    }
 
     private async Task MainAsync(TiberoSession session, string owner)
     {
@@ -257,11 +421,18 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
         output.WriteLine("server-generated PK/CHECK name prefixes: " + string.Join(", ", keyNames.Select(n => Prefix(n, owner)))
                          + "; Core CreateTableDdl.IsServerName = " + string.Join(", ", keyNames.Select(CreateTableDdl.IsServerName)));
 
+        var byteLength = info.Columns.FirstOrDefault(c => c.Name == "S")?.ByteLength;
+        output.WriteLine("meta.columns byte_length for S: " + (byteLength?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"));
+        Assert.True(byteLength == length, "meta.columns byte_length (data_length) of a BYTE column is not its length - the TR1 byte rule would not see it");
+
         await ExecQuietAsync(session, "RecycleBinOn", Dialect.RecycleBinOn().Text);
         await ExecQuietAsync(session, "DropTable(byte table)", Dialect.DropTable(owner, ByteTable).Text);
-        var create = CreateTableDdl.Build(info, owner, new HashSet<string>([ByteTable], StringComparer.Ordinal));
+        // 실행기와 같은 DDL(TR1): Tibero→Tibero, 서버 이름 판정은 원본 방언(<소유자>_CON…).
+        var create = CrossTableMap.Build(Dbms.Tibero, Dbms.Tibero, info, owner, new HashSet<string>([ByteTable], StringComparer.Ordinal),
+            name => TiberoRecreateStep.IsServerName(name, owner)).Statements;
         Assert.True(create[0].Contains($"\"S\" VARCHAR2({length?.ToString(System.Globalization.CultureInfo.InvariantCulture)} CHAR)", StringComparison.Ordinal),
             "CreateTableDdl: S is not written with a CHAR length");
+        Assert.True(!create[0].Contains("CONSTRAINT", StringComparison.Ordinal), "a server-named PK/CHECK is written with an explicit name (TR1 risk 5)");
         for (var i = 0; i < create.Count; i++)
         {
             await RunCreateAsync(session, owner, $"CreateTableDdl statement {i + 1}/{create.Count} (byte table)", create[i]);
@@ -272,6 +443,10 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
         Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM {ByteTable} WHERE LENGTH(S) = 4000") == 1, "the 4000-byte value did not round-trip into the recreated table");
         Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_constraints WHERE table_name = '{ByteTable}' AND constraint_type = 'P' AND status = 'ENABLED'") == 1,
             "the recreated byte table has no enabled primary key");
+        var newNames = await RowsAsync(session, $"SELECT constraint_name FROM user_constraints WHERE table_name = '{ByteTable}' AND constraint_type IN ('P', 'C')");
+        output.WriteLine("recreated PK/CHECK name prefixes: " + string.Join(", ", newNames.Select(n => Prefix(n, owner)))
+                         + "; same names as before = " + newNames.Intersect(keyNames, StringComparer.Ordinal).Count());
+        Assert.True(newNames.All(n => TiberoRecreateStep.IsServerName(n, owner)), "a recreated PK/CHECK does not have a server-generated name");
         await ExecQuietAsync(session, "commit byte table", "COMMIT");
 
         // 리뷰 TB4 #1 실측(단언 없음): 다시 만든 표에 없는 열을 가리키는 트리거를 되살리면 서버가 무엇을 주는가 — 오류 번호와 남는 상태.
@@ -292,16 +467,29 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
         }
 
         var maxInfo = await QuietAsync("GetTableAsync(max byte table)", () => provider.GetTableAsync(session, new DbObjectRef(owner, ByteMaxTable, "TABLE"), ct));
-        var maxLength = maxInfo.Columns.FirstOrDefault(c => c.Name == "S")?.Length;
+        var maxColumn = maxInfo.Columns.First(c => c.Name == "S");
+        output.WriteLine("source max S (char_used/data_length/char_length): " + await TryScalarAsync(session, ColumnShapeSql(ByteMaxTable))
+                         + $"; meta.columns length = {maxColumn.Length?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}, byte_length = {maxColumn.ByteLength?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}");
         await ExecQuietAsync(session, "DropTable(max byte table)", Dialect.DropTable(owner, ByteMaxTable).Text);
-        var maxCreate = CreateTableDdl.Build(maxInfo, owner, new HashSet<string>([ByteMaxTable], StringComparer.Ordinal));
-        var maxResult = await TryExecAsync(session, maxCreate[0]);
-        output.WriteLine($"VARCHAR2(65532 BYTE): meta.columns length = {maxLength?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}, "
-                         + $"recreated as VARCHAR2(<length> CHAR): {maxResult ?? "accepted"}");
-        if (maxResult is null)
+
+        // 출력만: 같은 열을 글자 단위로 만들면 서버가 받는가(TR1 전 DDL).
+        var charResult = await TryExecAsync(session, CreateTableDdl.Build(maxInfo, owner, new HashSet<string>([ByteMaxTable], StringComparer.Ordinal))[0]);
+        output.WriteLine($"VARCHAR2(65532 BYTE) recreated as VARCHAR2(<length> CHAR): {charResult ?? "accepted"}");
+        if (charResult is null)
         {
-            output.WriteLine("recreated max S (char_used/data_length/char_length): " + await TryScalarAsync(session, ColumnShapeSql(ByteMaxTable)));
+            output.WriteLine("recreated max S as CHAR (char_used/data_length/char_length): " + await TryScalarAsync(session, ColumnShapeSql(ByteMaxTable)));
+            await ExecQuietAsync(session, "drop the CHAR probe", $"DROP TABLE {ByteMaxTable} PURGE");
         }
+
+        // TR1 위험 2: 실행기 DDL 은 바이트 단위 그대로 만든다. 65532바이트 값이 들어간다.
+        var maxCreate = CrossTableMap.Build(Dbms.Tibero, Dbms.Tibero, maxInfo, owner, new HashSet<string>([ByteMaxTable], StringComparer.Ordinal),
+            name => TiberoRecreateStep.IsServerName(name, owner)).Statements;
+        Assert.True(maxCreate[0].Contains("\"S\" VARCHAR2(65532 BYTE)", StringComparison.Ordinal), "the 65532 BYTE column is not kept in bytes by the recreate DDL (TR1 risk 2)");
+        await RunCreateAsync(session, owner, "CrossTableMap.Build (max byte table)", maxCreate[0]);
+        output.WriteLine("recreated max S by the runner DDL (char_used/data_length/char_length): " + await TryScalarAsync(session, ColumnShapeSql(ByteMaxTable)));
+        await ExecQuietAsync(session, "insert 65532-byte value", $"INSERT INTO {ByteMaxTable} (S) VALUES (RPAD('x', 32766, 'x') || RPAD('y', 32766, 'y'))");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM {ByteMaxTable} WHERE LENGTHB(S) = 65532") == 1, "a 65532-byte value did not go into the recreated column");
+        await ExecQuietAsync(session, "commit max byte table", "COMMIT");
     }
 
     private static string ColumnShapeSql(string table) =>
@@ -337,7 +525,11 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
     }
 
     /// <summary>쓰기 시험 틀: 남은 제 객체를 지우고 본문을 돌린 뒤 다시 지운다. 본문 실패는 정리 뒤 그대로 다시 던진다.</summary>
-    private static async Task WriteAsync(string[] tables, Func<TiberoSession, string, Task> body)
+    private static Task WriteAsync(string[] tables, Func<TiberoSession, string, Task> body) =>
+        WriteAsync(tables, (_, session, owner) => body(session, owner));
+
+    /// <summary><see cref="WriteAsync(string[], Func{TiberoSession, string, Task})"/> 와 같되 본문이 시험 세션 틀(이벤트 버스 등)도 받는다.</summary>
+    private static async Task WriteAsync(string[] tables, Func<TiberoItSessions, TiberoSession, string, Task> body)
     {
         if (TiberoItSessions.SkipWrite())
         {
@@ -356,7 +548,7 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
         Exception? failure = null;
         try
         {
-            await body(session, it.Env.User.ToUpperInvariant());
+            await body(it, session, it.Env.User.ToUpperInvariant());
         }
 #pragma warning disable CA1031 // 본문 실패를 잡아 두고 정리한 뒤 그대로 다시 던진다(정리가 본문 실패를 가리지 않게).
         catch (Exception ex)
@@ -511,5 +703,32 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
         {
             session.CommandGate.Release();
         }
+    }
+
+    private sealed class AllowAll : IExecutionPolicy
+    {
+        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
+            ValueTask.FromResult(PolicyDecision.Allowed);
+    }
+
+    private sealed class NoQuestions : IExecutionInteraction
+    {
+        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
+
+        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
+
+        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
+            Task.FromResult(ScriptErrorAction.Stop);
+    }
+
+    /// <summary>시험용 통로는 실행 기록 없이 돈다.</summary>
+    private sealed class NoRunLog : ICopyRunLog
+    {
+        public Task<ICopyRunRecord> BeginAsync(CopyRunHeader header, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<UnfinishedRun>> FindUnfinishedAsync(string jobId, CancellationToken ct) => Task.FromResult<IReadOnlyList<UnfinishedRun>>([]);
+
+        public Task MarkRecoveredAsync(string runFile, CancellationToken ct) => Task.CompletedTask;
     }
 }

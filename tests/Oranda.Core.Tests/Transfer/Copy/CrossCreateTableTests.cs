@@ -383,6 +383,78 @@ public sealed class CrossCreateTableTests
         Assert.Empty(CrossTableMap.SkippedForeignKeys(Dbms.Oracle, Dbms.Oracle, child, null, [fkToId, fkToUk], p => parent));
     }
 
+    // ---- Tibero 대상의 큰 문자 열 길이 단위 (TR1 위험 2) ----
+
+    /// <summary>
+    /// 글자 단위(n CHAR)로 쓰면 글자당 4바이트 어림으로 Tibero 한도(VARCHAR2 65532·CHAR 2000 바이트)를 넘는 열 가운데, 바이트 길이가 글자 길이와 같은 열은 원본처럼 BYTE 로 만든다.
+    /// 한도 안의 열·글자 단위 열·바이트 길이를 모르는 열은 지금처럼 CHAR 다. Oracle 대상은 바꾸지 않는다.
+    /// </summary>
+    [Fact]
+    public void Tibero_target_keeps_large_byte_length_columns_in_bytes_and_leaves_the_rest_in_chars()
+    {
+        var table = new TableInfo(new DbObjectRef("SRC", "T", "TABLE"),
+        [
+            new ColumnInfo("MAXB", 1, "VARCHAR2") { Length = 65532, ByteLength = 65532 },
+            new ColumnInfo("TB", 2, "VARCHAR") { Length = 20000, ByteLength = 20000 },       // Tibero 사전 이름
+            new ColumnInfo("EDGE", 3, "VARCHAR2") { Length = 16383, ByteLength = 16383 },    // 16383 × 4 = 65532: 한도 안
+            new ColumnInfo("CH", 4, "CHAR") { Length = 1000, ByteLength = 1000 },
+            new ColumnInfo("CHSMALL", 5, "CHAR") { Length = 500, ByteLength = 500 },
+            new ColumnInfo("BIGCHAR", 6, "VARCHAR2") { Length = 20000, ByteLength = 65532 },  // 글자 단위 열
+            new ColumnInfo("UNKNOWN", 7, "VARCHAR2") { Length = 30000 },                      // 바이트 길이를 모름(예전 캐시)
+            new ColumnInfo("SMALL", 8, "VARCHAR2") { Length = 4000, ByteLength = 4000 },
+        ]);
+
+        var create = Assert.Single(CrossTableMap.Build(Dbms.Tibero, Dbms.Tibero, table, "DST", NoJobTables).Statements);
+
+        Assert.Equal(
+            "CREATE TABLE \"DST\".\"T\" (\"MAXB\" VARCHAR2(65532 BYTE), \"TB\" VARCHAR2(20000 BYTE), \"EDGE\" VARCHAR2(16383 CHAR), \"CH\" CHAR(1000 BYTE),"
+            + " \"CHSMALL\" CHAR(500 CHAR), \"BIGCHAR\" VARCHAR2(20000 CHAR), \"UNKNOWN\" VARCHAR2(30000 CHAR), \"SMALL\" VARCHAR2(4000 CHAR))",
+            create);
+        Assert.Equal(["MAXB", "TB", "CH"], CrossTableMap.TiberoByteKeptColumns(Dbms.Tibero, table).Select(c => c.Name));
+        Assert.Equal(["BIGCHAR", "UNKNOWN"], CrossTableMap.TiberoLargeCharColumns(Dbms.Tibero, table).Select(c => c.Name));
+
+        // Oracle 대상·Oracle 원본 구조는 이 규칙과 상관없다(Oracle 다시 만들기 DDL 은 그대로).
+        Assert.Empty(CrossTableMap.TiberoByteKeptColumns(Dbms.Oracle, table));
+        Assert.Empty(CrossTableMap.TiberoLargeCharColumns(Dbms.Oracle, table));
+        var oracleTable = new TableInfo(new DbObjectRef("SRC", "T", "TABLE"), [new ColumnInfo("S", 1, "VARCHAR2") { Length = 32767, ByteLength = 32767 }]);
+        Assert.Contains("\"S\" VARCHAR2(32767 CHAR)", Assert.Single(CrossTableMap.Build(Dbms.Oracle, Dbms.Oracle, oracleTable, "DST", NoJobTables).Statements),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Oracle EXTENDED 원본(바이트 단위 20000·글자 단위 20000)을 Tibero 에 다시 만들 때·없으면 만들 때: 바이트 열은 BYTE 로 만들고 확인 글에 그 이름을,
+    /// 글자 단위 열은 서버가 받지 않을 수 있다는 것과 그때 일어나는 일을 이름으로 적는다. 미리 보기 문장도 같은 BYTE 글이다.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Precheck_names_the_large_char_columns_kept_in_bytes_or_left_in_chars_for_a_tibero_target(bool recreate)
+    {
+        var table = new TableInfo(new DbObjectRef("SRC", "ORDERS", "TABLE"),
+        [
+            new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false },
+            new ColumnInfo("B", 2, "VARCHAR2") { Length = 20000, ByteLength = 20000 },
+            new ColumnInfo("C", 3, "VARCHAR2") { Length = 20000, ByteLength = 32767 },
+        ])
+        {
+            Constraints = [new ConstraintInfo("PK_ORDERS", ConstraintKind.PrimaryKey, ["ID"])],
+        };
+        var f = recreate
+            ? new Fixture(Dbms.Oracle, Dbms.Tibero, table, action: TargetAction.Recreate, create: false, targetHasTable: true)
+            : new Fixture(Dbms.Oracle, Dbms.Tibero, table);
+
+        var report = await f.PrecheckAsync();
+
+        var message = Assert.Single(report.Items, i => i.Code == (recreate ? "RecreateTable" : CopyCheckCodes.CreateTable)).Message;
+        Assert.Contains("큰 문자 열 B(20000 BYTE) 은(는) 글자 단위로 바꾸면 Tibero 바이트 한도를 넘을 수 있어 원본처럼 바이트 단위로 만듭니다.", message, StringComparison.Ordinal);
+        Assert.Contains("글자 단위 큰 문자 열 C(20000 CHAR) 은(는) Tibero 바이트 한도(VARCHAR2 65,532·CHAR 2,000 바이트)를 넘을 수 있습니다.", message, StringComparison.Ordinal);
+        Assert.Contains(recreate ? "지운 옛 테이블을 휴지통에서 되살리고 이 테이블은 복사하지 않습니다." : "테이블을 만들지 못해 이 테이블은 복사하지 않습니다.", message, StringComparison.Ordinal);
+        if (!recreate)
+        {
+            Assert.Contains(report.Preview, p => p.Sql.Contains("\"B\" VARCHAR2(20000 BYTE)", StringComparison.Ordinal) && p.Sql.Contains("\"C\" VARCHAR2(20000 CHAR)", StringComparison.Ordinal));
+        }
+    }
+
     // ---- 실행기 보호선 (리뷰 4) ----
 
     [Fact]

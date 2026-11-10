@@ -120,4 +120,11 @@ public interface ICopyDialect
     /// 지운 자식 표가 휴지통에 FK 를 쥔 채 남는 DBMS 가 채운다. <paramref name="children"/> = 먼저 지운 자식 표 이름(<c>계정.표</c>).
     /// </summary>
     string? RecycledChildForeignKeyNote(IReadOnlyList<string> children) => null;
+
+    /// <summary>
+    /// 「테이블 다시 만들기」에서 함께 다시 만드는 자식 표의 FK 도 첫 DROP 전에 모두 떼어 낼 것인가(TR1 위험 3). 지운 자식 표가 휴지통에서 FK 를 쥔 채 남아
+    /// 부모 DROP 을 막을 수 있는 DBMS(Tibero)가 켠다: 실행기는 자식 → 부모 순서로 모든 표의 참조 FK 를 먼저 떼고 나서 DROP 한다(떼다 하나라도 실패하면 아무 표도 지우지 않는다).
+    /// 자식 FK 는 휴지통에 기대지 않고 적재 뒤 원본 정의(작업 안 FK)로 부모 다음에 다시 붙는다. 기본 false(Oracle: 표마다 떼고 바로 지우는 지금 순서).
+    /// </summary>
+    bool DetachChildForeignKeysBeforeDrop => false;
 }

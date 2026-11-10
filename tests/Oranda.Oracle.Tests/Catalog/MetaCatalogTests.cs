@@ -46,6 +46,19 @@ public partial class MetaCatalogTests
         Assert.Contains("'TABLE', 'VIEW', 'MATERIALIZED VIEW'", sql, StringComparison.Ordinal);
     }
 
+    /// <summary>모든 판의 <c>meta.columns</c> 끝 열은 문자 열의 바이트 길이(<c>byte_length</c>, TR1: 다시 만들기의 BYTE 유지 판정)다.</summary>
+    [Theory]
+    [InlineData(11)]
+    [InlineData(19)]
+    [InlineData(23)]
+    public void Columns_end_with_the_byte_length_of_char_columns(int version)
+    {
+        var sql = Catalog.Get("meta.columns", version).Sql;
+
+        Assert.Contains("THEN c.data_length END AS byte_length", sql, StringComparison.Ordinal);
+        Assert.True(sql.IndexOf("byte_length", StringComparison.Ordinal) > sql.IndexOf("cm.comments", StringComparison.Ordinal), "byte_length is not after the comments column");
+    }
+
     [Fact]
     public void Domain_column_is_selected_only_on_23_and_later()
     {

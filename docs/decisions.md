@@ -587,6 +587,15 @@
 - **Reversible**: yes(배타 규칙으로 되돌리면 된다)
 - **Source**: 사용자 결정 2026-11-11, 조정자 회차 xdb-copy 결정 72(이를 대신함), 69, 100(Tibero 원본 켬, PF2b2)
 
+## D-064 (2026-11-11T09:00:00Z)
+- **Phase**: TR1(Tibero 대상 「테이블 다시 만들기」)
+- **Decision needed**: Tibero 대상의 다시 만들기를 막아 둔 TB4 일괄 차단(`TiberoCopyPrecheckDialect.RecreateBlockedReason`, D-051 의 「Oracle→Tibero 는 막는다」)을 풀지, 남은 위험 다섯 가지를 어떻게 다룰지
+- **Decision made**: 일괄 차단을 푼다(`RecreateBlockedReason` = null, Tibero→Tibero·Oracle→Tibero 모두). 위험은 테이블마다 다룬다. (1) 컴파일 오류 트리거: Tibero 는 오류 없이 INVALID 로 받으므로(#79) 그대로 다시 만들고, 되살린 뒤 INVALID 면 꺼 둔다. 지우기 전부터 INVALID 였던 트리거(`copy.invalid_triggers`, `PreservedDdl.InvalidTriggers`)는 알림만 하고 결과를 실패로 두지 않으며, 사전 점검 확인 글에 이름을 적는다. (2) 큰 바이트 길이 열: 글자 단위로 쓰면 글자당 4바이트 어림으로 한도(VARCHAR2 65532·CHAR 2000 바이트)를 넘는 열 가운데 바이트 길이가 글자 길이와 같은 열(`ColumnInfo.ByteLength`, 사전 `DATA_LENGTH`)은 `n BYTE` 로 만든다(`CrossTableMap.TiberoByteKeptColumns`). 글자 단위 큰 열은 CHAR 그대로 두고 확인 글에 알린다. (3) 부모·자식을 함께 다시 만들 때: 첫 DROP 전에 함께 다시 만드는 자식 테이블의 FK 까지 모든 참조 FK 를 떼고(`ICopyDialect.DetachChildForeignKeysBeforeDrop`, Tibero 만 켬), 자식 FK 는 휴지통에 기대지 않고 적재 뒤 원본 정의로 부모 다음에 붙인다. (4) DEFERRABLE FK: 카탈로그로 읽을 수 없어 즉시 검사로 만든다. 이 테이블을 참조하는 FK 와 Tibero 원본의 작업 안 FK 를 이름으로 확인 글에 적는다(`ICopyPrecheckDialect.RecreateTableNoteAsync`). (5) 서버 이름 제약(`<소유자>_CON<숫자>`): 원본 방언의 서버 이름 판정으로 이름 없이 만든다(이미 있던 경로, IT 로 확인). DROP 뒤 CREATE 가 실패하면 지금처럼 휴지통에서 되살린다(결정 66·67). 어느 위험도 데이터를 잃게 하지 않아 테이블마다 막는 경우는 두지 않았다
+- **Rationale**: 사용자 요청 2026-11-11 「Tibero 다시 만들기도 쓸 수 있게 해줘」. 남은 위험은 DDL 생성 고침·순서 바꿈·안내로 다룰 수 있었다
+- **Risk**: 서버로 돌린 결과가 아직 없다(`TiberoRecreateStepIt`·`CrossDbmsRecreateIntoTiberoIt` 를 win144 에서 돌려야 한다). 휴지통에서 되살린 옛 자식 테이블에는 DROP 전에 뗀 FK 가 없다(알림에 문장이 남는다). 대상 문자셋을 읽지 못해 글자당 4바이트로 어림하므로 2바이트 문자셋에서도 큰 바이트 열은 BYTE 로 남는다(원본과 같은 바이트 용량). 글자 단위 큰 열을 서버가 받는지는 모른다
+- **Reversible**: yes(`RecreateBlockedReason` 에 글을 돌려주면 다시 막힌다)
+- **Source**: 사용자 요청 2026-11-11, 조정자 결정 103(TB4 차단을 대신함), 결정 66·67, D-051
+
 ## D-065 (2026-11-11T06:00:00Z)
 - **Phase**: 회차 밖(실행 확인, 사용자 요청)
 - **Decision needed**: 개발 접속에서도 위험 명령(DROP·TRUNCATE·PURGE·ALTER SYSTEM·세션 Kill)과 WHERE 없는 UPDATE/DELETE 의 실행 확인 창(위험 명령은 이름 재입력)을 띄울지

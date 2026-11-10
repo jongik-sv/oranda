@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text;
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Transfer.Copy;
@@ -33,29 +35,79 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
     public bool SupportsReadPrivilege => false;
 
     /// <summary>
-    /// 「테이블 다시 만들기」는 아직 막는다(TB4 결정). 받아 두기 부품(<see cref="TiberoRecreateStep"/>: 트리거 DDL = T3 <c>*_SOURCE</c> 조립, 휴지통 BIN 이름,
-    /// <c>FLASHBACK TABLE … TO BEFORE DROP [RENAME TO]</c>)은 <c>TiberoRecreateStepIt</c> 가 잰다. 남은 위험(TB4 리뷰)은 실제 실행기로 도는 두 번째 계정 복사 IT(TI1b 결정65 - 지금 TI1b IT 는 같은 계정 거부만 본다)가 재고 나서 푼다:
-    /// 컴파일 오류 트리거(번호 미분류 → 끄지 못함), 바이트 길이를 CHAR 로 다시 쓸 때 큰 열, 부모·자식을 함께 다시 만들 때 휴지통의 자식 FK,
-    /// DEFERRABLE FK 를 카탈로그로 못 읽어 즉시 검사로 돌아옴, 서버 이름 제약(<c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>)을 Core 가 명시 이름으로 다시 만듦.
+    /// 「테이블 다시 만들기」를 막지 않는다(null, TR1 — 사용자 요청 2026-11-11, 조정 결정 103, D-064 가 TB4 의 일괄 차단을 대신한다).
+    /// TB4 리뷰의 남은 위험 다섯 가지는 표마다 이렇게 다룬다(서버로 끝까지 도는 확인은 <c>TiberoRecreateStepIt</c>·<c>CrossDbmsRecreateIntoTiberoIt</c>).
+    /// <list type="number">
+    /// <item>컴파일 오류 트리거: Tibero 는 오류 없이 INVALID 로 받는다(#79). 그대로 다시 만들고 되살린 뒤 INVALID 면 꺼 둔다(<see cref="TiberoCopyDialect.TriggerStatusSql"/>).
+    /// 지우기 전부터 INVALID 였던 것(<c>copy.invalid_triggers</c>)은 알림만 하고 결과를 실패로 두지 않으며, 확인 글에 트리거 이름을 적는다(<see cref="RecreateTableNoteAsync"/>).</item>
+    /// <item>큰 바이트 길이 열: 글자 단위로 다시 쓰면 한도(VARCHAR2 65532·CHAR 2000 바이트)를 넘을 수 있는 바이트 단위 열은 원본처럼 BYTE 로 만든다
+    /// (<see cref="CrossTableMap.TiberoByteKeptColumns"/>). 글자 단위 큰 열은 CHAR 그대로 두고 확인 글에 알린다(서버가 받지 않으면 옛 표를 휴지통에서 되살린다).</item>
+    /// <item>부모·자식을 함께 다시 만들 때 휴지통의 자식 FK: 자식 FK 를 첫 DROP 전에 떼고(<see cref="TiberoCopyDialect.DetachChildForeignKeysBeforeDrop"/>) 적재 뒤 원본 정의로 부모 다음에 붙인다.</item>
+    /// <item>DEFERRABLE FK: 카탈로그에 지연 여부가 없다(-8026). 즉시 검사로 다시 만들어지는 FK 를 이름으로 확인 글에 적는다.</item>
+    /// <item>서버 이름 제약(<c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>): <see cref="IsServerName"/> 판정으로 이름 없이 만들어 대상 서버가 새로 짓는다.</item>
+    /// </list>
+    /// 어느 것도 데이터를 잃게 하지 않으므로 표마다 막지 않는다. CREATE 가 DROP 뒤 실패해도 실행기가 옛 표를 휴지통에서 되살린다(결정 66·67).
     /// </summary>
-    public string? RecreateBlockedReason(ISession target) => RecreateBlocked;
-
-    internal const string RecreateBlocked =
-        "Tibero 의 테이블 다시 만들기는 아직 지원하지 않습니다(트리거 컴파일 오류·지연 FK·큰 바이트 길이 열을 다시 만드는 경로가 서버에서 확인되지 않음)";
+    public string? RecreateBlockedReason(ISession target) => null;
 
     /// <summary>
     /// 「없으면 만들기」는 막지 않는다(null, xdb-copy XC8b 2026-11-10, D11 변경). Tibero→Tibero 와 Oracle→Tibero 모두 대상이 Tibero 면 새 표를 만든다.
     /// 근거는 XC5 DDL 실측(D19): CHAR/BYTE 길이·DEFAULT·CHECK·일반/UNIQUE 인덱스·COMMENT 가 모두 만들어지고, <c>DROP TABLE … PURGE</c> 는 휴지통에 남기지 않으며,
     /// CREATE TABLE 은 앞 트랜잭션을 묵시 커밋하므로 대상 쓰기 트랜잭션을 열기 전에 만든다(<c>CopyRunner.CreateMissingTablesAsync</c>).
-    /// 「테이블 다시 만들기」는 그대로 막는다(<see cref="RecreateBlockedReason"/>): 지우고 되살리는 경로는 아직 서버에서 확인되지 않았다.
     /// </summary>
     public string? CreateBlockedReason(ISession target) => null;
 
     /// <summary>
+    /// 다시 만들 표 하나의 Tibero 안내(TR1 위험 1·4): 지금 INVALID 인 대상 트리거(<c>copy.invalid_triggers</c>)와, 지연 여부를 알 수 없어 즉시 검사로 다시 만들어지는 FK
+    /// (이 표를 참조하는 다른 표의 FK = <c>copy.recreate_referencing_fks</c>, Tibero 원본이면 작업 안 FK 도). 조회가 서버 오류면 「확인하지 못함」 으로 적는다.
+    /// </summary>
+    public async Task<string> RecreateTableNoteAsync(RecreateNoteInput input, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var note = new StringBuilder();
+        var invalid = await input.TargetRows("copy.invalid_triggers", ct).ConfigureAwait(false);
+        if (invalid is null)
+        {
+            note.Append(" 대상 트리거의 컴파일 상태(INVALID)를 확인하지 못했습니다. 되살린 뒤 INVALID 인 트리거는 꺼 두고 알립니다.");
+        }
+        else if (invalid.Count > 0)
+        {
+            var names = invalid.Select(r => $"{r[0]}.{r[1]}({(string.Equals(r[2], "ENABLED", StringComparison.Ordinal) ? "켜짐" : "꺼짐")})");
+            note.Append(" 대상 트리거 ").Append(string.Join(", ", names))
+                .Append(" 은(는) 지금 컴파일 오류(INVALID) 상태입니다. 그대로 다시 만들고, 켜져 있던 트리거가 다시 만든 뒤에도 INVALID 이면 꺼 두고 알립니다")
+                .Append("(켜 두면 이 테이블의 DML 이 막힙니다). 테이블 복사 결과에는 영향이 없습니다.");
+        }
+
+        var referencing = await input.TargetRows("copy.recreate_referencing_fks", ct).ConfigureAwait(false);
+        var unknown = new List<string>();
+        if (referencing is null)
+        {
+            note.Append(" 이 테이블을 참조하는 FK 를 읽지 못해 지연 검사(DEFERRABLE) 여부를 알릴 FK 를 확인하지 못했습니다.");
+        }
+        else
+        {
+            unknown.AddRange(referencing.Select(r => $"{r[0]}.{r[1]}.{r[2]}").Distinct(StringComparer.Ordinal));
+        }
+
+        if (input.SourceDbms == Dbms.Tibero)
+        {
+            unknown.AddRange(input.JobForeignKeys.Select(n => $"{input.TargetOwner}.{input.Table}.{n}"));
+        }
+
+        if (unknown.Count > 0)
+        {
+            note.Append(" FK ").Append(string.Join(", ", unknown))
+                .Append(" 은(는) Tibero 카탈로그가 지연 검사(DEFERRABLE) 여부를 알려 주지 않아 즉시 검사 FK 로 다시 만듭니다. 지연 FK 였다면 다시 만든 뒤 직접 바꾸세요.");
+        }
+
+        return note.ToString();
+    }
+
+    /// <summary>
     /// 문자열 길이 한도가 같은 Tibero 끼리뿐 아니라 Oracle 원본도 막을 것이 없다: 교차 복사는 이 함수에 원본을 Tibero 로 옮긴 구조(<c>CrossTableMap</c>)를 넘기고,
     /// 대상 Tibero VARCHAR2 한도(65532바이트) 안이다. Oracle 의 MAX_STRING_SIZE 같은 문자열 한도 파라미터가 Tibero 에는 확인되지 않았다.
-    /// 다시 만들기 DDL 은 길이를 CHAR 단위로 쓴다: <c>VARCHAR2(4000 BYTE)</c> 를 CHAR 길이로 다시 만들어 4000바이트 값을 다시 넣는 것은 <c>TiberoRecreateStepIt</c> 가 단언하고,
-    /// 최대 바이트 길이(65532 BYTE) 열은 같은 IT 가 결과만 남긴다(다시 만들기는 지금 막혀 있다 — 풀 때 그 결과로 여기서 막을지 정한다).
+    /// 다시 만들기 DDL 은 길이를 CHAR 단위로 쓴다: <c>VARCHAR2(4000 BYTE)</c> 를 CHAR 길이로 다시 만들어 4000바이트 값을 다시 넣는 것은 <c>TiberoRecreateStepIt</c> 가 단언한다.
+    /// 글자 단위로 쓰면 한도를 넘을 수 있는 큰 바이트 단위 열(예: 65532 BYTE)은 막지 않고 BYTE 그대로 만든다(TR1 위험 2, <see cref="CrossTableMap.TiberoByteKeptColumns"/>).
     /// </summary>
     public Task<IReadOnlyList<string>> ExtendedStringBlockersAsync(TableInfo source, Func<string, CancellationToken, Task<string?>> targetParameter,
                                                                    CancellationToken ct)
@@ -94,10 +146,12 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
     /// <summary>
     /// 다시 만들 때 원본에서 빠지거나 바뀌는 것(Oracle 글의 DEFAULT ON NULL·IDENTITY·COLLATE·도메인은 Tibero 에서 확인하지 않아 말하지 않는다).
     /// 실측: <c>ALL_CONSTRAINTS</c> 에 <c>DEFERRABLE</c>·<c>DEFERRED</c> 열이 없어(handover) 지연 FK 도 읽지 못한 채 즉시 검사로 돌아온다 — Oracle 글의 「DEFERRABLE PK/UK」 에 FK 가 더해진다.
-    /// 문자 길이는 CHAR 단위(<c>TiberoRecreateStepIt</c> 가 BYTE → CHAR 를 확인). 파티션·IOT·임시 표는 Core DDL 이 일반 표로 만든다.
+    /// 문자 길이는 CHAR 단위(<c>TiberoRecreateStepIt</c> 가 BYTE → CHAR 를 확인)이고, 글자 단위로 쓰면 바이트 한도를 넘을 수 있는 큰 바이트 열만 BYTE 그대로다(TR1 위험 2, 열 이름은 Core 가 따로 적는다).
+    /// 즉시 검사로 바뀌는 FK 의 이름은 <see cref="RecreateTableNoteAsync"/> 가 적는다. 파티션·IOT·임시 표는 Core DDL 이 일반 표로 만든다.
     /// </summary>
     public string RecreateDifferenceNote(bool hasDomain) =>
-        " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFERRABLE 제약(PK/UK 와, Tibero 카탈로그가 지연 여부를 알려 주지 않아 FK 도)은 즉시 검사로 바뀌고,"
+        " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR, 글자 단위로 쓰면 바이트 한도를 넘을 수 있는 큰 바이트 열은 바이트 그대로),"
+        + " DEFERRABLE 제약(PK/UK 와, Tibero 카탈로그가 지연 여부를 알려 주지 않아 FK 도)은 즉시 검사로 바뀌고,"
         + " 파티션·IOT·임시 테이블은 일반 테이블이 됩니다.";
 
     /// <summary>서버가 지은 이름 = <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>(#76 실측)·<c>_SYS_…</c>·Oracle 모양. 실행기의 <see cref="TiberoCopyDialect.IsServerName"/> 과 같은 판정.</summary>

@@ -1,3 +1,4 @@
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 
@@ -68,4 +69,22 @@ public interface ICopyPrecheckDialect
     /// 기본 구현 = Oracle(<c>SYS_…</c>·<c>BIN$…</c>). 실행기의 <see cref="ICopyDialect.IsServerName"/> 과 같은 판정이어야 한다.
     /// </summary>
     bool IsServerName(string name, string owner) => CreateTableDdl.IsServerName(name);
+
+    /// <summary>
+    /// 「테이블 다시 만들기」 표 하나에 대해 이 DBMS 만 알리는 것(확인 글 끝에 붙는 문장들, 앞 공백 포함·마침표로 끝남. 없으면 빈 글).
+    /// 다시 만들기를 막지는 않는다(막을 것은 <see cref="RecreateBlockedReason"/>·<see cref="ExtendedStringBlockersAsync"/>). 기본 = 없음(Oracle).
+    /// </summary>
+    Task<string> RecreateTableNoteAsync(RecreateNoteInput input, CancellationToken ct) => Task.FromResult(string.Empty);
 }
+
+/// <summary><see cref="ICopyPrecheckDialect.RecreateTableNoteAsync"/> 의 입력.</summary>
+/// <param name="TargetOwner">다시 만들 대상 표의 소유자</param>
+/// <param name="Table">다시 만들 표 이름</param>
+/// <param name="SourceDbms">원본 DBMS(작업 안 FK 는 원본 카탈로그로 만든다)</param>
+/// <param name="JobForeignKeys">적재 뒤 원본 정의로 붙이는 작업 안 FK 의 원본 이름(서버가 지은 이름도 원본 이름 그대로)</param>
+/// <param name="TargetRows">
+/// 대상 세션에서 그 DBMS 의 카탈로그 조회 하나(id, 바인드 <c>:OWN</c> = <paramref name="TargetOwner"/>·<c>:TBL</c> = <paramref name="Table"/>)를 보내 행을 글자로 읽는다.
+/// 서버 오류(권한·뷰 열 차이)면 null — 방언은 「확인하지 못함」 으로 알린다
+/// </param>
+public sealed record RecreateNoteInput(string TargetOwner, string Table, Dbms SourceDbms, IReadOnlyList<string> JobForeignKeys,
+                                       Func<string, CancellationToken, Task<IReadOnlyList<string?[]>?>> TargetRows);

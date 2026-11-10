@@ -15,7 +15,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// <list type="bullet">
 /// <item>틀: <see cref="CrossDbmsItEnvironment"/>(1단계 <c>CrossDbmsCopyIt</c> 와 같다). 만들 표는 Tibero 쪽이면 <c>ORT_</c> 이름이고 처음과 끝에 <c>DROP … PURGE</c> 한다
 /// (<see cref="CrossDbmsItEnvironment.EnsureMissingAsync"/>).</item>
-/// <item>Tibero 대상 「없으면 만들기」는 xc-core XC8b 로 열렸고(D11) 다시 만들기는 계속 막혀 있다(D12) — 모두 실제 부품 벌로 잰다.</item>
+/// <item>Tibero 대상 「없으면 만들기」는 xc-core XC8b 로 열렸다(D11). Tibero 대상 다시 만들기는 TR1(D-064)에서 열렸고 그 시험은 <see cref="CrossDbmsRecreateIntoTiberoIt"/> 에 있다 — 모두 실제 부품 벌로 잰다.</item>
 /// <item>순서: <c>CREATE TABLE</c> 은 두 DBMS 모두 대상의 앞 트랜잭션을 묵시 커밋한다(XC5). 실행기는 다시 만들기·없으면 만들기를 대상 쓰기 트랜잭션을 여는
 /// 지우기·적재 앞에 하고, 만든 표 정리(<c>DROP … PURGE</c>)는 대상 트랜잭션을 끝낸 뒤에 한다(<c>CopyRunner.RunAsync</c>·<c>PurgeUnloadedNewTablesAsync</c>).
 /// 정리 시험은 같은 실행에서 기존 표의 지우기가 「모두 끝난 뒤 커밋」으로 되돌려지는지(만들기의 묵시 커밋에 확정되지 않는지)도 함께 본다.</item>
@@ -236,47 +236,6 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         Assert.Equal(1, await env.CountAsync(target, "USER_TABLES", $"TABLE_NAME = '{table}'"));
         Assert.Equal(2, await env.CountAsync(target, table, "ID > 900"));
         Assert.Equal(0, await env.CountAsync(target, table, "ID < 900"));
-    }
-
-    /// <summary>
-    /// 다시 만들기 Oracle→Tibero 는 막혀 있다(D12): 사전 점검이 <c>RecreateBlocked</c> 오류(Tibero 의 막는 이유)를 내고, 오류를 지운 보고서를 넘겨도
-    /// 실행기 가드(XC8)가 아무것도 보내기 전에 거절한다. 대상 Tibero 표·옛 행은 그대로다.
-    /// </summary>
-    [CrossDbmsFact]
-    public async Task Recreate_from_oracle_into_tibero_is_blocked_by_the_precheck_and_the_runner()
-    {
-        await using var env = await CrossDbmsItEnvironment.CreateAsync();
-        if (env is null)
-        {
-            return;
-        }
-
-        const Dbms source = Dbms.Oracle;
-        const Dbms target = Dbms.Tibero;
-        var t = CrossDbmsItEnvironment.Name("XC10_RB_O2T");
-        await env.CreateTableAsync(source, t, "ID NUMBER(10) PRIMARY KEY, V VARCHAR2(20)");
-        await env.ExecAsync(source, $"INSERT INTO {t} (ID, V) VALUES (1, 'new')");
-        await env.CreateTableAsync(target, t, "ID NUMBER(10) PRIMARY KEY, OLD VARCHAR2(10)");
-        await env.ExecAsync(target, $"INSERT INTO {t} (ID, OLD) VALUES (901, 'old')");
-        await env.ExecAsync(target, $"INSERT INTO {t} (ID, OLD) VALUES (902, 'old')");
-
-        var ctx = await PrecheckAsync(env, source, target, [new TableRule(t, RuleKind.All, TargetAction.Recreate)], requireNoErrors: false,
-            label: "recreate_blocked");
-        var blocked = Assert.Single(ctx.Report.Items, i => i.Code == "RecreateBlocked");
-        Assert.Equal(CheckLevel.Error, blocked.Level);
-        Assert.Contains("Tibero", blocked.Message, StringComparison.Ordinal);
-
-        // 오류 없는 보고서를 받아도 실행기가 DROP 전에 멈춘다(XC8 EnsureRecreateAllowed).
-        var cleared = ctx.Report with { Items = [.. ctx.Report.Items.Where(i => i.Level != CheckLevel.Error)] };
-        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new CopyRunner(env.Bulk, env.Execution, new CrossMemoryRunLog(), ctx.SourceParts, ctx.TargetParts)
-                .RunAsync(ctx.Sessions, ctx.Job, cleared, CrossDbmsItEnvironment.NoDecisions(), Period, null, new CopyRunControl(), CancellationToken.None));
-        Note(env, "recreate_blocked.runner", refused.Message);
-        Assert.Contains("다시 만들기", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("Tibero", refused.Message, StringComparison.Ordinal);
-
-        Assert.Equal(2, await env.CountAsync(target, t));
-        Assert.Contains(await ColumnsAsync(env, target, t), c => c.Name == "OLD");
     }
 
     // ---------------------------------------------------------------------------------------------------------------

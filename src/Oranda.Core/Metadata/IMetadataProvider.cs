@@ -141,6 +141,12 @@ public sealed record ColumnInfo(string Name, int Position, string DataType)
 {
     public int? Length { get; init; }
 
+    /// <summary>
+    /// 문자 열(VARCHAR2·CHAR)의 바이트 길이(사전 <c>DATA_LENGTH</c>). <see cref="Length"/>(글자 수, <c>CHAR_LENGTH</c>)와 같으면 바이트 단위로 선언했거나
+    /// 바이트 한도에 걸린 열이라 「n BYTE」 와 담을 수 있는 값이 같다. 다르면 글자 단위 열이다. 모르면 null(예전 캐시, 문자 열이 아님).
+    /// </summary>
+    public int? ByteLength { get; init; }
+
     public int? Precision { get; init; }
 
     public int? Scale { get; init; }

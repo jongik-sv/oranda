@@ -23,8 +23,11 @@ namespace Oranda.Tibero.Transfer.Copy;
 /// <item>FK: <c>ALL_CONSTRAINTS</c> 에 DEFERRABLE·DEFERRED 가 없어(-8026, 3.5) 카탈로그가 그 자리에 NULL 을 준다 → <see cref="ForeignKeyDdl"/> 는 DEFERRABLE 절을 쓰지 않는다
 /// (지연 FK 는 기본 NOT DEFERRABLE 로 돌아온다). ON DELETE CASCADE·SET NULL 과 꺼짐(DISABLE)은 Oracle 과 같다.</item>
 /// <item>서버가 지은 이름: 6.2.15 는 <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c> 로 짓는다(#76 실측, <c>_SYS_</c> 아님). Core 의 <see cref="CreateTableDdl.IsServerName"/> 은
-/// <c>SYS_</c>·<c>BIN$</c> 만 보므로 <see cref="IsServerName"/> 이 소유자 이름으로 더 본다. Core 의 다시 만들기 DDL(PK·UK·CHECK)은 그 이름을 명시해 만든다 — handover.</item>
+/// <c>SYS_</c>·<c>BIN$</c> 만 보므로 <see cref="IsServerName"/> 이 소유자 이름으로 더 본다. 실행기·사전 점검이 원본 방언의 이 판정을 <see cref="CreateTableDdl"/> 에 넘겨
+/// 서버 이름 PK·UK·CHECK·작업 안 FK·인덱스는 이름 없이 만든다(대상 서버가 새로 짓는다, TR1 위험 5). 이 표를 참조하던 다른 표의 FK 는 같은 DB 에 있던 그 FK 를 되붙이는 것이라 이름 그대로 쓴다.</item>
 /// <item>휴지통: <c>USER_RECYCLEBIN</c> 에 OPERATION 이 없다(3.7). 휴지통 이름은 <c>BIN$…</c> 가 아니라 <c>&lt;계정&gt;_TBL…</c> 모양.</item>
+/// <item>컴파일 오류 트리거(TR1 위험 1): 지우기 전부터 INVALID 인 트리거를 <c>copy.invalid_triggers</c>(Tibero 에만 있는 id)로 읽어 <see cref="PreservedDdl.InvalidTriggers"/> 에 둔다.
+/// Tibero 는 컴파일 오류 트리거 CREATE 를 오류 없이 받으므로(TB4 #79) 그대로 다시 만들 수 있고, 실행기가 되살린 뒤 상태를 보고 꺼 둔다.</item>
 /// </list>
 /// 카탈로그 SELECT 는 <c>Catalog/copy/recreate_*.sql</c>(<c>dbms: tibero</c>, Oracle 과 같은 id·바인드·열 위치). 값은 <see cref="Text"/> 로 글자로 바꾼다(Tibero 대량 코덱에 기대지 않는다).
 /// 키 서비스가 아니다: Tibero 복사 실행기 하위 형식 <c>TiberoCopyRunner</c>(TI1b)가 생성자에서 넘긴다.
@@ -61,6 +64,10 @@ internal sealed partial class TiberoRecreateStep : ICopyRecreateStep
         ArgumentNullException.ThrowIfNull(target);
         var triggers = new List<string>();
         var triggerObjects = new List<DisabledObject>();
+        // 지우기 전부터 컴파일 오류(INVALID)인 트리거(TR1 위험 1): 그대로 다시 만들고, 되살린 뒤 INVALID 면 실행기가 꺼 두고 알린다(결과는 실패로 두지 않는다).
+        var invalid = (await QueryAsync(target, "copy.invalid_triggers", ct, ("OWN", owner), ("TBL", table)).ConfigureAwait(false))
+            .Select(r => (Owner: Text(r[0]), Name: Text(r[1]))).ToHashSet();
+        var invalidObjects = new List<DisabledObject>();
         foreach (var row in await QueryAsync(target, "copy.recreate_triggers", ct, ("OWN", owner), ("TBL", table)).ConfigureAwait(false))
         {
             var trgOwner = Text(row[0])!;
@@ -74,6 +81,11 @@ internal sealed partial class TiberoRecreateStep : ICopyRecreateStep
             var obj = new DisabledObject(DisabledKind.Trigger, trgOwner, table, name);
             triggers.Add(TriggerCreate(ddl));
             triggerObjects.Add(obj);
+            if (invalid.Contains((trgOwner, name)))
+            {
+                invalidObjects.Add(obj);
+            }
+
             if (!string.Equals(Text(row[2]), "ENABLED", StringComparison.Ordinal))
             {
                 triggers.Add($"ALTER TRIGGER {CopyCommonStatements.Qualified(trgOwner, name)} DISABLE");
@@ -100,7 +112,7 @@ internal sealed partial class TiberoRecreateStep : ICopyRecreateStep
             referencing.Add(new DisabledObject(DisabledKind.ForeignKey, fk.Key.Owner, fk.Key.Table, fk.Key.Name));
         }
 
-        return new PreservedDdl(triggers, grants, fks) { TriggerObjects = triggerObjects, ReferencingConstraints = referencing };
+        return new PreservedDdl(triggers, grants, fks) { TriggerObjects = triggerObjects, ReferencingConstraints = referencing, InvalidTriggers = invalidObjects };
     }
 
     /// <summary>

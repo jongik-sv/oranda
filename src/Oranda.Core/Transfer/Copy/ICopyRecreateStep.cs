@@ -58,4 +58,10 @@ public sealed record PreservedDdl(IReadOnlyList<string> Triggers, IReadOnlyList<
     /// (그 FK 는 <see cref="CreateTableDdl"/> 이 만든다), 부모 없는 행 수를 셀 때 쓴다. 두 목록은 같은 위치로 짝짓는다.
     /// </summary>
     public IReadOnlyList<DisabledObject> ReferencingConstraints { get; init; } = [];
+
+    /// <summary>
+    /// 받아 둘 때 이미 컴파일 오류(INVALID)였던 트리거(TR1 위험 1). 그대로 다시 만들고, 되살린 뒤에도 INVALID 이면 실행기가 꺼 두되
+    /// 다시 만들기가 만든 문제가 아니라서 결과를 실패로 두지 않고 알림만 한다. 상태를 읽지 못하는 DBMS(기본)는 비어 있다.
+    /// </summary>
+    public IReadOnlyList<DisabledObject> InvalidTriggers { get; init; } = [];
 }

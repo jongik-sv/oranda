@@ -429,7 +429,7 @@ public partial class CopyRunner : ICopyRunner
             throw new InvalidOperationException($"대상 접속 '{sessions.Target.Profile.Name}' 은 개발 접속이 아니라 「테이블 다시 만들기」를 실행할 수 없습니다.");
         }
 
-        // 대상 DBMS 가 다시 만들기를 막으면(Tibero 는 아직 막는다) 오류 없는 점검 결과를 받았어도 DROP 전에 멈춘다.
+        // 대상 DBMS 가 다시 만들기를 막으면 오류 없는 점검 결과를 받았어도 DROP 전에 멈춘다(지금 막는 DBMS 는 없다 — Tibero 는 TR1 에서 풀었다).
         if (recreate.Count > 0 && _targetPrecheck.RecreateBlockedReason(sessions.Target) is { } blocked)
         {
             throw new InvalidOperationException($"대상 DBMS({_targetDbms}) 에서는 「테이블 다시 만들기」를 실행할 수 없습니다: {blocked}");

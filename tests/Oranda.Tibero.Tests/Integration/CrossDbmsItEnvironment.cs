@@ -623,6 +623,39 @@ internal sealed class CrossDbmsItEnvironment : IAsyncDisposable
         {
             await SilentTiberoAsync($"DROP TABLE {table} CASCADE CONSTRAINTS");
         }
+
+        await PurgeTiberoBinAsync(table);
+    }
+
+    /// <summary>
+    /// 휴지통에서 이 ORT_ 표(원래 이름)의 항목만 휴지통 이름으로 <c>PURGE TABLE</c> 한다(<c>PURGE RECYCLEBIN</c> 금지). 「테이블 다시 만들기」(TR1)가 PURGE 없이 지운 옛 표가 남는다.
+    /// 오류는 무시한다(정리 단계).
+    /// </summary>
+    private async Task PurgeTiberoBinAsync(string table)
+    {
+        if (!table.StartsWith(TiberoItSessions.TablePrefix, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        List<string> names;
+        try
+        {
+            var rows = await TiberoSessionQuery.RunAsync(await TiberoSetupAsync(), "SELECT object_name FROM user_recyclebin WHERE original_name = :t",
+                c => TiberoSessionQuery.Bind(c, "t", table));
+            names = [.. rows.Rows.Select(r => TiberoSessionQuery.Str(r[0])).OfType<string>()];
+        }
+#pragma warning disable CA1031 // 정리 단계: 휴지통을 못 읽으면 넘어간다.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return;
+        }
+
+        foreach (var name in names)
+        {
+            await SilentTiberoAsync("PURGE TABLE " + Quote(name));
+        }
     }
 
     private static async Task SilentDisposeAsync(ISession session)

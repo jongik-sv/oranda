@@ -165,10 +165,17 @@ internal sealed class TiberoCopyDialect : ICopyDialect
 
     /// <summary>
     /// 먼저 지운 자식 표가 휴지통에 남아 그 FK 로 부모 DROP 이 TBR-7156 으로 거부될 수 있다(3.7: 휴지통 표 이름 <c>&lt;계정&gt;_TBL…</c>, 같은 DROP 거부는 3.5 실측).
-    /// 휴지통에 FK 가 남는지 자체는 이 조합으로 재지 못했다(미실측) → 「있을 수 있다」 로 적는다.
+    /// 휴지통에 FK 가 남는지 자체는 이 조합으로 재지 못했다(미실측) → 「있을 수 있다」 로 적는다. TR1 부터는 <see cref="DetachChildForeignKeysBeforeDrop"/> 로 자식 FK 를
+    /// DROP 전에 떼므로 이 글은 그래도 거부됐을 때(다른 길로 남은 FK)만 나온다.
     /// </summary>
     public string? RecycledChildForeignKeyNote(IReadOnlyList<string> children) =>
         $"이 실행에서 먼저 지운 자식 테이블 {string.Join(", ", children)} 이(가) 휴지통에 남아 그 FK 가 이 테이블을 참조하고 있을 수 있습니다(휴지통의 그 테이블을 PURGE 해야 할 수 있습니다).";
+
+    /// <summary>
+    /// TR1 위험 3: 함께 다시 만드는 자식 표의 FK 도 첫 DROP 전에 뗀다. 지운 자식 표가 휴지통에 FK 를 쥔 채 남아 부모 DROP 을 막는 일(TBR-7156)을 휴지통 동작과 상관없이 없앤다.
+    /// 자식 FK 는 적재 뒤 원본 정의(작업 안 FK)로 부모 다음에 붙는다. 서버 동작은 <c>TiberoRecreateStepIt</c> 가 출력한다.
+    /// </summary>
+    public bool DetachChildForeignKeysBeforeDrop => true;
 
     /// <summary>
     /// 미실측 → 번호 없음(Tibero 의 이전 시점 읽기 실패 번호를 재지 못했다, <c>TiberoErrorClassifier</c> 도 SnapshotTooOld 를 분류하지 않는다).

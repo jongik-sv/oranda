@@ -27,7 +27,7 @@
 | D9 | Tibero VARCHAR2 >4000B → Oracle | CLOB(만들기 한정, 기존 대상 테이블은 `NarrowerType`). EXTENDED 여부와 무관(단순·안전). NVARCHAR2·NCHAR 가 Oracle 한도를 넘으면 NCLOB. |
 | D10 | LONG·LONG RAW | Tibero 원본 = CLOB·BLOB 으로 옮김. Oracle 원본 = Dropped(Oracle 대량 읽기 미지원). |
 | D11 [제품] | CreateIfMissing 교차 | 양방향 범위 안. Tibero 대상 만들기 차단(`ICopyPrecheckDialect.CreateBlockedReason`, 다시 만들기 차단과 갈랐다)은 XC8b 에서 풀렸다(Tibero 대상 만들기는 막히지 않는다). 가상 열·함수 기반 인덱스는 만들지 않고 안내. |
-| D12 [제품] | Recreate 교차 | Tibero→Oracle 만. Oracle→Tibero 는 막힘 유지(`RecreateBlockedReason`). |
+| D12 [제품] | Recreate 교차 | 양방향. 처음에는 Tibero→Oracle 만 열고 Oracle→Tibero 는 `RecreateBlockedReason` 으로 막았으나 TR1(D-064, 결정 103, 2026-11-11)에서 Tibero 대상도 풀었다(위험은 표마다 다룬다 — `tibero-driver-transfer.md` 4장). |
 | D13 | 문자셋(Tibero CP949) | XC5 실측: 시험 DB 는 UTF-8 이라 손실이 없었다. 클라이언트 인코딩 검사는 하지 않고 안내만 한다(`CrossCharset`). CP949 DB 에서의 동작은 미실측. |
 | D14 [제품] | 앱 진입 | 「DBMS 다름」 막음을 「지원 쌍 아님」으로 바꿨다(`DataCopyServices.IsPairSupported`: 같은 DBMS 는 항상 참, 다른 DBMS 는 Oracle↔Tibero 이고 두 DBMS 의 교차 부품이 등록돼 있을 때 참). Tibero 활성 세션에서도 메뉴를 켠다. |
 | D15 | 등록 | 초안(XC10 녹색 뒤 한꺼번에 등록)에서 바뀜. XC0 이 Tibero 대량 실행(`TiberoBulkExecutionService`)·복사 실행기·사전 점검을 `Dbms.Tibero` 키로 먼저 등록했다(Tibero→Tibero 를 켜기 위해). 교차 부품 `TiberoCopyParts`(`ICopyDbmsParts`)의 키 등록은 XC11 이 교차 IT 통과 뒤에 했다(`[OrandaService(typeof(ICopyDbmsParts), Dbms = Dbms.Tibero)]`). 등록 뒤 앱에서 Oracle↔Tibero 쌍이 열린다. |
@@ -130,7 +130,7 @@
 ### 3.4 테이블 만들기·다시 만들기 범위
 
 - 만들기(CreateIfMissing): 양방향 범위 안(D11). 만든 테이블 실패 정리 = `DROP TABLE … PURGE`(D19).
-- 다시 만들기(Recreate): Tibero→Oracle 만(D12). Oracle→Tibero 는 `RecreateBlockedReason` 으로 막는다. 옛 테이블을 지운 뒤 CREATE 가 실패하면 실행기가 그 자리에서 `FLASHBACK TABLE … TO BEFORE DROP` 으로 되살리고 결과에 알린다(XC8e, 결정 67: 같은 DBMS 다시 만들기도 같다). 휴지통에 남지 않았거나 되살리기도 실패하면 직접 되돌리는 안내가 나온다.
+- 다시 만들기(Recreate): 양방향(D12, Oracle→Tibero 는 TR1·D-064 에서 열림). Tibero 대상은 함께 다시 만드는 자식 FK 를 첫 DROP 전에 떼고(`ICopyDialect.DetachChildForeignKeysBeforeDrop`), 큰 바이트 열은 BYTE 로 만들며(`CrossTableMap.TiberoByteKeptColumns`), INVALID 트리거·지연 여부를 모르는 FK 를 확인 글에 적는다(`ICopyPrecheckDialect.RecreateTableNoteAsync`). 옛 테이블을 지운 뒤 CREATE 가 실패하면 실행기가 그 자리에서 `FLASHBACK TABLE … TO BEFORE DROP` 으로 되살리고 결과에 알린다(XC8e, 결정 67: 같은 DBMS 다시 만들기도 같다). 휴지통에 남지 않았거나 되살리기도 실패하면 직접 되돌리는 안내가 나온다.
 - Oracle→Tibero 만들기: Tibero 대상 만들기 차단(`CreateBlockedReason`)은 XC8b 에서 풀렸다(D11).
 
 ### 3.5 주의 (실서버 시험 XC10)

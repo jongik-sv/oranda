@@ -47,6 +47,49 @@ public sealed class TiberoCopyRunnerTriggerTests
         Assert.Equal("TRG_BAD", query.Binds["NAME"].Value);
     }
 
+    /// <summary>위험 1: 지우기 전부터 INVALID 였던 트리거는 그대로 되살리고 꺼 두되, 다시 만들기가 만든 문제가 아니라 결과를 실패로 두지 않고 알림만 한다.</summary>
+    [Fact]
+    public async Task Trigger_that_was_invalid_before_the_drop_is_disabled_with_a_notice_and_does_not_fail_the_run()
+    {
+        var f = new Fixture("INVALID");
+
+        var (failed, notices) = await f.RestoreAsync(Kept([Create], [Trigger]) with { InvalidTriggers = [Trigger] });
+
+        Assert.False(failed);
+        Assert.Equal([Create, DisableText], f.Execution.Calls.Select(c => c.Statement.Text).ToList());
+        var notice = Assert.Single(notices);
+        Assert.Contains("SCOTT.TRG_BAD 은 다시 만들기 전부터 컴파일 오류로 INVALID 였습니다. 그대로 다시 만들고 꺼 두었습니다", notice, StringComparison.Ordinal);
+        Assert.DoesNotContain("다시 만든 열 구조와 맞지 않아", notice, StringComparison.Ordinal);
+    }
+
+    /// <summary>지우기 전부터 INVALID 였어도 끄지 못하면 DML 이 막히므로 결과는 실패다.</summary>
+    [Fact]
+    public async Task Trigger_that_was_invalid_before_but_cannot_be_disabled_still_fails()
+    {
+        var f = new Fixture("INVALID");
+        f.Execution.Responder = call => call.Statement.Text == DisableText
+            ? new ExecutionResult(call.Statement, ExecutionStatus.Failed) { Error = new DbError("TBR-1", "boom") }
+            : new ExecutionResult(call.Statement, ExecutionStatus.Succeeded);
+
+        var (failed, notices) = await f.RestoreAsync(Kept([Create], [Trigger]) with { InvalidTriggers = [Trigger] });
+
+        Assert.True(failed);
+        Assert.Contains("끄지도 못했습니다", Assert.Single(notices), StringComparison.Ordinal);
+    }
+
+    /// <summary>지우기 전부터 INVALID 였지만 다시 만든 표에서는 컴파일되면(VALID) 켜진 채 두고 알리지 않는다.</summary>
+    [Fact]
+    public async Task Trigger_that_was_invalid_before_but_compiles_after_the_recreate_stays_enabled()
+    {
+        var f = new Fixture("VALID");
+
+        var (failed, notices) = await f.RestoreAsync(Kept([Create], [Trigger]) with { InvalidTriggers = [Trigger] });
+
+        Assert.False(failed);
+        Assert.Empty(notices);
+        Assert.Equal([Create], f.Execution.Calls.Select(c => c.Statement.Text).ToList());
+    }
+
     [Fact]
     public async Task Valid_trigger_is_left_alone()
     {

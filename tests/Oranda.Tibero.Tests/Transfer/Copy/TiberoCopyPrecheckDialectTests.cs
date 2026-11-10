@@ -47,24 +47,98 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         }
     }
 
-    /// <summary>TB4 뒤로 막지 않는다(받아 두기·되살리기·휴지통 안내는 <c>TiberoRecreateStepIt</c> 가 서버로 잰다).</summary>
+    /// <summary>TR1(결정 103, D-064): Tibero 대상의 다시 만들기·없으면 만들기를 모두 막지 않는다. 남은 위험은 표마다 다룬다.</summary>
     [Fact]
-    public void Recreate_stays_blocked_with_a_reason_until_the_runner_copy_it()
-    {
-        Assert.Equal(TiberoCopyPrecheckDialect.RecreateBlocked, Dialect.RecreateBlockedReason(null!));
-        Assert.False(string.IsNullOrWhiteSpace(TiberoCopyPrecheckDialect.RecreateBlocked));
-    }
-
-    /// <summary>「없으면 만들기」는 푼다(XC8b, D11 변경): Tibero 대상에 새 표를 만든다. 다시 만들기는 그대로 막는다.</summary>
-    [Fact]
-    public void Create_if_missing_is_not_blocked_but_recreate_still_is()
+    public void Recreate_and_create_if_missing_are_not_blocked_for_a_tibero_target()
     {
         ICopyPrecheckDialect dialect = Dialect;
 
+        Assert.Null(dialect.RecreateBlockedReason(null!));
         Assert.Null(dialect.CreateBlockedReason(null!));
-        Assert.NotNull(dialect.RecreateBlockedReason(null!));
-        Assert.Equal(TiberoCopyPrecheckDialect.RecreateBlocked, dialect.RecreateBlockedReason(null!));
     }
+
+    /// <summary>위험 1: 지금 INVALID 인 대상 트리거를 켜짐·꺼짐과 함께 이름으로 적고, 복사 결과에는 영향이 없다고 말한다.</summary>
+    [Fact]
+    public async Task Recreate_note_names_the_invalid_target_triggers_with_their_state()
+    {
+        var rows = new Dictionary<string, IReadOnlyList<string?[]>?>(StringComparer.Ordinal)
+        {
+            ["copy.invalid_triggers"] = [["SCOTT", "TRG_BAD", "ENABLED"], ["SCOTT", "TRG_OLD", "DISABLED"]],
+            ["copy.recreate_referencing_fks"] = [],
+        };
+
+        var note = await Dialect.RecreateTableNoteAsync(Input(rows, Dbms.Oracle, []), CancellationToken.None);
+
+        Assert.Contains("대상 트리거 SCOTT.TRG_BAD(켜짐), SCOTT.TRG_OLD(꺼짐) 은(는) 지금 컴파일 오류(INVALID) 상태입니다.", note, StringComparison.Ordinal);
+        Assert.Contains("꺼 두고 알립니다", note, StringComparison.Ordinal);
+        Assert.Contains("테이블 복사 결과에는 영향이 없습니다.", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("DEFERRABLE", note, StringComparison.Ordinal);
+        Assert.StartsWith(" ", note, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 위험 4: 이 표를 참조하는 다른 표의 FK(대상 카탈로그, 열마다 한 줄이라 이름으로 한 번)와, Tibero 원본이면 작업 안 FK 도 「지연 여부를 모름 → 즉시 검사」 로 이름을 적는다.
+    /// Oracle 원본의 작업 안 FK 는 Oracle 카탈로그가 DEFERRABLE 을 알려 주므로 적지 않는다.
+    /// </summary>
+    [Theory]
+    [InlineData(Dbms.Tibero, true)]
+    [InlineData(Dbms.Oracle, false)]
+    public async Task Recreate_note_names_the_foreign_keys_whose_deferrable_state_cannot_be_read(Dbms source, bool jobForeignKeyNamed)
+    {
+        var rows = new Dictionary<string, IReadOnlyList<string?[]>?>(StringComparer.Ordinal)
+        {
+            ["copy.invalid_triggers"] = [],
+            ["copy.recreate_referencing_fks"] =
+            [
+                ["HR", "BONUS", "FK_BONUS_EMP", "NO ACTION", "E1", "ID1", "ENABLED", null, null],
+                ["HR", "BONUS", "FK_BONUS_EMP", "NO ACTION", "E2", "ID2", "ENABLED", null, null],
+            ],
+        };
+
+        var note = await Dialect.RecreateTableNoteAsync(Input(rows, source, ["EMP_DEPT_FK"]), CancellationToken.None);
+
+        Assert.Contains("HR.BONUS.FK_BONUS_EMP", note, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(note, "FK_BONUS_EMP"));
+        Assert.Equal(jobForeignKeyNamed, note.Contains("SCOTT.EMP.EMP_DEPT_FK", StringComparison.Ordinal));
+        Assert.Contains("지연 검사(DEFERRABLE) 여부를 알려 주지 않아 즉시 검사 FK 로 다시 만듭니다", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("INVALID", note, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Recreate_note_is_empty_without_invalid_triggers_or_foreign_keys_and_says_so_when_a_query_fails()
+    {
+        var empty = new Dictionary<string, IReadOnlyList<string?[]>?>(StringComparer.Ordinal)
+        {
+            ["copy.invalid_triggers"] = [],
+            ["copy.recreate_referencing_fks"] = [],
+        };
+        Assert.Equal(string.Empty, await Dialect.RecreateTableNoteAsync(Input(empty, Dbms.Tibero, []), CancellationToken.None));
+
+        var failed = new Dictionary<string, IReadOnlyList<string?[]>?>(StringComparer.Ordinal)
+        {
+            ["copy.invalid_triggers"] = null,
+            ["copy.recreate_referencing_fks"] = null,
+        };
+        var note = await Dialect.RecreateTableNoteAsync(Input(failed, Dbms.Tibero, []), CancellationToken.None);
+        Assert.Contains("컴파일 상태(INVALID)를 확인하지 못했습니다", note, StringComparison.Ordinal);
+        Assert.Contains("FK 를 확인하지 못했습니다", note, StringComparison.Ordinal);
+    }
+
+    /// <summary>안내가 쓰는 Tibero 카탈로그 id 가 모두 있고 바인드가 OWN·TBL 이다(입력의 <c>TargetRows</c> 가 그 둘만 보낸다).</summary>
+    [Theory]
+    [InlineData("copy.invalid_triggers")]
+    [InlineData("copy.recreate_referencing_fks")]
+    public void Recreate_note_catalog_ids_are_tibero_files_bound_by_owner_and_table(string id)
+    {
+        var query = Catalog.Get(id, 6, Dbms.Tibero);
+
+        Assert.Equal(Dbms.Tibero, query.Header.Dbms);
+        Assert.True(Binds(query.Sql).SetEquals(["OWN", "TBL"]), id + ": 바인드가 OWN·TBL 이 아니다");
+    }
+
+    private static RecreateNoteInput Input(Dictionary<string, IReadOnlyList<string?[]>?> rows, Dbms source, IReadOnlyList<string> jobForeignKeys) =>
+        new("SCOTT", "EMP", source, jobForeignKeys,
+            (id, _) => Task.FromResult(rows.TryGetValue(id, out var r) ? r : throw new InvalidOperationException("모르는 조회: " + id)));
 
     /// <summary>
     /// Tibero 카탈로그 모양의 표(문자 열 형식 이름 VARCHAR·CHAR, 길이 = 글자 수, 서버가 지은 제약 이름 <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>)를 같은 Tibero 에 만드는 문장.
@@ -260,9 +334,10 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         var oracleCopy = oracle.Entries.Where(e => e.Id.StartsWith("copy.", StringComparison.Ordinal)).Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
         var tiberoCopy = Catalog.Entries.Where(e => e.Id.StartsWith("copy.", StringComparison.Ordinal)).Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
 
-        // Tibero 에 Oracle 에 없는 copy.* 는 copy.trigger_status 하나뿐이다: 컴파일 오류 트리거를 오류 없이 받는 서버에서만 쓰는 조회로,
-        // Oracle 은 ORA-24344 로 알려 주므로 쓰지 않는다(Oracle 카탈로그는 바꾸지 않는다). Core 는 이 id 를 모르고 방언(TriggerStatusSql)이 글을 넘긴다.
-        Assert.Equal(["copy.trigger_status"], tiberoCopy.Except(oracleCopy).Order(StringComparer.Ordinal).ToList());
+        // Tibero 에 Oracle 에 없는 copy.* 는 컴파일 오류 트리거를 오류 없이 받는 서버에서만 쓰는 두 조회다: 되살린 트리거 상태(copy.trigger_status)와
+        // 지우기 전부터 INVALID 인 트리거(copy.invalid_triggers, TR1). Oracle 은 ORA-24344 로 알려 주므로 쓰지 않는다(Oracle 카탈로그는 바꾸지 않는다).
+        // Core 는 이 id 를 모르고 Tibero 방언·받아 두기 단계가 쓴다.
+        Assert.Equal(["copy.invalid_triggers", "copy.trigger_status"], tiberoCopy.Except(oracleCopy).Order(StringComparer.Ordinal).ToList());
         Assert.Equal(["copy.fga_policy_count", "copy.recreate_trigger_ddl"], oracleCopy.Except(tiberoCopy).Order(StringComparer.Ordinal).ToList());
     }
 

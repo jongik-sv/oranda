@@ -739,7 +739,9 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             message += " 원본의 함수 기반 인덱스·작업 밖 부모 FK 는 적재 뒤 함께 만듭니다(「함께 만드는 객체」 항목). 파티션·압축·테이블스페이스·저장 속성은 대상 기본값을 씁니다.";
 
             message += CrossSkippedForeignKeyNote(rule, source, linked);
-            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null)) + CrossCreateNote(source);
+            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null)) + CrossCreateNote(source) + LargeCharNote(source, recreating: true);
+            message += await dialect.RecreateTableNoteAsync(new RecreateNoteInput(owner, rule.Table, sourceParts.Dbms, JobForeignKeyNames(rule, source, linked),
+                (id, token) => TargetRowsAsync(id, owner, rule.Table, token)), ct).ConfigureAwait(false);
             var lost = await NotRestoredAsync(rule, ct).ConfigureAwait(false);
             if (lost.Count > 0)
             {
@@ -803,7 +805,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                           + " 만들지 않는 것: 시노님, 파티션·압축·테이블스페이스·저장 속성(대상 기본값을 씁니다).";
 
             message += CrossSkippedForeignKeyNote(rule, source, linked);
-            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null)) + CrossCreateNote(source);
+            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null)) + CrossCreateNote(source) + LargeCharNote(source, recreating: false);
             _items.Add(new CheckItem(key, CopyCheckCodes.CreateTable, CheckLevel.Confirm, message));
         }
 
@@ -994,6 +996,56 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         {
             var notes = CrossTableMap.MapTable(sourceParts.Dbms, targetDbms, source, sourceParts.Codec).Notes;
             return notes.Count == 0 ? string.Empty : " " + targetDbms + " 로 옮기며 달라지는 것: " + string.Join(" / ", notes) + ".";
+        }
+
+        /// <summary>
+        /// 대상 Tibero 에 만들 큰 문자 열의 길이 단위(TR1 위험 2, <see cref="CrossTableMap.TiberoByteKeptColumns"/>): 바이트 단위로 남기는 열과,
+        /// 글자 단위라 서버가 받지 않을 수 있는 열을 이름으로 알린다. 없으면 빈 글.
+        /// </summary>
+        private string LargeCharNote(TableInfo source, bool recreating)
+        {
+            var mapped = CrossTableMap.MapTable(sourceParts.Dbms, targetDbms, source, sourceParts.Codec).Target;
+            var kept = CrossTableMap.TiberoByteKeptColumns(targetDbms, mapped);
+            var large = CrossTableMap.TiberoLargeCharColumns(targetDbms, mapped);
+            var note = string.Empty;
+            if (kept.Count > 0)
+            {
+                note += $" 큰 문자 열 {Lengths(kept, "BYTE")} 은(는) 글자 단위로 바꾸면 {targetDbms} 바이트 한도를 넘을 수 있어 원본처럼 바이트 단위로 만듭니다.";
+            }
+
+            if (large.Count > 0)
+            {
+                note += $" 글자 단위 큰 문자 열 {Lengths(large, "CHAR")} 은(는) {targetDbms} 바이트 한도(VARCHAR2 {Number(CrossTableMap.TiberoVarcharMaxBytes)}·CHAR {Number(CrossTableMap.TiberoCharMaxBytes)} 바이트)를 넘을 수 있습니다. 서버가 받지 않으면 "
+                        + (recreating ? "지운 옛 테이블을 휴지통에서 되살리고 이 테이블은 복사하지 않습니다." : "테이블을 만들지 못해 이 테이블은 복사하지 않습니다.");
+            }
+
+            return note;
+
+            static string Lengths(IReadOnlyList<ColumnInfo> columns, string unit)
+                => string.Join(", ", columns.Select(c => $"{c.Name}({(c.Length ?? 0).ToString(CultureInfo.InvariantCulture)} {unit})"));
+        }
+
+        /// <summary>작업 안 FK(함께 만드는 부모를 참조하고 대상에 만드는 것)의 원본 이름. 실행기가 원본 카탈로그로 붙이는 FK 와 같은 판정이다.</summary>
+        private List<string> JobForeignKeyNames(TableRule rule, TableInfo source, HashSet<string> linked)
+        {
+            var skipped = CrossSkippedForeignKeys(rule, source, linked).Select(x => x.Fk.Name).ToHashSet(StringComparer.Ordinal);
+            return [.. source.Constraints
+                .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && IsLinkedParent(p, rule, linked) && !skipped.Contains(c.Name))
+                .Select(c => c.Name)];
+        }
+
+        /// <summary>대상 세션에서 카탈로그 조회 하나(바인드 OWN·TBL)를 보내 행을 글자로 읽는다. 서버 오류면 null(<see cref="RecreateNoteInput.TargetRows"/>).</summary>
+        private async Task<IReadOnlyList<string?[]>?> TargetRowsAsync(string id, string owner, string table, CancellationToken ct)
+        {
+            try
+            {
+                var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql(id), ct, ("OWN", owner), ("TBL", table)).ConfigureAwait(false);
+                return [.. rows.Select(r => r.Select(codec.ToText).ToArray())];
+            }
+            catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
+            {
+                return null;
+            }
         }
 
         /// <summary>

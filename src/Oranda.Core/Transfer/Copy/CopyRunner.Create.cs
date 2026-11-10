@@ -101,11 +101,26 @@ public partial class CopyRunner
         }
 
         ct.ThrowIfCancellationRequested();
-        for (var i = plans.Count - 1; i >= 0; i--)
+
+        // 지운 자식 표가 휴지통에서 FK 를 쥔 채 남는 DBMS(Tibero, TR1 위험 3): 함께 다시 만드는 자식의 FK 까지 모든 참조 FK 를 첫 DROP 전에 뗀다.
+        // 자식 FK 는 휴지통에 기대지 않고 적재 뒤 원본 정의(작업 안 FK)로 부모 다음에 붙는다. 떼다 실패하면 아무 표도 지우지 않는다(떼어 낸 FK 는 끝에 되붙인다).
+        var detachFirst = _dialect.DetachChildForeignKeysBeforeDrop;
+        var detached = true;
+        if (detachFirst)
+        {
+            for (var i = plans.Count - 1; i >= 0 && detached; i--)
+            {
+                var table = run.Table(plans[i]);
+                run.Progress(table.Name, 0, null, PhaseRecreate);
+                detached = await DetachReferencingAsync(run, table);
+            }
+        }
+
+        for (var i = plans.Count - 1; i >= 0 && detached; i--)
         {
             var table = run.Table(plans[i]);
             run.Progress(table.Name, 0, null, PhaseRecreate);
-            if (!await DetachReferencingAsync(run, table) || !await DropAsync(run, step, table))
+            if ((!detachFirst && !await DetachReferencingAsync(run, table)) || !await DropAsync(run, step, table))
             {
                 break;
             }
@@ -566,7 +581,7 @@ public partial class CopyRunner
                 var followedByDisable = obj is not null && i + 1 < kept.TriggerObjects.Count && kept.TriggerObjects[i + 1] == obj;
                 if (isCreate && !followedByDisable && _dialect.TriggerStatusSql is { } statusSql)
                 {
-                    await DisableIfInvalidAsync(run, t, obj!, statusSql, companion);
+                    await DisableIfInvalidAsync(run, t, obj!, statusSql, kept, companion);
                 }
 
                 continue;
@@ -574,7 +589,7 @@ public partial class CopyRunner
 
             if (r?.Error?.Kind == DbErrorKind.CompiledWithErrors && i < kept.TriggerObjects.Count)
             {
-                await DisableInvalidTriggerAsync(run, t, kept.TriggerObjects[i], companion);
+                await DisableInvalidTriggerAsync(run, t, kept.TriggerObjects[i], kept, companion);
                 continue;
             }
 
@@ -585,7 +600,7 @@ public partial class CopyRunner
     }
 
     /// <summary>되살린 트리거의 상태를 조회해 INVALID 이면 끈다. 상태를 알 수 없으면 알리고 결과를 실패로 둔다(막힌 DML 을 못 알아챌 수 있다).</summary>
-    private async Task DisableIfInvalidAsync(RunState run, TableState t, DisabledObject obj, string statusSql, bool companion = false)
+    private async Task DisableIfInvalidAsync(RunState run, TableState t, DisabledObject obj, string statusSql, PreservedDdl kept, bool companion = false)
     {
         string? status;
         try
@@ -611,15 +626,25 @@ public partial class CopyRunner
 
         if (string.Equals(status.Trim(), "INVALID", StringComparison.OrdinalIgnoreCase))
         {
-            await DisableInvalidTriggerAsync(run, t, obj, companion);
+            await DisableInvalidTriggerAsync(run, t, obj, kept, companion);
         }
     }
 
-    private async Task DisableInvalidTriggerAsync(RunState run, TableState t, DisabledObject obj, bool companion = false)
+    private async Task DisableInvalidTriggerAsync(RunState run, TableState t, DisabledObject obj, PreservedDdl kept, bool companion = false)
     {
         // 만들어졌지만 INVALID 다. 켜진 채 두면 이 표의 DML 이 모두 막히므로(Oracle ORA-04098) 끈다. 트리거는 지우지 않고 남긴다(결정 78).
         var off = await TryRestoreAsync(run, _dialect.DisableTrigger(obj.Owner, obj.Name).Text, CleanupTimeout);
         var compile = ErrorNameNote(_dialect.TriggerCompileErrorName);
+        if (!companion && off is { Status: ExecutionStatus.Succeeded } && kept.InvalidTriggers.Contains(obj))
+        {
+            // 지우기 전부터 INVALID 였다(TR1 위험 1): 다시 만들기가 만든 문제가 아니고 데이터 복사도 끝났으니 결과를 실패로 두지 않고 알린다.
+            var before = $"트리거 {obj.Owner}.{obj.Name} 은 다시 만들기 전부터 컴파일 오류{compile}로 INVALID 였습니다. 그대로 다시 만들고 꺼 두었습니다"
+                         + "(켜 두면 이 테이블의 DML 이 막힙니다). 고친 뒤 켜세요.";
+            t.Note(before);
+            run.Notices.Add($"{t.Name}: {before}");
+            return;
+        }
+
         var why = companion ? "원본에서 옮겨 만들었지만 대상에서 컴파일되지 않아" : "다시 만든 열 구조와 맞지 않아";
         Problem(run, t, off is { Status: ExecutionStatus.Succeeded }
             ? $"트리거 {obj.Owner}.{obj.Name} 은 {why} 컴파일 오류{compile}로 INVALID 입니다. 꺼 두었으니 고친 뒤 켜세요."
@@ -711,6 +736,24 @@ public partial class CopyRunner
                                new ResolvedPeriod(null, null), new HashSet<string>(StringComparer.Ordinal), null);
         await RestoreTriggersAsync(run, new TableState(owner + "." + table, owner, table), kept);
         return (run.RestoreFailed, [.. run.Notices]);
+    }
+
+    /// <summary>
+    /// 시험용: 「테이블 다시 만들기」 준비·떼기·DROP·CREATE(<see cref="RecreateTablesAsync"/>) 뒤 적재 없이 바로 되살리기(<see cref="RestoreAsync"/>)를 실행기 경로 그대로 돌린다.
+    /// 부모·자식을 함께 다시 만들 때 FK 를 떼고 붙이는 순서(TR1 위험 3)를 가짜 실행으로 보는 데 쓴다. 표마다 (규칙 키, 지움, 만듦, 휴지통에서 되살림)과 알림을 돌려준다.
+    /// </summary>
+    internal async Task<(IReadOnlyList<(string Name, bool Dropped, bool Created, bool Flashbacked)> Tables, IReadOnlyList<string> Notices)> RecreateAndRestoreForTestAsync(
+        CopySessions sessions, CopyJob job, IReadOnlyList<CopyTablePlan> plans)
+    {
+        ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(plans);
+        var run = new RunState(sessions, job, new PrecheckReport([], plans, [], new Dictionary<string, long>()), new ResolvedPeriod(null, null),
+                               new HashSet<string>(StringComparer.Ordinal), null);
+        await RecreateTablesAsync(run, CancellationToken.None);
+        await RestoreAsync(run);
+        NoteRecreated(run, restored: true);
+        return ([.. plans.Select(p => run.Table(p)).Select(t => (t.Name, t.Dropped, t.Created, t.Flashbacked))], [.. run.Notices]);
     }
 
     /// <summary>
@@ -841,7 +884,8 @@ public partial class CopyRunner
                         .Where(x => CopyOwners.SameOwner(x.fk.Owner, owner) && x.fk.Table == t.TableName && x.i < x.Item3.ReferencingForeignKeys.Count)
                         .Select(x => x.Item3.ReferencingForeignKeys[x.i]));
                 // 휴지통에서 되살린 옛 표는 트리거·권한이 함께 돌아온다: FK(떼어 낸 참조 FK, 이 표가 자식인 옛 FK)만 남는다.
-                // 작업 안 FK 는 새로 만들 표의 원본 FK 라 옛 표에는 해당하지 않는다. (Tibero 대상 다시 만들기는 막혀 있어(TB4) 되살리기는 Oracle 대상만 닿는다.)
+                // 작업 안 FK 는 새로 만들 표의 원본 FK 라 옛 표에는 해당하지 않는다. Tibero 대상(TR1)은 함께 다시 만드는 자식의 FK 를 DROP 전에 떼었으므로
+                // 되살린 옛 자식 표에도 그 FK 가 없다 — asChild 로 같은 문장이 남는다.
                 var pending = (t.Flashbacked
                         ? kept.ReferencingForeignKeys.Concat(asChild)
                         : kept.Triggers.Concat(kept.Grants).Concat(kept.ReferencingForeignKeys)

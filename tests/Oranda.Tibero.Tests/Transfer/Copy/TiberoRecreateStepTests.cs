@@ -17,7 +17,7 @@ public sealed class TiberoRecreateStepTests
     private static readonly SqlCatalog Catalog = TiberoEmbeddedCatalog.Load();
 
     private static readonly string[] Ids =
-        ["copy.recreate_triggers", "copy.recreate_grants", "copy.recreate_referencing_fks", "copy.recreate_source_fks", "copy.recreate_recycle_bin"];
+        ["copy.recreate_triggers", "copy.invalid_triggers", "copy.recreate_grants", "copy.recreate_referencing_fks", "copy.recreate_source_fks", "copy.recreate_recycle_bin"];
 
     private const string OffCreate = "CREATE OR REPLACE TRIGGER \"SCOTT\".\"T_OFF\" BEFORE INSERT ON EMP FOR EACH ROW\nBEGIN\n  :NEW.NOTE := 'off';\nEND;";
 
@@ -53,6 +53,33 @@ public sealed class TiberoRecreateStepTests
 
         var triggerCall = Assert.Single(_calls, c => c.Id == "copy.recreate_triggers");
         Assert.Equal(new[] { ("OWN", "SCOTT"), ("TBL", "EMP") }, triggerCall.Binds);
+    }
+
+    /// <summary>위험 1: 지우기 전부터 INVALID 인 트리거(<c>copy.invalid_triggers</c>)를 그대로 받아 두고 <see cref="PreservedDdl.InvalidTriggers"/> 에 적는다.</summary>
+    [Fact]
+    public async Task Capture_keeps_an_invalid_trigger_as_is_and_remembers_it_was_invalid_before()
+    {
+        _rows["copy.recreate_triggers"] = [["SCOTT", "T_OFF", "DISABLED"], ["SCOTT", "T_ON", "ENABLED"]];
+        _rows["copy.invalid_triggers"] = [["SCOTT", "T_ON", "ENABLED"]];
+        _triggerDdl[("SCOTT", "T_OFF")] = OffCreate;
+        _triggerDdl[("SCOTT", "T_ON")] = OnCreate;
+
+        var kept = await Step().CaptureAsync(Session(), "SCOTT", "EMP", CancellationToken.None);
+
+        Assert.Equal([OffCreate, "ALTER TRIGGER \"SCOTT\".\"T_OFF\" DISABLE", OnCreate], kept.Triggers); // INVALID 트리거도 원문 그대로
+        Assert.Equal([new DisabledObject(DisabledKind.Trigger, "SCOTT", "EMP", "T_ON")], kept.InvalidTriggers);
+        Assert.Equal(new[] { ("OWN", "SCOTT"), ("TBL", "EMP") }, Assert.Single(_calls, c => c.Id == "copy.invalid_triggers").Binds);
+    }
+
+    [Fact]
+    public async Task Capture_has_no_invalid_triggers_when_the_catalog_lists_none()
+    {
+        _rows["copy.recreate_triggers"] = [["SCOTT", "T_ON", "ENABLED"]];
+        _triggerDdl[("SCOTT", "T_ON")] = OnCreate;
+
+        var kept = await Step().CaptureAsync(Session(), "SCOTT", "EMP", CancellationToken.None);
+
+        Assert.Empty(kept.InvalidTriggers);
     }
 
     [Fact]

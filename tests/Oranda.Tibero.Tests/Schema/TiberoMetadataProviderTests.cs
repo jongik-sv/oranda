@@ -35,6 +35,24 @@ public class TiberoMetadataProviderTests
         Assert.Equal(28, TiberoMetadataProvider.CatalogIds.Distinct(StringComparer.Ordinal).Count());
     }
 
+    /// <summary>
+    /// <c>meta.columns</c> 끝 열 <c>byte_length</c>(문자 열의 DATA_LENGTH, TR1)를 <see cref="ColumnInfo.ByteLength"/> 로 읽는다. 그 열이 없는 예전 행 모양(13열)이면 모름(null).
+    /// 다시 만들기가 큰 바이트 단위 열을 BYTE 로 남기는 판정(<c>CrossTableMap.TiberoByteKeptColumns</c>)이 이 값을 쓴다.
+    /// </summary>
+    [Fact]
+    public void Column_rows_read_the_trailing_byte_length_and_leave_it_unknown_on_the_old_row_shape()
+    {
+        object?[] withBytes = ["S", 0m, "VARCHAR", 65532m, null, null, "Y", null, "NO", null, "NO", null, null, 65532m];
+        object?[] old = ["S", 0m, "VARCHAR", 65532m, null, null, "Y", null, "NO", null, "NO", null, null];
+
+        var column = TiberoMetadataProvider.ToColumn(withBytes);
+
+        Assert.Equal(65532, column.Length);
+        Assert.Equal(65532, column.ByteLength);
+        Assert.Null(TiberoMetadataProvider.ToColumn(old).ByteLength);
+        Assert.Contains("byte_length", Oranda.Tibero.Catalog.TiberoEmbeddedCatalog.Load().Get("meta.columns", 6, Oranda.Core.Connection.Dbms.Tibero).Sql, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Schemas_are_the_first_column_without_binds()
     {

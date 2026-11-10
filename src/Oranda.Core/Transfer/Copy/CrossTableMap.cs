@@ -205,9 +205,80 @@ public static class CrossTableMap
                                     Func<string, bool>? isServerName = null, IBulkValueCodec? sourceCodec = null, bool keysAfterLoad = false)
     {
         var mapped = MapTable(source, target, table, sourceCodec);
-        var (now, afterLoad) = CreateTableDdl.Build(mapped.Target, targetOwner, tablesInJob, isServerName, keysAfterLoad);
+        var (now, afterLoad) = CreateTableDdl.Build(KeepByteLengths(target, mapped.Target), targetOwner, tablesInJob, isServerName, keysAfterLoad);
         return new CrossCreate(now, mapped.Notes, mapped.OmittedConstraints) { AfterLoad = afterLoad };
     }
+
+    // ---- Tibero 대상의 큰 문자 열 길이 단위(TR1 위험 2) ----
+
+    /// <summary>Tibero VARCHAR2 의 바이트 한도.</summary>
+    public const int TiberoVarcharMaxBytes = 65532;
+
+    /// <summary>Tibero CHAR 의 바이트 한도.</summary>
+    public const int TiberoCharMaxBytes = 2000;
+
+    /// <summary>글자 단위 길이를 바이트로 어림할 때 쓰는 글자당 최대 바이트(UTF-8 최대). 대상 문자셋을 읽지 못해(#76) 가장 큰 값으로 본다.</summary>
+    public const int MaxBytesPerChar = 4;
+
+    /// <summary>
+    /// 대상 Tibero 에 만들 때 원본처럼 바이트 단위(<c>n BYTE</c>)로 남기는 큰 문자 열(TR1 위험 2). 만들기 DDL 은 문자 길이를 글자 단위(<c>n CHAR</c>)로 쓰는데,
+    /// 글자당 최대 바이트로 어림한 크기가 Tibero 한도(VARCHAR2 65532, CHAR 2000 바이트)를 넘는 열은 서버가 받지 않을 수 있다. 그 가운데 바이트 길이가
+    /// 글자 길이와 같은 열(<see cref="ColumnInfo.ByteLength"/> = <see cref="ColumnInfo.Length"/>: 바이트 단위로 선언했거나 바이트 한도에 걸린 열 — 담을 수 있는 값이 「n BYTE」 와 같다)은
+    /// 바이트 단위 그대로 만든다. 대상이 Tibero 가 아니면 빈 목록. <paramref name="mapped"/> 는 대상 DBMS 로 옮긴 구조(<see cref="MapTable"/>)다.
+    /// </summary>
+    public static IReadOnlyList<ColumnInfo> TiberoByteKeptColumns(Dbms target, TableInfo mapped)
+    {
+        ArgumentNullException.ThrowIfNull(mapped);
+        return target != Dbms.Tibero ? [] : [.. mapped.Columns.Where(c => TiberoCharLimit(c) is not null && c.ByteLength == c.Length)];
+    }
+
+    /// <summary>
+    /// 같은 어림으로 Tibero 한도를 넘을 수 있지만 글자 단위 열(또는 바이트 길이를 모르는 열)이라 원본처럼 <c>n CHAR</c> 로 남기는 열.
+    /// 서버가 받지 않으면 CREATE 가 실패한다(다시 만들기는 지운 옛 표를 휴지통에서 되살린다). 사전 점검이 열 이름으로 알린다.
+    /// </summary>
+    public static IReadOnlyList<ColumnInfo> TiberoLargeCharColumns(Dbms target, TableInfo mapped)
+    {
+        ArgumentNullException.ThrowIfNull(mapped);
+        return target != Dbms.Tibero ? [] : [.. mapped.Columns.Where(c => TiberoCharLimit(c) is not null && c.ByteLength != c.Length)];
+    }
+
+    /// <summary>Tibero 대상이면 <see cref="TiberoByteKeptColumns"/> 의 열 형식을 <c>VARCHAR2(n BYTE)</c>·<c>CHAR(n BYTE)</c> 로 바꾼 구조(DDL 만 쓴다). 아니면 그대로.</summary>
+    private static TableInfo KeepByteLengths(Dbms target, TableInfo mapped)
+    {
+        var kept = TiberoByteKeptColumns(target, mapped);
+        if (kept.Count == 0)
+        {
+            return mapped;
+        }
+
+        var names = kept.Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
+        return mapped with
+        {
+            Columns = [.. mapped.Columns.Select(c => names.Contains(c.Name)
+                ? c with { DataType = $"{ByteTypeName(c)}({c.Length!.Value.ToString(CultureInfo.InvariantCulture)} BYTE)", Length = null }
+                : c)],
+        };
+    }
+
+    /// <summary>글자 단위로 쓰면 Tibero 바이트 한도를 넘을 수 있는 문자 열이면 그 한도(바이트), 아니면 null. 형식 이름에 괄호가 있는 열(이미 길이 단위를 가진 글)은 보지 않는다.</summary>
+    private static int? TiberoCharLimit(ColumnInfo c)
+    {
+        if (c.Length is not { } n || c.DataType.Contains('(', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        int? limit = c.DataType.Trim().ToUpperInvariant() switch
+        {
+            "VARCHAR2" or "VARCHAR" => TiberoVarcharMaxBytes,
+            "CHAR" => TiberoCharMaxBytes,
+            _ => null,
+        };
+        return limit is { } l && (long)n * MaxBytesPerChar > l ? l : null;
+    }
+
+    private static string ByteTypeName(ColumnInfo c) =>
+        string.Equals(c.DataType.Trim(), "CHAR", StringComparison.OrdinalIgnoreCase) ? "CHAR" : "VARCHAR2";
 
     // ---- 작업 안 FK ----
 
