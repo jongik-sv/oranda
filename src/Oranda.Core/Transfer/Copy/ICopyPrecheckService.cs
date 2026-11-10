@@ -38,6 +38,21 @@ public static class CopyCheckCodes
 
     /// <summary>오류: 원본 구조로 만들 수 없는 이유가 있다(지원하지 않는 형식 열·문자열 한도·가리키는 객체 없음·이름 겹침 …, <c>RecreateBlocked</c> 와 같은 조건).</summary>
     public const string CreateBlocked = "CreateBlocked";
+
+    /// <summary>확인 필요(교차 복사만): 대상 DBMS 로 옮길 형식이 없는 열을 복사에서 뺀다(표·열·형식·이유). 같은 DBMS 의 <c>UnsupportedType</c> 오류와 다르다.</summary>
+    public const string ColumnDropped = "ColumnDropped";
+
+    /// <summary>오류(교차 복사만): 키(PK)·기간 조건·부모 키 연결 열을 대상 DBMS 로 옮길 형식이 없어 복사에서 빠진다 — 키가 없어지거나 조건 열이 NULL 로 들어가 다시 실행하면 행이 겹친다. 열마다 한 항목.</summary>
+    public const string KeyColumnDropped = "KeyColumnDropped";
+
+    /// <summary>교차 복사만: 형식을 바꿔 옮기는 열(표마다 한 항목). 값이 바뀌거나 행이 실패할 수 있는 변환(BINARY_* → NUMBER·시간대 지역 → 오프셋)이 있으면 확인 필요, 아니면 통과.</summary>
+    public const string TypeConverted = "TypeConverted";
+
+    /// <summary>확인 필요(교차 복사로 Tibero 에 넣을 때, 작업 전체 한 항목): 대상 문자셋 밖 글자는 실패하거나 바뀔 수 있다.</summary>
+    public const string CrossCharset = "CrossCharset";
+
+    /// <summary>통과 안내(교차 복사로 Tibero 에 BLOB 을 넣을 때): 길이가 0 인 BLOB 은 NULL 이 된다.</summary>
+    public const string BlobEmptyToNull = "BlobEmptyToNull";
 }
 
 public enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 
 namespace Oranda.Core.Transfer.Copy;
@@ -26,4 +27,30 @@ public static class CopyErrors
 
     /// <summary>바깥 예외가 「볼 수 없음」(객체 없음·권한 부족, <see cref="DbErrorKinds.IsNoAccess(DbErrorKind)"/>) 서버 오류인가.</summary>
     public static bool IsNoAccess(IDbErrorClassifier errors, Exception exception) => Server(errors, exception).IsNoAccess();
+
+    /// <summary>
+    /// 원본·대상 두 DBMS 의 예외를 함께 알아보는 분류기(xdb-copy XC2). <see cref="IDbErrorClassifier.FromException"/> = 대상 분류 ?? 원본 분류,
+    /// <see cref="IDbErrorClassifier.IsOwnDriverException"/> = 둘 중 하나, <see cref="IDbErrorClassifier.Classify"/>·<see cref="IDbErrorClassifier.Dbms"/> = 대상 것.
+    /// 둘이 같은 인스턴스이거나 같은 DBMS 면 대상 분류기를 그대로 돌려준다(같은 DBMS 복사는 예전과 같다).
+    /// 합친 분류기의 <see cref="IDbErrorClassifier.Classify"/>·<see cref="IDbErrorClassifier.Dbms"/> 는 대상 것이므로, 원본 예외의 번호를 넘겨 <c>Classify</c> 를 부르지 말고
+    /// <see cref="IDbErrorClassifier.FromException"/> 이 돌려주는 <see cref="DbError"/> 의 <c>Kind</c>(그 예외를 낸 DBMS 의 분류기가 채운다)를 보아야 한다.
+    /// </summary>
+    public static IDbErrorClassifier Combine(IDbErrorClassifier target, IDbErrorClassifier source)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(source);
+        return ReferenceEquals(target, source) || target.Dbms == source.Dbms ? target : new CompositeDbErrorClassifier(target, source);
+    }
+
+    /// <summary>대상 먼저, 그다음 원본으로 찾는 분류기(<see cref="Combine"/>).</summary>
+    private sealed class CompositeDbErrorClassifier(IDbErrorClassifier target, IDbErrorClassifier source) : IDbErrorClassifier
+    {
+        public Dbms Dbms => target.Dbms;
+
+        public DbErrorKind Classify(int number) => target.Classify(number);
+
+        public DbError? FromException(Exception exception) => target.FromException(exception) ?? source.FromException(exception);
+
+        public bool IsOwnDriverException(Exception exception) => target.IsOwnDriverException(exception) || source.IsOwnDriverException(exception);
+    }
 }

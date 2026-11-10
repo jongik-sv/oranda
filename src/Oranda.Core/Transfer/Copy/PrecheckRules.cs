@@ -1,5 +1,7 @@
 using System.Globalization;
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
+using Oranda.Core.Transfer.Copy.CrossDbms;
 
 namespace Oranda.Core.Transfer.Copy;
 
@@ -15,10 +17,33 @@ public static class PrecheckRules
     /// <summary>
     /// 복사할 열(<see cref="CopyTablePlan.Columns"/>). 원본 열 순서, 숨김 열 포함.
     /// 가상 열(양쪽)·대상에 없는 열·<see cref="TableRule.SkipColumns"/>·지원하지 않는 형식 열(<paramref name="codec"/>)은 뺀다(메모 D10).
+    /// 원본·대상이 같은 DBMS 일 때 쓴다(코덱 하나로 양쪽 형식을 본다).
     /// </summary>
     public static IReadOnlyList<string> SelectColumns(IBulkValueCodec codec, TableInfo source, TableInfo target, TableRule rule)
+        => SelectColumns(codec, codec, source, target, rule);
+
+    /// <summary>
+    /// <see cref="SelectColumns(IBulkValueCodec, TableInfo, TableInfo, TableRule)"/> 와 같되 원본 열 형식은 <paramref name="sourceCodec"/>,
+    /// 대상 열 형식은 <paramref name="targetCodec"/> 으로 본다(xdb-copy XC2, 원본·대상 부품 분리).
+    /// </summary>
+    public static IReadOnlyList<string> SelectColumns(IBulkValueCodec sourceCodec, IBulkValueCodec targetCodec, TableInfo source, TableInfo target, TableRule rule)
+        => SelectColumnsCore(sourceCodec, targetCodec, source, target, rule, null);
+
+    /// <summary>
+    /// 교차 복사(원본·대상 DBMS 가 다름)의 복사할 열. 원본 열은 읽을 수 있는 형식(<see cref="IBulkValueCodec.IsReadable"/>)이고 <see cref="CrossTypeMap"/> 이
+    /// 옮길 형식이 있다고 본 열만 남긴다 — 실행기(<c>CopyRunner</c>)가 SELECT·DML 에 넣는 열과 같다. 옮길 형식이 없는 열은 <see cref="CompareColumns(IBulkValueCodec, IBulkValueCodec, TableInfo, TableInfo, TableRule, string?, Dbms, Dbms, bool)"/>
+    /// 가 <see cref="CopyCheckCodes.ColumnDropped"/> 로 알린다. 값은 원본 형식을 대상 DBMS 로 옮긴 형식(<see cref="CrossColumnMapping.BindType"/>, D3)으로 묶으므로
+    /// 대상 코덱이 그 형식을 쓸 수 있는지만 본다(대상 열 형식과의 차이는 서버가 바꾼다). <paramref name="targetFromSource"/> 는 호출부 호환을 위해 남겼고 판정에 쓰지 않는다.
+    /// </summary>
+    public static IReadOnlyList<string> SelectColumns(IBulkValueCodec sourceCodec, IBulkValueCodec targetCodec, TableInfo source, TableInfo target, TableRule rule,
+                                                      Dbms sourceDbms, Dbms targetDbms, bool targetFromSource = false)
+        => SelectColumnsCore(sourceCodec, targetCodec, source, target, rule, sourceDbms == targetDbms ? null : (sourceDbms, targetDbms));
+
+    private static List<string> SelectColumnsCore(IBulkValueCodec sourceCodec, IBulkValueCodec targetCodec, TableInfo source, TableInfo target, TableRule rule,
+                                                (Dbms Source, Dbms Target)? cross)
     {
-        ArgumentNullException.ThrowIfNull(codec);
+        ArgumentNullException.ThrowIfNull(sourceCodec);
+        ArgumentNullException.ThrowIfNull(targetCodec);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(rule);
@@ -32,7 +57,54 @@ public static class PrecheckRules
                 continue;
             }
 
-            if (codec.IsSupported(column.DataType) && codec.IsSupported(t.DataType))
+            if (cross is { } pair)
+            {
+                var map = CrossTypeMap.Map(pair.Source, pair.Target, column);
+                // 값은 원본 형식을 대상 DBMS 로 옮긴 형식(BindType)으로 묶는다(D3): 대상 코덱이 그 형식을 쓸 수 있어야 한다. 대상 열 형식과의 차이는 서버가 바꾼다.
+                if (!map.IsDropped && sourceCodec.IsReadable(column.DataType) && targetCodec.IsSupported(map.BindType!))
+                {
+                    result.Add(column.Name);
+                }
+
+                continue;
+            }
+
+            if (sourceCodec.IsSupported(column.DataType) && targetCodec.IsSupported(t.DataType))
+            {
+                result.Add(column.Name);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 교차 복사(<paramref name="sourceDbms"/> ≠ <paramref name="targetDbms"/>)에서 대상으로 옮길 형식이 없거나 읽을 수 없어 복사에서 빠지는 열 이름.
+    /// <see cref="CompareColumns(IBulkValueCodec, IBulkValueCodec, TableInfo, TableInfo, TableRule, string?, Dbms, Dbms, bool)"/> 의
+    /// <see cref="CopyCheckCodes.ColumnDropped"/> 판정과 같다(가상·건너뜀·대상에 없는 열은 뺀 열이 아니다). 같은 DBMS 면 빈 집합.
+    /// </summary>
+    public static HashSet<string> CrossDroppedColumns(IBulkValueCodec sourceCodec, TableInfo source, TableInfo target, TableRule rule, Dbms sourceDbms, Dbms targetDbms)
+    {
+        ArgumentNullException.ThrowIfNull(sourceCodec);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(rule);
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        if (sourceDbms == targetDbms)
+        {
+            return result;
+        }
+
+        var targetColumns = target.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
+        var skip = rule.SkipColumns.ToHashSet(StringComparer.Ordinal);
+        foreach (var column in source.Columns)
+        {
+            if (column.IsVirtual || skip.Contains(column.Name) || !targetColumns.TryGetValue(column.Name, out var t) || t.IsVirtual)
+            {
+                continue;
+            }
+
+            if (CrossTypeMap.Map(sourceDbms, targetDbms, column).IsDropped || !sourceCodec.IsReadable(column.DataType))
             {
                 result.Add(column.Name);
             }
@@ -91,10 +163,34 @@ public static class PrecheckRules
 
     // ---- 열 비교(설계 7장) ----
 
-    /// <summary>원본과 대상의 열 차이. 항목의 <see cref="CheckItem.Table"/> 은 <paramref name="key"/>(규칙 키, 없으면 <c>rule.Table</c>)다.</summary>
+    /// <summary>원본과 대상의 열 차이. 항목의 <see cref="CheckItem.Table"/> 은 <paramref name="key"/>(규칙 키, 없으면 <c>rule.Table</c>)다. 코덱 하나로 양쪽 형식을 본다(같은 DBMS).</summary>
     public static IReadOnlyList<CheckItem> CompareColumns(IBulkValueCodec codec, TableInfo source, TableInfo target, TableRule rule, string? key = null)
+        => CompareColumns(codec, codec, source, target, rule, key);
+
+    /// <summary>
+    /// <see cref="CompareColumns(IBulkValueCodec, TableInfo, TableInfo, TableRule, string?)"/> 와 같되 원본 열 형식은 <paramref name="sourceCodec"/>,
+    /// 대상 열 형식은 <paramref name="targetCodec"/> 으로 본다(xdb-copy XC2).
+    /// </summary>
+    public static IReadOnlyList<CheckItem> CompareColumns(IBulkValueCodec sourceCodec, IBulkValueCodec targetCodec, TableInfo source, TableInfo target, TableRule rule,
+                                                          string? key = null)
+        => CompareColumnsCore(sourceCodec, targetCodec, source, target, rule, key, null, false);
+
+    /// <summary>
+    /// 교차 복사(<paramref name="sourceDbms"/> ≠ <paramref name="targetDbms"/>)의 열 차이. 같은 DBMS 면 위 함수와 같다.
+    /// 교차에서는 대상으로 옮길 형식이 없거나 읽을 수 없는 열이 오류(<c>UnsupportedType</c>)가 아니라 <see cref="CopyCheckCodes.ColumnDropped"/> 확인 항목이고(그 열은 복사 열에서 빠진다,
+    /// <see cref="SelectColumns(IBulkValueCodec, IBulkValueCodec, TableInfo, TableInfo, TableRule, Dbms, Dbms, bool)"/>),
+    /// 형식을 바꿔 옮기는 열은 표마다 <see cref="CopyCheckCodes.TypeConverted"/> 한 항목으로 알린다.
+    /// 빠지는 열이 대상에서 NOT NULL 이고 기본값이 없으면 <c>TargetRequiredColumnMissing</c> 오류는 그대로다(대상 구조가 원본에서 만들어지면(<paramref name="targetFromSource"/>) 그 열도 만들지 않으므로 아니다).
+    /// </summary>
+    public static IReadOnlyList<CheckItem> CompareColumns(IBulkValueCodec sourceCodec, IBulkValueCodec targetCodec, TableInfo source, TableInfo target, TableRule rule,
+                                                          string? key, Dbms sourceDbms, Dbms targetDbms, bool targetFromSource = false)
+        => CompareColumnsCore(sourceCodec, targetCodec, source, target, rule, key, sourceDbms == targetDbms ? null : (sourceDbms, targetDbms), targetFromSource);
+
+    private static List<CheckItem> CompareColumnsCore(IBulkValueCodec sourceCodec, IBulkValueCodec targetCodec, TableInfo source, TableInfo target, TableRule rule,
+                                                      string? key, (Dbms Source, Dbms Target)? cross, bool targetFromSource)
     {
-        ArgumentNullException.ThrowIfNull(codec);
+        ArgumentNullException.ThrowIfNull(sourceCodec);
+        ArgumentNullException.ThrowIfNull(targetCodec);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(rule);
@@ -102,6 +198,8 @@ public static class PrecheckRules
         var items = new List<CheckItem>();
         var skip = rule.SkipColumns.ToHashSet(StringComparer.Ordinal);
         var targetColumns = target.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
+        var dropped = new HashSet<string>(StringComparer.Ordinal);
+        var converted = new List<(string Column, string DataType, CrossColumnMapping Map)>();
 
         foreach (var s in source.Columns)
         {
@@ -123,9 +221,27 @@ public static class PrecheckRules
                 continue;
             }
 
-            if (!codec.IsSupported(s.DataType) || !codec.IsSupported(t.DataType))
+            CrossColumnMapping? map = null;
+            if (cross is { } pair)
             {
-                var unsupported = codec.IsSupported(s.DataType) ? t.DataType : s.DataType;
+                map = CrossTypeMap.Map(pair.Source, pair.Target, s);
+                if (map.IsDropped || !sourceCodec.IsReadable(s.DataType))
+                {
+                    dropped.Add(s.Name);
+                    items.Add(new CheckItem(table, CopyCheckCodes.ColumnDropped, CheckLevel.Confirm,
+                        $"{table}.{s.Name}: {s.DataType} 열은 {pair.Target} 로 옮길 수 없어 복사에서 뺍니다({DropReasonText(map.DropReason)}).") { Column = s.Name });
+                    continue;
+                }
+            }
+
+            // 교차: 값은 옮긴 형식(BindType, D3)으로 묶으므로 대상 코덱이 그 형식을 쓸 수 있어야 한다(대상 열 형식은 NarrowerType 비교에만 쓴다).
+            var writeType = map is null ? t.DataType : map.BindType!;
+
+            // 교차: 원본 쪽은 위에서 읽을 수 있는 형식만 남겼다(읽기 지원 = IsReadable). 같은 DBMS: 원본 형식도 지원 형식이어야 한다.
+            var sourceOk = map is not null || sourceCodec.IsSupported(s.DataType);
+            if (!sourceOk || !targetCodec.IsSupported(writeType))
+            {
+                var unsupported = sourceOk ? writeType : s.DataType;
                 items.Add(new CheckItem(table, "UnsupportedType", CheckLevel.Error,
                     $"{table}.{s.Name}: 복사가 지원하지 않는 형식({unsupported})입니다. 이 열을 건너뛰거나 규칙에서 빼세요.")
                 {
@@ -142,10 +258,30 @@ public static class PrecheckRules
                 continue;
             }
 
+            // DDL 에만 해당하는 변환(IDENTITY → 일반 열, RAW → BLOB, 긴 문자열 → CLOB …)은 대상 표를 원본에서 만들 때만 뜻이 있다(있는 대상 표는 이미 그 구조다).
+            // 값에 닿는 변환(BINARY_* → NUMBER, 시간대 지역 → 오프셋)은 늘 알린다.
+            if (map is { Kind: CrossMapKind.Converted } && (map.Note is CrossNote.BinaryAsNumber or CrossNote.TimeZoneRegionToOffset || targetFromSource))
+            {
+                converted.Add((s.Name, s.DataType, map));
+            }
+
             if (NarrowerReason(s, t) is { } reason)
             {
                 items.Add(new CheckItem(table, "NarrowerType", CheckLevel.Confirm, $"{table}.{s.Name}: {reason}") { Column = s.Name });
             }
+        }
+
+        if (cross is { } dropping && dropped.Count > 0)
+        {
+            items.AddRange(DroppedKeyAndFilterItems(table, dropping.Target, source, target, rule, dropped));
+        }
+
+        if (converted.Count > 0 && cross is { } converting)
+        {
+            var valueLevel = converted.Any(c => c.Map.Note is CrossNote.BinaryAsNumber or CrossNote.TimeZoneRegionToOffset);
+            items.Add(new CheckItem(table, CopyCheckCodes.TypeConverted, valueLevel ? CheckLevel.Confirm : CheckLevel.Pass,
+                $"{table}: {converting.Target} 로 옮기며 형식을 바꾸는 열 — "
+                + string.Join(", ", converted.Select(c => $"{c.Column}({c.DataType}: {NoteText(c.Map.Note)})")) + "."));
         }
 
         // 대상에만 있는 열 중 값이 꼭 필요한 열. 원본에서 읽지 못하는 열(가상·건너뜀)도 같다.
@@ -156,7 +292,14 @@ public static class PrecheckRules
                 continue;
             }
 
-            var read = source.Columns.Any(s => string.Equals(s.Name, t.Name, StringComparison.Ordinal) && !s.IsVirtual && !skip.Contains(s.Name));
+            // 교차: 옮길 수 없어 뺀 열은 값을 가져올 수 없다. 단 대상 구조를 원본에서 만들면 그 열은 만들지 않으므로 필요한 열이 아니다.
+            if (targetFromSource && dropped.Contains(t.Name))
+            {
+                continue;
+            }
+
+            var read = !dropped.Contains(t.Name)
+                       && source.Columns.Any(s => string.Equals(s.Name, t.Name, StringComparison.Ordinal) && !s.IsVirtual && !skip.Contains(s.Name));
             if (!read)
             {
                 items.Add(new CheckItem(table, "TargetRequiredColumnMissing", CheckLevel.Error,
@@ -167,13 +310,128 @@ public static class PrecheckRules
         return items;
     }
 
+    // 키(원본·대상 PK)·기간 조건·부모 키 연결 열이 복사에서 빠지면 오류(KeyColumnDropped): 키가 없어져 행을 구별할 수 없고,
+    // 조건 열은 SELECT·DELETE 가 걸러내는데 넣는 행에는 NULL 이 들어가 다시 실행할 때 행이 겹친다. 열마다 한 항목.
+    private static List<CheckItem> DroppedKeyAndFilterItems(string table, Dbms targetDbms, TableInfo source, TableInfo target, TableRule rule, HashSet<string> dropped)
+    {
+        var keyColumns = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var info in new[] { source, target })
+        {
+            if (info.Constraints.FirstOrDefault(c => c.Kind == ConstraintKind.PrimaryKey) is { } pk)
+            {
+                keyColumns.UnionWith(pk.Columns);
+            }
+        }
+
+        var items = new List<CheckItem>();
+        foreach (var column in dropped.Order(StringComparer.Ordinal))
+        {
+            var roles = new List<string>();
+            var reasons = new List<string>();
+            if (keyColumns.Contains(column))
+            {
+                roles.Add("키");
+                reasons.Add("행을 구별할 키가 없어집니다.");
+            }
+
+            if (rule.PeriodColumns.Any(p => string.Equals(p.Column, column, StringComparison.Ordinal)))
+            {
+                roles.Add("기간 조건");
+                reasons.Add("기간 조건에 쓰는 열인데 넣는 행에서는 NULL 이 되어 다시 실행하면 행이 겹칩니다.");
+            }
+
+            if (rule.Parent is { } parent && parent.ChildColumns.Contains(column, StringComparer.Ordinal))
+            {
+                roles.Add("부모 키 연결");
+                reasons.Add("부모 키 연결 조건에 쓰는 열인데 넣는 행에서는 NULL 이 되어 다시 실행하면 행이 겹칩니다.");
+            }
+
+            if (roles.Count == 0)
+            {
+                continue;
+            }
+
+            items.Add(new CheckItem(table, CopyCheckCodes.KeyColumnDropped, CheckLevel.Error,
+                $"{table}.{column}: {string.Join("·", roles)} 열을 {targetDbms} 로 옮길 형식이 없어 복사할 수 없습니다. {string.Join(" ", reasons)} 이 표를 규칙에서 빼세요.") { Column = column });
+        }
+
+        return items;
+    }
+
+    // ---- 교차 복사 안내 ----
+
+    /// <summary>
+    /// 교차 복사로 Tibero 에 넣는 표의 BLOB 안내(<see cref="CopyCheckCodes.BlobEmptyToNull"/>, 통과 항목): 길이 0 인 BLOB 값은 Tibero 에서 NULL 이 된다.
+    /// 복사 열(<paramref name="columns"/>) 가운데 BLOB 으로 옮기는 열이 없거나 교차가 아니거나 대상이 Tibero 가 아니면 null.
+    /// </summary>
+    public static CheckItem? CrossBlobNote(Dbms sourceDbms, Dbms targetDbms, TableInfo source, IReadOnlyList<string> columns, string table)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(columns);
+        if (sourceDbms == targetDbms || targetDbms != Dbms.Tibero)
+        {
+            return null;
+        }
+
+        var blobs = source.Columns
+            .Where(c => columns.Contains(c.Name, StringComparer.Ordinal) && CrossTypeMap.Map(sourceDbms, targetDbms, c).BindType == "BLOB")
+            .Select(c => c.Name)
+            .ToList();
+        return blobs.Count == 0
+            ? null
+            : new CheckItem(table, CopyCheckCodes.BlobEmptyToNull, CheckLevel.Pass,
+                $"{table}: BLOB 열 {string.Join(", ", blobs)} — 길이가 0 인 BLOB 값은 Tibero 에서 NULL 이 됩니다.");
+    }
+
+    /// <summary>
+    /// 교차 복사로 Tibero 에 넣을 때의 문자셋 안내(<see cref="CopyCheckCodes.CrossCharset"/>, 확인 항목, 작업 전체에 하나).
+    /// 문자 열(CHAR·VARCHAR2·CLOB·LONG)을 하나라도 복사할 때만 낸다. 대상 문자셋을 조회하지 않고 늘 같은 글을 낸다.
+    /// </summary>
+    public static CheckItem? CrossCharsetNote(Dbms sourceDbms, Dbms targetDbms, IEnumerable<CopyTablePlan> plans)
+    {
+        ArgumentNullException.ThrowIfNull(plans);
+        if (sourceDbms == targetDbms || targetDbms != Dbms.Tibero)
+        {
+            return null;
+        }
+
+        var hasText = plans.Any(p => p.Source.Columns.Any(c => p.Columns.Contains(c.Name, StringComparer.Ordinal)
+                                                              && CrossTypeMap.Normalize(c.DataType) is "VARCHAR2" or "CHAR" or "CLOB" or "LONG"));
+        return hasText
+            ? new CheckItem(null, CopyCheckCodes.CrossCharset, CheckLevel.Confirm,
+                "문자 열을 Tibero 로 옮깁니다. 대상 문자셋 밖 글자는 실패하거나 바뀔 수 있습니다. 대상 DB 의 문자셋이 원본보다 좁은지 확인하세요.")
+            : null;
+    }
+
+    private static string DropReasonText(CrossDropReason reason) => reason switch
+    {
+        CrossDropReason.LongSource => "LONG·LONG RAW 는 대량 읽기를 지원하지 않음",
+        CrossDropReason.RowId => "ROWID 는 다른 DB 에서 뜻이 없음",
+        CrossDropReason.LocalTimeZone => "TIMESTAMP WITH LOCAL TIME ZONE 은 옮기지 않음",
+        _ => "대량 읽기를 지원하지 않는 형식",
+    };
+
+    private static string NoteText(CrossNote note) => note switch
+    {
+        CrossNote.BinaryAsNumber => "NUMBER 로 옮김, NaN·무한대 값은 그 행이 실패함",
+        CrossNote.TimeZoneRegionToOffset => "시간대 지역 이름은 그 시각의 UTC 오프셋으로 바뀜",
+        CrossNote.RawToBlob => "2000바이트가 넘는 RAW 는 BLOB 으로 옮김",
+        CrossNote.LongStringToClob => "4000바이트가 넘는 VARCHAR2 는 CLOB 으로 옮김",
+        CrossNote.LongNationalStringToNClob => "대상 한도를 넘는 NVARCHAR2·NCHAR 는 NCLOB 으로 옮김",
+        CrossNote.LongToClob => "CLOB 으로 옮김",
+        CrossNote.LongRawToBlob => "BLOB 으로 옮김",
+        CrossNote.IdentityToPlain => "IDENTITY 가 일반 열이 됨",
+        _ => "형식을 바꿔 옮김",
+    };
+
     // ---- 마스킹(설계 8.5) ----
 
     /// <summary>
     /// 마스킹 규칙 점검. PK·UK 열과 부모 키 규칙의 연결 열에는 마스킹을 걸 수 없다(<c>MaskOnKey</c>).
     /// 가리는 열이 있으면 목록을 <c>MaskedColumns</c> 통과 항목으로 보여 준다. 규칙이 원본에 없는 열이나 열 형식에 못 쓰는 종류면 오류다.
     /// </summary>
-    public static IReadOnlyList<CheckItem> CheckMasks(TableRule rule, TableInfo source, IReadOnlyList<string> keyColumns, string? key = null)
+    public static IReadOnlyList<CheckItem> CheckMasks(TableRule rule, TableInfo source, IReadOnlyList<string> keyColumns, string? key = null,
+                                                      IReadOnlySet<string>? dropped = null)
     {
         if (rule.Masks.Count == 0)
         {
@@ -205,8 +463,8 @@ public static class PrecheckRules
                 continue;
             }
 
-            // 복사하지 않는 열은 가릴 값도 없다.
-            if (column.IsVirtual || skip.Contains(mask.Column))
+            // 복사하지 않는 열(가상·건너뜀·교차 복사에서 빠지는 열)은 가릴 값도 없다.
+            if (column.IsVirtual || skip.Contains(mask.Column) || dropped?.Contains(mask.Column) == true)
             {
                 continue;
             }

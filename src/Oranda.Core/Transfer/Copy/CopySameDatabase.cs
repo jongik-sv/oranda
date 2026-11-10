@@ -41,12 +41,20 @@ public static class CopySameDatabase
     }
 
     /// <summary>
-    /// 같은 DB 일 때 대상 정리가 원본 행을 지우는 규칙(규칙 사이 비교, <see cref="CopyOwners.TargetsReadAsSource"/>). 다른 DB 면 빈 목록.
+    /// 원본과 대상이 같은 DB 인가(DBMS 까지 본다). DBMS 가 다르면 DbKey 를 견주기 전에 false 다(xdb-copy D18: Oracle 과 Tibero 의 DbKey 가 우연히 같아도 다른 DB).
+    /// 같은 DBMS 면 <see cref="IsSameDatabase(string, ServerInfo, string, ServerInfo)"/> 그대로.
+    /// </summary>
+    public static bool IsSameDatabase(Dbms sourceDbms, string sourceDbKey, ServerInfo source, Dbms targetDbms, string targetDbKey, ServerInfo target)
+        => sourceDbms == targetDbms && IsSameDatabase(sourceDbKey, source, targetDbKey, target);
+
+    /// <summary>
+    /// 같은 DB 일 때 대상 정리가 원본 행을 지우는 규칙(규칙 사이 비교, <see cref="CopyOwners.TargetsReadAsSource"/>). 다른 DB(DBMS 가 다름 포함)면 빈 목록.
     /// </summary>
     public static IReadOnlyList<(string Key, string Table)> SameSourceTargets(CopySessions sessions, CopyJob job)
     {
         ArgumentNullException.ThrowIfNull(sessions);
-        return IsSameDatabase(sessions.Source.DbKey, sessions.Source.Server, sessions.Target.DbKey, sessions.Target.Server)
+        return IsSameDatabase(sessions.Source.Profile.Dbms, sessions.Source.DbKey, sessions.Source.Server,
+                              sessions.Target.Profile.Dbms, sessions.Target.DbKey, sessions.Target.Server)
             ? CopyOwners.TargetsReadAsSource(job)
             : [];
     }

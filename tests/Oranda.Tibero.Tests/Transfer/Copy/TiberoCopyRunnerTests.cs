@@ -62,12 +62,15 @@ public sealed class TiberoCopyRunnerTests
         Assert.IsType<TiberoBulkValueCodec>(BaseField(runner, typeof(CopyRunner), "_codec"));
         Assert.IsType<TiberoRecreateStep>(BaseField(runner, typeof(CopyRunner), "_recreate"));
 
-        // 주 생성자 매개변수는 컴파일러가 만든 필드(<이름>P)로 잡힌다.
-        Assert.IsType<TiberoSqlCatalog>(BaseField(precheck, typeof(CopyPrecheckService), "<catalog>P"));
-        Assert.IsType<TiberoErrorClassifier>(BaseField(precheck, typeof(CopyPrecheckService), "<errors>P"));
-        Assert.IsType<TiberoCopyPrecheckDialect>(BaseField(precheck, typeof(CopyPrecheckService), "<dialect>P"));
-        Assert.IsType<TiberoCopyDialect>(BaseField(precheck, typeof(CopyPrecheckService), "<statements>P"));
-        Assert.IsType<TiberoBulkValueCodec>(BaseField(precheck, typeof(CopyPrecheckService), "<codec>P"));
+        // 주 생성자 매개변수는 컴파일러가 만든 필드(<이름>P)로 잡힌다. 같은 DBMS 복사 = 원본·대상에 같은 벌(XC2).
+        var parts = Assert.IsType<CopyDbmsParts>(BaseField(precheck, typeof(CopyPrecheckService), "<target>P"));
+        Assert.Same(parts, BaseField(precheck, typeof(CopyPrecheckService), "<source>P"));
+        Assert.Equal(Dbms.Tibero, parts.Dbms);
+        Assert.IsType<TiberoSqlCatalog>(parts.Catalog);
+        Assert.IsType<TiberoErrorClassifier>(parts.Errors);
+        Assert.IsType<TiberoCopyPrecheckDialect>(parts.PrecheckDialect);
+        Assert.IsType<TiberoCopyDialect>(parts.Dialect);
+        Assert.IsType<TiberoBulkValueCodec>(parts.Codec);
     }
 
     private static object? BaseField(object instance, Type baseType, string name)

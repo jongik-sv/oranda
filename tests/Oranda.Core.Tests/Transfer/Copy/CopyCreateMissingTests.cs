@@ -295,12 +295,109 @@ public sealed class CopyCreateMissingTests
         Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.CreateTable);
     }
 
+    // ---- 원본·대상 부품 나누기(xdb-copy XC2) ----
+
+    [Fact]
+    public async Task Runner_sends_read_only_with_the_source_dialect_to_the_source_and_savepoints_with_the_target_dialect_to_the_target()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: false,
+            sourceParts: Parts(new NoCatalog(), new FakePrecheckDialect(), new FakeDialect("SRC")),
+            targetParts: Parts(new NoCatalog(), new FakePrecheckDialect(), new FakeDialect("TGT")));
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        var readOnly = Assert.Single(f.Bulk.Calls, c => c.Text.Contains("SET TRANSACTION READ ONLY", StringComparison.Ordinal));
+        Assert.Equal("SRC SET TRANSACTION READ ONLY", readOnly.Text);
+        Assert.Same(f.Source, readOnly.Session);
+        var savepoints = f.Bulk.Calls.Where(c => c.Text.Contains("SAVEPOINT", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(savepoints);
+        Assert.All(savepoints, c =>
+        {
+            Assert.StartsWith("TGT ", c.Text, StringComparison.Ordinal);
+            Assert.Same(f.Target, c.Session);
+        });
+    }
+
+    [Fact]
+    public async Task Precheck_takes_the_read_consistency_parameter_and_hint_from_the_source_dialect()
+    {
+        // 대상 벌의 방언은 파라미터가 없다(null). 원본 벌이 묻고 원본 세션에서 읽은 값(900)으로 안내한다.
+        var p = new PrecheckFixture(createIfMissing: false, targetHasTable: true,
+            sourceParts: Parts(new FakeCatalog(), new FakePrecheckDialect("undo_retention", "SRC "), new FakeDialect()));
+
+        var report = await p.RunAsync();
+
+        var item = Assert.Single(report.Items, i => i.Code == "ReadConsistency");
+        Assert.Equal("SRC 읽기 일관성 900", item.Message);
+    }
+
+    [Fact]
+    public async Task Runner_asks_the_source_dialect_for_server_names_and_the_source_recreate_step_for_foreign_keys_on_the_source_session()
+    {
+        // 서버가 지은 제약 이름인지는 원본 이름을 보는 판정이라 원본 방언이, 작업 안 FK 는 원본 세션에서 원본 벌의 받아 두기가 읽는다.
+        var sourceRecreate = new FakeRecreateStep();
+        var targetRecreate = new FakeRecreateStep();
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: true, sourcePrimaryKey: true,
+            sourceParts: Parts(new NoCatalog(), new FakePrecheckDialect(), new FakeDialect(serverName: "PK_ORDERS"), recreate: sourceRecreate),
+            targetParts: Parts(new NoCatalog(), new FakePrecheckDialect(), new FakeDialect(), recreate: targetRecreate));
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        var create = f.Execution.Calls[0].Statement.Text;
+        Assert.Contains("PRIMARY KEY (\"ID\")", create, StringComparison.Ordinal);
+        Assert.DoesNotContain("CONSTRAINT", create, StringComparison.Ordinal); // 원본 방언이 PK_ORDERS 를 서버 이름으로 봤다(대상 방언은 아니라고 본다)
+        Assert.Same(f.Source, sourceRecreate.ForeignKeySession);
+        Assert.Null(targetRecreate.ForeignKeySession);
+    }
+
+    [Fact]
+    public async Task Runner_shapes_rows_with_the_source_codec_not_the_target_codec()
+    {
+        // 마스킹을 건 열의 형식 해석(RowShape.Create → KindOf)은 원본 값을 보므로 원본 벌의 코덱이 한다.
+        var sourceCodec = new FakeCodec();
+        var targetCodec = new FakeCodec();
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: false, masks: [new MaskRule("NAME", MaskKind.Null)],
+            sourceParts: Parts(new NoCatalog(), new FakePrecheckDialect(), new FakeDialect(), codec: sourceCodec),
+            targetParts: Parts(new NoCatalog(), new FakePrecheckDialect(), new FakeDialect(), codec: targetCodec));
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Contains("VARCHAR2", sourceCodec.KindOfCalls);
+        Assert.Empty(targetCodec.KindOfCalls);
+    }
+
+    [Fact]
+    public async Task Precheck_reads_source_access_and_the_read_consistency_parameter_through_the_source_catalog()
+    {
+        var sourceLog = new List<string>();
+        var targetLog = new List<string>();
+        var p = new PrecheckFixture(createIfMissing: false, targetHasTable: true,
+            sourceParts: Parts(new FakeCatalog(sourceLog), new FakePrecheckDialect("undo_retention"), new FakeDialect()),
+            targetParts: Parts(new FakeCatalog(targetLog), new FakePrecheckDialect(), new FakeDialect()));
+
+        await p.RunAsync();
+
+        // 원본 세션이 어떤 계정·권한인지는 원본 카탈로그로, 같은 시점 읽기 파라미터도 원본 카탈로그로 묻는다. 대상 카탈로그는 둘 다 묻지 않는다.
+        Assert.Single(sourceLog, x => x == "copy.session_user");
+        Assert.Single(sourceLog, x => x == "copy.parameter_value");
+        Assert.Single(targetLog, x => x == "copy.session_user");
+        Assert.DoesNotContain("copy.parameter_value", targetLog);
+    }
+
+    /// <summary>시험 부품 한 벌. 분류기는 늘 같은 가짜이고, 코덱·다시 만들기 받아 두기는 주지 않으면 새 가짜다.</summary>
+    private static CopyDbmsParts Parts(Oranda.Core.Catalog.ISqlCatalog catalog, ICopyPrecheckDialect precheckDialect, ICopyDialect dialect,
+                                       IBulkValueCodec? codec = null, ICopyRecreateStep? recreate = null) =>
+        new(Dbms.Oracle, catalog, new FakeClassifier(), dialect, precheckDialect, codec ?? new FakeCodec(), recreate ?? new FakeRecreateStep());
+
     // ---- 가짜 협력자 ----
 
     private sealed class PrecheckFixture
     {
         public PrecheckFixture(bool createIfMissing, bool targetHasTable, ConnectionEnvironment environment = ConnectionEnvironment.Development,
-                               bool otherObjectExists = false, bool canCreateTable = true)
+                               bool otherObjectExists = false, bool canCreateTable = true, CopyDbmsParts? sourceParts = null, CopyDbmsParts? targetParts = null)
         {
             Job = new CopyJob
             {
@@ -318,8 +415,9 @@ public sealed class CopyCreateMissingTests
             }
 
             Policy = new RecordingPolicy();
+            var parts = Parts(new FakeCatalog(), new FakePrecheckDialect(), new FakeDialect());
             Service = new CopyPrecheckService(new FakePrecheckBulk(Source, Target, targetHasTable, otherObjectExists, canCreateTable), metadata, Policy,
-                new FakeCatalog(), new FakeClassifier(), new FakePrecheckDialect(), new FakeDialect(), new FakeCodec());
+                sourceParts ?? parts, targetParts ?? parts);
         }
 
         public CopyJob Job { get; }
@@ -346,10 +444,13 @@ public sealed class CopyCreateMissingTests
     }
 
     /// <summary>카탈로그 글 대신 id 를 그대로 글로 돌려준다(가짜 대량 읽기가 id 로 답한다).</summary>
-    private sealed class FakeCatalog : Oranda.Core.Catalog.ISqlCatalog
+    private sealed class FakeCatalog(List<string>? log = null) : Oranda.Core.Catalog.ISqlCatalog
     {
-        public Oranda.Core.Catalog.CatalogQuery Get(string id, ServerInfo server) =>
-            new(new Oranda.Core.Catalog.CatalogHeader(id, 11, [], Oranda.Core.Catalog.CatalogLicense.None, Oranda.Core.Catalog.CatalogRac.V, id + ".sql"), id);
+        public Oranda.Core.Catalog.CatalogQuery Get(string id, ServerInfo server)
+        {
+            log?.Add(id);
+            return new(new Oranda.Core.Catalog.CatalogHeader(id, 11, [], Oranda.Core.Catalog.CatalogLicense.None, Oranda.Core.Catalog.CatalogRac.V, id + ".sql"), id);
+        }
     }
 
     /// <summary>점검 조회(id)에 답한다. 모르는 id 는 행 없음, <c>SELECT COUNT(*)</c> 는 2.</summary>
@@ -363,6 +464,7 @@ public sealed class CopyCreateMissingTests
             object?[][] rows = query.Text switch
             {
                 "copy.session_user" => [[isTarget ? "DST" : "SRC"]],
+                "copy.parameter_value" when !isTarget => [[900L]],
                 "copy.session_privs" when isTarget && canCreateTable => [["CREATE TABLE"]],
                 "copy.target_is_table" => [[targetHasTable ? 1L : 0L]],
                 "copy.object_exists" => [[otherObjectExists ? 1L : 0L]],
@@ -391,7 +493,8 @@ public sealed class CopyCreateMissingTests
         }
     }
 
-    private sealed class FakePrecheckDialect : ICopyPrecheckDialect
+    /// <summary><paramref name="readConsistencyParameter"/> 를 주면 그 이름으로 원본 파라미터를 묻고, 안내 글 앞에 <paramref name="hintTag"/> 와 뒤에 읽은 값을 붙인다.</summary>
+    private sealed class FakePrecheckDialect(string? readConsistencyParameter = null, string hintTag = "") : ICopyPrecheckDialect
     {
         public bool SupportsReadPrivilege => false;
 
@@ -404,9 +507,10 @@ public sealed class CopyCreateMissingTests
 
         public string RecycleBinNote(string? tablespace) => string.Empty;
 
-        public string? ReadConsistencyParameter => null;
+        public string? ReadConsistencyParameter => readConsistencyParameter;
 
-        public (CheckLevel Level, string Message) ReadConsistencyHint(long estimatedSeconds, long? retention) => (CheckLevel.Pass, "읽기 일관성");
+        public (CheckLevel Level, string Message) ReadConsistencyHint(long estimatedSeconds, long? retention) =>
+            (CheckLevel.Pass, hintTag + "읽기 일관성" + (retention is { } r ? " " + r.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty));
 
         public string ChildRecordFoundError => "ORA-02292";
     }
@@ -414,15 +518,16 @@ public sealed class CopyCreateMissingTests
     private sealed class Fixture
     {
         public Fixture(TargetAction action, bool createMissing, ConnectionEnvironment environment = ConnectionEnvironment.Development,
-                       string targetUser = "DST")
+                       string targetUser = "DST", CopyDbmsParts? sourceParts = null, CopyDbmsParts? targetParts = null,
+                       IReadOnlyList<MaskRule>? masks = null, bool sourcePrimaryKey = false)
         {
-            Rule = new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = createMissing };
+            Rule = new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = createMissing, Masks = masks ?? [] };
             Job = new CopyJob
             {
                 Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
                 SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==", Tables = [Rule],
             };
-            var source = Orders("SRC");
+            var source = Orders("SRC", sourcePrimaryKey);
             Plan = new CopyTablePlan(Rule, source, Orders("DST"), ["ID", "NAME"], ["ID"]) { CreateMissing = createMissing };
             var preview = new List<PreviewStatement>();
             if (!createMissing)
@@ -449,7 +554,8 @@ public sealed class CopyCreateMissingTests
             };
             Bulk = new FakeBulk(this);
             RunRecord = new FakeRunRecord();
-            Runner = new CopyRunner(Bulk, Execution, new FakeRunLog(RunRecord), new NoCatalog(), new FakeClassifier(), new FakeDialect(), new FakeCodec(), new FakeRecreateStep());
+            var parts = Parts(new NoCatalog(), new FakePrecheckDialect(), new FakeDialect());
+            Runner = new CopyRunner(Bulk, Execution, new FakeRunLog(RunRecord), sourceParts ?? parts, targetParts ?? parts);
         }
 
         public TableRule Rule { get; }
@@ -485,7 +591,7 @@ public sealed class CopyCreateMissingTests
             new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false),
             new ResolvedPeriod(null, null), null, new CopyRunControl(), CancellationToken.None);
 
-        private static TableInfo Orders(string owner) =>
+        private static TableInfo Orders(string owner, bool primaryKey = false) =>
             new(new DbObjectRef(owner, "ORDERS", "TABLE"),
             [
                 new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false },
@@ -493,6 +599,7 @@ public sealed class CopyCreateMissingTests
             ])
             {
                 Comment = "주문",
+                Constraints = primaryKey ? [new ConstraintInfo("PK_ORDERS", ConstraintKind.PrimaryKey, ["ID"])] : [],
             };
     }
 
@@ -506,6 +613,9 @@ public sealed class CopyCreateMissingTests
         public Func<BulkCall, BulkResult?>? OnArray { get; set; }
 
         public bool SourceReadFails { get; set; }
+
+        /// <summary>배열 DML·트랜잭션 제어 호출(세션 포함, 보낸 순서).</summary>
+        public List<BulkCall> Calls { get; } = [];
 
         public async IAsyncEnumerable<object?[]> StreamRowsAsync(ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds,
                                                                  ExecutionOptions options, [EnumeratorCancellation] CancellationToken ct)
@@ -532,6 +642,7 @@ public sealed class CopyCreateMissingTests
             var isDml = columns.Count > 0;
             fixture.All.Add((isDml ? "BULK " : "CTL ") + stmt.Text);
             var call = new BulkCall(s, stmt.Text, columns.Count, rows.Count);
+            Calls.Add(call);
             var result = OnArray?.Invoke(call) ?? new BulkResult(ExecutionStatus.Succeeded, isDml ? rows.Count : 0);
             if (isDml && result.Status == ExecutionStatus.Succeeded && ReferenceEquals(s, fixture.Target))
             {
@@ -594,9 +705,16 @@ public sealed class CopyCreateMissingTests
 
     private sealed class FakeCodec : IBulkValueCodec
     {
+        /// <summary>형식 해석(<see cref="KindOf"/>)을 부른 서버 형식(어느 벌의 코덱이 불렸는지 가린다).</summary>
+        public List<string> KindOfCalls { get; } = [];
+
         public bool IsSupported(string serverType) => true;
 
-        public BulkKind KindOf(string serverType) => serverType.StartsWith("VARCHAR", StringComparison.Ordinal) ? BulkKind.Text : BulkKind.Other;
+        public BulkKind KindOf(string serverType)
+        {
+            KindOfCalls.Add(serverType);
+            return serverType.StartsWith("VARCHAR", StringComparison.Ordinal) ? BulkKind.Text : BulkKind.Other;
+        }
 
         public BindDataType BindTypeOf(string serverType) => BindDataType.Varchar2;
 
@@ -619,16 +737,30 @@ public sealed class CopyCreateMissingTests
     {
         public Task<PreservedDdl> CaptureAsync(ISession target, string owner, string table, CancellationToken ct) => throw new NotSupportedException();
 
+        /// <summary>작업 안 FK 를 읽으러 온 원본 세션(불리지 않았으면 null).</summary>
+        public ISession? ForeignKeySession { get; private set; }
+
         public Task<IReadOnlyList<(string Parent, string Ddl, string? Name)>> SourceForeignKeysAsync(ISession source, string sourceOwner, string table,
-            IReadOnlySet<string> parents, string targetOwner, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<(string Parent, string Ddl, string? Name)>>([]);
+            IReadOnlySet<string> parents, string targetOwner, CancellationToken ct)
+        {
+            ForeignKeySession = source;
+            return Task.FromResult<IReadOnlyList<(string Parent, string Ddl, string? Name)>>([]);
+        }
 
         public Task<HashSet<string>> RecycleBinAsync(ISession target, string table, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    /// <summary>문장 글만 만드는 방언. <c>DropCreatedTable</c> 은 인터페이스 기본 구현(공통 글)을 그대로 쓴다.</summary>
-    private sealed class FakeDialect : ICopyDialect
+    /// <summary>
+    /// 문장 글만 만드는 방언. <c>DropCreatedTable</c> 은 인터페이스 기본 구현(공통 글)을 그대로 쓴다.
+    /// <paramref name="tag"/> 를 주면 트랜잭션 제어 글(READ ONLY·세이브포인트) 앞에 붙인다(어느 벌의 방언이 보냈는지 가린다).
+    /// </summary>
+    private sealed class FakeDialect(string? tag = null, string? serverName = null) : ICopyDialect
     {
+        private readonly string _prefix = tag is null ? string.Empty : tag + " ";
+
+        /// <summary><paramref name="serverName"/> 을 주면 그 이름만 서버가 지은 이름으로 본다(주지 않으면 공통 기본 판정).</summary>
+        public bool IsServerName(string name, string owner) => serverName is null ? CreateTableDdl.IsServerName(name) : name == serverName;
+
         private static SqlStatement Ddl(string text) => new(text, default, StatementKind.Ddl);
 
         public string BindPlaceholder(string bindName, string serverType) => ":" + bindName;
@@ -641,11 +773,11 @@ public sealed class CopyCreateMissingTests
 
         public SqlStatement NextValues(string owner, string sequence) => throw new NotSupportedException();
 
-        public SqlStatement SetTransactionReadOnly() => new("SET TRANSACTION READ ONLY", default, StatementKind.TransactionControl);
+        public SqlStatement SetTransactionReadOnly() => new(_prefix + "SET TRANSACTION READ ONLY", default, StatementKind.TransactionControl);
 
-        public SqlStatement Savepoint(string name) => new("SAVEPOINT " + name, default, StatementKind.TransactionControl);
+        public SqlStatement Savepoint(string name) => new(_prefix + "SAVEPOINT " + name, default, StatementKind.TransactionControl);
 
-        public SqlStatement RollbackToSavepoint(string name) => new("ROLLBACK TO SAVEPOINT " + name, default, StatementKind.TransactionControl);
+        public SqlStatement RollbackToSavepoint(string name) => new(_prefix + "ROLLBACK TO SAVEPOINT " + name, default, StatementKind.TransactionControl);
 
         public SqlStatement EnableTrigger(string owner, string trigger) => Ddl($"ALTER TRIGGER \"{owner}\".\"{trigger}\" ENABLE");
 

@@ -8,6 +8,7 @@ using Oranda.Core.History;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Text;
+using Oranda.Core.Transfer.Copy.CrossDbms;
 
 namespace Oranda.Core.Transfer.Copy;
 
@@ -28,6 +29,8 @@ namespace Oranda.Core.Transfer.Copy;
 /// DBMS 마다 다른 것은 생성자로 받는다(T5 결정 Q2): 문장(<see cref="ICopyDialect"/>, DBMS 무관 문장은 <see cref="CopyCommonStatements"/>)·
 /// 값 해석(<see cref="IBulkValueCodec"/>)·오류 분류(<see cref="IDbErrorClassifier"/>, 잡는 범위는 <see cref="CopyErrors"/>)·카탈로그 조회 글(<see cref="ISqlCatalog"/>)·
 /// 다시 만들기 전 받아 두기(<see cref="ICopyRecreateStep"/>). 키 서비스 등록은 그 DBMS 의 본문 없는 하위 형식(예: <c>OracleCopyRunner</c>)이 한다.
+/// 이것들은 원본 벌과 대상 벌(<see cref="CopyDbmsParts"/>)로 따로 받는다(xdb-copy XC2): 원본 세션의 문장·원본 FK·원본 값 해석은 원본 벌, 나머지는 대상 벌,
+/// 오류 분류는 둘을 합친 것(<see cref="CopyErrors.Combine"/>). 같은 DBMS 하위 형식은 같은 벌을 두 번 넘긴다.
 /// </para>
 /// </summary>
 public class CopyRunner : ICopyRunner
@@ -65,23 +68,47 @@ public class CopyRunner : ICopyRunner
     private readonly IBulkExecutionService _bulk;
     private readonly IExecutionService _execution;
     private readonly ICopyRunLog _runLog;
+    // 원본 벌: 원본 세션에 보내는 문장(SET TRANSACTION READ ONLY)·원본 FK 읽기·원본 이름 판정·원본 값 해석(마스킹·실패 행 키).
+    private readonly ICopyDialect _sourceDialect;
+    private readonly IBulkValueCodec _sourceCodec;
+    private readonly ICopyRecreateStep _sourceRecreate;
+
+    // 대상 벌: 그 밖의 모든 것(대상 조회·DML·DDL·되살리기·시퀀스·건수).
     private readonly ISqlCatalog _catalog;
-    private readonly IDbErrorClassifier _errors;
     private readonly ICopyDialect _dialect;
     private readonly IBulkValueCodec _codec;
     private readonly ICopyRecreateStep _recreate;
 
-    public CopyRunner(IBulkExecutionService bulk, IExecutionService execution, ICopyRunLog runLog, ISqlCatalog catalog,
-                      IDbErrorClassifier errors, ICopyDialect dialect, IBulkValueCodec codec, ICopyRecreateStep recreate)
+    /// <summary>원본·대상 두 DBMS 의 예외를 함께 알아보는 분류기(<see cref="CopyErrors.Combine"/>, 같은 DBMS 면 대상 것 그대로).</summary>
+    private readonly IDbErrorClassifier _errors;
+
+    /// <summary>원본·대상 DBMS. 다르면 교차 복사(xdb-copy XC6): 열을 <see cref="CrossTypeMap"/> 으로 옮기고 값을 이식 값으로 바꾼다.</summary>
+    private readonly Dbms _sourceDbms;
+    private readonly Dbms _targetDbms;
+
+    public CopyRunner(IBulkExecutionService bulk, IExecutionService execution, ICopyRunLog runLog, CopyDbmsParts source, CopyDbmsParts target)
     {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
         _bulk = bulk;
         _execution = execution;
         _runLog = runLog;
-        _catalog = catalog;
-        _errors = errors;
-        _dialect = dialect;
-        _codec = codec;
-        _recreate = recreate;
+        _sourceDbms = source.Dbms;
+        _targetDbms = target.Dbms;
+        _sourceDialect = source.Dialect;
+        _sourceCodec = source.Codec;
+        _sourceRecreate = source.Recreate;
+        _catalog = target.Catalog;
+        _dialect = target.Dialect;
+        _codec = target.Codec;
+        _recreate = target.Recreate;
+        _errors = CopyErrors.Combine(target.Errors, source.Errors);
+    }
+
+    /// <summary>같은 DBMS 복사: 같은 벌(<paramref name="parts"/>)을 원본·대상에 같은 인스턴스로 넘긴다(DBMS 별 하위 형식이 쓴다).</summary>
+    protected CopyRunner(IBulkExecutionService bulk, IExecutionService execution, ICopyRunLog runLog, CopyDbmsParts parts)
+        : this(bulk, execution, runLog, parts, parts)
+    {
     }
 
     public async Task<CopyRunResult> RunAsync(CopySessions sessions, CopyJob job, PrecheckReport report, CopyDecisions decisions,
@@ -407,8 +434,19 @@ public class CopyRunner : ICopyRunner
         }
     }
 
-    private static void EnsureSessions(CopySessions sessions)
+    private void EnsureSessions(CopySessions sessions)
     {
+        // 부품 벌(방언·코덱)은 자기 DBMS 의 것이다: 세션 DBMS 와 다르면 다른 DBMS 의 문장·값 코덱으로 실행하게 된다.
+        if (sessions.Source.Profile.Dbms != _sourceDbms)
+        {
+            throw new InvalidOperationException($"원본 세션의 DBMS({sessions.Source.Profile.Dbms})가 원본 복사 부품의 DBMS({_sourceDbms})와 다릅니다. 세션에 맞는 복사 실행기를 쓰세요.");
+        }
+
+        if (sessions.Target.Profile.Dbms != _targetDbms)
+        {
+            throw new InvalidOperationException($"대상 세션의 DBMS({sessions.Target.Profile.Dbms})가 대상 복사 부품의 DBMS({_targetDbms})와 다릅니다. 세션에 맞는 복사 실행기를 쓰세요.");
+        }
+
         if (sessions.Target.HasPendingTransaction)
         {
             // 첫 DDL(끄기)이나 COMMIT 이 남의 미커밋 작업을 확정하지 않게 한다. 복사는 전용 세션을 새로 연다(설계 8.1).
@@ -435,7 +473,7 @@ public class CopyRunner : ICopyRunner
 
         // 「같은 시점 기준 읽기」를 꺼도 원본에는 DB 수준 READ ONLY 를 건다(그때는 표마다 새로 연다, BeginTableReadAsync).
         run.ReadStartedAt = DateTimeOffset.Now;
-        var set = await ControlLoggedAsync(run, run.Source, _dialect.SetTransactionReadOnly(), ct,
+        var set = await ControlLoggedAsync(run, run.Source, _sourceDialect.SetTransactionReadOnly(), ct,
             run.Job.ConsistentRead ? "모든 표를 이 시점 기준으로 읽기" : "읽기 전용(표마다 새로 엽니다)");
         if (set.Status != ExecutionStatus.Succeeded)
         {
@@ -526,7 +564,7 @@ public class CopyRunner : ICopyRunner
             return;
         }
 
-        var step = _recreate;
+        var step = _recreate; // 대상 쪽 받아 두기·휴지통. 원본 FK 는 원본 벌(_sourceRecreate)이 읽는다.
         var noForeignKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var plan in plans)
         {
@@ -544,8 +582,9 @@ public class CopyRunner : ICopyRunner
                 table.Preserved = await step.CaptureAsync(run.Target, owner, plan.Rule.Table, ct);
                 // 작업 안 FK 는 CreateTableDdl 대신 원본 카탈로그로 만든다(ON DELETE·DEFERRABLE·UK 참조를 원본대로, 조정 결정 16).
                 // 서버가 지은 제약 이름(Oracle SYS_C…, Tibero <소유자>_CON<숫자>)은 명시하지 않고 대상 서버가 새로 짓게 둔다.
-                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, noForeignKeys, name => _dialect.IsServerName(name, sourceOwner));
-                table.JobForeignKeys = await step.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
+                // 서버가 지은 이름인지는 원본 이름을 보는 판정이라 원본 방언이 한다.
+                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, noForeignKeys, name => _sourceDialect.IsServerName(name, sourceOwner));
+                table.JobForeignKeys = await _sourceRecreate.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
                 table.BinBefore = await step.RecycleBinAsync(run.Target, plan.Rule.Table, ct);
                 run.Log($"지우기 전에 받아 둠: 트리거 {table.Preserved.Triggers.Count.ToString(CultureInfo.InvariantCulture)}개 · 권한 {table.Preserved.Grants.Count.ToString(CultureInfo.InvariantCulture)}개"
                         + $" · 참조 FK {table.Preserved.ReferencingForeignKeys.Count.ToString(CultureInfo.InvariantCulture)}개 · 작업 안 FK {table.JobForeignKeys.Count.ToString(CultureInfo.InvariantCulture)}개");
@@ -643,8 +682,8 @@ public class CopyRunner : ICopyRunner
                 .Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
             try
             {
-                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, new HashSet<string>(StringComparer.Ordinal), name => _dialect.IsServerName(name, sourceOwner));
-                table.JobForeignKeys = await _recreate.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
+                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, new HashSet<string>(StringComparer.Ordinal), name => _sourceDialect.IsServerName(name, sourceOwner));
+                table.JobForeignKeys = await _sourceRecreate.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested
                                        && (CopyErrors.IsServer(_errors, ex) || ex is InvalidOperationException or BulkDeniedException or ArgumentException))
@@ -1242,11 +1281,12 @@ public class CopyRunner : ICopyRunner
         var sw = Stopwatch.StartNew();
         try
         {
-            var shape = RowShape.Create(_codec, run.Job, plan);
-            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, table.Name, shape, freshTable: plan.CreateMissing), plan.Columns.Count);
+            var shape = ShapeFor(run, plan);
+            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, table.Name, shape, freshTable: plan.CreateMissing), shape.CopyColumns.Count);
             var estimated = run.Report.EstimatedRows.TryGetValue(table.Name, out var e) ? e : (long?)null;
             run.Progress(table.Name, 0, estimated, PhaseLoad);
             run.Log("적재 시작" + (estimated is { } est ? $" · 예상 {est.ToString("N0", CultureInfo.InvariantCulture)}건" : string.Empty));
+            LogDroppedColumns(run, table, shape);
 
             // 실패 행 상한을 넘거나 원본 읽기가 실패하면 이 표의 적재분만 되돌린다(앞 표의 정리·적재는 남긴다).
             var savepoint = await ControlLoggedAsync(run, run.Target, _dialect.Savepoint(CopyCommonStatements.TableSavepoint), ct, "이 표를 되돌릴 자리");
@@ -1261,8 +1301,8 @@ public class CopyRunner : ICopyRunner
                 return;
             }
 
-            var select = run.Builder.SourceSelect(table.Name, plan.Columns);
-            LogLoadStatements(run, plan, select, dml);
+            var select = run.Builder.SourceSelect(table.Name, shape.CopyColumns);
+            LogLoadStatements(run, plan, shape, select, dml);
             var batch = new List<object?[]>(run.Job.Options.BatchSize);
             var stop = false;
             try
@@ -1289,7 +1329,7 @@ public class CopyRunner : ICopyRunner
             {
                 if (error.Kind == DbErrorKind.SnapshotTooOld)
                 {
-                    run.Notices.Add($"{table.Name}: 원본 읽기가 오래 걸려 이전 시점 데이터를 읽지 못했습니다{ErrorNameNote(_dialect.SnapshotTooOldErrorName)}. 기간을 줄이거나 나눠 실행하세요.");
+                    run.Notices.Add($"{table.Name}: 원본 읽기가 오래 걸려 이전 시점 데이터를 읽지 못했습니다{ErrorNameNote(_sourceDialect.SnapshotTooOldErrorName)}. 기간을 줄이거나 나눠 실행하세요.");
                     run.Abort(null);
                 }
 
@@ -1339,14 +1379,43 @@ public class CopyRunner : ICopyRunner
         }
     }
 
+    /// <summary>
+    /// 표의 열 배치. 원본·대상 DBMS 가 같으면 예전 그대로(열 = 점검 열, 바인드 = 원본 형식, 값 변환 없음).
+    /// 다르면 교차 복사 배치(<see cref="CrossTypeMap"/>: 옮길 형식이 없는 열 빼기, 바인드 = 원본 형식을 대상 DBMS 로 옮긴 형식, 값 = 이식 값을 거쳐 대상 코덱).
+    /// </summary>
+    private RowShape ShapeFor(RunState run, CopyTablePlan plan) =>
+        _sourceDbms == _targetDbms
+            ? RowShape.Create(_sourceCodec, run.Job, plan)
+            : RowShape.Create(_sourceCodec, run.Job, plan, new CrossSides(_sourceDbms, _targetDbms, _codec));
+
+    /// <summary>교차 복사에서 옮길 형식이 없어 뺀 열을 알림(작업 로그 경고 + 결과 알림) 한 줄로 남긴다. 같은 DBMS 면 아무것도 하지 않는다.</summary>
+    private void LogDroppedColumns(RunState run, TableState table, RowShape shape)
+    {
+        if (shape.Dropped.Count == 0)
+        {
+            return;
+        }
+
+        var columns = string.Join(", ", shape.Dropped.Select(d => $"{d.Name}({d.DataType} — {DropReasonText(d.Reason)})"));
+        run.Notices.Add($"{table.Name}: {_targetDbms} 로 옮길 형식이 없는 열을 빼고 복사합니다: {columns}.");
+    }
+
+    private static string DropReasonText(CrossDropReason reason) => reason switch
+    {
+        CrossDropReason.LongSource => "LONG·LONG RAW 는 대량 읽기를 지원하지 않음",
+        CrossDropReason.RowId => "ROWID 는 다른 DB 에서 뜻이 없음",
+        CrossDropReason.LocalTimeZone => "TIMESTAMP WITH LOCAL TIME ZONE 은 옮기지 않음",
+        _ => "대량 읽기를 지원하지 않는 형식",
+    };
+
     /// <summary>원본 SELECT(바인드 요약)·대상 INSERT/MERGE(표마다 한 번)·마스킹 열(이름과 방식만, 값은 남기지 않는다).</summary>
-    private static void LogLoadStatements(RunState run, CopyTablePlan plan, SqlWithBinds select, SqlStatement dml)
+    private static void LogLoadStatements(RunState run, CopyTablePlan plan, RowShape shape, SqlWithBinds select, SqlStatement dml)
     {
         run.LogStatement(run.Source, select.Sql, select.Binds);
         run.Log(CopyLogText.Statement(run.SideOf(run.Target), dml.Text)
-                + $"  [바인드 배열 :C1…:C{plan.Columns.Count.ToString(CultureInfo.InvariantCulture)}, 배치 {run.Job.Options.BatchSize.ToString("N0", CultureInfo.InvariantCulture)}행씩]",
+                + $"  [바인드 배열 :C1…:C{shape.CopyColumns.Count.ToString(CultureInfo.InvariantCulture)}, 배치 {run.Job.Options.BatchSize.ToString("N0", CultureInfo.InvariantCulture)}행씩]",
                 CopyLogKind.Statement);
-        var masks = plan.Rule.Masks.Where(m => plan.Columns.Contains(m.Column, StringComparer.Ordinal)).ToList();
+        var masks = plan.Rule.Masks.Where(m => shape.CopyColumns.Contains(m.Column, StringComparer.Ordinal)).ToList();
         if (masks.Count > 0)
         {
             run.Log("마스킹(앱에서 바꿔 보냄, 값은 남기지 않음): " + string.Join(", ", masks.Select(m => $"{m.Column}({MaskText(m)})")));
@@ -1388,10 +1457,43 @@ public class CopyRunner : ICopyRunner
         }
 
         table.Batches++;
-        var r = await _bulk.ExecuteArrayAsync(run.Target, dml, shape.Columns, batch, run.BulkOptions, ct);
+
+        // 같은 DBMS: 보낼 행 = 읽은 행 그대로. 교차: 값을 대상 DBMS 값으로 바꾼 새 행, 못 바꾼 행은 여기서 실패 행이 된다(키는 원본 값, D5).
+        var rows = batch;
+        var sources = batch;
+        var conversionFailed = 0;
+        if (shape.Converts)
+        {
+            var converted = new List<object?[]>(batch.Count);
+            var kept = new List<object?[]>(batch.Count);
+            foreach (var source in batch)
+            {
+                if (shape.TryToTarget(source, out var values, out var error))
+                {
+                    converted.Add(values);
+                    kept.Add(source);
+                    continue;
+                }
+
+                if (await AddFailedRowAsync(run, table, new FailedRow(table.Name, shape.KeyOf(source), error!), pendingAtBatchStart, ct))
+                {
+                    return false;
+                }
+            }
+
+            rows = converted;
+            sources = kept;
+            conversionFailed = batch.Count - rows.Count;
+            if (rows.Count == 0)
+            {
+                return await EndBatchAsync(run, table, 0, conversionFailed, perBatch, ct);
+            }
+        }
+
+        var r = await _bulk.ExecuteArrayAsync(run.Target, dml, shape.Columns, rows, run.BulkOptions, ct);
         if (r.Status == ExecutionStatus.Succeeded)
         {
-            table.Loaded += batch.Count;
+            table.Loaded += rows.Count;
         }
         else if (r.Status == ExecutionStatus.Failed)
         {
@@ -1403,8 +1505,9 @@ public class CopyRunner : ICopyRunner
                 return false;
             }
 
-            foreach (var row in batch)
+            for (var i = 0; i < rows.Count; i++)
             {
+                var row = rows[i];
                 var one = await _bulk.ExecuteArrayAsync(run.Target, dml, shape.Columns, [row], run.BulkOptions, ct);
                 if (one.Status == ExecutionStatus.Succeeded)
                 {
@@ -1418,26 +1521,9 @@ public class CopyRunner : ICopyRunner
                     return false;
                 }
 
-                // 실패 행은 그 표의 적재가 확정(커밋)될 때 결과·실행 기록에 넣는다. 되돌린 적재의 실패 행으로
-                // 「실패 행만 다시 넣기」를 하면 나머지 행이 빠진 표가 성공으로 보이기 때문이다.
-                table.PendingFailed.Add(new FailedRow(table.Name, shape.KeyOf(row), ErrorText(one.Error)));
-                table.FailedRows++;
-                run.Log($"실패 행 {table.FailedRows.ToString("N0", CultureInfo.InvariantCulture)}: {ErrorText(one.Error)}", CopyLogKind.Error);
-                if (table.FailedRows > run.Job.Options.MaxFailedRows)
+                // 실패 행 키는 원본 값으로 남긴다(교차 복사면 sources[i] 가 바꾸기 전 원본 행, 같은 DBMS 면 row 그대로).
+                if (await AddFailedRowAsync(run, table, new FailedRow(table.Name, shape.KeyOf(sources[i]), ErrorText(one.Error)), pendingAtBatchStart, ct))
                 {
-                    // 이 배치에서 한 행씩 넣은 행도 되돌린다(「배치마다 커밋」이면 표 세이브포인트가 없으므로 여기서만 되돌릴 수 있다).
-                    var undo = await ControlLoggedAsync(run, run.Target, _dialect.RollbackToSavepoint(CopyCommonStatements.BatchSavepoint), ct, "상한을 넘은 배치 되돌리기");
-                    if (undo.Status == ExecutionStatus.Succeeded)
-                    {
-                        // 이 배치의 실패 행만 뺀다. 앞 배치의 대기 행은 표 되돌리기가 성공할 때 함께 버린다(RolledBack).
-                        table.PendingFailed.RemoveRange(pendingAtBatchStart, table.PendingFailed.Count - pendingAtBatchStart);
-                    }
-                    else
-                    {
-                        run.Notices.Add($"{table.Name}: 상한을 넘은 배치를 되돌리지 못했습니다: " + Describe(undo));
-                    }
-
-                    table.Fail($"실패 행이 상한({run.Job.Options.MaxFailedRows.ToString(CultureInfo.InvariantCulture)})을 넘어 이 표를 멈췄습니다.");
                     return false;
                 }
             }
@@ -1448,7 +1534,47 @@ public class CopyRunner : ICopyRunner
             return false;
         }
 
-        var batchText = $"배치 {table.Batches.ToString(CultureInfo.InvariantCulture)} · {batch.Count.ToString("N0", CultureInfo.InvariantCulture)}행 보냄 · 누적 {table.Loaded.ToString("N0", CultureInfo.InvariantCulture)}행";
+        return await EndBatchAsync(run, table, rows.Count, conversionFailed, perBatch, ct);
+    }
+
+    /// <summary>
+    /// 실패 행 하나를 대기 목록에 넣고 작업 로그에 남긴다. 상한을 넘으면 이 배치를 되돌리고(이 배치의 대기 행도 뺀다) 표를 실패로 둔 뒤 true(그만둔다).
+    /// </summary>
+    private async Task<bool> AddFailedRowAsync(RunState run, TableState table, FailedRow failed, int pendingAtBatchStart, CancellationToken ct)
+    {
+        // 실패 행은 그 표의 적재가 확정(커밋)될 때 결과·실행 기록에 넣는다. 되돌린 적재의 실패 행으로
+        // 「실패 행만 다시 넣기」를 하면 나머지 행이 빠진 표가 성공으로 보이기 때문이다.
+        table.PendingFailed.Add(failed);
+        table.FailedRows++;
+        run.Log($"실패 행 {table.FailedRows.ToString("N0", CultureInfo.InvariantCulture)}: {failed.Error}", CopyLogKind.Error);
+        if (table.FailedRows <= run.Job.Options.MaxFailedRows)
+        {
+            return false;
+        }
+
+        // 이 배치에서 한 행씩 넣은 행도 되돌린다(「배치마다 커밋」이면 표 세이브포인트가 없으므로 여기서만 되돌릴 수 있다).
+        var undo = await ControlLoggedAsync(run, run.Target, _dialect.RollbackToSavepoint(CopyCommonStatements.BatchSavepoint), ct, "상한을 넘은 배치 되돌리기");
+        if (undo.Status == ExecutionStatus.Succeeded)
+        {
+            // 이 배치의 실패 행만 뺀다. 앞 배치의 대기 행은 표 되돌리기가 성공할 때 함께 버린다(RolledBack).
+            table.PendingFailed.RemoveRange(pendingAtBatchStart, table.PendingFailed.Count - pendingAtBatchStart);
+        }
+        else
+        {
+            run.Notices.Add($"{table.Name}: 상한을 넘은 배치를 되돌리지 못했습니다: " + Describe(undo));
+        }
+
+        table.Fail($"실패 행이 상한({run.Job.Options.MaxFailedRows.ToString(CultureInfo.InvariantCulture)})을 넘어 이 표를 멈췄습니다.");
+        return true;
+    }
+
+    /// <summary>배치 끝: 작업 로그 한 줄, 「배치마다 커밋」이면 커밋하고 실패 행을 확정한다. 표를 더 진행하면 true.</summary>
+    private async Task<bool> EndBatchAsync(RunState run, TableState table, int sent, int conversionFailed, bool perBatch, CancellationToken ct)
+    {
+        // sent = 실제로 보낸 행 수. 교차 복사에서 값 변환에 실패해 보내지 않은 행이 있으면 그 수를 덧붙인다(같은 DBMS 는 conversionFailed 가 0 이라 글이 그대로).
+        var batchText = $"배치 {table.Batches.ToString(CultureInfo.InvariantCulture)} · {sent.ToString("N0", CultureInfo.InvariantCulture)}행 보냄"
+                        + (conversionFailed > 0 ? $"(값 변환 실패 {conversionFailed.ToString("N0", CultureInfo.InvariantCulture)}행 제외)" : string.Empty)
+                        + $" · 누적 {table.Loaded.ToString("N0", CultureInfo.InvariantCulture)}행";
         if (perBatch)
         {
             var commit = await ControlAsync(run.Target, CopyCommonStatements.Commit(), ct);
@@ -1537,7 +1663,7 @@ public class CopyRunner : ICopyRunner
             return false;
         }
 
-        var set = await ControlLoggedAsync(run, run.Source, _dialect.SetTransactionReadOnly(), ct, "이 표를 읽을 시점");
+        var set = await ControlLoggedAsync(run, run.Source, _sourceDialect.SetTransactionReadOnly(), ct, "이 표를 읽을 시점");
         return RunState.Accept(set, table, "원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다", ct);
     }
 
@@ -1550,9 +1676,11 @@ public class CopyRunner : ICopyRunner
             throw new InvalidOperationException($"{key}: PK 기준 MERGE 에 쓸 키 열이 없습니다.");
         }
 
-        // 값 자리 글은 방언이 정한다(바인드 이름·원본 형식 = 행 배치의 열). Oracle 은 :Cn 그대로라 글이 바뀌지 않는다.
+        // 값 자리 글은 방언이 정한다(바인드 이름·바인드 형식 = 행 배치의 열). Oracle 은 :Cn 그대로라 글이 바뀌지 않는다.
+        // 대상에 보내는 DML 이라 대상 방언이다. 형식은 같은 DBMS 면 원본 열 형식, 교차면 원본 형식을 대상 DBMS 로 옮긴 형식(D3)이다.
+        // 열은 행 배치의 복사 열이다(교차 복사에서 옮길 형식이 없는 열은 빠졌다).
         string ValueAt(int i) => _dialect.BindPlaceholder(shape.Columns[i].BindName, shape.Columns[i].ServerType);
-        return merge ? builder.Merge(key, plan.Columns, plan.KeyColumns, ValueAt) : builder.Insert(key, plan.Columns, ValueAt);
+        return merge ? builder.Merge(key, shape.CopyColumns, plan.KeyColumns, ValueAt) : builder.Insert(key, shape.CopyColumns, ValueAt);
     }
 
     // ---- 「실패 행만 다시 넣기」 ----
@@ -1576,10 +1704,11 @@ public class CopyRunner : ICopyRunner
                 return;
             }
 
-            var shape = RowShape.Create(_codec, run.Job, plan);
-            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, tableName, shape), plan.Columns.Count);
-            var query = CopyCommonStatements.Query(run.Builder.SourceSelectByKeys(tableName, plan.Columns, plan.KeyColumns));
+            var shape = ShapeFor(run, plan);
+            var dml = CopyCommonStatements.ArrayDml(DmlFor(run.Builder, plan, tableName, shape), shape.CopyColumns.Count);
+            var query = CopyCommonStatements.Query(run.Builder.SourceSelectByKeys(tableName, shape.CopyColumns, plan.KeyColumns));
             run.Progress(tableName, 0, rows.Count, PhaseRetry);
+            LogDroppedColumns(run, table, shape);
             run.Log(CopyLogText.Statement(run.SideOf(run.Source), query.Text)
                     + $"  [바인드 키 :K1…:K{plan.KeyColumns.Count.ToString(CultureInfo.InvariantCulture)}, {rows.Count.ToString("N0", CultureInfo.InvariantCulture)}행을 한 행씩]", CopyLogKind.Statement);
             run.Log(CopyLogText.Statement(run.SideOf(run.Target), dml.Text), CopyLogKind.Statement);
@@ -1609,7 +1738,16 @@ public class CopyRunner : ICopyRunner
                     continue;
                 }
 
-                var one = await _bulk.ExecuteArrayAsync(run.Target, dml, shape.Columns, [source], run.BulkOptions, ct);
+                // 교차 복사: 적재와 같은 값 변환. 못 바꾸면 그 행만 다시 실패 행으로 남긴다(D5).
+                var values = source;
+                if (shape.Converts && !shape.TryToTarget(source, out values, out var conversionError))
+                {
+                    table.PendingFailed.Add(failedRow with { Error = conversionError! });
+                    table.FailedRows++;
+                    continue;
+                }
+
+                var one = await _bulk.ExecuteArrayAsync(run.Target, dml, shape.Columns, [values], run.BulkOptions, ct);
                 if (one.Status == ExecutionStatus.Succeeded)
                 {
                     table.Loaded++;
@@ -2320,7 +2458,16 @@ public class CopyRunner : ICopyRunner
 
     // ---- 상태 ----
 
-    /// <summary>표 하나의 열 배치: 바인드 열(원본 형식), 마스킹, 키 열 위치.</summary>
+    /// <summary>교차 복사(원본·대상 DBMS 가 다름)의 두 DBMS 와 대상 값 코덱. 같은 DBMS 복사는 이것이 없다(값 변환을 거치지 않는다).</summary>
+    private sealed record CrossSides(Dbms Source, Dbms Target, IBulkValueCodec TargetCodec);
+
+    /// <summary>교차 복사에서 옮길 형식이 없어 뺀 열(<see cref="CrossColumnMapping.DropReason"/>).</summary>
+    private sealed record DroppedColumn(string Name, string DataType, CrossDropReason Reason);
+
+    /// <summary>
+    /// 표 하나의 열 배치: 복사 열·바인드 열, 마스킹, 키 열 위치. 값 해석(마스킹·실패 행 키)은 원본 값을 보므로 원본 벌의 코덱이다.
+    /// 교차 복사면 열을 <see cref="CrossTypeMap"/> 으로 옮기고(옮길 형식이 없는 열은 뺀다) 마스킹한 원본 값을 대상 DBMS 값으로 바꾼다(<see cref="TryToTarget"/>).
+    /// </summary>
     private sealed class RowShape
     {
         private readonly IBulkValueCodec _codec;
@@ -2329,23 +2476,42 @@ public class CopyRunner : ICopyRunner
         private readonly string[] _keyTypes;
         private readonly string _salt;
 
-        private RowShape(IBulkValueCodec codec, IReadOnlyList<BulkColumn> columns, (int, MaskRule, int, object?, bool)[] masks, int[] keyIndexes,
-                         string[] keyTypes, IReadOnlyList<string> keyNames, string salt)
+        // 교차 복사만: 대상 값 코덱, 복사 열마다의 원본 형식(이식 값으로 읽을 형식). 같은 DBMS 면 null.
+        private readonly IBulkValueCodec? _targetCodec;
+        private readonly string[] _sourceTypes;
+
+        private RowShape(IBulkValueCodec codec, IReadOnlyList<string> copyColumns, IReadOnlyList<BulkColumn> columns,
+                         (int, MaskRule, int, object?, bool)[] masks, int[] keyIndexes, string[] keyTypes, IReadOnlyList<string> keyNames, string salt,
+                         IBulkValueCodec? targetCodec, string[] sourceTypes, IReadOnlyList<DroppedColumn> dropped)
         {
             _codec = codec;
+            CopyColumns = copyColumns;
             Columns = columns;
             _masks = masks;
             _keyIndexes = keyIndexes;
             _keyTypes = keyTypes;
             KeyNames = keyNames;
             _salt = salt;
+            _targetCodec = targetCodec;
+            _sourceTypes = sourceTypes;
+            Dropped = dropped;
         }
 
+        /// <summary>읽고 넣는 열(원본 SELECT·대상 DML 의 열 순서). 같은 DBMS 면 <see cref="CopyTablePlan.Columns"/> 그대로, 교차면 옮길 형식이 없는 열을 뺀 것.</summary>
+        public IReadOnlyList<string> CopyColumns { get; }
+
+        /// <summary>대상 DML 바인드 열. 같은 DBMS = 원본 열 형식, 교차 = 원본 형식을 대상 DBMS 로 옮긴 형식(<see cref="CrossColumnMapping.BindType"/>, D3).</summary>
         public IReadOnlyList<BulkColumn> Columns { get; }
 
         public IReadOnlyList<string> KeyNames { get; }
 
-        public static RowShape Create(IBulkValueCodec codec, CopyJob job, CopyTablePlan plan)
+        /// <summary>교차 복사에서 옮길 형식이 없어 뺀 열(원본 열 순서). 같은 DBMS 면 비었다.</summary>
+        public IReadOnlyList<DroppedColumn> Dropped { get; }
+
+        /// <summary>값을 대상 DBMS 값으로 바꿔야 한다(교차 복사).</summary>
+        public bool Converts => _targetCodec is not null;
+
+        public static RowShape Create(IBulkValueCodec codec, CopyJob job, CopyTablePlan plan, CrossSides? cross = null)
         {
             var source = plan.Source.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
             var target = plan.Target.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
@@ -2353,14 +2519,39 @@ public class CopyRunner : ICopyRunner
                 ? c
                 : throw new InvalidOperationException($"{plan.Rule.Table}: 원본에 열 {name} 이(가) 없습니다.");
 
-            // 바인드 형식은 원본 열 형식이다: 값이 원본 형식의 DBMS 고유 값이고, 형식이 달라도 변환은 서버가 맡는다.
-            var bindNames = CopyCommonStatements.BindNames(plan.Columns.Count);
-            var columns = plan.Columns.Select((c, i) => new BulkColumn(bindNames[i], SourceColumn(c).DataType)).ToList();
+            // 같은 DBMS: 바인드 형식은 원본 열 형식이다. 값이 원본 형식의 DBMS 고유 값이고, 형식이 달라도 변환은 서버가 맡는다.
+            // 교차: 열마다 CrossTypeMap 으로 옮긴다. 옮길 형식이 없는 열은 빼고, 바인드 형식은 원본 형식을 대상 DBMS 로 옮긴 형식이다(대상 열 형식이 아님, D3).
+            IReadOnlyList<string> copyColumns = plan.Columns;
+            string[] sourceTypes = [];
+            IReadOnlyList<DroppedColumn> dropped = [];
+            List<BulkColumn> columns;
+            if (cross is null)
+            {
+                var bindNames = CopyCommonStatements.BindNames(plan.Columns.Count);
+                columns = plan.Columns.Select((c, i) => new BulkColumn(bindNames[i], SourceColumn(c).DataType)).ToList();
+            }
+            else
+            {
+                var kept = plan.Columns.Select(SourceColumn)
+                    .Select(c => (Column: c, Map: CrossTypeMap.Map(cross.Source, cross.Target, c)))
+                    .Where(x => !x.Map.IsDropped)
+                    .ToList();
+                dropped = DroppedColumns(cross, plan, target);
+                if (plan.KeyColumns.FirstOrDefault(k => dropped.Any(d => string.Equals(d.Name, k, StringComparison.Ordinal))) is { } lostKey)
+                {
+                    throw new InvalidOperationException($"{plan.Rule.Table}.{lostKey}: 키 열을 대상 DBMS 로 옮길 형식이 없어 이 표를 복사할 수 없습니다.");
+                }
+
+                copyColumns = [.. kept.Select(x => x.Column.Name)];
+                sourceTypes = [.. kept.Select(x => x.Column.DataType)];
+                var bindNames = CopyCommonStatements.BindNames(kept.Count);
+                columns = kept.Select((x, i) => new BulkColumn(bindNames[i], x.Map.BindType!)).ToList();
+            }
 
             var masks = new List<(int, MaskRule, int, object?, bool)>();
             foreach (var rule in plan.Rule.Masks)
             {
-                var index = IndexOf(plan.Columns, rule.Column);
+                var index = IndexOf(copyColumns, rule.Column);
                 if (index < 0)
                 {
                     continue; // 복사하지 않는 열이다.
@@ -2401,14 +2592,58 @@ public class CopyRunner : ICopyRunner
                 masks.Add((index, rule, maxLength, fixedValue, text));
             }
 
-            var keyIndexes = plan.KeyColumns.Select(k => IndexOf(plan.Columns, k)).ToArray();
+            var keyIndexes = plan.KeyColumns.Select(k => IndexOf(copyColumns, k)).ToArray();
             if (keyIndexes.Any(i => i < 0))
             {
                 throw new InvalidOperationException($"{plan.Rule.Table}: 키 열이 복사 열에 없습니다.");
             }
 
             var keyTypes = plan.KeyColumns.Select(k => SourceColumn(k).DataType).ToArray();
-            return new RowShape(codec, columns, [.. masks], keyIndexes, keyTypes, plan.KeyColumns, job.MaskSalt);
+            return new RowShape(codec, copyColumns, columns, [.. masks], keyIndexes, keyTypes, plan.KeyColumns, job.MaskSalt,
+                                cross?.TargetCodec, sourceTypes, dropped);
+        }
+
+        /// <summary>
+        /// 교차 복사에서 형식 때문에 빠지는 열: 형식만 아니면 복사했을 열(가상 열 아님·건너뛸 열 아님·대상에도 있음) 가운데 <see cref="CrossTypeMap"/> 이 Dropped 로 본 것.
+        /// 점검이 미리 뺐든(<see cref="CopyTablePlan.Columns"/> 에 없음) 아니든 같은 목록이다 — 실행 로그에 남길 목록.
+        /// </summary>
+        private static List<DroppedColumn> DroppedColumns(CrossSides cross, CopyTablePlan plan, Dictionary<string, ColumnInfo> target)
+        {
+            var skip = plan.Rule.SkipColumns.ToHashSet(StringComparer.Ordinal);
+            return [.. plan.Source.Columns
+                .Where(c => !c.IsVirtual && !skip.Contains(c.Name) && target.TryGetValue(c.Name, out var t) && !t.IsVirtual)
+                .Select(c => (Column: c, Map: CrossTypeMap.Map(cross.Source, cross.Target, c)))
+                .Where(x => x.Map.IsDropped)
+                .Select(x => new DroppedColumn(x.Column.Name, x.Column.DataType, x.Map.DropReason))];
+        }
+
+        /// <summary>
+        /// 교차 복사: 마스킹한 원본 행 → 새 배열의 대상 DBMS 값(원본 코덱 <c>ToPortable</c> → 대상 코덱 <c>FromPortable</c>, 바인드 형식 = <see cref="Columns"/>).
+        /// 값 하나라도 못 바꾸면(<see cref="PortableConversionException"/>·<see cref="InvalidCastException"/>·<see cref="FormatException"/>·<see cref="OverflowException"/>)
+        /// false 와 그 행의 실패 사유(열 이름·형식 이름만의 고정 글, 예외 글·값은 넣지 않는다, D5). <see cref="NotSupportedException"/> 은 잡지 않는다(표가 실패). 원본 행은 바꾸지 않는다(실패 행 키를 원본 값으로 남긴다).
+        /// </summary>
+        public bool TryToTarget(object?[] row, out object?[] values, out string? error)
+        {
+            var target = _targetCodec ?? throw new InvalidOperationException("같은 DBMS 복사는 값을 바꾸지 않습니다.");
+            var converted = new object?[row.Length];
+            for (var i = 0; i < row.Length; i++)
+            {
+                try
+                {
+                    converted[i] = row[i] is null ? null : target.FromPortable(_codec.ToPortable(row[i], _sourceTypes[i]), Columns[i].ServerType);
+                }
+                catch (Exception ex) when (ex is PortableConversionException or InvalidCastException or FormatException or OverflowException)
+                {
+                    // 코덱 예외 글에는 행 값(숫자·날짜 등)이 들어 있을 수 있어 사유에 넣지 않는다: 열 이름·형식 이름만으로 만든 고정 글.
+                    values = [];
+                    error = $"열 {CopyColumns[i]} 의 값(원본 형식 {_sourceTypes[i]})을 대상 형식({Columns[i].ServerType})으로 바꾸지 못했습니다.";
+                    return false;
+                }
+            }
+
+            values = converted;
+            error = null;
+            return true;
         }
 
         /// <summary>원본 행에 마스킹을 건 새 행. 원본 값은 어디에도 남기지 않는다.</summary>

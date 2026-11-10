@@ -120,7 +120,7 @@ public class DbmsDispatcherTests
     {
         var precheck = new CountingPrecheck();
         var table = new DbmsServiceTable().Add<ICopyPrecheckService>(Dbms.Oracle, () => precheck);
-        var dispatcher = new CopyPrecheckServiceDispatcher(table);
+        var dispatcher = CopyCrossDispatchTests.Precheck(table);
 
         await dispatcher.RunAsync(new CopySessions(OracleSession(), OracleSession()), null!, null!, null, default);
         Assert.Equal(1, precheck.Runs);

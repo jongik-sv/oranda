@@ -93,6 +93,11 @@ public sealed class CheckItemViewModel
         ["TargetTriggers"] = "대상 트리거",
         ["UnsupportedType"] = "지원하지 않는 형식",
         ["WrongLengthDates"] = "날짜 길이 다름",
+        [CopyCheckCodes.ColumnDropped] = "형식 때문에 뺀 열",
+        [CopyCheckCodes.KeyColumnDropped] = "옮길 수 없는 키 열",
+        [CopyCheckCodes.TypeConverted] = "형식 바꿔 옮김",
+        [CopyCheckCodes.CrossCharset] = "대상 문자셋 안내",
+        [CopyCheckCodes.BlobEmptyToNull] = "빈 BLOB 은 NULL",
     };
 
     public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices, string? tableText = null)

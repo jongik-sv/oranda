@@ -14,14 +14,23 @@ namespace Oranda.Core.Transfer.Copy;
 /// 접속 간 복사 사전 점검(설계 7장). 모든 조회는 대량 실행 경로의 읽기(<see cref="IBulkExecutionService.StreamRowsAsync"/>)로 보내고
 /// 하나씩 끝까지 읽은 뒤 다음 조회를 보낸다. 표 구조는 <see cref="IMetadataProvider"/> 로 읽는다(원본·대상 모두 점검 때만, 메모 D3).
 /// 판정 규칙 가운데 DB 가 필요 없는 것은 <see cref="PrecheckRules"/> 에 있다.
-/// DBMS 마다 다른 것은 생성자로 받는다: SELECT 글 = <paramref name="catalog"/>(<c>copy.*</c>), 서버 오류 분류 = <paramref name="errors"/>(바깥 예외만, <see cref="CopyErrors"/>),
-/// 기능 차이·안내 글 = <paramref name="dialect"/>, 미리 보기 문장 = <paramref name="statements"/>, 값 해석 = <paramref name="codec"/>.
-/// DBMS 별 하위 형식(본문 없음)이 그 DBMS 의 것을 넘기고 키 서비스로 등록된다(Oracle = <c>OracleCopyPrecheckService</c>).
+/// DBMS 마다 다른 것은 생성자로 받는다(<see cref="CopyDbmsParts"/>): SELECT 글 = <see cref="CopyDbmsParts.Catalog"/>(<c>copy.*</c>),
+/// 서버 오류 분류 = <see cref="CopyDbmsParts.Errors"/>(바깥 예외만, <see cref="CopyErrors"/>), 기능 차이·안내 글 = <see cref="CopyDbmsParts.PrecheckDialect"/>,
+/// 미리 보기 문장 = <see cref="CopyDbmsParts.Dialect"/>, 값 해석 = <see cref="CopyDbmsParts.Codec"/>.
+/// 원본 벌(<paramref name="source"/>)은 원본 세션 조회(접속 권한·원본 표 권한·건수·문자열 날짜·시퀀스 최대값)·읽기 일관성·원본 열 형식·원본 이름 판정에,
+/// 대상 벌(<paramref name="target"/>)은 나머지 전부에 쓰고, 오류 분류는 둘을 합친다(<see cref="CopyErrors.Combine"/>, xdb-copy XC2).
+/// DBMS 별 하위 형식(본문 없음)이 그 DBMS 의 벌을 두 번 넘기고 키 서비스로 등록된다(Oracle = <c>OracleCopyPrecheckService</c>).
 /// </summary>
-public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, ISqlCatalog catalog,
-                                         IDbErrorClassifier errors, ICopyPrecheckDialect dialect, ICopyDialect statements, IBulkValueCodec codec)
+public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, CopyDbmsParts source,
+                                         CopyDbmsParts target)
     : ICopyPrecheckService
 {
+    /// <summary>같은 DBMS 복사: 같은 벌(<paramref name="parts"/>)을 원본·대상에 같은 인스턴스로 넘긴다(DBMS 별 하위 형식이 쓴다).</summary>
+    protected CopyPrecheckService(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, CopyDbmsParts parts)
+        : this(bulk, metadata, policy, parts, parts)
+    {
+    }
+
     public async Task<PrecheckReport> RunAsync(CopySessions sessions, CopyJob job, ResolvedPeriod period,
                                                IProgress<string>? progress, CancellationToken ct)
     {
@@ -53,12 +62,18 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 [], [], new Dictionary<string, long>());
         }
 
-        return await new Run(bulk, metadata, policy, catalog, errors, dialect, statements, codec, sessions, job, period, progress)
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        return await new Run(bulk, metadata, policy, source, target.Dbms, target.Catalog, CopyErrors.Combine(target.Errors, source.Errors), target.PrecheckDialect,
+                             target.Dialect, target.Codec, sessions, job, period, progress)
             .ExecuteAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>한 번의 점검이 쓰는 상태. 점검 항목을 순서대로 쌓는다.</summary>
-    private sealed class Run(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, ISqlCatalog catalog,
+    /// <summary>
+    /// 한 번의 점검이 쓰는 상태. 점검 항목을 순서대로 쌓는다. <paramref name="catalog"/>·<paramref name="dialect"/>·<paramref name="statements"/>·<paramref name="codec"/> 은
+    /// 대상 벌, <paramref name="errors"/> 는 원본·대상을 합친 분류기, 원본 쪽 것은 <paramref name="sourceParts"/> 에서 꺼낸다.
+    /// </summary>
+    private sealed class Run(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, CopyDbmsParts sourceParts, Dbms targetDbms, ISqlCatalog catalog,
                              IDbErrorClassifier errors, ICopyPrecheckDialect dialect, ICopyDialect statements, IBulkValueCodec codec,
                              CopySessions sessions, CopyJob job, ResolvedPeriod period, IProgress<string>? progress)
     {
@@ -87,7 +102,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
         public async Task<PrecheckReport> ExecuteAsync(CancellationToken ct)
         {
-            _sourceAccess = await CopyCatalogQueries.ReadAccessAsync(bulk, catalog, codec, Source, ct).ConfigureAwait(false);
+            _sourceAccess = await CopyCatalogQueries.ReadAccessAsync(bulk, sourceParts.Catalog, sourceParts.Codec, Source, ct).ConfigureAwait(false);
             _targetAccess = await CopyCatalogQueries.ReadAccessAsync(bulk, catalog, codec, Target, ct).ConfigureAwait(false);
 
             var active = job.Tables.Where(r => r.Kind != RuleKind.Exclude).ToList();
@@ -113,6 +128,11 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
             await CheckParentsAsync(active, ct).ConfigureAwait(false);
             _items.AddRange(PrecheckRules.CheckParentLinkMasks(job));
+
+            if (PrecheckRules.CrossCharsetNote(sourceParts.Dbms, targetDbms, plans) is { } charset)
+            {
+                _items.Add(charset);
+            }
 
             var order = BuildOrder(plans);
             await CheckSequencesAsync(plans, ct).ConfigureAwait(false);
@@ -289,13 +309,25 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             var source = _sourceTables[key];
             var target = _targetTables[key];
 
-            _items.AddRange(PrecheckRules.CompareColumns(codec, source, target, rule, key));
-            var columns = PrecheckRules.SelectColumns(codec, source, target, rule);
+            // 교차 복사(DBMS 가 다름): 옮길 형식이 없는 열은 오류가 아니라 복사 열에서 빠지고(ColumnDropped), 실행기가 SELECT·DML 에 넣는 열과 같은 목록이 된다.
+            // 대상 구조가 원본에서 만들어지는 표(없으면 만들기·다시 만들기)는 대상 열 형식을 옮긴 형식으로 본다.
+            var fromSource = _creating.Contains(key) || (IsRecreate(rule) && CanRecreate);
+            _items.AddRange(PrecheckRules.CompareColumns(sourceParts.Codec, codec, source, target, rule, key, sourceParts.Dbms, targetDbms, fromSource));
+            var dropped = PrecheckRules.CrossDroppedColumns(sourceParts.Codec, source, target, rule, sourceParts.Dbms, targetDbms);
+            var columns = PrecheckRules.SelectColumns(sourceParts.Codec, codec, source, target, rule, sourceParts.Dbms, targetDbms, fromSource);
+            if (PrecheckRules.CrossBlobNote(sourceParts.Dbms, targetDbms, source, columns, key) is { } blob)
+            {
+                _items.Add(blob);
+            }
+
             var keys = PrecheckRules.KeyColumns(target, columns);
-            _items.AddRange(PrecheckRules.CheckMasks(rule, source, keys, key));
+            _items.AddRange(PrecheckRules.CheckMasks(rule, source, keys, key, dropped));
 
             var creating = _creating.Contains(key);
-            if (keys.Count == 0)
+
+            // 교차: PK 열이 옮길 형식이 없어 빠졌으면 KeyColumnDropped 오류가 이미 있다. 「PK 없음」은 그 이유를 가리므로 내지 않는다.
+            var keyDropped = dropped.Any(c => IsPrimaryKeyColumn(source, c) || IsPrimaryKeyColumn(target, c));
+            if (keys.Count == 0 && !keyDropped)
             {
                 // 새로 만드는 표는 비어 있어 INSERT 로 넣는다: PK 기준 MERGE 에 쓸 키가 없어도 막지 않는다.
                 _items.Add(rule.Action == TargetAction.MergeByPk && !creating
@@ -342,9 +374,13 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             };
         }
 
+        private static bool IsPrimaryKeyColumn(TableInfo table, string column)
+            => table.Constraints.FirstOrDefault(c => c.Kind == ConstraintKind.PrimaryKey)?.Columns.Contains(column, StringComparer.Ordinal) == true;
+
         private async Task<bool> CheckSourcePrivilegeAsync(TableRule rule, CancellationToken ct)
         {
-            var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Source, _sourceAccess, SourceOwner(rule), rule.Table, "TABLE", dialect.SupportsReadPrivilege, ct)
+            var held = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, sourceParts.Catalog, sourceParts.Codec, Source, _sourceAccess, SourceOwner(rule), rule.Table, "TABLE",
+                    sourceParts.PrecheckDialect.SupportsReadPrivilege, ct)
                 .ConfigureAwait(false);
             if (held.Contains("SELECT"))
             {
@@ -532,7 +568,8 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 blocked.Add(reason);
             }
 
-            var unsupported = source.Columns.Where(c => !c.IsVirtual && !codec.IsSupported(c.DataType))
+            // 원본 열 형식이라 원본 코덱으로 본다.
+            var unsupported = source.Columns.Where(c => !c.IsVirtual && !sourceParts.Codec.IsSupported(c.DataType))
                 .Select(c => $"{c.Name}({c.DataType})").ToList();
             if (unsupported.Count > 0)
             {
@@ -563,7 +600,8 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
             // 이름 겹침: 원본 이름 그대로 만드는 제약·인덱스·작업 안 FK.
             // 서버가 지은 이름 판정은 실행기와 같아야 한다(DBMS 마다 다르다: Oracle SYS_…, Tibero <소유자>_CON<숫자>).
-            bool IsServer(string name) => dialect.IsServerName(name, source.Table.Owner);
+            // 원본 이름을 보는 판정이라 원본 방언이다.
+            bool IsServer(string name) => sourceParts.PrecheckDialect.IsServerName(name, source.Table.Owner);
             var (constraints, indexes) = CreateTableDdl.NamedObjects(source, IsServer);
             var foreignKeys = source.Constraints
                 .Where(c => c.Kind == ConstraintKind.ForeignKey && !IsServer(c.Name) && c.ReferencedTable is { } p && IsLinkedParent(p, rule, linked))
@@ -780,7 +818,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             try
             {
                 var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, count.Sql, count.Binds, ct).ConfigureAwait(false);
-                _estimated[key] = codec.ToInt64(rows.FirstOrDefault()?[0]) ?? 0;
+                _estimated[key] = sourceParts.Codec.ToInt64(rows.FirstOrDefault()?[0]) ?? 0;
             }
             catch (Exception ex) when (CopyErrors.IsNoAccess(errors, ex))
             {
@@ -828,7 +866,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 try
                 {
                     var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, sql, binds, ct).ConfigureAwait(false);
-                    var wrong = codec.ToInt64(rows.FirstOrDefault()?[0]) ?? 0;
+                    var wrong = sourceParts.Codec.ToInt64(rows.FirstOrDefault()?[0]) ?? 0;
                     if (wrong > 0)
                     {
                         _items.Add(new CheckItem(key, "WrongLengthDates", CheckLevel.Confirm,
@@ -877,8 +915,8 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                     $"{key}: 부모 표 {sourceParent} 가 {(parent is null ? "작업에 없어" : "제외되어 있어")} 부모 전체를 기준으로 연결합니다(대상 쪽은 {targetParent})."));
 
                 // 작업 밖 부모는 다른 규칙이 권한을 보지 않는다: 원본 조회·대상 범위 지우기·건수 비교가 부모 표를 읽으므로 양쪽 SELECT 를 본다.
-                var sourceHeld = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Source, _sourceAccess,
-                    CopyOwners.ParentSource(job, rule), rule.Parent.ParentTable, "TABLE", dialect.SupportsReadPrivilege, ct).ConfigureAwait(false);
+                var sourceHeld = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, sourceParts.Catalog, sourceParts.Codec, Source, _sourceAccess,
+                    CopyOwners.ParentSource(job, rule), rule.Parent.ParentTable, "TABLE", sourceParts.PrecheckDialect.SupportsReadPrivilege, ct).ConfigureAwait(false);
                 if (!sourceHeld.Contains("SELECT"))
                 {
                     _items.Add(new CheckItem(key, "SourceNoSelect", CheckLevel.Error,
@@ -986,7 +1024,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             {
                 var sql = $"SELECT MAX({SqlIdentifier.QuoteAlways(rule.Column)}){count.Sql[CountPrefix.Length..]}";
                 var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, sql, count.Binds, ct).ConfigureAwait(false);
-                max = codec.ToInt64(rows.FirstOrDefault()?[0]) ?? long.MinValue;
+                max = sourceParts.Codec.ToInt64(rows.FirstOrDefault()?[0]) ?? long.MinValue;
             }
             catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
             {
@@ -1068,14 +1106,16 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 return;
             }
 
+            // 같은 시점 읽기는 원본의 일이라 파라미터·안내 글 모두 원본 방언에서 꺼낸다(같은 DBMS 면 예전과 같다).
+            var sourceDialect = sourceParts.PrecheckDialect;
             long? undo = null;
-            if (dialect.ReadConsistencyParameter is { } parameter)
+            if (sourceDialect.ReadConsistencyParameter is { } parameter)
             {
                 try
                 {
                     var rows = await CopyCatalogQueries.QueryAsync(bulk, Source, SourceSql("copy.parameter_value"), ct,
                         ("PNAME", parameter)).ConfigureAwait(false);
-                    undo = codec.ToInt64(rows.FirstOrDefault()?[0]);
+                    undo = sourceParts.Codec.ToInt64(rows.FirstOrDefault()?[0]);
                 }
                 catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
                 {
@@ -1085,7 +1125,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
             // 못 읽었으면(null) 어림 시간은 글에 쓰이지 않으므로 계산하지 않는다(옮기기 전과 같음).
             var seconds = undo is null ? 0 : (long)Math.Ceiling(_estimated.Values.Sum() / AssumedRowsPerSecond);
-            var (level, message) = dialect.ReadConsistencyHint(seconds, undo);
+            var (level, message) = sourceDialect.ReadConsistencyHint(seconds, undo);
             _items.Add(new CheckItem(null, "ReadConsistency", level, message));
         }
 
@@ -1129,7 +1169,8 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             foreach (var plan in created)
             {
                 var owner = TargetOwner(plan.Rule);
-                foreach (var text in CreateTableDdl.Build(plan.Source, owner, new HashSet<string>(StringComparer.Ordinal), name => dialect.IsServerName(name, SourceOwner(plan.Rule))))
+                foreach (var text in CreateTableDdl.Build(plan.Source, owner, new HashSet<string>(StringComparer.Ordinal),
+                             name => sourceParts.PrecheckDialect.IsServerName(name, SourceOwner(plan.Rule))))
                 {
                     list.Add(await PreviewAsync(Target, CopyCommonStatements.RecreateDdl(text), PreviewSide.Target, ct).ConfigureAwait(false));
                 }
@@ -1175,7 +1216,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         private string TargetSql(string id) => CopyCatalogQueries.Sql(catalog, Target.Server, id);
 
         /// <summary>원본 세션 DBMS 의 카탈로그 SELECT 글(<c>copy.*</c>).</summary>
-        private string SourceSql(string id) => CopyCatalogQueries.Sql(catalog, Source.Server, id);
+        private string SourceSql(string id) => CopyCatalogQueries.Sql(sourceParts.Catalog, Source.Server, id);
 
         /// <summary>대상 초기화 파라미터 값(<c>copy.parameter_value</c>)을 글자로. 행이 없거나 서버 오류면 null.</summary>
         private async Task<string?> TargetParameterAsync(string name, CancellationToken ct)
