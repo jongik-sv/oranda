@@ -17,6 +17,12 @@ public interface ICopyDialect
     /// </summary>
     string BindPlaceholder(string bindName, string serverType);
 
+    /// <summary>
+    /// 교차 복사(원본 DBMS ≠ 대상 DBMS)의 값 자리 글. <paramref name="bindType"/> 은 원본 형식을 이 DBMS 로 옮긴 바인드 형식(<c>CrossTypeMap</c>, D3)이다.
+    /// 같은 DBMS 로는 쓰지 않는 형식을 교차 쓰기로만 보내는 DBMS(Tibero TIMESTAMP WITH TIME ZONE)가 덮는다. 기본 = <see cref="BindPlaceholder"/>.
+    /// </summary>
+    string CrossBindPlaceholder(string bindName, string bindType) => BindPlaceholder(bindName, bindType);
+
     /// <summary>대상 트리거 끄기.</summary>
     SqlStatement DisableTrigger(string owner, string trigger);
 

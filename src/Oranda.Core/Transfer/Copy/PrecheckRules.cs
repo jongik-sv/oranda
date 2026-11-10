@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Transfer.Copy.CrossDbms;
@@ -112,6 +113,41 @@ public static class PrecheckRules
 
         return result;
     }
+
+    /// <summary>
+    /// Oracle 카탈로그(<c>*_TAB_COLS.VIRTUAL_COLUMN</c>)는 XMLTYPE 열을 가상 열로 표시한다(실제 저장은 숨은 SYS_NC…$ LOB 열). 그대로 두면 복사가 이 열을 「값을 넣지 않는 가상 열」로
+    /// 조용히 건너뛰어 사전 점검에 아무 항목도 나지 않는다(xdb-copy XC8c). 교차 복사에서만 가상 열 표시를 지워 형식 판정이 그 열을 보게 한다(<c>ColumnDropped</c> 확인).
+    /// 같은 DBMS 는 예전처럼 빼고 복사하되 <see cref="SameDbmsXmlTypeNotes"/> 가 확인 항목으로 알린다(같은 DBMS 동작 불변). XMLTYPE 가상 열이 없으면 <paramref name="table"/> 그대로.
+    /// </summary>
+    public static TableInfo ClearXmlTypeVirtual(TableInfo table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        return table.Columns.Any(IsXmlTypeVirtual)
+            ? table with { Columns = [.. table.Columns.Select(c => IsXmlTypeVirtual(c) ? c with { IsVirtual = false } : c)] }
+            : table;
+    }
+
+    /// <summary>
+    /// 같은 DBMS 복사: 가상 열로 표시된 XMLTYPE 열은 예전처럼 빼고 복사한다. 막지 않고 열마다 <see cref="CopyCheckCodes.ColumnDropped"/> 확인 항목으로 알린다
+    /// (사용자 원칙 「안 되면 그 열을 빼고 알림」). 규칙에서 건너뛰기로 고른 열은 알리지 않는다. 교차 복사는 형식 지도가 판정하므로 빈 목록.
+    /// </summary>
+    public static IReadOnlyList<CheckItem> SameDbmsXmlTypeNotes(TableInfo source, TableRule rule, string table, Dbms sourceDbms, Dbms targetDbms)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(rule);
+        if (sourceDbms != targetDbms)
+        {
+            return [];
+        }
+
+        var skip = rule.SkipColumns.ToHashSet(StringComparer.Ordinal);
+        return [.. source.Columns.Where(c => IsXmlTypeVirtual(c) && !skip.Contains(c.Name))
+            .Select(c => new CheckItem(table, CopyCheckCodes.ColumnDropped, CheckLevel.Confirm,
+                $"{table}.{c.Name}: XMLTYPE 열은 복사하지 않습니다(이 열을 빼고 복사합니다).") { Column = c.Name })];
+    }
+
+    private static bool IsXmlTypeVirtual(ColumnInfo c)
+        => c.IsVirtual && CrossTypeMap.Normalize(c.DataType) is "XMLTYPE" or "SYS.XMLTYPE";
 
     /// <summary>
     /// 「테이블 다시 만들기」 뒤의 대상 구조: 원본 구조를 대상 소유자 이름으로 둔다. IDENTITY 는 <see cref="CreateTableDdl"/> 이
@@ -267,7 +303,7 @@ public static class PrecheckRules
                 converted.Add((s.Name, s.DataType, map));
             }
 
-            if (NarrowerReason(s, t) is { } reason)
+            if (NarrowerReason(s, t, map is not null) is { } reason)
             {
                 items.Add(new CheckItem(table, "NarrowerType", CheckLevel.Confirm, $"{table}.{s.Name}: {reason}") { Column = s.Name });
             }
@@ -383,6 +419,130 @@ public static class PrecheckRules
             ? null
             : new CheckItem(table, CopyCheckCodes.BlobEmptyToNull, CheckLevel.Pass,
                 $"{table}: BLOB 열 {string.Join(", ", blobs)} — 길이가 0 인 BLOB 값은 Tibero 에서 NULL 이 됩니다.");
+    }
+
+    /// <summary>글자당 최대 바이트(UTF-8 기준). 서버 문자셋을 읽지 않으므로 늘 이 값으로 어림한다(보수적으로 큰 쪽).</summary>
+    internal const int MaxBytesPerChar = 4;
+
+    /// <summary>Oracle CHAR 의 바이트 한도(CHAR 단위로 만들어도 넘지 못한다).</summary>
+    internal const int OracleCharMaxBytes = 2000;
+
+    /// <summary>
+    /// 교차 복사로 Oracle 에 넣을 때, 문자 단위(CHAR) 길이 열이 대상의 바이트 한도를 넘을 수 있다는 확인 항목(<see cref="CopyCheckCodes.CrossStringBytes"/>, 표마다 하나).
+    /// 대상 VARCHAR2 는 CHAR 단위로 만들어도 4000바이트를 넘지 못한다(MAX_STRING_SIZE 를 읽지 않고 STANDARD 로 본다): 복사 열(<paramref name="columns"/>) 가운데
+    /// 원본·대상이 모두 VARCHAR2(한도 4000)·CHAR(한도 <see cref="OracleCharMaxBytes"/>) 이고 (둘 중 짧은 길이 × <see cref="MaxBytesPerChar"/>) &gt; 한도인 열이 있으면 낸다. 넘는 값은 그 행이 실패한다(ORA-12899).
+    /// 표를 새로 만드는 경우(대상 열 = 원본 열)와 기존 대상 표 둘 다 본다. 교차가 아니거나 대상이 Oracle 이 아니면 null.
+    /// </summary>
+    public static CheckItem? CrossStringByteLimitNote(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TableInfo target, IReadOnlyList<string> columns, string table)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(columns);
+        if (sourceDbms == targetDbms || targetDbms != Dbms.Oracle)
+        {
+            return null;
+        }
+
+        var targetColumns = target.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
+        var over = source.Columns
+            .Where(c => !c.IsVirtual
+                        && columns.Contains(c.Name, StringComparer.Ordinal)
+                        && ByteLimit(CrossTypeMap.Normalize(c.DataType)) is { } limit
+                        && CrossTypeMap.Map(sourceDbms, targetDbms, c).BindType == CrossTypeMap.Normalize(c.DataType)
+                        && c.Length is { } length
+                        && targetColumns.TryGetValue(c.Name, out var t)
+                        && CrossTypeMap.Normalize(t.DataType) == CrossTypeMap.Normalize(c.DataType)
+                        && (long)Math.Min(length, t.Length ?? length) * MaxBytesPerChar > limit)
+            .Select(c => c.Name)
+            .ToList();
+        return over.Count == 0
+            ? null
+            : new CheckItem(table, CopyCheckCodes.CrossStringBytes, CheckLevel.Confirm,
+                $"{table}: 원본 문자 단위 열 {string.Join(", ", over)} 이(가) 대상 Oracle 바이트 한도(VARCHAR2 {CrossTypeMap.OracleVarcharMaxLength}바이트·CHAR {OracleCharMaxBytes}바이트)를 넘을 수 있습니다"
+                + $"(글자당 최대 {MaxBytesPerChar}바이트로 계산, 대상 MAX_STRING_SIZE 는 STANDARD 로 봄). 넘는 값은 그 행이 실패합니다(ORA-12899).");
+
+        // Oracle 의 바이트 한도: VARCHAR2 4000(STANDARD), CHAR 2000. 그 밖의 형식은 보지 않는다.
+        static int? ByteLimit(string type) => type switch
+        {
+            "VARCHAR2" => CrossTypeMap.OracleVarcharMaxLength,
+            "CHAR" => OracleCharMaxBytes,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// 교차 복사로 Oracle CHAR 열을 Tibero 에 넣을 때의 안내(<see cref="CopyCheckCodes.CharPadDiffers"/>, 통과 항목, 표마다 하나).
+    /// Oracle 은 CHAR 를 바이트로 채우고 Tibero CHAR(n CHAR) 는 글자 수로 채워, 여러 바이트 글자가 든 값은 뒤 공백 수가 달라진다.
+    /// 복사 열(<paramref name="columns"/>) 가운데 원본·대상이 모두 CHAR 인 열이 있을 때만 낸다. 교차가 아니거나 방향이 Oracle → Tibero 가 아니면 null.
+    /// </summary>
+    public static CheckItem? CrossCharPadNote(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TableInfo target, IReadOnlyList<string> columns, string table)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(columns);
+        if (sourceDbms != Dbms.Oracle || targetDbms != Dbms.Tibero)
+        {
+            return null;
+        }
+
+        var targetColumns = target.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
+        var chars = source.Columns
+            .Where(c => !c.IsVirtual
+                        && columns.Contains(c.Name, StringComparer.Ordinal)
+                        && CrossTypeMap.Normalize(c.DataType) == "CHAR"
+                        && targetColumns.TryGetValue(c.Name, out var t)
+                        && CrossTypeMap.Normalize(t.DataType) == "CHAR")
+            .Select(c => c.Name)
+            .ToList();
+        return chars.Count == 0
+            ? null
+            : new CheckItem(table, CopyCheckCodes.CharPadDiffers, CheckLevel.Pass,
+                $"{table}: CHAR(n CHAR) 열 {string.Join(", ", chars)} 은(는) Tibero 에서 글자 수로 공백을 채워 뒤 공백 수가 달라질 수 있습니다.");
+    }
+
+    // ---- 기본값의 시퀀스 ----
+
+    private static readonly Regex SequenceNextVal = new(
+        "(?:(?<own>\"(?:[^\"]|\"\")+\"|[A-Za-z][\\w$#]*)\\s*\\.\\s*)?(?<seq>\"(?:[^\"]|\"\")+\"|[A-Za-z][\\w$#]*)\\s*\\.\\s*(?:\"NEXTVAL\"|NEXTVAL)(?![\\w$#\"])",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+
+    /// <summary>
+    /// 기본값 식이 <c>NEXTVAL</c> 로 가리키는 시퀀스(나온 순서, 중복 없음). 형태는 <c>SEQ.NEXTVAL</c>·<c>"SEQ".NEXTVAL</c>·<c>OWN.SEQ.NEXTVAL</c>·<c>"OWN"."SEQ"."NEXTVAL"</c>.
+    /// 따옴표 없는 이름은 대문자로, 따옴표 이름은 글자 그대로 돌려준다. 소유자 접두가 없으면 <c>Owner</c> 는 null.
+    /// </summary>
+    public static IReadOnlyList<(string? Owner, string Name)> SequenceReferences(string? defaultValue)
+    {
+        var result = new List<(string? Owner, string Name)>();
+        if (string.IsNullOrWhiteSpace(defaultValue))
+        {
+            return result;
+        }
+
+        foreach (Match m in SequenceNextVal.Matches(defaultValue))
+        {
+            var reference = (m.Groups["own"].Success ? IdentifierText(m.Groups["own"].Value) : null, IdentifierText(m.Groups["seq"].Value));
+            if (!result.Contains(reference))
+            {
+                result.Add(reference);
+            }
+        }
+
+        return result;
+    }
+
+    private static string IdentifierText(string identifier)
+        => identifier.Length >= 2 && identifier[0] == '"' && identifier[^1] == '"'
+            ? identifier[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal)
+            : identifier.ToUpperInvariant();
+
+    /// <summary>열의 기본값을 뺀 표 구조(<paramref name="columns"/> 에 든 열 이름만). 빼는 열이 없으면 <paramref name="table"/> 그대로.</summary>
+    public static TableInfo WithoutDefaults(TableInfo table, IReadOnlySet<string> columns)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(columns);
+        return columns.Count == 0 || !table.Columns.Any(c => columns.Contains(c.Name))
+            ? table
+            : table with { Columns = [.. table.Columns.Select(c => columns.Contains(c.Name) ? c with { DefaultValue = null } : c)] };
     }
 
     /// <summary>
@@ -609,10 +769,10 @@ public static class PrecheckRules
 
     private enum Family { Text, Clob, Number, DateTime, IntervalDs, IntervalYm, Raw, Blob, Other }
 
-    private static string? NarrowerReason(ColumnInfo s, ColumnInfo t)
+    private static string? NarrowerReason(ColumnInfo s, ColumnInfo t, bool crossDbms = false)
     {
-        var sf = FamilyOf(s.DataType);
-        var tf = FamilyOf(t.DataType);
+        var sf = FamilyOf(crossDbms ? CrossTypeMap.Normalize(s.DataType) : s.DataType);
+        var tf = FamilyOf(crossDbms ? CrossTypeMap.Normalize(t.DataType) : t.DataType);
         var from = s.DataType;
         var to = t.DataType;
 

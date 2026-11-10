@@ -80,6 +80,12 @@ internal sealed class TiberoCopyDialect : ICopyDialect
 
     public string BindPlaceholder(string bindName, string serverType) => TiberoBulkValueCodec.BindExpression(bindName, serverType);
 
+    /// <summary>
+    /// 교차 쓰기 값 자리: TIMESTAMP WITH TIME ZONE 은 <c>TO_TIMESTAMP_TZ</c> 로 감싸고 BINARY_* 는 감싸지 않는다(대량 실행이 기대하는 글과 같다,
+    /// <see cref="TiberoBulkValueCodec.CrossBindExpression"/>). 같은 DBMS 의 <see cref="BindPlaceholder"/> 는 이 형식을 받지 않는다(xdb-copy XC8c, win144 #137).
+    /// </summary>
+    public string CrossBindPlaceholder(string bindName, string bindType) => TiberoBulkValueCodec.CrossBindExpression(bindName, bindType);
+
     public SqlStatement Savepoint(string name) =>
         new("SAVEPOINT " + name, default, StatementKind.TransactionControl) { Verb = "SAVEPOINT" };
 

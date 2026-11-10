@@ -54,7 +54,32 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
         {
             verify = await OpenSecondAsync(it, user2, password2, SessionPurpose.Work, readOnly: false);
             opened.Add(verify);
-            await DropBothAsync(setup, verify);
+
+            // 대상 계정에 DROP 을 막는 DDL 트리거가 있으면 만든 표를 지울 수 없다(#141: <owner>_NO_DROP_TRUNCATE, ODP-20102 / TBR-15163).
+            // 트리거를 끄거나 돌아가지 않고, 표를 만들기 전에 이유를 남기고 건너뛴다(결정 59).
+            if (await DropGuardAsync(verify) is { } guard)
+            {
+                output.WriteLine("XC8b skipped: the target account has a DDL trigger that refuses DROP — " + guard);
+                return;
+            }
+
+            // 앞 실행이 남긴 표(두 계정, 이 시험이 만드는 이름만)를 먼저 지운다. 남으면 만들기 시나리오가 성립하지 않으므로 지우기 오류를 싣고 멈춘다.
+            var dropFailures = await DropBothAsync(setup, verify);
+            if (await LeftoverAsync(setup) + await LeftoverAsync(verify) > 0)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                dropFailures = await DropBothAsync(setup, verify);
+            }
+
+            // 카탈로그로 못 본 트리거라도 지우기가 트리거 오류로 거부되면 같은 이유로 건너뛴다.
+            if (dropFailures.FirstOrDefault(IsTriggerRefusal) is { } refused)
+            {
+                output.WriteLine("XC8b skipped: DROP was refused by a DDL trigger — " + refused);
+                return;
+            }
+
+            Assert.True(await LeftoverAsync(setup) + await LeftoverAsync(verify) == 0,
+                "tables left by an earlier run could not be dropped: " + string.Join(" | ", dropFailures));
 
             await CreateSourcesAsync(setup);
             await Task.Delay(TimeSpan.FromSeconds(2)); // 방금 만든 표를 읽기 전용 트랜잭션이 읽을 수 있도록 DDL 시각을 지나게 한다.
@@ -81,11 +106,72 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
         }
         finally
         {
-            await DropBothAsync(setup, verify);
-            foreach (var session in opened)
+            // 복사에 쓴 대상 세션(두 번째 계정)이 열려 있으면 DROP 이 막혀 표가 남는다(#138: 두 번째 계정에 ORT_CM_A·B 가 남음).
+            // 그 세션들을 먼저 닫고, 확인용 세션으로 두 계정을 지운 뒤 남은 표가 있는지 보고 한 번 더 지운다.
+            foreach (var session in opened.Where(o => !ReferenceEquals(o, verify)))
             {
                 await session.DisposeAsync();
             }
+
+            await DropBothAsync(setup, verify);
+            if (await LeftoverAsync(setup) + (verify is null ? 0 : await LeftoverAsync(verify)) > 0)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2));
+                await DropBothAsync(setup, verify);
+            }
+
+            if (verify is not null)
+            {
+                await verify.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>이 시험이 만드는 표(<see cref="TableA"/>·<see cref="TableB"/>)가 세션 계정에 몇 개 남았는가. 읽지 못하면 0(정리를 막지 않는다).</summary>
+    /// <summary>
+    /// 세션 계정에 걸리는 켜진 스키마·DB 단위 DDL 트리거(DROP·TRUNCATE·DDL 사건, 표 트리거 아님) 이름과 사건. 없거나 카탈로그를 못 읽으면 null.
+    /// Tibero ALL_TRIGGERS 에는 BASE_OBJECT_TYPE 이 없어(-8026) 표 트리거가 아닌 것(TABLE_NAME 없음)으로 가른다.
+    /// </summary>
+    private static async Task<string?> DropGuardAsync(TiberoSession session)
+    {
+        try
+        {
+            var rows = (await TiberoSessionQuery.RunAsync(session,
+                "SELECT TRIGGER_NAME, TRIGGERING_EVENT FROM ALL_TRIGGERS WHERE TABLE_NAME IS NULL AND STATUS = 'ENABLED'"
+                + " AND (UPPER(TRIGGERING_EVENT) LIKE '%DROP%' OR UPPER(TRIGGERING_EVENT) LIKE '%TRUNCATE%' OR UPPER(TRIGGERING_EVENT) LIKE '%DDL%')")).Rows;
+            if (rows.Count == 0)
+            {
+                return null;
+            }
+
+            // 트리거 이름에 계정 이름이 들어갈 수 있다(<owner>_NO_DROP_TRUNCATE) — 출력에서 가린다.
+            var owner = session.Server.SessionUser;
+            var text = string.Join(", ", rows.Select(r => $"{TiberoSessionQuery.Str(r[0])}({TiberoSessionQuery.Str(r[1])})"));
+            return string.IsNullOrEmpty(owner) ? text : text.Replace(owner, "<owner>", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>지우기 실패 글이 DDL 트리거의 거부(사용자 정의 오류: ODP-20102 / TBR-15163)인가.</summary>
+    private static bool IsTriggerRefusal(string failure) =>
+        failure.Contains("20102", StringComparison.Ordinal) || failure.Contains("15163", StringComparison.Ordinal);
+
+    private static Task<long> LeftoverAsync(TiberoSession session) => LeftoverAsync(session, null);
+
+    /// <summary><paramref name="table"/> 하나(null 이면 둘 다)가 세션 계정에 남았는가. 읽지 못하면 0.</summary>
+    private static async Task<long> LeftoverAsync(TiberoSession session, string? table)
+    {
+        var names = table is null ? $"'{TableA}', '{TableB}'" : $"'{table}'";
+        try
+        {
+            return await ScalarAsync(session, $"SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME IN ({names})");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return 0;
         }
     }
 
@@ -94,6 +180,7 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
     private async Task<CopyRunResult> CopyAsync(TiberoItSessions it, string user2, string password2, List<ISession> opened, bool expectCreate)
     {
         var source = await it.OpenAsync(SessionPurpose.Dedicated, it.Profile() with { ReadOnly = true });
+        opened.Add(source);
         var target = await OpenSecondAsync(it, user2, password2, SessionPurpose.Dedicated, readOnly: false);
         opened.Add(target);
         var sessions = new CopySessions(source, target);
@@ -229,8 +316,13 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
         return (TiberoSession)await it.Manager.OpenAsync(profile, credential, purpose, CancellationToken.None);
     }
 
-    private static async Task DropBothAsync(TiberoSession first, TiberoSession? second)
+    /// <summary>
+    /// 두 계정에서 이 시험이 만드는 표만 지운다(소유자를 붙여 그 세션 계정의 표만). 남은 표가 지우기에 실패하면(#139: 두 번째 계정에 ORT_CM_A·B 가 남음)
+    /// 그 오류를 시험 출력에 남긴다 — 계정 이름은 가린다. 돌려주는 값 = 지우기 실패 글(없으면 빈 목록).
+    /// </summary>
+    private async Task<List<string>> DropBothAsync(TiberoSession first, TiberoSession? second)
     {
+        var failures = new List<string>();
         foreach (var session in new[] { first, second })
         {
             if (session is null)
@@ -239,11 +331,33 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
             }
 
             await SilentAsync(session, "ROLLBACK");
+            var owner = session.Server.SessionUser;
             foreach (var table in new[] { TableA, TableB })
             {
-                await SilentAsync(session, $"DROP TABLE {table} CASCADE CONSTRAINTS PURGE");
+                var name = string.IsNullOrEmpty(owner) ? table : $"\"{owner}\".{table}";
+                try
+                {
+                    await ExecAsync(session, $"DROP TABLE {name} CASCADE CONSTRAINTS PURGE");
+                }
+#pragma warning disable CA1031 // 정리 단계: 없는 표 지우기 실패는 무시하고, 남은 표가 있으면 그 오류를 남긴다.
+                catch (Exception ex)
+#pragma warning restore CA1031
+                {
+                    if (await LeftoverAsync(session, table) > 0)
+                    {
+                        var text = string.IsNullOrEmpty(owner) ? ex.Message : ex.Message.Replace(owner, "<owner>", StringComparison.OrdinalIgnoreCase);
+                        failures.Add($"{table}: {text}");
+                    }
+                }
             }
         }
+
+        foreach (var failure in failures)
+        {
+            output.WriteLine("XC8b cleanup: drop failed " + failure);
+        }
+
+        return failures;
     }
 
     private static async Task<List<string?>> TextsAsync(TiberoSession s, string sql) =>

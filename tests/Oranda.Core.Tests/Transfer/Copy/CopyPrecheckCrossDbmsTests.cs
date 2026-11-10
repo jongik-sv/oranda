@@ -241,6 +241,214 @@ public sealed class CopyPrecheckCrossDbmsTests
         Assert.DoesNotContain(rawOnly, i => i.Code == CopyCheckCodes.TypeConverted);
     }
 
+    [Fact]
+    public async Task Xmltype_column_that_the_oracle_catalog_marks_virtual_is_dropped_with_a_confirm_item_in_both_cross_and_same_dbms()
+    {
+        // Oracle 카탈로그(*_TAB_COLS)는 XMLTYPE 열의 VIRTUAL_COLUMN 을 YES 로 돌려준다. 예전에는 이 열이 가상 열로 조용히 사라졌다.
+        ColumnInfo[] Columns(string xmlType) =>
+            [new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("X", 2, xmlType) { IsVirtual = true }];
+        ColumnInfo[] TargetColumns() =>
+            [new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("X", 2, "VARCHAR2") { Length = 40 }];
+
+        var cross = new Fixture(Dbms.Oracle, Dbms.Tibero, source: Table("SRC", Columns("XMLTYPE")), target: Table("DST", TargetColumns()),
+            unsupportedBySource: ["XMLTYPE"]);
+        var crossReport = await cross.RunAsync();
+
+        var dropped = Assert.Single(crossReport.Items, i => i.Code == CopyCheckCodes.ColumnDropped);
+        Assert.Equal("X", dropped.Column);
+        Assert.Equal(CheckLevel.Confirm, dropped.Level);
+        Assert.Contains("XMLTYPE", dropped.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(crossReport.Items, i => i.Code == "UnsupportedType");
+        Assert.Equal(["ID"], Assert.Single(crossReport.Order).Columns);
+
+        var same = new Fixture(Dbms.Oracle, Dbms.Oracle, source: Table("SRC", Columns("XMLTYPE")), target: Table("DST", Columns("XMLTYPE")),
+            unsupportedBySource: ["XMLTYPE"], unsupportedByTarget: ["XMLTYPE"]);
+        var sameReport = await same.RunAsync();
+
+        // 같은 DBMS: 예전처럼 빼고 복사하되(막지 않음) 확인 항목으로 알린다.
+        var note = Assert.Single(sameReport.Items, i => i.Code == CopyCheckCodes.ColumnDropped);
+        Assert.Equal("X", note.Column);
+        Assert.Equal(CheckLevel.Confirm, note.Level);
+        Assert.Contains("XMLTYPE", note.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(sameReport.Items, i => i.Level == CheckLevel.Error);
+        Assert.Equal(["ID"], Assert.Single(sameReport.Order).Columns);
+    }
+
+    [Fact]
+    public void National_varchar_dictionary_names_do_not_look_like_a_type_change_only_in_a_cross_copy()
+    {
+        var rule = new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert);
+        var codec = new FakeCodec([]);
+        var oracle = Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("N", 2, "NVARCHAR2") { Length = 20 }, new ColumnInfo("V", 3, "VARCHAR2") { Length = 20 });
+        var tibero = Table("DST", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("N", 2, "NVARCHAR") { Length = 20 }, new ColumnInfo("V", 3, "VARCHAR") { Length = 20 });
+
+        Assert.DoesNotContain(PrecheckRules.CompareColumns(codec, codec, oracle, tibero, rule, "ORDERS", Dbms.Oracle, Dbms.Tibero), i => i.Code == "NarrowerType");
+        Assert.DoesNotContain(PrecheckRules.CompareColumns(codec, codec, tibero, oracle, rule, "ORDERS", Dbms.Tibero, Dbms.Oracle), i => i.Code == "NarrowerType");
+
+        // 진짜 차이(NUMBER → VARCHAR2)는 교차에서도 그대로 알린다.
+        var changed = Table("DST", new ColumnInfo("ID", 1, "VARCHAR2") { Length = 20, IsNullable = false });
+        var real = PrecheckRules.CompareColumns(codec, codec, oracle, changed, rule, "ORDERS", Dbms.Oracle, Dbms.Tibero);
+        Assert.Contains(real, i => i.Code == "NarrowerType" && i.Column == "ID");
+    }
+
+    [Fact]
+    public async Task Tibero_char_length_columns_over_the_oracle_byte_limit_get_one_confirm_item_for_created_and_existing_target_tables()
+    {
+        // 1000자 x 4바이트 = 4000 은 넘지 않는다. 1001자부터 넘을 수 있다. 4000자 넘는 VARCHAR 는 CLOB 으로 옮기므로 대상이 아니다.
+        ColumnInfo[] Columns() =>
+        [
+            new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false },
+            new ColumnInfo("FITS", 2, "VARCHAR") { Length = 1000 },
+            new ColumnInfo("V2000", 3, "VARCHAR") { Length = 2000 },
+            new ColumnInfo("V4000", 4, "VARCHAR") { Length = 4000 },
+            new ColumnInfo("BIG", 5, "VARCHAR") { Length = 4001 },
+        ];
+        ColumnInfo[] OracleColumns() =>
+        [
+            new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false },
+            new ColumnInfo("FITS", 2, "VARCHAR2") { Length = 1000 },
+            new ColumnInfo("V2000", 3, "VARCHAR2") { Length = 2000 },
+            new ColumnInfo("V4000", 4, "VARCHAR2") { Length = 4000 },
+            new ColumnInfo("BIG", 5, "CLOB"),
+        ];
+
+        // 있는 대상 표: 대상 열도 VARCHAR2(n) 라 같은 한도를 본다.
+        var existing = await new Fixture(Dbms.Tibero, Dbms.Oracle, source: Table("SRC", Columns()), target: Table("DST", OracleColumns())).RunAsync();
+        var item = Assert.Single(existing.Items, i => i.Code == CopyCheckCodes.CrossStringBytes);
+        Assert.Equal(CheckLevel.Confirm, item.Level);
+        Assert.Equal("ORDERS", item.Table);
+        Assert.Contains("V2000, V4000", item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("FITS", item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("BIG", item.Message, StringComparison.Ordinal);
+        Assert.Contains("4000바이트", item.Message, StringComparison.Ordinal);
+        Assert.Contains("그 행이 실패", item.Message, StringComparison.Ordinal);
+
+        // 표를 새로 만드는 경우: 대상 열 = 원본 열.
+        var created = await new Fixture(Dbms.Tibero, Dbms.Oracle, source: Table("SRC", Columns()), target: null, createMissing: true).RunAsync();
+        var createdItem = Assert.Single(created.Items, i => i.Code == CopyCheckCodes.CrossStringBytes);
+        Assert.Contains("V2000, V4000", createdItem.Message, StringComparison.Ordinal);
+        Assert.Contains(created.Items, i => i.Code == CopyCheckCodes.CreateTable);
+
+        // 대상 열이 더 짧으면 짧은 쪽으로 본다: 대상 VARCHAR2(500) 은 500 x 4 = 2000 바이트라 넘지 않는다.
+        var narrow = await new Fixture(Dbms.Tibero, Dbms.Oracle,
+            source: Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("V", 2, "VARCHAR") { Length = 2000 }),
+            target: Table("DST", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("V", 2, "VARCHAR2") { Length = 500 })).RunAsync();
+        Assert.DoesNotContain(narrow.Items, i => i.Code == CopyCheckCodes.CrossStringBytes);
+
+        // CHAR 는 Oracle 한도가 2000바이트다: CHAR(500) 은 넘지 않고 CHAR(501) 부터 넘을 수 있다.
+        var chars = await new Fixture(Dbms.Tibero, Dbms.Oracle,
+            source: Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("C500", 2, "CHAR") { Length = 500 }, new ColumnInfo("C501", 3, "CHAR") { Length = 501 }),
+            target: null, createMissing: true).RunAsync();
+        var charItem = Assert.Single(chars.Items, i => i.Code == CopyCheckCodes.CrossStringBytes);
+        Assert.Contains("C501", charItem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("C500", charItem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Char_length_byte_limit_note_is_only_for_tibero_to_oracle_copies()
+    {
+        ColumnInfo[] Columns(string type) => [new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("V", 2, type) { Length = 2000 }];
+
+        var oracleToTibero = await new Fixture(Dbms.Oracle, Dbms.Tibero, source: Table("SRC", Columns("VARCHAR2")), target: Table("DST", Columns("VARCHAR2"))).RunAsync();
+        var sameOracle = await new Fixture(Dbms.Oracle, Dbms.Oracle, source: Table("SRC", Columns("VARCHAR2")), target: Table("DST", Columns("VARCHAR2"))).RunAsync();
+        var sameTibero = await new Fixture(Dbms.Tibero, Dbms.Tibero, source: Table("SRC", Columns("VARCHAR")), target: Table("DST", Columns("VARCHAR"))).RunAsync();
+
+        Assert.DoesNotContain(oracleToTibero.Items, i => i.Code == CopyCheckCodes.CrossStringBytes);
+        Assert.DoesNotContain(sameOracle.Items, i => i.Code == CopyCheckCodes.CrossStringBytes);
+        Assert.DoesNotContain(sameTibero.Items, i => i.Code == CopyCheckCodes.CrossStringBytes);
+    }
+
+    [Fact]
+    public async Task Oracle_char_columns_into_tibero_get_a_pass_note_about_trailing_space_padding_and_no_other_direction_does()
+    {
+        ColumnInfo[] Columns() => [new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("C", 2, "CHAR") { Length = 2000 }, new ColumnInfo("V", 3, "VARCHAR2") { Length = 20 }];
+
+        var report = await new Fixture(Dbms.Oracle, Dbms.Tibero, source: Table("SRC", Columns()), target: Table("DST", Columns())).RunAsync();
+
+        var note = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.CharPadDiffers);
+        Assert.Equal(CheckLevel.Pass, note.Level);
+        Assert.Equal("ORDERS", note.Table);
+        Assert.Contains("ORDERS: CHAR(n CHAR) 열 C ", note.Message, StringComparison.Ordinal);
+        Assert.Contains("뒤 공백 수가 달라질 수 있습니다", note.Message, StringComparison.Ordinal);
+
+        var reverse = await new Fixture(Dbms.Tibero, Dbms.Oracle, source: Table("SRC", Columns()), target: Table("DST", Columns())).RunAsync();
+        var same = await new Fixture(Dbms.Oracle, Dbms.Oracle, source: Table("SRC", Columns()), target: Table("DST", Columns())).RunAsync();
+        Assert.DoesNotContain(reverse.Items, i => i.Code == CopyCheckCodes.CharPadDiffers);
+        Assert.DoesNotContain(same.Items, i => i.Code == CopyCheckCodes.CharPadDiffers);
+    }
+
+    [Theory]
+    [InlineData(Dbms.Tibero, Dbms.Oracle, "SEQ_ORD.NEXTVAL", "\"ID\" NUMBER DEFAULT SEQ_ORD.NEXTVAL NOT NULL")]
+    [InlineData(Dbms.Oracle, Dbms.Tibero, "\"SRC\".\"SEQ_ORD\".\"NEXTVAL\"", "\"ID\" NUMBER DEFAULT \"DST\".\"SEQ_ORD\".\"NEXTVAL\" NOT NULL")]
+    public async Task Cross_create_keeps_a_sequence_default_when_the_target_schema_has_the_sequence(Dbms sourceDbms, Dbms targetDbms, string defaultValue, string expectedColumn)
+    {
+        var source = Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false, DefaultValue = defaultValue }, new ColumnInfo("NAME", 2, "VARCHAR2") { Length = 20 });
+
+        var report = await new Fixture(sourceDbms, targetDbms, source, target: null, createMissing: true, targetSequences: ["SEQ_ORD"]).RunAsync();
+
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.SequenceDefaultDropped);
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.CreateBlocked);
+        Assert.Contains(report.Items, i => i.Code == CopyCheckCodes.CreateTable);
+        Assert.Contains(expectedColumn, CreateDdl(report), StringComparison.Ordinal);
+        Assert.Equal(defaultValue, Assert.Single(report.Order).Source.Columns.First(c => c.Name == "ID").DefaultValue);
+    }
+
+    [Theory]
+    [InlineData(Dbms.Tibero, Dbms.Oracle, "SEQ_ORD.NEXTVAL")]
+    [InlineData(Dbms.Tibero, Dbms.Oracle, "\"SRC\".\"SEQ_ORD\".NEXTVAL")]
+    [InlineData(Dbms.Oracle, Dbms.Tibero, "\"SRC\".\"SEQ_ORD\".\"NEXTVAL\"")]
+    public async Task Cross_create_drops_only_the_default_whose_sequence_is_missing_in_the_target_and_previews_the_same_ddl(Dbms sourceDbms, Dbms targetDbms, string defaultValue)
+    {
+        var source = Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false, DefaultValue = defaultValue },
+            new ColumnInfo("QTY", 2, "NUMBER") { DefaultValue = "0" }, new ColumnInfo("NAME", 3, "VARCHAR2") { Length = 20, DefaultValue = "'x'" });
+
+        var report = await new Fixture(sourceDbms, targetDbms, source, target: null, createMissing: true, targetSequences: ["OTHER_SEQ"]).RunAsync();
+
+        var item = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.SequenceDefaultDropped);
+        Assert.Equal(CheckLevel.Confirm, item.Level);
+        Assert.Equal("ORDERS", item.Table);
+        Assert.Equal("ID", item.Column);
+        Assert.Contains("SEQ_ORD", item.Message, StringComparison.Ordinal);
+        Assert.Contains("NEXTVAL", item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.CreateBlocked);
+        Assert.False(report.HasErrors);
+
+        // 미리 보기 DDL 은 실행기가 보낼 문장과 같은 입력(계획의 원본 구조)에서 나온다: ID 의 DEFAULT 만 빠진다.
+        var plan = Assert.Single(report.Order);
+        Assert.True(plan.CreateMissing);
+        Assert.Null(plan.Source.Columns.First(c => c.Name == "ID").DefaultValue);
+        Assert.Equal("0", plan.Source.Columns.First(c => c.Name == "QTY").DefaultValue);
+        var ddl = CreateDdl(report);
+        Assert.DoesNotContain("NEXTVAL", ddl, StringComparison.Ordinal);
+        Assert.Contains("\"QTY\" NUMBER DEFAULT 0", ddl, StringComparison.Ordinal);
+        var sent = CrossTableMap.Build(sourceDbms, targetDbms, plan.Source, "DST", new HashSet<string>(StringComparer.Ordinal)).Statements;
+        Assert.Equal(sent[0], ddl);
+    }
+
+    [Fact]
+    public async Task Same_dbms_create_with_a_missing_sequence_is_unchanged_and_still_blocked()
+    {
+        var source = Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false, DefaultValue = "\"SRC\".\"SEQ_ORD\".\"NEXTVAL\"" });
+
+        var report = await new Fixture(Dbms.Oracle, Dbms.Oracle, source, target: null, createMissing: true, targetSequences: ["OTHER_SEQ"]).RunAsync();
+
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.SequenceDefaultDropped);
+        Assert.Contains(report.Items, i => i.Code == CopyCheckCodes.CreateBlocked && i.Level == CheckLevel.Error);
+    }
+
+    [Fact]
+    public void Sequence_references_are_read_from_default_expressions_with_or_without_owner_and_quotes()
+    {
+        Assert.Equal([((string?)null, "ORT_SEQ")], PrecheckRules.SequenceReferences("ORT_SEQ.NEXTVAL"));
+        Assert.Equal([((string?)null, "ort_seq")], PrecheckRules.SequenceReferences("\"ort_seq\".nextval"));
+        Assert.Equal([("SRC", "SEQ")], PrecheckRules.SequenceReferences("src.seq.NEXTVAL"));
+        Assert.Equal([("SRC", "My Seq")], PrecheckRules.SequenceReferences("\"SRC\".\"My Seq\".\"NEXTVAL\""));
+        Assert.Equal([("A", "S1"), ((string?)null, "S2")], PrecheckRules.SequenceReferences("A.S1.NEXTVAL + S2.NEXTVAL"));
+        Assert.Empty(PrecheckRules.SequenceReferences("0"));
+        Assert.Empty(PrecheckRules.SequenceReferences("'x'"));
+        Assert.Empty(PrecheckRules.SequenceReferences(null));
+    }
+
     // ---- 도우미 ----
 
     private static TableInfo Table(string owner, params ColumnInfo[] columns) =>
@@ -249,26 +457,34 @@ public sealed class CopyPrecheckCrossDbmsTests
             Constraints = [new ConstraintInfo("PK_ORDERS", ConstraintKind.PrimaryKey, ["ID"])],
         };
 
+    /// <summary>미리 보기에서 대상에 만드는 표의 CREATE TABLE 문장.</summary>
+    private static string CreateDdl(PrecheckReport report)
+        => Assert.Single(report.Preview, x => x.Side == PreviewSide.Target && x.Sql.StartsWith("CREATE TABLE", StringComparison.Ordinal)).Sql;
+
     private static CopyDbmsParts Parts(Dbms dbms, IBulkValueCodec codec) =>
         new(dbms, new FakeCatalog(), new FakeClassifier(dbms), new FakeDialect(), new FakePrecheckDialect(), codec, new FakeRecreateStep());
 
     private sealed class Fixture
     {
-        public Fixture(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TableInfo target, string[]? unsupportedBySource = null,
-                       string[]? unsupportedByTarget = null, string[]? crossWritableByTarget = null)
+        public Fixture(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TableInfo? target, string[]? unsupportedBySource = null,
+                       string[]? unsupportedByTarget = null, string[]? crossWritableByTarget = null, bool createMissing = false, string[]? targetSequences = null)
         {
             Job = new CopyJob
             {
                 Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
                 SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==",
-                Tables = [new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert)],
+                Tables = [new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { CreateIfMissing = createMissing }],
             };
             Source = new FakeSession(TestData.Profile(readOnly: true), TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" };
             Target = new FakeSession(TestData.Profile(ConnectionEnvironment.Development) with { Name = "dev" }, TestData.Server()) { DbKey = "DSTDB/PDB1/DST" };
             var metadata = new FakeMetadataProvider();
             metadata.Tables[new DbObjectRef("SRC", "ORDERS", "TABLE")] = source;
-            metadata.Tables[new DbObjectRef("DST", "ORDERS", "TABLE")] = target;
-            Service = new CopyPrecheckService(new FakePrecheckBulk(Source, Target), metadata, new AllowPolicy(),
+            if (target is not null)
+            {
+                metadata.Tables[new DbObjectRef("DST", "ORDERS", "TABLE")] = target;
+            }
+
+            Service = new CopyPrecheckService(new FakePrecheckBulk(Source, Target, target is not null, targetSequences ?? []), metadata, new AllowPolicy(),
                 Parts(sourceDbms, new FakeCodec(unsupportedBySource ?? [])), Parts(targetDbms, new FakeCodec(unsupportedByTarget ?? [], crossWritableByTarget ?? [])));
         }
 
@@ -292,7 +508,7 @@ public sealed class CopyPrecheckCrossDbmsTests
     }
 
     /// <summary>점검 조회(id)에 답한다. 모르는 id 는 행 없음, <c>SELECT COUNT(*)</c> 는 2. 대상은 표다.</summary>
-    private sealed class FakePrecheckBulk(ISession source, ISession target) : IBulkExecutionService
+    private sealed class FakePrecheckBulk(ISession source, ISession target, bool targetHasTable = true, string[]? targetSequences = null) : IBulkExecutionService
     {
         public async IAsyncEnumerable<object?[]> StreamRowsAsync(ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds,
                                                                  ExecutionOptions options, [EnumeratorCancellation] CancellationToken ct)
@@ -302,7 +518,11 @@ public sealed class CopyPrecheckCrossDbmsTests
             object?[][] rows = query.Text switch
             {
                 "copy.session_user" => [[isTarget ? "DST" : "SRC"]],
-                "copy.target_is_table" => [[1L]],
+                "copy.target_is_table" => [[targetHasTable ? 1L : 0L]],
+                "copy.session_privs" when isTarget => [["CREATE TABLE"]],
+                "copy.sequence_names" when isTarget => [.. (targetSequences ?? []).Select(n => new object?[] { n })],
+                // 기본값이 가리키는 객체 확인(만들기 차단 검사): 대상 시퀀스만 있다. 표 이름 자체(이름 겹침 검사)는 없다.
+                "copy.object_exists" when isTarget => [[binds.TryGetValue("NAME", out var name) && (targetSequences ?? []).Contains(name.Value as string) ? 1L : 0L]],
                 _ when query.Text.StartsWith("SELECT COUNT(*)", StringComparison.Ordinal) && ReferenceEquals(s, source) => [[2L]],
                 _ => [],
             };

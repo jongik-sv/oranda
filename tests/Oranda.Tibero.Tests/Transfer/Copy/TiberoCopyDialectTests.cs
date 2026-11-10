@@ -50,6 +50,16 @@ public sealed class TiberoCopyDialectTests
         Assert.Equal(":C1", Dialect.BindPlaceholder("C1", "VARCHAR2(10 CHAR)"));
 
     [Fact]
+    public void Cross_value_slot_wraps_time_zone_values_that_the_same_dbms_slot_refuses()
+    {
+        // 교차 쓰기(Oracle → Tibero)만 TIMESTAMP WITH TIME ZONE 을 보낸다(win144 #137: 같은 DBMS 값 자리로 DML 을 만들다 표가 실패).
+        Assert.Throws<NotSupportedException>(() => Dialect.BindPlaceholder("C1", "TIMESTAMP WITH TIME ZONE"));
+        Assert.StartsWith("TO_TIMESTAMP_TZ(:C1", Dialect.CrossBindPlaceholder("C1", "TIMESTAMP WITH TIME ZONE"), StringComparison.Ordinal);
+        // 그 밖의 형식은 같은 DBMS 값 자리와 같다.
+        Assert.Equal(Dialect.BindPlaceholder("C1", "DATE"), Dialect.CrossBindPlaceholder("C1", "DATE"));
+    }
+
+    [Fact]
     public void Read_only_transaction_is_the_psm_block_and_recycle_bin_uses_use_recyclebin()
     {
         var readOnly = Dialect.SetTransactionReadOnly();

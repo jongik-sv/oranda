@@ -276,7 +276,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
 
             row.Estimated ??= table.SourceRows; // 끝난 표는 진행 막대가 가득 차게
             row.SourceRows = table.SourceRows;
-            row.TargetRows = table.TargetRows;
+            row.TargetRows = table.TargetRows >= 0 ? table.TargetRows : null; // -1 = 대상 건수 모름(중지 등): 그리드에서 「-」, 건수 비교 없음
             row.Outcome = table.Outcome;
             row.Message = table.Message ?? string.Empty;
             row.Phase = table.Outcome == CopyOutcome.Succeeded ? "완료" : "문제 있음";

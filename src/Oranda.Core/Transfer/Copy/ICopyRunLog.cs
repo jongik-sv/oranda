@@ -34,5 +34,13 @@ public sealed record UnfinishedRun(string RunFile, DateTimeOffset StartedAt, IRe
 /// </summary>
 public sealed record FailedRow(string Table, IReadOnlyDictionary<string, string?> Key, string Error);
 
+/// <summary>
+/// 표 하나의 결과. <paramref name="TargetRows"/> 가 음수(-1)면 대상 건수를 모른다(중지·실행 중 예외·건수 세기 실패로 대상 건수 비교를 건너뜀).
+/// 글로 보일 때는 <see cref="TargetRowsText"/> 를 쓴다(-1 을 그대로 보이지 않는다).
+/// </summary>
 public sealed record TableRunResult(string Table, long SourceRows, long TargetRows, TimeSpan Elapsed,
-                                    CopyOutcome Outcome, string? Message);
+                                    CopyOutcome Outcome, string? Message)
+{
+    /// <summary>대상 건수 글: 천 단위 구분, 모르면(<see cref="TargetRows"/> 가 음수) <c>-</c>.</summary>
+    public string TargetRowsText => TargetRows < 0 ? "-" : TargetRows.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+}

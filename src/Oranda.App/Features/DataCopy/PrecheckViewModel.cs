@@ -98,6 +98,9 @@ public sealed class CheckItemViewModel
         [CopyCheckCodes.TypeConverted] = "형식 바꿔 옮김",
         [CopyCheckCodes.CrossCharset] = "대상 문자셋 안내",
         [CopyCheckCodes.BlobEmptyToNull] = "빈 BLOB 은 NULL",
+        [CopyCheckCodes.CrossStringBytes] = "Oracle 바이트 한도 넘을 수 있음",
+        [CopyCheckCodes.CharPadDiffers] = "CHAR 뒤 공백 달라짐",
+        [CopyCheckCodes.SequenceDefaultDropped] = "없는 시퀀스 기본값 뺌",
     };
 
     public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices, string? tableText = null)

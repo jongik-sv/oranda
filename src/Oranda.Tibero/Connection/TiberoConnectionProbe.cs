@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Globalization;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
+using Oranda.Core.Execution;
 using Oranda.Tibero.Driver;
 using Oranda.Tibero.Execution;
 
@@ -11,6 +12,8 @@ namespace Oranda.Tibero.Connection;
 /// <remarks>
 /// 드라이버는 사용자가 지정한 위치에서 처음 쓸 때 읽는다(D-046-1, <see cref="TiberoDriver.Require"/>). 지정 안 했거나 쓸 수 없으면 그 이유를 실패로 돌려준다.
 /// 서버 버전은 <c>SELECT * FROM V$VERSION</c> 의 글에서 뽑는다(읽기 전용).
+/// 접속은 됐는데 이 뷰를 못 읽으면(일반 계정: TBR-8033·권한 없음) 시험 실패가 아니라 <c>connection.ServerVersion</c> 으로 대신하고
+/// 결과의 <see cref="ServerProbeResult.Message"/> 에 안내를 싣는다. 끊김·취소·제한 시간은 그대로 실패(또는 취소)다.
 /// </remarks>
 [OrandaService(typeof(IConnectionProbe), Dbms = Dbms.Tibero)]
 internal sealed class TiberoConnectionProbe : IConnectionProbe
@@ -65,9 +68,10 @@ internal sealed class TiberoConnectionProbe : IConnectionProbe
         }
 
         string? version;
+        string? notice;
         try
         {
-            version = await ReadVersionAsync(driver, connectionString, profile.ConnectTimeoutSeconds, ct).ConfigureAwait(false);
+            (version, notice) = await ReadVersionAsync(driver, connectionString, profile.ConnectTimeoutSeconds, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is DbException || TiberoErrorClassifier.IsDriverException(ex))
         {
@@ -81,8 +85,14 @@ internal sealed class TiberoConnectionProbe : IConnectionProbe
             return ServerProbeResult.Fail(null, Redact(ex.Message, password));
         }
 
+        // 버전 뷰를 못 읽어 드라이버 버전도 비면 버전을 모르는 채로 통과시킨다(접속은 됐다 — 버전 모름은 「지원 안 됨」이 아니다).
+        if (notice is not null && string.IsNullOrWhiteSpace(version))
+        {
+            return ServerProbeResult.Ok(null, notice);
+        }
+
         return _policy.IsSupported(version, out var reason)
-            ? ServerProbeResult.Ok(version)
+            ? ServerProbeResult.Ok(version, notice)
             : ServerProbeResult.Unsupported(version, reason);
     }
 
@@ -97,7 +107,7 @@ internal sealed class TiberoConnectionProbe : IConnectionProbe
     /// 접속·버전 조회. 드라이버의 *Async 는 동기로 돌아(실측 exec 4장) 스레드 풀에서 돌리고, 제한 시간·취소는 기다림에 건다 —
     /// 기다림을 끊어도 시작한 일은 끝난 뒤 백그라운드에서 연결을 닫는다(응답 없는 서버에 부른 쪽이 묶이지 않게).
     /// </summary>
-    private static async Task<string?> ReadVersionAsync(TiberoDriver driver, string connectionString, int connectTimeoutSeconds, CancellationToken ct)
+    private static async Task<(string? Version, string? Notice)> ReadVersionAsync(TiberoDriver driver, string connectionString, int connectTimeoutSeconds, CancellationToken ct)
     {
         // 제한 시간은 접속과 버전 조회 전체에 건다(서버가 접속은 받고 응답하지 않는 경우). 일이 끝날 때까지 토큰 원본을 살려 둔다.
         var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -140,7 +150,7 @@ internal sealed class TiberoConnectionProbe : IConnectionProbe
         }
     }
 
-    private static string? ReadVersion(TiberoDriver driver, string connectionString, CancellationToken ct)
+    private static (string? Version, string? Notice) ReadVersion(TiberoDriver driver, string connectionString, CancellationToken ct)
     {
         var connection = driver.CreateConnection(connectionString);
         try
@@ -148,23 +158,18 @@ internal sealed class TiberoConnectionProbe : IConnectionProbe
             connection.Open();
             ct.ThrowIfCancellationRequested();
 
-            using var command = connection.CreateCommand();
-            command.CommandText = VersionSql;
-            // 취소는 타이머 스레드에서도 불린다 — 드라이버가 던져도 프로세스를 죽이지 않게 삼킨다(취소는 최선 노력).
-            using var cancel = ct.Register(static state => TryCancel((DbCommand)state!), command);
-            using var reader = command.ExecuteReader();
-
-            // 열은 (NAME, VALUE, BANNER). 앞의 두 열만 읽는다.
-            var rows = new List<(string?, string?)>();
-            while (!ct.IsCancellationRequested && reader.Read())
+            try
             {
-                rows.Add((
-                    reader.IsDBNull(0) ? null : Convert.ToString(reader.GetValue(0), CultureInfo.InvariantCulture),
-                    reader.FieldCount > 1 && !reader.IsDBNull(1) ? Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture) : null));
+                var rows = ReadVersionRows(connection, ct);
+                ct.ThrowIfCancellationRequested();
+                return (TiberoServerVersionPolicy.FromVersionRows(rows) ?? connection.ServerVersion, null);
             }
-
-            ct.ThrowIfCancellationRequested();
-            return TiberoServerVersionPolicy.FromVersionRows(rows) ?? connection.ServerVersion;
+            catch (Exception ex) when (!ct.IsCancellationRequested && IsVersionViewUnreadable(ex))
+            {
+                // 접속은 됐는데 V$VERSION 을 못 읽는다(일반 계정: TBR-8033 객체 없음·권한 없음) — 시험 실패가 아니다. 드라이버가 알려 주는 버전으로 대신한다.
+                var driverVersion = string.IsNullOrWhiteSpace(connection.ServerVersion) ? null : connection.ServerVersion.Trim();
+                return (driverVersion, NoVersionViewNotice(driverVersion));
+            }
         }
         finally
         {
@@ -185,6 +190,39 @@ internal sealed class TiberoConnectionProbe : IConnectionProbe
                 connection.Dispose();
             }
         }
+    }
+
+    /// <summary>접속 시험 성공에 붙는 안내: 버전 뷰를 못 읽어 드라이버가 알려 준 버전(없으면 모름)으로 대신했다.</summary>
+    internal static string NoVersionViewNotice(string? driverVersion) =>
+        string.IsNullOrEmpty(driverVersion)
+            ? "서버 버전을 읽지 못했습니다(V$VERSION 권한 없음). 버전은 알 수 없습니다."
+            : $"서버 버전을 읽지 못했습니다(V$VERSION 권한 없음). 드라이버가 알려 준 버전 {driverVersion} 로 대신합니다.";
+
+    /// <summary>
+    /// 버전 조회 실패가 「이 계정이 뷰를 못 본다」(객체 없음 TBR-8033 — 실측으로는 권한 없는 객체도 이 번호 — 또는 권한 없음 TBR-8053)인가.
+    /// 끊김·취소·그 밖의 오류는 아니다 — 그건 시험 실패(또는 취소)로 둔다.
+    /// </summary>
+    private static bool IsVersionViewUnreadable(Exception ex) =>
+        Classifier.FromException(ex)?.Kind is DbErrorKind.ObjectNotFound or DbErrorKind.InsufficientPrivileges;
+
+    private static List<(string?, string?)> ReadVersionRows(DbConnection connection, CancellationToken ct)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = VersionSql;
+        // 취소는 타이머 스레드에서도 불린다 — 드라이버가 던져도 프로세스를 죽이지 않게 삼킨다(취소는 최선 노력).
+        using var cancel = ct.Register(static state => TryCancel((DbCommand)state!), command);
+        using var reader = command.ExecuteReader();
+
+        // 열은 (NAME, VALUE, BANNER). 앞의 두 열만 읽는다.
+        var rows = new List<(string?, string?)>();
+        while (!ct.IsCancellationRequested && reader.Read())
+        {
+            rows.Add((
+                reader.IsDBNull(0) ? null : Convert.ToString(reader.GetValue(0), CultureInfo.InvariantCulture),
+                reader.FieldCount > 1 && !reader.IsDBNull(1) ? Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture) : null));
+        }
+
+        return rows;
     }
 
     private static void TryCancel(DbCommand command)

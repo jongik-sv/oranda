@@ -185,6 +185,44 @@ public class TiberoConnectionProbeTests
     }
 
     [Fact]
+    public async Task Probe_passes_with_a_notice_and_the_driver_version_when_V_VERSION_is_not_visible()
+    {
+        // 일반 계정: 접속은 되지만 V$VERSION 은 TBR-8033(객체 없음)이다.
+        string? sql = null;
+        FakeDriverHost.SetHandler(command =>
+        {
+            sql = command.CommandText;
+            throw FakeDriverHost.ServerError(-8033, "ODP-8033:Specified schema object was not found.");
+        });
+
+        var result = await new TiberoConnectionProbe(static () => FakeDriverHost.Driver).ProbeAsync(Profile(), "pw", CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("6", result.ServerVersion); // 가짜 드라이버의 ServerVersion
+        Assert.Null(result.Error);
+        Assert.Contains("V$VERSION", result.Message, StringComparison.Ordinal);
+        Assert.Equal("SELECT * FROM V$VERSION", sql);
+    }
+
+    [Fact]
+    public void NoVersionViewNotice_says_the_version_is_unknown_when_the_driver_gives_none()
+    {
+        Assert.Contains("알 수 없습니다", TiberoConnectionProbe.NoVersionViewNotice(null), StringComparison.Ordinal);
+        Assert.Contains("6.2", TiberoConnectionProbe.NoVersionViewNotice("6.2"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Probe_still_fails_when_the_version_query_hits_a_dropped_connection()
+    {
+        FakeDriverHost.SetHandler(static _ => throw FakeDriverHost.ServerError(-12001, "ODP-12001:Session killed."));
+
+        var result = await new TiberoConnectionProbe(static () => FakeDriverHost.Driver).ProbeAsync(Profile(), "pw", CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("TBR-12001", result.Error!.Code);
+    }
+
+    [Fact]
     public async Task Probe_stops_waiting_at_the_time_limit()
     {
         using var release = new ManualResetEventSlim();

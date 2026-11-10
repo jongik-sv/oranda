@@ -183,6 +183,23 @@ public sealed class RunStepTests
     }
 
     [Fact]
+    public async Task Unknown_target_count_is_not_shown_as_minus_one_and_does_not_count_as_a_mismatch()
+    {
+        var h = new DataCopyHarness();
+        h.Runner.Behavior = _ => Task.FromResult(new CopyRunResult(CopyOutcome.Stopped,
+            [new TableRunResult("ORDERS", 10, -1, TimeSpan.FromSeconds(1), CopyOutcome.Stopped, null)], [], [],
+            new DateTimeOffset(2026, 11, 6, 12, 0, 1, TimeSpan.Zero)));
+        var vm = new RunViewModel(h.Services());
+
+        await vm.StartAsync(Sessions(), TestJobs.Job("중지 건수"), Report(), NoDecisions, Period);
+
+        var row = Assert.Single(vm.Rows);
+        Assert.Null(row.TargetRows);
+        Assert.Null(row.CountsMatch); // -1 != 10 이라고 「다름」으로 보이지 않는다
+        Assert.DoesNotContain("-1", row.CountsText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Last_run_is_not_recorded_when_every_target_count_is_unknown()
     {
         var h = new DataCopyHarness();

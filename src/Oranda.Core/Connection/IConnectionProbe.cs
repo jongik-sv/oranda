@@ -30,10 +30,13 @@ public interface IConnectionProbe
 /// <summary>
 /// 접속 시험 결과. 지원하지 않는 서버 버전이면 <see cref="Succeeded"/> 가 false, <see cref="ServerVersion"/> 은 채우고
 /// <see cref="Error"/> 는 null, <see cref="Message"/> 에 이유를 담는다.
+/// 성공이어도 <see cref="Message"/> 에 안내 한 줄이 실릴 수 있다(예: 버전 뷰를 볼 권한이 없어 드라이버가 알려 준 버전으로 대신함).
 /// </summary>
 public sealed record ServerProbeResult(bool Succeeded, string? ServerVersion, DbError? Error, string? Message)
 {
-    public static ServerProbeResult Ok(string? serverVersion) => new(true, serverVersion, null, null);
+    /// <param name="serverVersion">서버 버전. 알 수 없으면 null.</param>
+    /// <param name="notice">성공이지만 사용자에게 알릴 안내(없으면 null).</param>
+    public static ServerProbeResult Ok(string? serverVersion, string? notice = null) => new(true, serverVersion, null, notice);
 
     public static ServerProbeResult Fail(DbError? error, string message) => new(false, null, error, message);
 

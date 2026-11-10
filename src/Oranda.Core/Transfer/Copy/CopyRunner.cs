@@ -1757,7 +1757,10 @@ public class CopyRunner : ICopyRunner
         // 값 자리 글은 방언이 정한다(바인드 이름·바인드 형식 = 행 배치의 열). Oracle 은 :Cn 그대로라 글이 바뀌지 않는다.
         // 대상에 보내는 DML 이라 대상 방언이다. 형식은 같은 DBMS 면 원본 열 형식, 교차면 원본 형식을 대상 DBMS 로 옮긴 형식(D3)이다.
         // 열은 행 배치의 복사 열이다(교차 복사에서 옮길 형식이 없는 열은 빠졌다).
-        string ValueAt(int i) => _dialect.BindPlaceholder(shape.Columns[i].BindName, shape.Columns[i].ServerType);
+        // 교차는 교차 쓰기 값 자리(ICopyDialect.CrossBindPlaceholder): Tibero 는 TZ 를 같은 DBMS 값 자리로는 받지 않는다(win144 #137).
+        string ValueAt(int i) => _sourceDbms != _targetDbms
+            ? _dialect.CrossBindPlaceholder(shape.Columns[i].BindName, shape.Columns[i].ServerType)
+            : _dialect.BindPlaceholder(shape.Columns[i].BindName, shape.Columns[i].ServerType);
         return merge ? builder.Merge(key, shape.CopyColumns, plan.KeyColumns, ValueAt) : builder.Insert(key, shape.CopyColumns, ValueAt);
     }
 

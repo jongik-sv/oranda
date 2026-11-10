@@ -88,6 +88,12 @@
 표 만들기 DDL(XC8)이 쓰는 열: 이름·위치·널 허용·기본값·길이·정밀도·`DataType` 의 괄호(`TIMESTAMP(9)`)는 원본 그대로, IDENTITY·도메인(Oracle 23ai)은 지운다.
 형식을 바꾼 열(LOB 로의 변환)은 `DataType` 을 바꾸고 길이·정밀도를 버린다. 가상 열·함수 기반 인덱스·COLLATE 처리는 XC8 몫이다.
 
+### 3.4 주의 (실서버 시험 XC10)
+
+- Oracle `CHAR(n CHAR)` → Tibero: Oracle 은 CHAR 를 바이트로, Tibero 는 글자 수로 공백을 채워 뒤 공백 수가 달라질 수 있다(점검 `CharPadDiffers`, 통과 안내).
+- Tibero `VARCHAR(n CHAR)` → Oracle: DDL 은 `VARCHAR2(n CHAR)` 그대로이나 Oracle 은 4000바이트를 넘는 값을 받지 못해 그 행이 실패한다(ORA-12899). 점검 `CrossStringBytes`(확인): 복사 열의 짧은 쪽 길이 × 4바이트(UTF-8 최대) > 4000 인 VARCHAR2 열을 알린다(MAX_STRING_SIZE 는 읽지 않고 STANDARD 로 봄).
+- 기본값 `시퀀스.NEXTVAL`(양방향 표 만들기): 시퀀스 이름을 대상 스키마 `ALL_SEQUENCES` 에서 찾아 없으면 그 열의 DEFAULT 만 빼고 만든다(점검 `SequenceDefaultDropped`, 확인). 미리 보기·실행 DDL 은 같은 계획 구조에서 나온다. 같은 DBMS 복사는 바꾸지 않는다.
+
 ## 4. 실측이 필요한 가정(XC5) — 결과는 `tibero-driver-transfer.md` §5
 
 1. Tibero TZ 쓰기: 지역 이름·음수 분 오프셋 → D7.

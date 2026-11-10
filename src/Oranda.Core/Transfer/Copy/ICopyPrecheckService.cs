@@ -53,6 +53,15 @@ public static class CopyCheckCodes
 
     /// <summary>통과 안내(교차 복사로 Tibero 에 BLOB 을 넣을 때): 길이가 0 인 BLOB 은 NULL 이 된다.</summary>
     public const string BlobEmptyToNull = "BlobEmptyToNull";
+
+    /// <summary>확인 필요(교차 복사로 Oracle 에 넣을 때, 표마다 한 항목): 원본 문자 단위(CHAR) 길이 열이 대상 Oracle 의 바이트 한도(VARCHAR2 4000)를 넘는 값을 담을 수 있다 — 넘는 값은 그 행이 실패한다.</summary>
+    public const string CrossStringBytes = "CrossStringBytes";
+
+    /// <summary>통과 안내(교차 복사로 Oracle CHAR 를 Tibero 에 넣을 때, 표마다 한 항목): Tibero 는 CHAR(n CHAR) 를 글자 수로 공백을 채워 뒤 공백 수가 달라질 수 있다.</summary>
+    public const string CharPadDiffers = "CharPadDiffers";
+
+    /// <summary>확인 필요(교차 복사로 표를 만들 때, 열마다 한 항목): 기본값이 가리키는 시퀀스가 대상에 없어 그 열의 DEFAULT 를 빼고 만든다.</summary>
+    public const string SequenceDefaultDropped = "SequenceDefaultDropped";
 }
 
 public enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }

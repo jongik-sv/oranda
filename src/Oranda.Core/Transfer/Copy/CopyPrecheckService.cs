@@ -181,6 +181,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                     createRefused = await CreateRefusedAsync(targetOwner, rule.Table, ct).ConfigureAwait(false);
                     if (createRefused is null)
                     {
+                        source = await DropMissingSequenceDefaultsAsync(rule, key, source, ct).ConfigureAwait(false);
                         _sourceTables[key] = source;
                         _targetTables[key] = PrecheckRules.AsRecreated(source, targetOwner);
                         _creating.Add(key);
@@ -201,11 +202,74 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                     continue;
                 }
 
+                if (IsRecreate(rule) && CanRecreate)
+                {
+                    source = await DropMissingSequenceDefaultsAsync(rule, key, source, ct).ConfigureAwait(false);
+                }
+
                 _sourceTables[key] = source;
                 // 다시 만들 표는 적재할 때 원본 구조다: 열·키·문장을 옛 대상 구조가 아니라 다시 만든 구조로 정한다.
                 _targetTables[key] = IsRecreate(rule) && CanRecreate
                     ? PrecheckRules.AsRecreated(source, targetOwner)
                     : await AdjustIdentityAsync(target, targetOwner, ct).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// 교차 복사로 표를 만들 때(없으면 만들기·다시 만들기): 열 기본값이 <c>시퀀스.NEXTVAL</c> 인데 그 시퀀스가 대상에 없으면 그 열의 DEFAULT 만 빼고 만든다
+        /// (<see cref="CopyCheckCodes.SequenceDefaultDropped"/> 확인 항목). 뺀 구조를 점검 계획(<see cref="CopyTablePlan.Source"/>)에 담으므로 미리 보기 DDL 과 실행 DDL 이 같다.
+        /// 소유자 접두가 없으면 대상 소유자, 원본 소유자면 대상 소유자로 바뀌는 쪽(<see cref="CreateTableDdl"/> 의 소유자 치환), 다른 소유자는 그 소유자에서 찾는다.
+        /// 시퀀스 목록을 읽지 못하면 있는 것으로 보고 기본값을 둔다(같은 DBMS 복사는 바꾸지 않는다).
+        /// </summary>
+        private async Task<TableInfo> DropMissingSequenceDefaultsAsync(TableRule rule, string key, TableInfo source, CancellationToken ct)
+        {
+            if (sourceParts.Dbms == targetDbms)
+            {
+                return source;
+            }
+
+            var targetOwner = TargetOwner(rule);
+            var sourceOwner = SourceOwner(rule);
+            var known = new Dictionary<string, HashSet<string>?>(CopyOwners.OwnerComparer);
+            var drop = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var c in source.Columns.Where(c => !c.IsVirtual && !c.IsIdentity))
+            {
+                foreach (var (owner, name) in PrecheckRules.SequenceReferences(c.DefaultValue))
+                {
+                    var resolved = owner is null || CopyOwners.SameOwner(owner, sourceOwner) ? targetOwner : owner;
+                    if (!known.TryGetValue(resolved, out var names))
+                    {
+                        names = await ReadSequenceNamesAsync(resolved, ct).ConfigureAwait(false);
+                        known[resolved] = names;
+                    }
+
+                    if (names is not null && !names.Contains(name))
+                    {
+                        drop.Add(c.Name);
+                        _items.Add(new CheckItem(key, CopyCheckCodes.SequenceDefaultDropped, CheckLevel.Confirm,
+                            $"{key}: 대상 {resolved} 에 시퀀스 {name} 이(가) 없어 열 {c.Name} 의 기본값({c.DefaultValue!.Trim()})을 빼고 만듭니다. 시퀀스를 만든 뒤 기본값을 다시 걸어야 합니다.")
+                        {
+                            Column = c.Name,
+                        });
+                        break;
+                    }
+                }
+            }
+
+            return PrecheckRules.WithoutDefaults(source, drop);
+        }
+
+        /// <summary>한 소유자의 시퀀스 이름(<c>copy.sequence_names</c>, ALL_SEQUENCES). 읽지 못하면 null.</summary>
+        private async Task<HashSet<string>?> ReadSequenceNamesAsync(string owner, CancellationToken ct)
+        {
+            try
+            {
+                var rows = await CopyCatalogQueries.QueryAsync(bulk, Target, TargetSql("copy.sequence_names"), ct, ("OWN", owner)).ConfigureAwait(false);
+                return rows.Select(r => codec.ToText(r[0])).OfType<string>().ToHashSet(StringComparer.Ordinal);
+            }
+            catch (Exception ex) when (CopyErrors.IsNoAccess(errors, ex))
+            {
+                return null;
             }
         }
 
@@ -269,7 +333,10 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         {
             try
             {
-                return await metadata.GetTableAsync(s, new DbObjectRef(owner, table, "TABLE"), ct).ConfigureAwait(false);
+                // 교차 복사: Oracle 카탈로그가 가상 열로 표시하는 XMLTYPE 열을 형식 판정이 보게 한다(점검 계획·실행기가 쓰는 구조 모두 여기서 온다).
+                // 같은 DBMS 는 예전처럼 가상 열로 두어 빼고 복사한다(SameDbmsXmlTypeNotes 가 확인 항목으로 알림).
+                var info = await metadata.GetTableAsync(s, new DbObjectRef(owner, table, "TABLE"), ct).ConfigureAwait(false);
+                return sourceParts.Dbms != targetDbms ? PrecheckRules.ClearXmlTypeVirtual(info) : info;
             }
             catch (InvalidOperationException)
             {
@@ -314,11 +381,22 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             // 대상 구조가 원본에서 만들어지는 표(없으면 만들기·다시 만들기)는 대상 열 형식을 옮긴 형식으로 본다.
             var fromSource = _creating.Contains(key) || (IsRecreate(rule) && CanRecreate);
             _items.AddRange(PrecheckRules.CompareColumns(sourceParts.Codec, codec, source, target, rule, key, sourceParts.Dbms, targetDbms, fromSource));
+            _items.AddRange(PrecheckRules.SameDbmsXmlTypeNotes(source, rule, key, sourceParts.Dbms, targetDbms));
             var dropped = PrecheckRules.CrossDroppedColumns(sourceParts.Codec, source, target, rule, sourceParts.Dbms, targetDbms);
             var columns = PrecheckRules.SelectColumns(sourceParts.Codec, codec, source, target, rule, sourceParts.Dbms, targetDbms, fromSource);
             if (PrecheckRules.CrossBlobNote(sourceParts.Dbms, targetDbms, source, columns, key) is { } blob)
             {
                 _items.Add(blob);
+            }
+
+            if (PrecheckRules.CrossStringByteLimitNote(sourceParts.Dbms, targetDbms, source, target, columns, key) is { } bytes)
+            {
+                _items.Add(bytes);
+            }
+
+            if (PrecheckRules.CrossCharPadNote(sourceParts.Dbms, targetDbms, source, target, columns, key) is { } pad)
+            {
+                _items.Add(pad);
             }
 
             var keys = PrecheckRules.KeyColumns(target, columns);

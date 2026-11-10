@@ -75,6 +75,10 @@ public partial class DataCopyWindow
         return string.IsNullOrEmpty(r.Message) ? outcome : string.IsNullOrEmpty(outcome) ? r.Message : $"{outcome} · {r.Message}";
     }
 
+    // 대상 건수를 모르면(중지 등, 행이 끝났는데 값이 없음) 「-」. 끝나기 전에는 빈 칸.
+    private static string TargetRowsText(TableRunRowViewModel r)
+        => r.TargetRows is { } t ? t.ToString("N0", CultureInfo.InvariantCulture) : r.Outcome is null ? string.Empty : "-";
+
     /// <summary>테이블별 진행 열. 5 = 건수 비교, 6 = 결과(색 칸 번호).</summary>
     private static MonitorColumn<TableRunRowViewModel>[] RunColumns() =>
     [
@@ -82,7 +86,7 @@ public partial class DataCopyWindow
         new(L("진행"),ColumnDataKind.Text, ProgressText),
         new(L("단계"), ColumnDataKind.Text, r => L(r.Phase)),
         new(L("원본 건수"), ColumnDataKind.Number, r => r.SourceRows),
-        new(L("대상 건수"), ColumnDataKind.Number, r => r.TargetRows),
+        new(L("대상 건수"), ColumnDataKind.Text, TargetRowsText),
         new(L("건수 비교"), ColumnDataKind.Text, r => r.CountsMatch switch { true => "✓ " + L("같음"), false => "✗ " + L("다름"), null => string.Empty }),
         new(L("결과"), ColumnDataKind.Text, ResultText),
     ];
