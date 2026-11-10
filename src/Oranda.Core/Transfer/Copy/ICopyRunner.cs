@@ -37,6 +37,17 @@ public sealed record CopyProgress(string Table, long Rows, long? Estimated, stri
     /// <summary>작업 로그 한 줄(진행 보고면 null).</summary>
     public CopyLogEntry? Log { get; init; }
 
+    /// <summary>
+    /// 대상에 넣은 행 수(적재 단계). 읽기·쓰기를 겹치면 읽은 수(<see cref="Rows"/>)보다 늦게 따라온다. 모르면 null(받는 쪽은 앞 값을 둔다).
+    /// </summary>
+    public long? Written { get; init; }
+
+    /// <summary>
+    /// 멈춤 표시(결정 70): 지금 응답을 오래 기다리는 단계(원본 읽기·대상 쓰기 따로). null = 이 보고는 멈춤 표시와 상관없다(받는 쪽은 앞 표시를 둔다),
+    /// 빈 목록 = 멈춤이 풀렸다(표시를 지운다).
+    /// </summary>
+    public IReadOnlyList<CopyWait>? Waits { get; init; }
+
     public static CopyProgress ForLog(CopyLogEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -44,9 +55,44 @@ public sealed record CopyProgress(string Table, long Rows, long? Estimated, stri
     }
 }
 
+/// <summary>멈춤 표시의 쪽: 원본 읽기 또는 대상 쓰기.</summary>
+public enum CopyWaitSide { Source, Target }
+
+/// <summary>
+/// 멈춤 표시가 기다리는 명령의 종류. <see cref="Load"/>(기본) = 적재(원본 읽기·배치 쓰기), <see cref="Delete"/> = 대상 정리(DELETE),
+/// <see cref="Commit"/> = 「테이블마다 커밋」의 COMMIT. 둘 다 대상 명령이다(리뷰 PF1-4: 흔한 멈춤인 DELETE 행 잠금 대기도 감시한다).
+/// </summary>
+public enum CopyWaitStep { Load, Delete, Commit }
+
+/// <summary>
+/// 멈춤 표시 하나(결정 70): 명령 하나가 응답 없이 기다린 시간. <paramref name="Batch"/> 는 대상 쓰기의 배치 번호(원본 읽기면 null).
+/// 글은 <see cref="CopyLogText.Wait"/>(「배치 n 쓰는 중 · m분째 대기」·「원본 읽는 중 · m분째」·「대상 정리(DELETE) 중 · m분째 대기」·「테이블 커밋 중 · m분째 대기」).
+/// </summary>
+public sealed record CopyWait(CopyWaitSide Side, int? Batch, TimeSpan Waited)
+{
+    /// <summary>몇 분째인지(1부터: 1분이 안 됐으면 1분째).</summary>
+    public int Minute => (int)Waited.TotalMinutes + 1;
+
+    /// <summary>기다리는 명령의 종류(기본 = 적재).</summary>
+    public CopyWaitStep Step { get; init; }
+}
+
 public sealed record CopyRunResult(CopyOutcome Outcome, IReadOnlyList<TableRunResult> Tables,
                                    IReadOnlyList<FailedRow> FailedRows, IReadOnlyList<string> Notices,
-                                   DateTimeOffset ReadStartedAt);
+                                   DateTimeOffset ReadStartedAt)
+{
+    /// <summary>
+    /// 원본 명령이 취소에도 돌아오지 않아 실행기가 원본 세션을 버렸다(리뷰 PF1-3). 그 세션은 명령을 쥐고 있어 더 쓸 수 없다:
+    /// 앱은 세션 쌍을 닫고 새로 열어야 한다(다시 점검).
+    /// </summary>
+    public bool SourceAbandoned { get; init; }
+
+    /// <summary>대상 명령이 취소에도 돌아오지 않아 실행기가 대상 세션을 버렸다(커밋·롤백을 보내지 않았다). 앱은 세션 쌍을 닫는다(닫으면 커밋하지 않은 변경은 되돌아간다).</summary>
+    public bool TargetAbandoned { get; init; }
+
+    /// <summary>버린 세션이 있다(<see cref="SourceAbandoned"/> 또는 <see cref="TargetAbandoned"/>).</summary>
+    public bool SessionsAbandoned => SourceAbandoned || TargetAbandoned;
+}
 
 /// <summary>일시 정지·재개 신호. 중지는 취소 토큰으로 한다.</summary>
 public sealed class CopyRunControl

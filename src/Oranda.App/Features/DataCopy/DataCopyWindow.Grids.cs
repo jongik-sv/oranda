@@ -65,14 +65,27 @@ public partial class DataCopyWindow
     ];
 
     private static string ProgressText(TableRunRowViewModel r) =>
-        r.HasEstimate ? string.Create(CultureInfo.InvariantCulture, $"{r.Percent:0}%")
-        : r.Rows > 0 ? string.Create(CultureInfo.InvariantCulture, $"{r.Rows:N0}") + (LiteralTranslator.IsEnglish ? " rows" : "행")
-        : string.Empty;
+        (r.HasEstimate ? string.Create(CultureInfo.InvariantCulture, $"{r.Percent:0}%")
+         : r.Rows > 0 ? string.Create(CultureInfo.InvariantCulture, $"{r.Rows:N0}") + (LiteralTranslator.IsEnglish ? " rows" : "행")
+         : string.Empty)
+        + WrittenText(r);
+
+    // 적재 중 읽기·쓰기를 겹치면 넣은 수가 읽은 수보다 늦다: 그때만 넣은 수를 덧붙인다(끝나면 결과가 정한다).
+    private static string WrittenText(TableRunRowViewModel r) =>
+        r.Outcome is null && r.Written is { } w && w < r.Rows
+            ? string.Create(CultureInfo.InvariantCulture, $" · {w:N0}") + (LiteralTranslator.IsEnglish ? " written" : "행 넣음")
+            : string.Empty;
+
+    // 단계 칸: 멈춤 표시가 있으면 덧붙인다(「적재 · 배치 3 쓰는 중 · 2분째 대기」).
+    private static string PhaseText(TableRunRowViewModel r) =>
+        string.IsNullOrEmpty(r.WaitText) ? L(r.Phase) : L(r.Phase) + " · " + r.WaitText;
 
     private static string ResultText(TableRunRowViewModel r)
     {
         var outcome = r.Outcome is { } o ? Text(DataCopyConverters.OutcomeText, o) : string.Empty;
-        return string.IsNullOrEmpty(r.Message) ? outcome : string.IsNullOrEmpty(outcome) ? r.Message : $"{outcome} · {r.Message}";
+        var text = string.IsNullOrEmpty(r.Message) ? outcome : string.IsNullOrEmpty(outcome) ? r.Message : $"{outcome} · {r.Message}";
+        // 시간 나눔(결정 74: 읽기·변환·쓰기·행/초)은 결과 칸 끝에 덧붙인다(칸을 늘리지 않는다).
+        return string.IsNullOrEmpty(r.TimesText) ? text : string.IsNullOrEmpty(text) ? r.TimesText : $"{text} · {r.TimesText}";
     }
 
     // 대상 건수를 모르면(중지 등, 행이 끝났는데 값이 없음) 「-」. 끝나기 전에는 빈 칸.
@@ -84,7 +97,7 @@ public partial class DataCopyWindow
     [
         new(L("테이블"), ColumnDataKind.Text, r => r.Display),
         new(L("진행"),ColumnDataKind.Text, ProgressText),
-        new(L("단계"), ColumnDataKind.Text, r => L(r.Phase)),
+        new(L("단계"), ColumnDataKind.Text, PhaseText),
         new(L("원본 건수"), ColumnDataKind.Number, r => r.SourceRows),
         new(L("대상 건수"), ColumnDataKind.Text, TargetRowsText),
         new(L("건수 비교"), ColumnDataKind.Text, r => r.CountsMatch switch { true => "✓ " + L("같음"), false => "✗ " + L("다름"), null => string.Empty }),

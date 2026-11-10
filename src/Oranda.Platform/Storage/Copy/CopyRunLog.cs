@@ -365,6 +365,15 @@ internal sealed class CopyRunLog : ICopyRunLog
                 {
                     w.WriteString("message", message);
                 }
+
+                if (result.Times is { } times)
+                {
+                    // 시간 나눔(결정 74): 겹치기 켬·끔 전후 비교용(밀리초·행/초).
+                    w.WriteNumber("readMs", (long)times.Read.TotalMilliseconds);
+                    w.WriteNumber("convertMs", (long)times.Convert.TotalMilliseconds);
+                    w.WriteNumber("writeMs", (long)times.Write.TotalMilliseconds);
+                    w.WriteNumber("rowsPerSecond", Math.Round(times.RowsPerSecond, 1));
+                }
             }), ct);
         }
 
@@ -392,6 +401,23 @@ internal sealed class CopyRunLog : ICopyRunLog
 
                 w.WriteEndObject();
                 w.WriteString("error", row.Error);
+            }), ct);
+        }
+
+        public Task RecordEventAsync(string kind, string? table, string text, CancellationToken ct)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(kind);
+            ArgumentNullException.ThrowIfNull(text);
+            return AppendAsync(BuildLine("event", w =>
+            {
+                w.WriteString("at", Now());
+                w.WriteString("kind", kind);
+                if (table is not null)
+                {
+                    w.WriteString("table", table);
+                }
+
+                w.WriteString("text", text);
             }), ct);
         }
 

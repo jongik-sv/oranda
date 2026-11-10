@@ -33,7 +33,7 @@ namespace Oranda.Core.Transfer.Copy;
 /// 오류 분류는 둘을 합친 것(<see cref="CopyErrors.Combine"/>). 같은 DBMS 하위 형식은 같은 벌을 두 번 넘긴다.
 /// </para>
 /// </summary>
-public class CopyRunner : ICopyRunner
+public partial class CopyRunner : ICopyRunner
 {
     /// <summary>중지 뒤 정리에 주는 시간.</summary>
     internal static readonly TimeSpan CleanupTimeout = TimeSpan.FromMinutes(2);
@@ -256,7 +256,10 @@ public class CopyRunner : ICopyRunner
         run.Enter(PhaseStart);
         run.Log($"{what}: 작업 「{job.Name}」 · 원본 {job.Source.Name} → 대상 {job.Target.Name} · 테이블 {run.Report.Order.Count.ToString(CultureInfo.InvariantCulture)}개"
                 + $" · 커밋 {commit} · 배치 {options.BatchSize.ToString("N0", CultureInfo.InvariantCulture)}행 · 실패 행 상한 {options.MaxFailedRows.ToString("N0", CultureInfo.InvariantCulture)}"
-                + (job.ConsistentRead ? " · 같은 시점 기준 읽기" : " · 테이블마다 따로 읽기"));
+                + (job.ConsistentRead ? " · 같은 시점 기준 읽기" : " · 테이블마다 따로 읽기")
+                // 기본값(읽기·쓰기 겹치기, 대기 한도 없음)이면 덧붙이지 않는다(예전 첫 줄 그대로).
+                + (options.SerialReadWrite ? " · 읽기·쓰기 번갈아(겹치지 않음)" : string.Empty)
+                + (options.WaitLimitMinutes > 0 ? $" · 테이블당 대기 한도 {options.WaitLimitMinutes.ToString(CultureInfo.InvariantCulture)}분" : string.Empty));
         if (period is { } p && (p.TimeFrom is not null || p.TimeTo is not null))
         {
             static string At(DateTime? d) => d?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? "(열림)";
@@ -1338,7 +1341,15 @@ public class CopyRunner : ICopyRunner
 
     // ---- 2. 대상 정리 ----
 
-    /// <summary>자식 → 부모 순서로 DELETE. 지우지 못한 표는 적재하지 않는다(겹친 행이 생기므로).</summary>
+    /// <summary>
+    /// 자식 → 부모 순서로 DELETE. 지우지 못한 표는 적재하지 않는다(겹친 행이 생기므로).
+    /// <para>
+    /// DELETE 하나하나도 멈춤 표시·대기 한도 아래 보낸다(리뷰 PF1-4: 행 잠금을 기다리는 DELETE 가 실제로 흔한 멈춤이다). 정리는 모든 테이블을 먼저
+    /// 지우는 단계라, 한도를 넘으면 <b>그 DELETE 의 테이블만</b> 실패(지우지 않음 → 적재하지 않음)로 두고 다음 테이블을 계속 지운다:
+    /// 취소한 문장은 그 문장만 되돌아가고(문장 단위 원자성) 앞 테이블의 DELETE 는 트랜잭션에 남는다. 부모 테이블의 DELETE 가 남은 자식 행 때문에
+    /// 실패하면 그것도 보통 DELETE 실패로 그 테이블만 실패다. 취소한 DELETE 가 돌아오지 않으면 대상 세션을 버리고 실행을 멈춘다(적재로 가지 않는다).
+    /// </para>
+    /// </summary>
     private async Task DeleteTargetsAsync(RunState run, CancellationToken ct)
     {
         for (var i = run.Report.Order.Count - 1; i >= 0; i--)
@@ -1352,7 +1363,32 @@ public class CopyRunner : ICopyRunner
 
             var table = run.Table(plan);
             run.Progress(table.Name, 0, null, PhaseDelete);
-            var r = await ExecuteLoggedAsync(run, run.Target, CopyCommonStatements.Delete(delete), delete.Binds, ct);
+            var deleteStarted = Stopwatch.GetTimestamp();
+            (PumpEnd End, ExecutionResult? Result, SideWatch Side) watched;
+            try
+            {
+                watched = await WatchTargetCommandAsync(run, table, null, CopyWaitStep.Delete,
+                    token => ExecuteLoggedAsync(run, run.Target, CopyCommonStatements.Delete(delete), delete.Binds, token), ct);
+            }
+            finally
+            {
+                table.Times.AddOutside(deleteStarted); // 테이블 전체 경과에 든다(원격 #155)
+            }
+
+            if (watched.End == PumpEnd.Stuck)
+            {
+                await AbandonStuckAsync(run, table, watched.Side, ct);
+                return;
+            }
+
+            if (watched.End == PumpEnd.WaitLimit
+                || (watched.Result is { Status: not ExecutionStatus.Succeeded } && watched.Side.LimitHit && !ct.IsCancellationRequested))
+            {
+                table.Fail(WaitLimitText(run, watched.Side));
+                continue;
+            }
+
+            var r = watched.Result!;
             if (r.Status != ExecutionStatus.Succeeded)
             {
                 table.Fail("대상 정리(DELETE)를 하지 못했습니다: " + Describe(r));
@@ -1412,44 +1448,29 @@ public class CopyRunner : ICopyRunner
 
             var select = run.Builder.SourceSelect(table.Name, shape.CopyColumns);
             LogLoadStatements(run, plan, shape, select, dml);
-            var batch = new List<object?[]>(run.Job.Options.BatchSize);
-            var stop = false;
+            // 읽기·쓰기(겹치기 또는 옛 동작 번갈아)·멈춤 감시·대기 한도는 PumpTableAsync(CopyRunner.Pipeline.cs).
+            table.Pumped = true;
+            var pumpStarted = Stopwatch.GetTimestamp();
+            PumpResult pumped;
             try
             {
-                await foreach (var row in _bulk.StreamRowsAsync(run.Source, CopyCommonStatements.Query(select), select.Binds, run.BulkOptions, ct))
-                {
-                    batch.Add(shape.Apply(row));
-                    table.SourceRows++;
-                    if (batch.Count < run.Job.Options.BatchSize)
-                    {
-                        continue;
-                    }
-
-                    stop = !await FlushAsync(run, plan, table, shape, dml, batch, control, ct);
-                    batch.Clear();
-                    run.Progress(table.Name, table.SourceRows, estimated, PhaseLoad);
-                    if (stop)
-                    {
-                        break;
-                    }
-                }
+                pumped = await PumpTableAsync(run, new TableLoad(plan, table, shape, dml, select, estimated, control), ct);
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested && CopyErrors.Server(_errors, ex) is { } error)
+            finally
             {
-                if (error.Kind == DbErrorKind.SnapshotTooOld)
-                {
-                    run.Notices.Add($"{table.Name}: 원본 읽기가 오래 걸려 이전 시점 데이터를 읽지 못했습니다{ErrorNameNote(_sourceDialect.SnapshotTooOldErrorName)}. 기간을 줄이거나 나눠 실행하세요.");
-                    run.Abort(null);
-                }
-
-                await RollbackTableAsync(run, table, ct);
-                table.Fail("원본을 읽지 못했습니다: " + SafeError(ex.Message));
-                return;
+                table.Times.AddLoad(pumpStarted); // 적재 구간(행/초의 기준, 원격 #155)
             }
 
-            if (!stop && batch.Count > 0)
+            switch (pumped.End)
             {
-                stop = !await FlushAsync(run, plan, table, shape, dml, batch, control, ct);
+                case PumpEnd.ReadFailed:
+                    return; // 원본 읽기 실패: 이미 되돌리고 실패로 뒀다
+                case PumpEnd.WaitLimit:
+                    await StopAtWaitLimitAsync(run, table, pumped.Side!, ct);
+                    return;
+                case PumpEnd.Stuck:
+                    await AbandonStuckAsync(run, table, pumped.Side!, ct, pumped.SourceHeld);
+                    return;
             }
 
             if (table.Outcome == CopyOutcome.Failed)
@@ -1460,7 +1481,23 @@ public class CopyRunner : ICopyRunner
 
             if (run.Job.Options.Commit == CommitMode.PerTable)
             {
-                var commit = await ControlLoggedAsync(run, run.Target, CopyCommonStatements.Commit(), ct, "테이블마다 커밋");
+                // 커밋도 멈춤 표시·대기 한도 아래 보낸다(리뷰 PF1-4). 한도를 넘으면 취소한 뒤 테이블을 되돌려 본다(되돌리면 커밋이 되지 않은 것이다).
+                var watched = await WatchTargetCommandAsync(run, table, estimated, CopyWaitStep.Commit,
+                    token => ControlLoggedAsync(run, run.Target, CopyCommonStatements.Commit(), token, "테이블마다 커밋"), ct);
+                if (watched.End == PumpEnd.Stuck)
+                {
+                    await AbandonStuckAsync(run, table, watched.Side, ct);
+                    return;
+                }
+
+                if (watched.End == PumpEnd.WaitLimit
+                    || (watched.Result is { Status: not ExecutionStatus.Succeeded } && watched.Side.LimitHit && !ct.IsCancellationRequested))
+                {
+                    await StopCommitAtWaitLimitAsync(run, table, watched.Side, ct);
+                    return;
+                }
+
+                var commit = watched.Result!;
                 if (RunState.Accept(commit, table, "커밋하지 못했습니다", ct))
                 {
                     run.DeletesPersisted = true;
@@ -1484,7 +1521,10 @@ public class CopyRunner : ICopyRunner
         finally
         {
             table.Elapsed += sw.Elapsed;
-            LogTableEnd(run, table, sw.Elapsed);
+            var end = LogTableEnd(run, table, sw.Elapsed);
+
+            // 실행 기록(copy-runs)에도 바로 한 줄: 표 결과 줄은 마무리 때 한꺼번에 쓰므로 실행 중에는 이 줄로 어디까지 왔는지 안다(결정 70).
+            await RecordEventAsync(run, "tableEnd", table.Name, end);
         }
     }
 
@@ -1540,25 +1580,49 @@ public class CopyRunner : ICopyRunner
         _ => "NULL",
     };
 
-    private static void LogTableEnd(RunState run, TableState table, TimeSpan elapsed)
+    private static string LogTableEnd(RunState run, TableState table, TimeSpan elapsed)
     {
         var text = $"적재 끝 · 원본 {table.SourceRows.ToString("N0", CultureInfo.InvariantCulture)}건 읽음 · {table.Loaded.ToString("N0", CultureInfo.InvariantCulture)}행 넣음"
                    + (table.FailedRows > 0 ? $" · 실패 {table.FailedRows.ToString("N0", CultureInfo.InvariantCulture)}행" : string.Empty)
                    + (table.WasRolledBack ? " · 되돌림" : string.Empty)
-                   + " · " + CopyLogText.Elapsed(elapsed);
+                   + " · " + CopyLogText.Elapsed(elapsed)
+                   // 시간 나눔(결정 74): 겹치기 켬·끔 전후 비교용. 적재 흐름을 지난 표만.
+                   + (table.Pumped ? " · " + CopyLogText.Times(table.Times.ToTimes(table.Loaded, elapsed)) : string.Empty);
         run.Log(text, table.Outcome == CopyOutcome.Failed ? CopyLogKind.Error : CopyLogKind.Info, table.Name);
+        return text;
     }
 
     /// <summary>
     /// 배치 하나를 보낸다. 실패하면 배치 세이브포인트로 되돌린 뒤 한 행씩 다시 넣어 실패 행을 찾는다(설계 8.2).
     /// 표를 더 진행하면 true, 그만두면(실패 행 상한 초과·거부) false.
     /// </summary>
-    private async Task<bool> FlushAsync(RunState run, CopyTablePlan plan, TableState table, RowShape shape, SqlStatement dml,
-                                        List<object?[]> batch, CopyRunControl control, CancellationToken ct)
+    /// <param name="writer">대상 쓰기 감시(멈춤 표시·대기 한도): 일시 정지를 기다리는 동안은 쉬는 중, 배치를 보내는 동안은 응답을 기다리는 중으로 둔다.</param>
+    private async Task<bool> FlushAsync(RunState run, TableState table, RowShape shape, SqlStatement dml,
+                                        List<object?[]> batch, CopyRunControl control, SideWatch writer, CancellationToken ct)
     {
         await control.WaitIfPausedAsync(ct);
+        writer.Begin(table.Batches + 1);
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
+            return await SendBatchAsync(run, table, shape, dml, batch, writer, ct);
+        }
+        finally
+        {
+            writer.Idle();
+
+            // 쓰기 시간 = 배치를 보낸 시간(세이브포인트·배열 DML·한 행씩 다시 넣기·배치 커밋)에서 값 변환 시간을 뺀 것(결정 74, 변환은 SendBatchAsync 가 따로 더한다).
+            table.Times.AddWrite(started);
+        }
+    }
+
+    /// <summary><see cref="FlushAsync"/> 의 본문(일시 정지를 지난 뒤). 한 행씩 다시 넣을 때는 행마다 감시 시각을 새로 잡는다(움직이는 중이면 멈춤이 아니다).</summary>
+    private async Task<bool> SendBatchAsync(RunState run, TableState table, RowShape shape, SqlStatement dml,
+                                            List<object?[]> batch, SideWatch writer, CancellationToken ct)
+    {
         var perBatch = run.Job.Options.Commit == CommitMode.PerBatch;
         var pendingAtBatchStart = table.PendingFailed.Count;
+        table.PendingAtBatchStart = pendingAtBatchStart; // 대기 한도로 이 배치를 되돌릴 때 쓴다(StopAtWaitLimitAsync)
         var savepoint = await ControlAsync(run.Target, _dialect.Savepoint(CopyCommonStatements.BatchSavepoint), ct);
         if (!RunState.Accept(savepoint, table, "배치를 시작하지 못했습니다", ct))
         {
@@ -1573,21 +1637,34 @@ public class CopyRunner : ICopyRunner
         var conversionFailed = 0;
         if (shape.Converts)
         {
+            var convertStarted = Stopwatch.GetTimestamp();
+            long failedRowTime = 0; // 실패 행 처리(상한 초과면 ROLLBACK TO 왕복) = 대상 DB 시간: 변환에서 빼고 쓰기에 남긴다
             var converted = new List<object?[]>(batch.Count);
             var kept = new List<object?[]>(batch.Count);
-            foreach (var source in batch)
+            try
             {
-                if (shape.TryToTarget(source, out var values, out var error))
+                foreach (var source in batch)
                 {
-                    converted.Add(values);
-                    kept.Add(source);
-                    continue;
-                }
+                    if (shape.TryToTarget(source, out var values, out var error))
+                    {
+                        converted.Add(values);
+                        kept.Add(source);
+                        continue;
+                    }
 
-                if (await AddFailedRowAsync(run, table, new FailedRow(table.Name, shape.KeyOf(source), error!), pendingAtBatchStart, ct))
-                {
-                    return false;
+                    var failedAt = Stopwatch.GetTimestamp();
+                    var over = await AddFailedRowAsync(run, table, new FailedRow(table.Name, shape.KeyOf(source), error!), pendingAtBatchStart, ct);
+                    failedRowTime += Stopwatch.GetTimestamp() - failedAt;
+                    if (over)
+                    {
+                        return false;
+                    }
                 }
+            }
+            finally
+            {
+                // 상한 초과로 일찍 끝나도 변환 시간을 남긴다(쓰기 시간에서 빠진다, 결정 74·리뷰 PF1-5).
+                table.Times.AddBatchConvert(convertStarted, failedRowTime);
             }
 
             rows = converted;
@@ -1618,6 +1695,7 @@ public class CopyRunner : ICopyRunner
             {
                 var row = rows[i];
                 var one = await _bulk.ExecuteArrayAsync(run.Target, dml, shape.Columns, [row], run.BulkOptions, ct);
+                writer.Touch();
                 if (one.Status == ExecutionStatus.Succeeded)
                 {
                     table.Loaded++;
@@ -1906,7 +1984,10 @@ public class CopyRunner : ICopyRunner
         finally
         {
             table.Elapsed += sw.Elapsed;
-            LogTableEnd(run, table, sw.Elapsed);
+            var end = LogTableEnd(run, table, sw.Elapsed);
+
+            // 실행 기록(copy-runs)에도 바로 한 줄: 표 결과 줄은 마무리 때 한꺼번에 쓰므로 실행 중에는 이 줄로 어디까지 왔는지 안다(결정 70).
+            await RecordEventAsync(run, "tableEnd", table.Name, end);
         }
     }
 
@@ -2096,19 +2177,27 @@ public class CopyRunner : ICopyRunner
 
         NoteRecreated(run, restored: ended);
 
-        try
+        if (run.SourceAbandoned)
         {
-            using var step = new CancellationTokenSource(CleanupTimeout);
-            run.Enter(PhaseFinish);
-            var rollback = await ControlLoggedAsync(run, run.Source, CopyCommonStatements.Rollback(), step.Token, "원본 읽기 전용 트랜잭션 닫기");
-            if (rollback.Status != ExecutionStatus.Succeeded)
-            {
-                run.Notices.Add("원본 읽기 전용 트랜잭션을 닫지 못했습니다: " + Describe(rollback));
-            }
+            // 돌아오지 않는 원본 명령이 세션을 쥐고 있다: 보내도 차례를 못 받는다. 세션을 닫으면 읽기 전용 트랜잭션도 끝난다.
+            run.Notices.Add("원본 세션의 명령이 돌아오지 않아 원본 읽기 전용 트랜잭션을 닫지 않았습니다. 복사 창을 닫아 세션을 정리하세요.");
         }
-        catch (Exception ex) when (IsCleanupFailure(ex))
+        else
         {
-            run.Notices.Add("원본 읽기 전용 트랜잭션을 닫지 못했습니다: " + SafeError(ex.Message));
+            try
+            {
+                using var step = new CancellationTokenSource(CleanupTimeout);
+                run.Enter(PhaseFinish);
+                var rollback = await ControlLoggedAsync(run, run.Source, CopyCommonStatements.Rollback(), step.Token, "원본 읽기 전용 트랜잭션 닫기");
+                if (rollback.Status != ExecutionStatus.Succeeded)
+                {
+                    run.Notices.Add("원본 읽기 전용 트랜잭션을 닫지 못했습니다: " + Describe(rollback));
+                }
+            }
+            catch (Exception ex) when (IsCleanupFailure(ex))
+            {
+                run.Notices.Add("원본 읽기 전용 트랜잭션을 닫지 못했습니다: " + SafeError(ex.Message));
+            }
         }
 
         if (!run.IsRetry)
@@ -2158,7 +2247,7 @@ public class CopyRunner : ICopyRunner
                 t.TargetRows = t.Loaded;
             }
         }
-        else if (!run.Stopped && !faulted)
+        else if (!run.Stopped && !faulted && !run.TargetAbandoned)
         {
             using var step = new CancellationTokenSource(LongCleanupTimeout);
             await CountTargetsAsync(run, step.Token);
@@ -2261,6 +2350,14 @@ public class CopyRunner : ICopyRunner
     /// <summary>다시 켜기(DDL, 묵시 커밋) 전에 대상 트랜잭션을 끝낸다. 끝났으면(커밋 또는 롤백 성공) true.</summary>
     private async Task<bool> EndTargetTransactionAsync(RunState run, bool faulted)
     {
+        if (run.TargetAbandoned)
+        {
+            // 취소에도 돌아오지 않는 대상 명령이 세션을 쥐고 있다(AbandonStuckAsync): 커밋·롤백을 보내도 차례를 못 받는다.
+            // 끝내지 못한 것으로 두어 다시 켜기(DDL, 묵시 커밋)도 하지 않는다. 세션을 닫으면 커밋하지 않은 적재는 되돌아간다.
+            run.Notices.Add("대상 세션의 명령이 돌아오지 않아 대상 트랜잭션을 끝내지 못했습니다. 복사 창을 닫아 세션을 정리하면 커밋하지 않은 변경은 되돌아갑니다.");
+            return false;
+        }
+
         // 전체 중단(원본 준비·끄기 실패, ORA-01555)도 되돌린다: 커밋하면 아직 적재하지 않은 뒤쪽 표의 DELETE 까지 확정된다.
         var rollback = run.Stopped || faulted || run.Aborted
                        || (run.Job.Options.Commit == CommitMode.AtEnd && run.Tables.Values.Any(t => t.Outcome == CopyOutcome.Failed));
@@ -2443,6 +2540,7 @@ public class CopyRunner : ICopyRunner
         foreach (var table in run.Tables.Values.Where(t => !t.Purged && !(t.CreateRequested && !t.Created)))
         {
             run.Progress(table.Name, table.SourceRows, null, PhaseCount);
+            var countStarted = Stopwatch.GetTimestamp();
             try
             {
                 var count = run.Builder.TargetCount(table.Name);
@@ -2457,6 +2555,10 @@ public class CopyRunner : ICopyRunner
             {
                 table.TargetRows = -1;
                 table.Note("대상 건수를 세지 못했습니다: " + SafeError(ex.Message));
+            }
+            finally
+            {
+                table.Times.AddOutside(countStarted); // 결과의 테이블 전체 경과에 든다(원격 #155)
             }
         }
     }
@@ -2931,6 +3033,18 @@ public class CopyRunner : ICopyRunner
 
         public TimeSpan Elapsed { get; set; }
 
+        /// <summary>적재 시간 나눔(결정 74: 읽기·변환·쓰기). 적재 흐름(PumpTableAsync)을 지났을 때만 결과에 싣는다(<see cref="Pumped"/>).</summary>
+        public TableTimes Times { get; } = new();
+
+        /// <summary>적재 흐름을 지났다(시간 나눔이 뜻이 있다).</summary>
+        public bool Pumped { get; set; }
+
+        /// <summary>
+        /// 지금 배치를 시작할 때의 <see cref="PendingFailed"/> 수. 대기 한도로 그 배치를 배치 세이브포인트로 되돌리면 그 뒤에 넣은 실패 행을 뺀다
+        /// (「배치마다 커밋」, 리뷰 PF1-2: 되돌린 배치의 실패 행이 확정되지 않게).
+        /// </summary>
+        public int PendingAtBatchStart { get; set; }
+
         public CopyOutcome Outcome { get; private set; } = CopyOutcome.Succeeded;
 
         /// <summary>실패 메시지를 작업 로그에 남기는 통로.</summary>
@@ -2959,8 +3073,78 @@ public class CopyRunner : ICopyRunner
             var outcome = Outcome == CopyOutcome.Succeeded && (FailedRows > 0 || Incomplete) ? CopyOutcome.PartiallyFailed : Outcome;
             // 표 하나가 「중지」여도 실행 전체 판정(RunState.Outcome)은 따로 한다.
             var message = _messages.Count > 0 ? string.Join(" ", _messages) : null;
-            return new TableRunResult(Name, SourceRows, TargetRows, Elapsed, outcome, message);
+            return new TableRunResult(Name, SourceRows, TargetRows, Elapsed, outcome, message) { Times = Pumped ? Times.ToTimes(Loaded, Elapsed) : null };
         }
+    }
+
+    /// <summary>
+    /// 테이블 하나의 적재 시간 나눔(결정 74). 읽기 = 원본 행을 받기까지 기다린 시간(겹치기에서는 읽기 작업이 실제로 DB 를 기다린 시간),
+    /// 변환 = 마스킹·교차 복사 값 변환(바인드 값 준비), 쓰기 = 배치를 보낸 시간에서 그 배치의 값 변환을 뺀 것. 겹치기 켬·끔 모두 같은 자리에서 잰다.
+    /// 읽기·마스킹은 읽기 작업, 쓰기·값 변환은 쓰기 흐름이 더한다(Interlocked).
+    /// </summary>
+    private sealed class TableTimes
+    {
+        private long _read;
+        private long _convert;
+        private long _write;
+        private long _batchConvert; // 쓰기 흐름만: 지금 배치의 값 변환(쓰기 시간에서 뺀다)
+        private long _firstRow = -1; // 첫 행까지(질의 시작·커서 열기). -1 = 아직
+        private long _load; // 적재 구간(PumpTableAsync) 경과
+        private long _outside; // 적재 흐름(LoadTableAsync) 밖에서 이 테이블에 쓴 시간: 대상 정리(DELETE)·건수 비교
+
+        /// <summary>원본 행 하나를 받기까지 기다린 시간. 처음 부른 것(질의 시작 → 첫 행)은 따로도 남긴다(원격 #155).</summary>
+        public void AddRead(long started)
+        {
+            var spent = Stopwatch.GetTimestamp() - started;
+            Interlocked.Add(ref _read, spent);
+            Interlocked.CompareExchange(ref _firstRow, spent, -1);
+        }
+
+        /// <summary>적재 구간(원본 질의 시작 → 마지막 배치 쓰기 끝) 경과. 행/초의 기준이다.</summary>
+        public void AddLoad(long started) => Interlocked.Add(ref _load, Stopwatch.GetTimestamp() - started);
+
+        /// <summary>적재 흐름 밖에서 이 테이블에 쓴 시간(대상 정리 DELETE·건수 비교): 테이블 전체 경과에 든다.</summary>
+        public void AddOutside(long started) => Interlocked.Add(ref _outside, Stopwatch.GetTimestamp() - started);
+
+        public void AddConvert(long started) => Interlocked.Add(ref _convert, Stopwatch.GetTimestamp() - started);
+
+        /// <summary>
+        /// 지금 배치의 값 변환. <paramref name="excluded"/> = 변환 고리 안에서 실패 행을 처리한 시간(상한을 넘으면 ROLLBACK TO 왕복):
+        /// 대상 DB 를 기다린 시간이라 변환에서 빼고 쓰기에 남긴다(리뷰 PF1-5).
+        /// </summary>
+        public void AddBatchConvert(long started, long excluded = 0)
+        {
+            var spent = Math.Max(0, Stopwatch.GetTimestamp() - started - excluded);
+            Interlocked.Add(ref _convert, spent);
+            _batchConvert += spent;
+        }
+
+        public void AddWrite(long started)
+        {
+            var spent = Stopwatch.GetTimestamp() - started - _batchConvert;
+            _batchConvert = 0;
+            Interlocked.Add(ref _write, Math.Max(0, spent));
+        }
+
+        /// <summary>
+        /// 행/초 = 넣은 행 / 적재 구간 경과(적재 구간을 재지 못했으면 <paramref name="elapsed"/>). 테이블 전체 = <paramref name="elapsed"/>(적재 흐름: 세이브포인트·
+        /// 읽기 시점·적재 구간·커밋) + 대상 정리·건수 비교(원격 #155: 「걸린 시간과 행/초가 안 맞음」 — 기준을 나눠 적는다).
+        /// </summary>
+        public CopyTableTimes ToTimes(long written, TimeSpan elapsed)
+        {
+            var load = Interlocked.Read(ref _load);
+            var basis = load > 0 ? Span(load) : elapsed;
+            var first = Interlocked.Read(ref _firstRow);
+            return new CopyTableTimes(Span(Interlocked.Read(ref _read)), Span(Interlocked.Read(ref _convert)), Span(Interlocked.Read(ref _write)),
+                basis.TotalSeconds > 0 ? written / basis.TotalSeconds : 0)
+            {
+                Load = load > 0 ? Span(load) : null,
+                Total = elapsed + Span(Interlocked.Read(ref _outside)),
+                FirstRow = first >= 0 ? Span(first) : null,
+            };
+        }
+
+        private static TimeSpan Span(long stopwatchTicks) => Stopwatch.GetElapsedTime(0, stopwatchTicks);
     }
 
     /// <summary>알림 목록. 더할 때마다 <paramref name="added"/> 로 작업 로그에 남긴다.</summary>
@@ -2982,6 +3166,7 @@ public class CopyRunner : ICopyRunner
     private sealed class RunState
     {
         private readonly IProgress<CopyProgress>? _progress;
+        private readonly object _reportGate = new();
         private readonly Dictionary<string, TableInfo> _sourceTables;
         private readonly Dictionary<string, TableInfo> _targetTables;
 
@@ -3069,6 +3254,14 @@ public class CopyRunner : ICopyRunner
         /// <summary>끝낼 때 대상 트랜잭션을 롤백으로 끝냈다(커밋하지 않은 적재가 모두 되돌아갔다).</summary>
         public bool TargetRolledBack { get; set; }
 
+        /// <summary>
+        /// 원본 명령이 취소에도 돌아오지 않아 원본 세션을 더 쓰지 않는다(<see cref="CopyRunner.AbandonStuckAsync"/>). Core 는 세션을 새로 열 수 없어 실행을 멈춘다.
+        /// </summary>
+        public bool SourceAbandoned { get; set; }
+
+        /// <summary>대상 명령이 취소에도 돌아오지 않아 대상 세션을 더 쓰지 않는다(마무리의 커밋·롤백·다시 켜기·건수 비교를 보내지 않는다).</summary>
+        public bool TargetAbandoned { get; set; }
+
         /// <summary>규칙 키.</summary>
         public string Key(CopyTablePlan plan) => CopyOwners.Key(Job, plan.Rule);
 
@@ -3105,7 +3298,37 @@ public class CopyRunner : ICopyRunner
         {
             CurrentPhase = phase;
             CurrentTable = table;
-            _progress?.Report(new CopyProgress(table, rows, estimated, phase));
+            Send(new CopyProgress(table, rows, estimated, phase));
+        }
+
+        /// <summary>적재 진행: 읽은 수(<paramref name="rows"/>)와 넣은 수(<paramref name="written"/>)를 함께 보낸다.</summary>
+        public void Progress(string table, long rows, long? estimated, string phase, long written)
+        {
+            CurrentPhase = phase;
+            CurrentTable = table;
+            Send(new CopyProgress(table, rows, estimated, phase) { Written = written });
+        }
+
+        /// <summary>
+        /// 멈춤 표시(감시가 보낸다). 지금 표·단계(<see cref="CurrentTable"/>·<see cref="CurrentPhase"/>)를 바꾸지 않는다: 감시는 적재 흐름과 따로 돈다.
+        /// <paramref name="waits"/> 가 비면 표시를 지운다.
+        /// </summary>
+        /// <param name="phase">진행 줄 단계(적재, 또는 대상 정리 DELETE 를 기다릴 때 대상 정리).</param>
+        public void ReportWaits(string table, long rows, long? estimated, long written, IReadOnlyList<CopyWait> waits, string phase = PhaseLoad) =>
+            Send(new CopyProgress(table, rows, estimated, phase) { Written = written, Waits = waits });
+
+        /// <summary>진행·로그 보고는 한 번에 하나씩(적재 흐름·멈춤 감시가 서로 다른 스레드에서 보낼 수 있다).</summary>
+        private void Send(CopyProgress p)
+        {
+            if (_progress is null)
+            {
+                return;
+            }
+
+            lock (_reportGate)
+            {
+                _progress.Report(p);
+            }
         }
 
         /// <summary>단계를 바꾼다(표와 상관없는 단계: 시작·원본 준비·마무리). 진행 줄은 보내지 않는다.</summary>
@@ -3117,7 +3340,7 @@ public class CopyRunner : ICopyRunner
 
         /// <summary>작업 로그 한 줄. 표·단계를 주지 않으면 지금 표·단계다. 행 값·비밀은 넣지 않는다(부르는 쪽 책임).</summary>
         public void Log(string text, CopyLogKind kind = CopyLogKind.Info, string? table = null, string? phase = null) =>
-            _progress?.Report(CopyProgress.ForLog(new CopyLogEntry(DateTimeOffset.Now, phase ?? CurrentPhase, table ?? CurrentTable, text, kind)));
+            Send(CopyProgress.ForLog(new CopyLogEntry(DateTimeOffset.Now, phase ?? CurrentPhase, table ?? CurrentTable, text, kind)));
 
         /// <summary>보낸 문장 한 줄(원본·대상, 바인드 요약).</summary>
         public void LogStatement(ISession session, string sql, IReadOnlyDictionary<string, BindValue>? binds = null) =>
@@ -3167,6 +3390,11 @@ public class CopyRunner : ICopyRunner
         }
 
         public CopyRunResult Result() =>
-            new(Outcome(faulted: false), [.. Tables.Values.Select(t => t.ToResult())], [.. FailedRows], [.. Notices], ReadStartedAt);
+            new(Outcome(faulted: false), [.. Tables.Values.Select(t => t.ToResult())], [.. FailedRows], [.. Notices], ReadStartedAt)
+            {
+                // 버린 세션은 앱이 닫고 새로 연다(리뷰 PF1-3).
+                SourceAbandoned = SourceAbandoned,
+                TargetAbandoned = TargetAbandoned,
+            };
     }
 }

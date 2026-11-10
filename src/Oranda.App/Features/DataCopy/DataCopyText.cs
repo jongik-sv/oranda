@@ -7,6 +7,52 @@ internal static class DataCopyText
     public static string L(string korean) =>
         Localization.LiteralTranslator.IsEnglish && Localization.LiteralTranslator.Table.TryGetValue(korean, out var english) ? english : korean;
 
+    /// <summary>
+    /// 멈춤 표시 글(결정 70). 한국어는 실행기와 같은 글(<see cref="Oranda.Core.Transfer.Copy.CopyLogText.Wait"/>: 「배치 n 쓰는 중 · m분째 대기」·「원본 읽는 중 · m분째」),
+    /// 영어 화면이면 같은 뜻의 영어.
+    /// </summary>
+    public static string WaitText(Oranda.Core.Transfer.Copy.CopyWait wait)
+    {
+        ArgumentNullException.ThrowIfNull(wait);
+        if (!Localization.LiteralTranslator.IsEnglish)
+        {
+            return Oranda.Core.Transfer.Copy.CopyLogText.Wait(wait);
+        }
+
+        var minute = wait.Minute.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return wait.Step switch
+        {
+            Oranda.Core.Transfer.Copy.CopyWaitStep.Delete => $"Deleting target rows (DELETE) · waiting, minute {minute}",
+            Oranda.Core.Transfer.Copy.CopyWaitStep.Commit => $"Committing table · waiting, minute {minute}",
+            _ => wait.Side == Oranda.Core.Transfer.Copy.CopyWaitSide.Source
+                ? $"Reading source · minute {minute}"
+                : $"Writing batch {(wait.Batch ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)} · waiting, minute {minute}",
+        };
+    }
+
+    /// <summary>
+    /// 실행기가 돌아오지 않는 명령 때문에 세션을 버린 뒤(리뷰 PF1-3) 앱이 세션 쌍을 닫았을 때. 다시 실행하려면 다시 점검해 새 세션을 연다.
+    /// </summary>
+    public const string SessionsAbandoned = "취소한 명령이 돌아오지 않아 복사 세션을 닫았습니다. 다시 실행하려면 사전 점검을 다시 하세요(새 세션을 엽니다).";
+
+    /// <summary>시간 나눔 글(결정 74). 한국어는 실행기와 같은 글(<see cref="Oranda.Core.Transfer.Copy.CopyLogText.Times"/>), 영어 화면이면 영어.</summary>
+    public static string TimesText(Oranda.Core.Transfer.Copy.CopyTableTimes times)
+    {
+        ArgumentNullException.ThrowIfNull(times);
+        if (!Localization.LiteralTranslator.IsEnglish)
+        {
+            return Oranda.Core.Transfer.Copy.CopyLogText.Times(times);
+        }
+
+        static string Seconds(TimeSpan t) => t.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "s";
+        return (times.Load is { } load ? $"load span {Seconds(load)} · " : string.Empty)
+               + $"read {Seconds(times.Read)}" + (times.FirstRow is { } first ? $" (first row {Seconds(first)})" : string.Empty)
+               + $" · convert {Seconds(times.Convert)} · write {Seconds(times.Write)} · "
+               + times.RowsPerSecond.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " rows/s"
+               + (times.Total is { } total ? $" · table total {Seconds(total)}" : string.Empty)
+               + (times.Other is { } other ? $" · other {Seconds(other)}" : string.Empty);
+    }
+
     public const string StoreMissing = "복사 작업 저장소가 아직 준비되지 않았습니다. 앱을 다시 시작하거나 최신 버전으로 업데이트하세요.";
     public const string PrecheckMissing = "사전 점검 서비스가 아직 준비되지 않았습니다.";
     public const string RunnerMissing = "복사 실행기가 아직 준비되지 않았습니다.";

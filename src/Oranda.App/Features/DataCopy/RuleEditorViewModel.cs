@@ -407,6 +407,14 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     [ObservableProperty]
     private long _sequenceGapConfirm = 10_000_000;
 
+    /// <summary>테이블 안에서 원본 읽기와 대상 쓰기를 겹친다(결정 69, 기본 켬). 끄면 옛 동작(<see cref="CopyOptions.SerialReadWrite"/>).</summary>
+    [ObservableProperty]
+    private bool _overlapReadWrite = true;
+
+    /// <summary>테이블당 대기 한도(분, 결정 73). 0 = 한도 없음.</summary>
+    [ObservableProperty]
+    private int _waitLimitMinutes;
+
     [ObservableProperty]
     private TableRuleViewModel? _selectedRule;
 
@@ -544,6 +552,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         DisableTriggersByDefault = job.Options.DisableTriggersByDefault;
         MaxFailedRows = job.Options.MaxFailedRows;
         SequenceGapConfirm = job.Options.SequenceGapConfirm;
+        OverlapReadWrite = !job.Options.SerialReadWrite;
+        WaitLimitMinutes = Math.Max(0, job.Options.WaitLimitMinutes);
         Rules.Clear();
         // 규칙마다 실제 계정을 풀어 둔다(비어 있던 계정 = 작업 기본 계정). 저장할 때는 늘 계정을 적어 저장한다.
         // 「기본을 따름」: 원본 계정이 비었거나 작업 기본 원본 계정이면 따르고, 대상 계정이 비었거나 그 규칙의 기본 대상(MapTarget)이면 따른다.
@@ -680,6 +690,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
                 DisableTriggersByDefault = DisableTriggersByDefault,
                 MaxFailedRows = MaxFailedRows,
                 SequenceGapConfirm = SequenceGapConfirm,
+                SerialReadWrite = !OverlapReadWrite,
+                WaitLimitMinutes = Math.Max(0, WaitLimitMinutes),
             },
             ConsistentRead = ConsistentRead,
         };

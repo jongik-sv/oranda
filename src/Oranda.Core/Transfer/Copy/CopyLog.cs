@@ -71,6 +71,40 @@ public static partial class CopyLogText
             ? elapsed.TotalSeconds.ToString("0.00", CultureInfo.InvariantCulture) + "초"
             : string.Create(CultureInfo.InvariantCulture, $"{(int)elapsed.TotalMinutes}분 {elapsed.Seconds:00}초");
 
+    /// <summary>
+    /// 멈춤 표시 글(결정 70): 대상 쓰기 = <c>배치 3 쓰는 중 · 2분째 대기</c>, 원본 읽기 = <c>원본 읽는 중 · 2분째</c>,
+    /// 대상 정리 = <c>대상 정리(DELETE) 중 · 2분째 대기</c>, 테이블 커밋 = <c>테이블 커밋 중 · 2분째 대기</c>.
+    /// </summary>
+    public static string Wait(CopyWait wait)
+    {
+        ArgumentNullException.ThrowIfNull(wait);
+        var minute = wait.Minute.ToString(CultureInfo.InvariantCulture);
+        return wait.Step switch
+        {
+            CopyWaitStep.Delete => $"대상 정리(DELETE) 중 · {minute}분째 대기",
+            CopyWaitStep.Commit => $"테이블 커밋 중 · {minute}분째 대기",
+            _ => wait.Side == CopyWaitSide.Source
+                ? $"원본 읽는 중 · {minute}분째"
+                : $"배치 {(wait.Batch ?? 0).ToString(CultureInfo.InvariantCulture)} 쓰는 중 · {minute}분째 대기",
+        };
+    }
+
+    /// <summary>
+    /// 시간 나눔 글(결정 74): <c>읽기 1.20초 · 변환 0.05초 · 쓰기 3.40초 · 1,234행/초</c>. 적재 구간·테이블 전체를 알면(원격 #155) 기준을 함께 적는다:
+    /// <c>적재 구간 4.49초 · 읽기 1.20초(첫 행까지 0.30초) · 변환 0.05초 · 쓰기 3.40초 · 66,811행/초 · 테이블 전체 10.70초 · 기타 6.21초</c>
+    /// (행/초 = 넣은 행 / 적재 구간, 기타 = 테이블 전체 − 적재 구간: 정리·세이브포인트·커밋·건수 비교).
+    /// </summary>
+    public static string Times(CopyTableTimes times)
+    {
+        ArgumentNullException.ThrowIfNull(times);
+        return (times.Load is { } load ? $"적재 구간 {Elapsed(load)} · " : string.Empty)
+               + $"읽기 {Elapsed(times.Read)}" + (times.FirstRow is { } first ? $"(첫 행까지 {Elapsed(first)})" : string.Empty)
+               + $" · 변환 {Elapsed(times.Convert)} · 쓰기 {Elapsed(times.Write)} · "
+               + times.RowsPerSecond.ToString("N0", CultureInfo.InvariantCulture) + "행/초"
+               + (times.Total is { } total ? $" · 테이블 전체 {Elapsed(total)}" : string.Empty)
+               + (times.Other is { } other ? $" · 기타 {Elapsed(other)}" : string.Empty);
+    }
+
     /// <summary>화면·복사·저장에 쓰는 한 줄: <c>HH:mm:ss [단계] 표 · 내용</c>.</summary>
     public static string Format(CopyLogEntry entry)
     {

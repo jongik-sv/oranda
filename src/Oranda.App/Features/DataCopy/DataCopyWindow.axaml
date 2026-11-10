@@ -307,7 +307,7 @@
                 </Border>
                 <!-- 범위·실행 -->
                 <Border Grid.Column="4" Classes="group">
-                  <Grid ColumnDefinitions="64,110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                  <Grid ColumnDefinitions="64,110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
                     <StackPanel Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="6">
                       <ContentControl Content="{Binding Source='settings', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
                       <TextBlock Classes="section-label" Text="범위 · 실행" VerticalAlignment="Center" />
@@ -350,6 +350,15 @@
                     <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="1" Maximum="100000" Increment="10" FormatString="0" Value="{Binding MaxFailedRows}"
                                    AutomationProperties.Name="실패 행 상한" ToolTip.Tip="한 테이블에서 넣지 못한 행이 이 수를 넘으면 그 테이블을 멈춥니다" />
                     <TextBlock Grid.Row="7" Grid.Column="2" Text="행" VerticalAlignment="Center" Classes="dim" />
+                    <!-- 대기 한도(결정 73): 한 명령이 이 시간 넘게 응답이 없으면 취소하고 그 테이블을 되돌린 뒤 다음 테이블로. 0 = 한도 없음. -->
+                    <TextBlock Grid.Row="8" Classes="field" Text="대기 한도" />
+                    <NumericUpDown Grid.Row="8" Grid.Column="1" Minimum="0" Maximum="1440" Increment="1" FormatString="0" Value="{Binding WaitLimitMinutes}"
+                                   AutomationProperties.Name="테이블당 대기 한도"
+                                   ToolTip.Tip="원본 읽기나 대상 쓰기 명령 하나가 이 시간 넘게 응답이 없으면 명령을 취소하고 그 테이블을 되돌린 뒤 다음 테이블로 갑니다. 0 은 한도 없음입니다" />
+                    <TextBlock Grid.Row="8" Grid.Column="2" Text="분(0 = 없음)" VerticalAlignment="Center" Classes="dim" />
+                    <!-- 읽기·쓰기 겹치기(결정 69): 끄면 옛 동작(읽다가 배치가 차면 쓰기를 기다린 뒤 다시 읽기). -->
+                    <CheckBox Grid.Row="9" Grid.ColumnSpan="3" Classes="compact" Content="읽기·쓰기 겹치기" IsChecked="{Binding OverlapReadWrite}"
+                              ToolTip.Tip="원본을 읽는 동안 앞 배치를 대상에 씁니다. 문제가 있을 때 끄면 읽기와 쓰기를 번갈아 합니다(예전 동작)" />
                   </Grid>
                 </Border>
               </Grid>

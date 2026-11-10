@@ -160,4 +160,27 @@ public class CopyJobJsonTests
             Assert.Equal(TargetAction.DeleteRangeInsert, TargetActions.DefaultFor(RuleKind.Custom, pk));
         }
     }
+
+    /// <summary>
+    /// 스키마 버전을 올리지 않은 새 옵션(PF1: waitLimitMinutes·serialReadWrite, 결정 77)의 조건: 그 칸을 모르는 읽기기(스키마 5 판 앱)가
+    /// 새 키가 섞인 파일을 오류 없이 열고 무시한다. 같은 직렬화 문맥이 모르는 키를 건너뛰는지로 본다 — 옛 판에는 이 두 속성이 없으므로
+    /// 지금 읽기기에 처음 보는 키를 같은 자리(options·최상위)에 섞어 같은 처지를 만든다.
+    /// </summary>
+    [Fact]
+    public void A_file_with_option_keys_the_reader_does_not_know_opens_and_ignores_them()
+    {
+        var job = Sample() with { Options = Sample().Options with { WaitLimitMinutes = 3, SerialReadWrite = true } };
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(job, CopyJobJsonContext.Default.CopyJob))!;
+        Assert.Equal(3, (int)node["options"]!["waitLimitMinutes"]!);
+        Assert.True((bool)node["options"]!["serialReadWrite"]!);
+
+        // 옛 판 처지: 읽기기가 모르는 키(앞으로 생길 옵션)가 options 와 최상위에 있다.
+        node["options"]!["optionFromANewerApp"] = 7;
+        node["fieldFromANewerApp"] = "x";
+        var back = JsonSerializer.Deserialize(node.ToJsonString(), CopyJobJsonContext.Default.CopyJob);
+
+        Assert.NotNull(back);
+        Assert.Equal(job.Options, back!.Options);
+        Assert.Equal(job.Tables.Count, back.Tables.Count);
+    }
 }

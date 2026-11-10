@@ -1272,6 +1272,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         }
 
         await Run.RetryFailedAsync(ct).ConfigureAwait(true);
+        await CloseAbandonedSessionsAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -1356,7 +1357,35 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         }
 
         Say(Run.StatusText, Run.Outcome is CopyOutcome.Failed);
+        await CloseAbandonedSessionsAsync().ConfigureAwait(true);
         await Jobs.RefreshAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 실행기가 돌아오지 않는 명령 때문에 세션을 버렸으면(리뷰 PF1-3) 세션 쌍을 닫는다: 그 세션은 명령을 쥐고 있어 다음 점검·실행에 쓸 수 없다.
+    /// 닫으면 커밋하지 않은 대상 변경은 되돌아간다(닫기는 시간 제한이 있다, <see cref="ConnectionManager.ConnectionService"/>).
+    /// 점검 결과도 지워 다시 점검하게 한다(점검이 새 세션을 연다).
+    /// </summary>
+    private async Task CloseAbandonedSessionsAsync()
+    {
+        if (!Run.SessionsAbandoned)
+        {
+            return;
+        }
+
+        await _sessionGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            await CloseSessionPairAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            _sessionGate.Release();
+        }
+
+        Precheck.Invalidate();
+        _checkedJob = null;
+        Say(DataCopyText.L(DataCopyText.SessionsAbandoned), error: true);
     }
 
     /// <summary>열린 작업의 이름을 바꾼다(목록의 선택 항목이 열린 작업이면 편집 화면의 이름도 맞춘다).</summary>

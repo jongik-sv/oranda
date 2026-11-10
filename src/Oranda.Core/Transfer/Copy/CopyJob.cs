@@ -12,6 +12,13 @@ namespace Oranda.Core.Transfer.Copy;
 /// 5 = 테이블 규칙의 전체 기본값(<see cref="CopyJob.TableDefaults"/>)과 테이블별로 따로 바꾼 항목(<see cref="TableRule.Overrides"/>). 4 → 5 는 바꿀 것이 없다(<see cref="CopyJobMigrationV4"/>):
 /// 옛 파일은 <c>tableDefaults</c> 가 없고, 그러면 화면이 모든 테이블을 「따로 바꾼 것」으로 열어 전체 기본값을 바꿔도 저장된 값이 그대로다.
 /// 버전을 올리는 까닭: 예전 앱이 두 칸을 버린 채 다시 저장하면 따로 바꾼 표시가 사라져 전체 값 변경이 저장된 값을 덮어쓸 수 있다(읽기 전용으로 열게).
+/// <para>
+/// 버전을 올리지 않은 칸: 실행 옵션 <see cref="CopyOptions.SerialReadWrite"/>(읽기·쓰기 번갈아)·<see cref="CopyOptions.WaitLimitMinutes"/>(테이블당 대기 한도, PF1).
+/// 기본값이면 파일에 쓰지 않고, 예전 앱이 버려도 무엇을 읽고 지우는지는 바뀌지 않는다(속도·멈춤 대응만 기본으로 돌아간다).
+/// 버전을 올리면 새 앱이 저장한 모든 작업이 예전 앱에서 읽기 전용이 되므로 그 비용을 치르지 않는다.
+/// 남는 위험(받아들임): 예전 앱이 이 작업을 열었다가 저장하면 두 칸(<c>serialReadWrite</c>·<c>waitLimitMinutes</c>)이 알림 없이 사라진다 —
+/// 새 앱에서 다시 열면 읽기·쓰기 겹치기 켬·대기 한도 없음(기본)으로 돌아가 있으니 필요하면 다시 고른다.
+/// </para>
 /// </summary>
 public static class CopyJobSchema
 {
@@ -173,6 +180,20 @@ public sealed record CopyOptions
     public bool DisableTriggersByDefault { get; init; }
     public int MaxFailedRows { get; init; } = 100;
     public long SequenceGapConfirm { get; init; } = 10_000_000;
+
+    /// <summary>
+    /// 테이블 안에서 읽기와 쓰기를 겹치지 않고 번갈아 한다(옛 동작: 원본을 읽다 배치가 차면 쓰기를 기다린 뒤 다시 읽는다, 결정 69).
+    /// 꺼짐(기본) = 원본 읽기와 대상 쓰기를 겹친다(사이에 배치 몇 개 크기의 버퍼). 겹치기에 문제가 있을 때 켠다. 꺼짐이면 파일에 쓰지 않는다.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool SerialReadWrite { get; init; }
+
+    /// <summary>
+    /// 테이블당 대기 한도(분, 결정 73). 원본 읽기나 대상 쓰기 명령 하나가 이 시간 넘게 응답이 없으면 그 명령을 취소하고 그 테이블을 되돌려 실패로 둔 뒤
+    /// 다음 테이블로 간다. 0(기본) = 한도 없음. 0 이면 파일에 쓰지 않는다.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int WaitLimitMinutes { get; init; }
 }
 
 /// <summary>

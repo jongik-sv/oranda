@@ -70,6 +70,35 @@ public sealed class CopyRunLogTests : IDisposable
     }
 
     [Fact]
+    public async Task Run_events_and_table_times_are_on_disk_right_away_and_do_not_finish_the_run()
+    {
+        var log = NewLog();
+        await using (var record = await log.BeginAsync(Header(), CancellationToken.None))
+        {
+            await record.RecordDisabledAsync([Trigger], CancellationToken.None);
+            await record.RecordEventAsync("wait", "ORDERS", "배치 3 쓰는 중 · 2분째 대기", CancellationToken.None);
+            await record.RecordTableAsync(new TableRunResult("ORDERS", 10, 10, TimeSpan.FromSeconds(2), CopyOutcome.Succeeded, null)
+            {
+                Times = new CopyTableTimes(TimeSpan.FromMilliseconds(1200), TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(700), 5),
+            }, CancellationToken.None);
+
+            // 닫기 전에 다른 핸들로 읽어도 사건 줄·시간 나눔이 보인다(줄마다 flush).
+            var file = Assert.Single(Directory.GetFiles(Paths.CopyRunsDirectory, "*.jsonl"));
+            await using var reader = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var text = new StreamReader(reader);
+            var content = await text.ReadToEndAsync();
+            Assert.Contains("\"type\":\"event\"", content, StringComparison.Ordinal);
+            Assert.Contains("\"kind\":\"wait\"", content, StringComparison.Ordinal);
+            Assert.Contains("\"readMs\":1200", content, StringComparison.Ordinal);
+            Assert.Contains("\"writeMs\":700", content, StringComparison.Ordinal);
+        }
+
+        // 사건 줄은 실행을 끝내지 않는다(끈 목록은 그대로 「끝나지 않은 실행」).
+        var unfinished = Assert.Single(await NewLog().FindUnfinishedAsync(JobId, CancellationToken.None));
+        Assert.Equal([Trigger], unfinished.Disabled);
+    }
+
+    [Fact]
     public async Task Running_record_is_not_reported_as_unfinished()
     {
         var log = NewLog();

@@ -31,6 +31,18 @@ public sealed partial class TableRunRowViewModel(string table) : ViewModelBase
     [ObservableProperty]
     private string _message = string.Empty;
 
+    /// <summary>대상에 넣은 행 수(적재 중). 읽기·쓰기를 겹치면 읽은 수(<see cref="Rows"/>)보다 늦다. 모르면 null.</summary>
+    [ObservableProperty]
+    private long? _written;
+
+    /// <summary>멈춤 표시(결정 70): 「배치 n 쓰는 중 · m분째 대기」 등. 없으면 빈 글자. 단계 칸에 덧붙여 보인다.</summary>
+    [ObservableProperty]
+    private string _waitText = string.Empty;
+
+    /// <summary>끝난 표의 시간 나눔(결정 74: 「읽기 x초 · 변환 y초 · 쓰기 z초 · n행/초」). 없으면 빈 글자.</summary>
+    [ObservableProperty]
+    private string _timesText = string.Empty;
+
     /// <summary>규칙 키(진행·결과가 이 이름으로 온다).</summary>
     public string Table { get; } = table;
 
@@ -159,6 +171,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         }
 
         _sessions = sessions;
+        SessionsAbandoned = false;
         _job = job;
         _report = report;
         Rows.Clear();
@@ -223,6 +236,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
             if (result is not null)
             {
                 Apply(result);
+                NoteAbandoned(result);
                 await SaveLastRunAsync(job, result, ct).ConfigureAwait(true);
             }
 
@@ -236,6 +250,21 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
 
     /// <summary>지금 도는(또는 마지막) 실행이 끝나면 완료되는 작업. 창을 닫을 때 세션을 닫기 전에 기다린다.</summary>
     public Task? Completion { get; private set; }
+
+    /// <summary>
+    /// 마지막 실행(또는 다시 넣기)에서 실행기가 돌아오지 않는 명령 때문에 세션을 버렸다(<see cref="CopyRunResult.SessionsAbandoned"/>, 리뷰 PF1-3).
+    /// 그 세션은 더 쓸 수 없다: 「실패 행만 다시 넣기」를 막고(<see cref="CanRetry"/>), 창 쪽이 세션 쌍을 닫는다.
+    /// </summary>
+    public bool SessionsAbandoned { get; private set; }
+
+    private void NoteAbandoned(CopyRunResult result)
+    {
+        SessionsAbandoned = result.SessionsAbandoned;
+        if (SessionsAbandoned)
+        {
+            _sessions = null; // 버린 세션으로 다시 넣지 않는다(다시 점검하면 새 세션을 연다)
+        }
+    }
 
     /// <summary>작업 파일에 마지막 실행 정보를 저장할지(읽기 전용 작업 파일은 저장하지 않는다).</summary>
     public bool SaveLastRun { get; set; } = true;
@@ -260,6 +289,16 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         row.Rows = p.Rows;
         row.Estimated = p.Estimated ?? row.Estimated;
         row.Phase = p.Phase;
+        if (p.Written is { } written)
+        {
+            row.Written = written;
+        }
+
+        if (p.Waits is { } waits)
+        {
+            // 빈 목록 = 멈춤이 풀렸다. null 이면(보통 진행 보고) 앞 표시를 둔다: 다른 쪽(원본·대상)이 아직 기다릴 수 있다.
+            row.WaitText = string.Join(" / ", waits.Select(DataCopyText.WaitText));
+        }
     }
 
     // 실행기 결과로 표를 맞춘다. 진행 보고가 늦게 도착해도 최종 값은 결과가 정한다.
@@ -280,6 +319,8 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
             row.Outcome = table.Outcome;
             row.Message = table.Message ?? string.Empty;
             row.Phase = table.Outcome == CopyOutcome.Succeeded ? "완료" : "문제 있음";
+            row.WaitText = string.Empty;
+            row.TimesText = table.Times is { } times ? DataCopyText.TimesText(times) : string.Empty;
             row.Rows = table.SourceRows;
         }
 
@@ -360,6 +401,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         ReadStartedAt = null;
         StatusText = string.Empty;
         LastRun = null;
+        SessionsAbandoned = false;
         _sessions = null;
         _job = null;
         _report = null;
@@ -416,6 +458,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _cts = cts;
         _control = null; // 다시 넣기에는 일시 정지가 없다(중지만)
+        SessionsAbandoned = false;
         DetailTab = 0; // 다시 넣기 로그는 앞 실행 로그 뒤에 이어 붙인다
         IsRunning = true;
         StatusText = "실패 행을 다시 넣는 중…";
@@ -460,6 +503,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
 
             Outcome = result.FailedRows.Count == 0 ? CopyOutcome.Succeeded : CopyOutcome.PartiallyFailed;
             StatusText = result.FailedRows.Count == 0 ? "실패했던 행을 모두 넣었습니다." : $"실패한 행이 {result.FailedRows.Count:N0}개 남았습니다.";
+            NoteAbandoned(result);
         }
         catch (OperationCanceledException)
         {
