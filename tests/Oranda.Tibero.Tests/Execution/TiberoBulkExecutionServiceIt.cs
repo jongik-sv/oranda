@@ -452,6 +452,98 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// PF6: 작은 BLOB(1~<see cref="TiberoBulkExecutionService.ArrayBlobMaxBytes"/> 바이트)은 16진 글자 배열 + <c>HEXTORAW</c> 로 배열 구간에 들어가고(RAW → BLOB 변환),
+    /// 큰 값(2001 B·100 KB)·빈 값은 한 행씩, NULL 은 NULL 이다. 묶음 하나에 섞어 넣고 끝까지 읽어 바이트가 같은지 본다(빈 값은 한 행씩 경로의 옛 저장 결과와 같아야 한다).
+    /// 같은 묶음을 upsert MERGE 로 다시 보내 같은 값이 되는지, 1000 B BLOB 2000행을 옛 동작(묶음 전체 한 행씩)·새 동작으로 넣는 시간을 관찰 줄로 남긴다.
+    /// </summary>
+    [TiberoWriteFact]
+    public async Task Step3b_small_blobs_go_as_hex_arrays_and_read_back_byte_for_byte()
+    {
+        if (TiberoItSessions.SkipWrite())
+        {
+            return;
+        }
+
+        await using var it = TiberoItSessions.Create();
+        if (it is null)
+        {
+            return;
+        }
+
+        var service = NewService(it);
+        service.LobWrite = TiberoLobWrite.SplitLongRows;
+        var s = await it.OpenAsync();
+        var t = TiberoItSessions.ObjectName("PF6_BLOB");
+        await CleanupAsync([s], t);
+        try
+        {
+            await ExecAsync(s, $"CREATE TABLE {t} (ID NUMBER(10) PRIMARY KEY, V VARCHAR2(10), B BLOB)");
+            Col[] colSpec = [new("ID", "NUMBER(10)"), new("V", "VARCHAR2(10)"), new("B", "BLOB")];
+            var cols = BulkCols(colSpec);
+            var max = TiberoBulkExecutionService.ArrayBlobMaxBytes;
+            byte[]?[] values = [Pattern(1), Pattern(max - 1), Pattern(max), null, Pattern(max + 1), Pattern(100_000), Array.Empty<byte>(), Pattern(17), Pattern(max)];
+            var rows = values.Select((v, i) => new object?[] { Num(i + 1), "r" + N(i + 1), v }).ToList();
+
+            var sw = Stopwatch.StartNew();
+            var inserted = await RunAsync(service, s, InsertSql(t, colSpec), cols, rows);
+            Log("pf6 mixed insert " + Show(inserted) + " ms=" + N(sw.ElapsedMilliseconds));
+            AssertOk(inserted, "pf6 mixed insert", rows.Count);
+            AssertOk(await ControlAsync(service, s, "COMMIT"), "commit");
+            await AssertBlobsAsync(service, s, t, values);
+
+            // 같은 묶음을 upsert MERGE 로(USING 의 HEXTORAW 값이 UPDATE·INSERT 로 간다): 값이 그대로여야 한다.
+            var merge = MergeSql(t, colSpec, 1);
+            Log("pf6 merge text " + merge);
+            AssertOk(await RunAsync(service, s, merge, cols, rows), "pf6 merge", rows.Count);
+            AssertOk(await ControlAsync(service, s, "COMMIT"), "commit merge");
+            await AssertBlobsAsync(service, s, t, values);
+
+            // 시간(관찰만): 1000 B BLOB 2000행, 배치 500 — 옛 동작 = 행마다 명령, 새 동작 = 배치마다 배열 한 번.
+            foreach (var mode in new[] { TiberoLobWrite.WholeBatchRowByRow, TiberoLobWrite.SplitLongRows })
+            {
+                await ExecAsync(s, $"DELETE FROM {t}");
+                await ExecAsync(s, "COMMIT");
+                service.LobWrite = mode;
+                sw.Restart();
+                for (var start = 1; start <= 2000; start += 500)
+                {
+                    var chunk = Enumerable.Range(start, 500).Select(id => new object?[] { Num(id), "m", Pattern(1000) }).ToList();
+                    AssertOk(await RunAsync(service, s, InsertSql(t, colSpec), cols, chunk), "pf6 measure " + mode, 500);
+                }
+
+                AssertOk(await ControlAsync(service, s, "COMMIT"), "commit measure");
+                var ms = Math.Max(1, sw.ElapsedMilliseconds);
+                Log($"pf6 measure blob 1000B rows=2000 mode={mode} ms={N(ms)} rows/s={N(2000 * 1000 / ms)}");
+                Assert.Equal("2000;2000000", await ScalarAsync(s, $"SELECT TO_CHAR(COUNT(*)) || ';' || TO_CHAR(SUM(DBMS_LOB.GETLENGTH(B))) FROM {t}"));
+            }
+        }
+        finally
+        {
+            await CleanupAsync([s], t);
+        }
+    }
+
+    /// <summary>ID 1..n 의 BLOB 을 끝까지 읽어 <paramref name="expected"/> 와 바이트까지 같은지 본다. 빈 값은 한 행씩 경로가 저장하는 대로(NULL 또는 빈 BLOB) 받아들이고 관찰 줄로 남긴다.</summary>
+    private async Task AssertBlobsAsync(TiberoBulkExecutionService service, TiberoSession s, string t, byte[]?[] expected)
+    {
+        var read = await StreamAllAsync(service, s, Query($"SELECT ID, B FROM {t} ORDER BY ID"));
+        Assert.Equal(expected.Length, read.Count);
+        for (var i = 0; i < expected.Length; i++)
+        {
+            var got = read[i][1] as byte[];
+            if (expected[i] is { Length: 0 })
+            {
+                Log($"pf6 empty blob row {N(i + 1)} stored as " + (got is null ? "NULL" : "length " + N(got.Length)));
+                Assert.True(got is null or { Length: 0 }, "빈 BLOB 행");
+                continue;
+            }
+
+            Assert.True(expected[i] is null ? got is null : got is not null && got.AsSpan().SequenceEqual(expected[i]),
+                $"{N(i + 1)}번째 행 BLOB 이 다르다(기대 {N(expected[i]?.Length ?? -1)}B, 읽음 {N(got?.Length ?? -1)}B)");
+        }
+    }
+
     // =================================================================================================================
     // 4. MERGE
     // =================================================================================================================

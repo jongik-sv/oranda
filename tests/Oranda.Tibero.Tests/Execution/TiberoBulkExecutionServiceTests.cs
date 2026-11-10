@@ -600,9 +600,9 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
         Assert.All(rows, s => Assert.Equal(["C1", "C2"], s.Parameters.Select(p => p.Name)));
         Assert.All(rows, s => Assert.Equal(["Decimal", "Blob"], s.Parameters.Select(p => p.Kind)));
         Assert.Equal(["1", "2", "3"], rows.Select(s => s.Parameters[0].Value));
-        Assert.Equal(new byte[] { 1, 2, 3 }, Assert.IsType<byte[]>(rows[0].Parameters[1].Value));
+        Assert.Equal(BigBlob(1), Assert.IsType<byte[]>(rows[0].Parameters[1].Value));
         Assert.Same(DBNull.Value, rows[1].Parameters[1].Value);
-        Assert.Equal(new byte[] { 9 }, Assert.IsType<byte[]>(rows[2].Parameters[1].Value));
+        Assert.Equal(BigBlob(9), Assert.IsType<byte[]>(rows[2].Parameters[1].Value));
 
         var executed = Assert.Single(Events<StatementExecuted>());
         Assert.Equal(ExecutionStatus.Succeeded, executed.Result.Status);
@@ -668,6 +668,84 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
         Assert.Equal(["4", "5"], (string?[])sent[2].Parameters[0].Value!);
         Assert.Equal(["d", ""], (string?[])sent[2].Parameters[1].Value!);
         Assert.Equal(["d", "e"], (string?[])sent[2].Parameters[2].Value!);
+    }
+
+    [Fact]
+    public async Task Small_blobs_go_as_one_hex_text_array_with_hextoraw_in_the_array_text()
+    {
+        // PF6: 이진 배열 바인드는 드라이버 NRE(실측 3.1) → 작은 BLOB 은 RAW 처럼 16진 글자 배열 + HEXTORAW 로 배열 한 번.
+        const string hexInsert = "INSERT INTO \"T\" (\"A\", \"B\") VALUES (:C1, HEXTORAW(:C2))";
+        Serve(cmd => cmd.CommandText == hexInsert ? FakeDriverHost.Get(cmd, "ArrayBindCount") as int? ?? 1 : null);
+        var service = NewService();
+        service.LobWrite = TiberoLobWrite.SplitLongRows;
+        await using var session = NewSession();
+        object?[][] rows = [[1m, new byte[] { 1, 0xAB }], [2m, null], [3m, new byte[TiberoBulkExecutionService.ArrayBlobMaxBytes]]];
+
+        var result = await service.ExecuteArrayAsync(session, Dml(BlobInsert), BlobColumns, rows, ExecutionOptions.Default, CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        Assert.Equal(3, result.RowsAffected);
+        var sent = Assert.Single(_sent, s => s.Text == hexInsert);
+        Assert.Equal(3, sent.ArrayBindCount);
+        Assert.Equal(["Decimal", "Varchar2"], sent.Parameters.Select(p => p.Kind));
+        var hex = (string?[])sent.Parameters[1].Value!;
+        Assert.Equal("01AB", hex[0]);
+        Assert.Null(hex[1]);
+        Assert.Equal(new string('0', TiberoBulkExecutionService.ArrayBlobMaxBytes * 2), hex[2]);
+        Assert.DoesNotContain(_sent, s => s.Text == BlobInsert);
+    }
+
+    [Fact]
+    public async Task Big_and_empty_blob_rows_go_alone_with_bytes_and_the_original_text_and_the_small_rows_around_them_stay_hex_arrays()
+    {
+        const string hexInsert = "INSERT INTO \"T\" (\"A\", \"B\") VALUES (:C1, HEXTORAW(:C2))";
+        Serve(cmd => cmd.CommandText is hexInsert or BlobInsert ? FakeDriverHost.Get(cmd, "ArrayBindCount") as int? is { } n and > 0 ? n : 1 : null);
+        var service = NewService();
+        service.LobWrite = TiberoLobWrite.SplitLongRows;
+        await using var session = NewSession();
+        var big = BigBlob(7);
+        object?[][] rows = [[1m, new byte[] { 1 }], [2m, new byte[] { 2 }], [3m, big], [4m, Array.Empty<byte>()], [5m, new byte[] { 5 }]];
+
+        var result = await service.ExecuteArrayAsync(session, Dml(BlobInsert), BlobColumns, rows, ExecutionOptions.Default, CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        Assert.Equal(5, result.RowsAffected);
+        var sent = _sent.Where(s => s.Text is hexInsert or BlobInsert).ToList();
+        Assert.Equal([hexInsert, BlobInsert, BlobInsert, BlobInsert], sent.Select(s => s.Text));
+        Assert.Equal([2, 0, 0, 0], sent.Select(s => s.ArrayBindCount));
+        Assert.Equal(["01", "02"], (string?[])sent[0].Parameters[1].Value!);
+        Assert.Equal(big, Assert.IsType<byte[]>(sent[1].Parameters[1].Value)); // 큰 값은 byte[] 로 한 행
+        Assert.Empty(Assert.IsType<byte[]>(sent[2].Parameters[1].Value)); // 빈 BLOB 은 16진이면 NULL 이 되므로 byte[] 로 한 행
+        Assert.Equal(new byte[] { 5 }, Assert.IsType<byte[]>(sent[3].Parameters[1].Value)); // 1행 구간은 스칼라(원래 글, byte[])
+        Assert.All(sent.Skip(1), s => Assert.Equal(["Decimal", "Blob"], s.Parameters.Select(p => p.Kind)));
+    }
+
+    [Fact]
+    public async Task The_old_whole_batch_mode_still_sends_small_blob_rows_one_by_one()
+    {
+        Serve(cmd => cmd.CommandText == BlobInsert ? 1 : null);
+        var service = NewService();
+        service.LobWrite = TiberoLobWrite.WholeBatchRowByRow;
+        await using var session = NewSession();
+        object?[][] rows = [[1m, new byte[] { 1 }], [2m, new byte[] { 2 }]];
+
+        var result = await service.ExecuteArrayAsync(session, Dml(BlobInsert), BlobColumns, rows, ExecutionOptions.Default, CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        var sent = _sent.Where(s => s.Text == BlobInsert).ToList();
+        Assert.Equal(2, sent.Count);
+        Assert.All(sent, s => Assert.Equal(0, s.ArrayBindCount));
+        Assert.DoesNotContain(_sent, s => s.Text.Contains("HEXTORAW", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("INSERT INTO T (A, B) VALUES (:C1, :C2)", "INSERT INTO T (A, B) VALUES (:C1, HEXTORAW(:C2))")]
+    [InlineData("INSERT INTO T (A, B) VALUES (:C2, :C20)", "INSERT INTO T (A, B) VALUES (HEXTORAW(:C2), :C20)")]
+    [InlineData("MERGE INTO T USING (SELECT :C1 AS A, :c2 AS B FROM DUAL) S ON (T.A = S.A) WHEN NOT MATCHED THEN INSERT (A, B) VALUES (S.A, S.B)",
+                "MERGE INTO T USING (SELECT :C1 AS A, HEXTORAW(:C2) AS B FROM DUAL) S ON (T.A = S.A) WHEN NOT MATCHED THEN INSERT (A, B) VALUES (S.A, S.B)")]
+    public void Hex_wrapping_wraps_only_the_blob_bind_and_not_a_longer_name(string text, string expected)
+    {
+        Assert.Equal(expected, TiberoBulkExecutionService.HexWrapped(text, ["C2"]));
     }
 
     [Theory]
@@ -826,7 +904,7 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
         Assert.Equal(ExecutionStatus.Succeeded, result.Status);
         Assert.Equal(1, result.RowsAffected);
         Assert.Equal(0, _sent[0].ArrayBindCount);
-        Assert.Equal(new byte[] { 1, 2, 3 }, Assert.IsType<byte[]>(_sent[0].Parameters[1].Value));
+        Assert.Equal(BigBlob(1), Assert.IsType<byte[]>(_sent[0].Parameters[1].Value));
     }
 
     [Fact]
@@ -976,8 +1054,14 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
         return all.Take(count).ToList();
     }
 
-    /// <summary>BLOB 표 3행: 값 있음 / BLOB NULL / 한 바이트. 열 순서 = <see cref="BlobColumns"/>.</summary>
-    private static List<object?[]> BlobRows() => [[1m, new byte[] { 1, 2, 3 }], [2m, null], [3m, new byte[] { 9 }]];
+    /// <summary>
+    /// BLOB 표 3행: 큰 값 / BLOB NULL / 큰 값. 열 순서 = <see cref="BlobColumns"/>. 큰 값(<see cref="TiberoBulkExecutionService.ArrayBlobMaxBytes"/> 초과)이라
+    /// 새 동작(PF6)에서도 세 행이 모두 한 행씩 간다(가운데 NULL 행은 1행 구간 = 스칼라): 한 행씩 경로의 시험들이 이 묶음을 쓴다.
+    /// </summary>
+    private static List<object?[]> BlobRows() => [[1m, BigBlob(1)], [2m, null], [3m, BigBlob(9)]];
+
+    /// <summary>16진 배열로 보내지 않는 크기의 BLOB 값(<see cref="TiberoBulkExecutionService.ArrayBlobMaxBytes"/> + 1 바이트, 모두 <paramref name="fill"/>).</summary>
+    private static byte[] BigBlob(byte fill) => Enumerable.Repeat(fill, TiberoBulkExecutionService.ArrayBlobMaxBytes + 1).ToArray();
 
     private static SqlStatement Dml(string text) => new(text, default, StatementKind.Dml);
 

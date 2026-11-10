@@ -25,7 +25,9 @@ namespace Oranda.Tibero.Execution;
 /// </para>
 /// <para>
 /// 경로(TB1 설계 3.1): 열 없음 = 한 번 실행, 행 1 = 스칼라 바인드(서버 오류가 그대로 나와 실패 행의 이유가 된다), 행 &gt; 1 = 배열(ArrayBindCount).
-/// BLOB 열이 있는 행 &gt; 1 묶음은 스칼라 한 행씩: 행마다 새 명령·매개변수를 만들어 실행하고 닫으며(재사용하면 큰 BLOB 뒤 TBR-590727, 실측), 행 사이에 취소를 확인한다.
+/// BLOB 열이 있는 행 &gt; 1 묶음: 이진 배열 바인드는 드라이버가 받지 못해(NRE, 실측 3.1) <see cref="ArrayBlobMaxBytes"/> 이하 BLOB 은 16진 글자 배열 + <c>HEXTORAW(:Cn)</c> 으로
+/// 배열 구간에 넣고(PF6), 큰 BLOB·빈 BLOB 의 행만 스칼라 한 행씩 보낸다(옛 동작 <see cref="TiberoLobWrite.WholeBatchRowByRow"/> 면 묶음 전체가 한 행씩).
+/// 한 행씩은 행마다 새 명령·매개변수를 만들어 실행하고 닫으며(재사용하면 큰 BLOB 뒤 TBR-590727, 실측), 행 사이에 취소를 확인한다.
 /// 긴 CLOB·NCLOB(<see cref="ArrayClobMaxChars"/> 초과)이 있는 묶음은 그 행만 한 행씩, 사이의 연속 구간은 배열로 보낸다(PF5, <see cref="LobWrite"/> — 옛 동작은 묶음 전체를 한 행씩).
 /// 드라이버 예외·INSERT 0 행(<see cref="PartialCode"/>, 몇 번째 행인지 글에 넣음)이면 거기서 멈추고 남은 행은 보내지 않는다(앞 행은 열린 트랜잭션에 남는다). Tibero 배열 DML 은 오류 없이 앞 k 행만 넣고 멈출 수 있다(실측 3.1) →
 /// INSERT … VALUES·MERGE 는 반환 행 수 k 가 보낸 행 수 n 과 같을 때만 성공한다: k &lt; n(앞 k 행만 넣고 멈춤)이든 k &gt; n(WHEN MATCHED UPDATE 가 대상 키가
@@ -404,9 +406,10 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
     /// 명령 하나와 매개변수 한 벌을 만든다. 배열이면 <paramref name="row"/> 번째부터 <paramref name="count"/> 행을 배열 바인드로(묶음 전체면 열 배열 그대로),
     /// 아니면 <paramref name="row"/> 번째 행의 스칼라 값만 담는다.
     /// </summary>
+    /// 배열이면 16진으로 보내는 BLOB 열(PF6, <see cref="PreparedColumn.ArrayValues"/>)은 16진 글자 배열·Varchar2 종류로, 글은 <see cref="BindPlan.ArrayText"/> 로 보낸다.
     private static DbCommand BuildCommand(TiberoSession session, TiberoDriver driver, SqlStatement stmt, BindPlan plan, bool array, int row, int count)
     {
-        var cmd = session.CreateCommand(stmt.Text);
+        var cmd = session.CreateCommand(array ? plan.ArrayText ?? stmt.Text : stmt.Text);
         try
         {
             if (array)
@@ -418,9 +421,10 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
             {
                 var p = cmd.CreateParameter();
                 p.ParameterName = column.BindName;
-                driver.SetParameterKind(p, column.Kind);
+                var hex = array ? column.ArrayValues : null;
+                driver.SetParameterKind(p, hex is null ? column.Kind : TiberoParamKind.Varchar2);
                 p.Direction = ParameterDirection.Input;
-                p.Value = array ? Slice(column.Values, row, count) : ScalarAt(column, row);
+                p.Value = array ? Slice(hex ?? column.Values, row, count) : ScalarAt(column, row);
                 cmd.Parameters.Add(p);
             }
 
@@ -513,7 +517,8 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
     /// <summary>
     /// 열마다 모양을 보고 값을 바인드 배열로 바꾼다. 지원 밖 형식, 감싸야 하는 값 자리(<see cref="TiberoBulkShape.IsWrapped"/>)가 글에 없는 열,
     /// 바꿀 수 없는 값이면 false 와 이유(열·행 번호). 행 &gt; 1 묶음에 긴 CLOB·NCLOB 값(<see cref="ArrayClobMaxChars"/> 초과)이 있으면 <paramref name="lobWrite"/> 를 따른다:
-    /// 옛 동작은 묶음 전체를 한 행씩, <see cref="TiberoLobWrite.SplitLongRows"/> 는 그 행만 표시한다(<see cref="BindPlan.LongRows"/>). BLOB 열이 있으면 언제나 묶음 전체가 한 행씩이다.
+    /// 옛 동작은 묶음 전체를 한 행씩, <see cref="TiberoLobWrite.SplitLongRows"/> 는 그 행만 표시한다(<see cref="BindPlan.LongRows"/>).
+    /// BLOB 열은 옛 동작이면 묶음 전체가 한 행씩, <see cref="TiberoLobWrite.SplitLongRows"/> 면 16진 배열로 못 보내는 행(빈 값·<see cref="ArrayBlobMaxBytes"/> 초과)만 표시한다(PF6).
     /// </summary>
     private static bool TryPrepare(SqlStatement stmt, IReadOnlyList<BulkColumn> columns, IReadOnlyList<object?[]> rows, TiberoLobWrite lobWrite,
                                    out BindPlan plan, out string refusal)
@@ -521,6 +526,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
         var prepared = new List<PreparedColumn>(columns.Count);
         var rowByRow = false;
         bool[]? longRows = null;
+        var hexBlobs = new List<string>(); // 배열 구간에서 16진 글자로 보내는 BLOB 열(PF6)
         plan = new BindPlan(prepared, rows.Count, false, null);
         refusal = string.Empty;
         for (var c = 0; c < columns.Count; c++)
@@ -557,7 +563,11 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
             }
 
             var blob = shape.Type == TiberoBulkType.Blob;
-            rowByRow |= !shape.ArrayBind && rows.Count > 1;
+
+            // PF6: 이진 배열 바인드는 드라이버가 받지 못한다(NRE, 실측 3.1). 「긴 행만 한 행씩」이면 BLOB 은 RAW 처럼 16진 글자 배열 + HEXTORAW 로
+            // 배열 구간에 넣고(ArrayBlobMaxBytes 이하), 그보다 크거나 빈 BLOB 의 행만 지금처럼 byte[] 로 한 행씩 보낸다.
+            var hexBlob = blob && lobWrite == TiberoLobWrite.SplitLongRows && rows.Count > 1;
+            rowByRow |= !shape.ArrayBind && rows.Count > 1 && !hexBlob;
             Array values = blob ? new byte[]?[rows.Count] : new string?[rows.Count];
             for (var r = 0; r < rows.Count; r++)
             {
@@ -588,11 +598,66 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
                 }
             }
 
-            prepared.Add(new PreparedColumn(column.BindName, paramKind, values));
+            string?[]? hex = null;
+            if (hexBlob)
+            {
+                hex = HexBlobs((byte[]?[])values, longRows ??= new bool[rows.Count]);
+                hexBlobs.Add(column.BindName);
+            }
+
+            prepared.Add(new PreparedColumn(column.BindName, paramKind, values) { ArrayValues = hex });
         }
 
-        plan = new BindPlan(prepared, columns.Count == 0 ? 1 : rows.Count, rowByRow, rowByRow ? null : longRows);
+        // 한 행씩 보낼 행이 없으면 구간 나누기 없이 배열 한 번이다(BLOB 이 모두 작은 묶음).
+        var split = !rowByRow && longRows is not null && Array.IndexOf(longRows, true) >= 0 ? longRows : null;
+        plan = new BindPlan(prepared, columns.Count == 0 ? 1 : rows.Count, rowByRow, split)
+        {
+            ArrayText = hexBlobs.Count == 0 ? null : HexWrapped(stmt.Text, hexBlobs),
+        };
         return true;
+    }
+
+    /// <summary>
+    /// 배열 구간에 16진 글자로 넣는 BLOB 값의 상한(바이트, PF6). <c>HEXTORAW</c> 의 결과는 RAW 이고 Tibero RAW 는 2000바이트까지다(16진 4000자 = 배열에 넣어도 되는
+    /// 글 길이 <see cref="ArrayClobMaxChars"/> 와 같다). 이보다 큰 값과 빈 BLOB(16진으로는 NULL 이 된다)의 행은 한 행씩 byte[] 로 보낸다. win144 실측으로 확인한다.
+    /// </summary>
+    internal const int ArrayBlobMaxBytes = 2000;
+
+    /// <summary>BLOB 값 → 배열용 16진 글자(NULL 은 NULL). 배열로 못 보내는 값(빈 값·<see cref="ArrayBlobMaxBytes"/> 초과)의 행은 <paramref name="longRows"/> 에 표시한다.</summary>
+    private static string?[] HexBlobs(byte[]?[] values, bool[] longRows)
+    {
+        var hex = new string?[values.Length];
+        for (var r = 0; r < values.Length; r++)
+        {
+            if (values[r] is not { } bytes)
+            {
+                continue;
+            }
+
+            if (bytes.Length == 0 || bytes.Length > ArrayBlobMaxBytes)
+            {
+                longRows[r] = true;
+                continue;
+            }
+
+            hex[r] = Convert.ToHexString(bytes);
+        }
+
+        return hex;
+    }
+
+    /// <summary>배열 구간의 글: 16진으로 보내는 BLOB 열의 값 자리 <c>:Cn</c> 을 <c>HEXTORAW(:Cn)</c> 으로(<c>:C1</c> 은 <c>:C10</c> 이 아님). 한 행씩 보낼 때는 원래 글이다.</summary>
+    internal static string HexWrapped(string text, IReadOnlyList<string> bindNames)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(bindNames);
+        foreach (var name in bindNames)
+        {
+            text = Regex.Replace(text, ":" + Regex.Escape(name) + "(?![A-Za-z0-9_$#])", "HEXTORAW(:" + name + ")",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        }
+
+        return text;
     }
 
     /// <summary>
@@ -765,18 +830,29 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
         MergeKeyOnly,
     }
 
-    /// <summary>바인드 열 하나: 이름(쌍점 없음)·매개변수 종류·행마다의 값(<c>string?[]</c>, BLOB 은 <c>byte[]?[]</c>).</summary>
-    private sealed record PreparedColumn(string BindName, TiberoParamKind Kind, Array Values);
+    /// <summary>
+    /// 바인드 열 하나: 이름(쌍점 없음)·매개변수 종류·행마다의 값(<c>string?[]</c>, BLOB 은 <c>byte[]?[]</c>).
+    /// <see cref="ArrayValues"/> = 배열 구간에서 대신 보내는 16진 글자(PF6, BLOB 만, 한 행씩 보낼 행의 칸은 쓰지 않는다). null = <see cref="Values"/> 그대로.
+    /// </summary>
+    private sealed record PreparedColumn(string BindName, TiberoParamKind Kind, Array Values)
+    {
+        public string?[]? ArrayValues { get; init; }
+    }
 
     /// <summary>
     /// 실행 계획: 열·행 수(열이 없으면 1)·스칼라 한 행씩 여부(BLOB 열이 있는 행 &gt; 1, 옛 동작이면 긴 CLOB 이 있는 묶음도)·
     /// 긴 CLOB·NCLOB 값이 있는 행 표시(<see cref="TiberoLobWrite.SplitLongRows"/> 일 때만, 없으면 null — 그 행만 한 행씩, 나머지는 구간마다 배열).
     /// </summary>
-    private sealed record BindPlan(IReadOnlyList<PreparedColumn> Columns, int RowCount, bool RowByRow, bool[]? LongRows);
+    private sealed record BindPlan(IReadOnlyList<PreparedColumn> Columns, int RowCount, bool RowByRow, bool[]? LongRows)
+    {
+        /// <summary>배열 구간의 글(16진으로 보내는 BLOB 열이 있으면 그 값 자리를 <c>HEXTORAW</c> 로 감싼 글, PF6). null = 원래 글.</summary>
+        public string? ArrayText { get; init; }
+    }
 }
 
 /// <summary>
-/// Tibero 대량 쓰기에서 묶음 안에 긴 CLOB·NCLOB 값(<see cref="TiberoBulkExecutionService.ArrayClobMaxChars"/> 초과)이 있을 때의 처리(PF5).
+/// Tibero 대량 쓰기에서 묶음 안에 긴 CLOB·NCLOB 값(<see cref="TiberoBulkExecutionService.ArrayClobMaxChars"/> 초과)이 있을 때의 처리(PF5),
+/// BLOB 열이 있을 때의 처리(PF6: <see cref="SplitLongRows"/> 면 작은 BLOB 은 16진 배열, 큰·빈 BLOB 의 행만 한 행씩).
 /// 긴 값이 섞인 배열은 서버가 연결을 끊으므로(TBR-90405, 실측) 긴 값의 행은 언제나 한 행씩 보낸다 — 차이는 나머지 행이다.
 /// </summary>
 internal enum TiberoLobWrite

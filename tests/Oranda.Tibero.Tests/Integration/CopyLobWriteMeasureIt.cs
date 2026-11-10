@@ -13,7 +13,8 @@ namespace Oranda.Tibero.Tests.Integration;
 /// 단언은 결과 건수만.
 /// <list type="bullet">
 /// <item><c>PF5_CLOB</c>(ID, CL CLOB, V VARCHAR2): CLOB 은 PF3 측정과 같은 값(1~3000자, 1000행마다 104000자) — 새 동작이 달라지는 모양.</item>
-/// <item><c>PF5_BLOB</c>(ID, CL CLOB, BL BLOB): BLOB 열이 있어 두 동작 모두 묶음 전체를 한 행씩 보낸다(드라이버가 이진 배열을 받지 않는다, TB1 3.1) — 기준선.</item>
+/// <item><c>PF5_BLOB</c>(ID, CL CLOB, BL BLOB, BLOB 1~2000바이트): 옛 동작은 묶음 전체를 한 행씩(드라이버가 이진 배열을 받지 않는다, TB1 3.1),
+/// 새 동작은 PF6 부터 작은 BLOB 을 16진 글자 배열 + HEXTORAW 로 배열 구간에 넣는다(긴 CLOB 행만 한 행씩) — PF6 전후 비교.</item>
 /// <item>교차 복사 관문(<see cref="CrossDbmsItEnvironment.SkipReason"/>)에 더해 <c>ORANDA_IT_COPY_MEASURE=1</c> 일 때만 돈다(행 수 <c>ORANDA_IT_COPY_MEASURE_ROWS</c>, 기본 5000).</item>
 /// <item>실행: <c>ORANDA_IT_COPY_MEASURE=1 ORANDA_IT_TIBERO_WRITE=1 dotnet test tests/Oranda.Tibero.Tests --filter "FullyQualifiedName~CopyLobWriteMeasureIt" --logger "console;verbosity=detailed"</c></item>
 /// </list>
