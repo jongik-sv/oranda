@@ -579,10 +579,10 @@
 - **Source**: 조정자 회차 xdb-copy 결정 69, 74, 81, 83, 87, 92, 93, 99
 
 ## D-063 (2026-11-11T03:00:00Z)
-- **Phase**: PF2b(같은 시점 읽기와 동시 복사)
+- **Phase**: PF2b(같은 시점 읽기와 동시 복사), PF2b2(Tibero 원본)
 - **Decision needed**: 같은 시점 읽기(기본 켬)를 켠 채로도 동시 테이블 복사를 허용할지. 결정 72 는 같은 시점 읽기를 켜면 동시 복사를 끄는 배타 규칙으로 정해 두었다
-- **Decision made**: 같은 시점 읽기와 동시 복사를 함께 허용한다(Oracle 원본, 결정 72 의 배타 규칙을 대신함). 원본 읽기 전용 트랜잭션을 연 직후, 대상에 아무것도 하기 전에 시작 SCN 하나를 잡는다(`DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER`, 권한이 없으면 `TIMESTAMP_TO_SCN(SYSTIMESTAMP)`, 둘 다 실패하면 대상에 손대지 않고 멈춤). 모든 레인의 원본 SELECT 와 부모 키 규칙의 원본 부모 테이블에 `AS OF SCN` 을 붙인다. SCN 은 작업 로그와 실행 화면에 보인다. 사전 점검에 「시작 SCN 으로 읽음」 항목(UNDO_RETENTION 경고 포함)과 다른 계정 테이블의 FLASHBACK 권한 검사를 둔다. ORA-01555·08180·08181 은 전체 중단, ORA-01031·01466 은 그 테이블만 실패로 두고, 어느 경우에도 지금 데이터로 바꿔 읽지 않는다. 동시 수 1 이면 예전 경로(읽기 전용 트랜잭션 하나) 그대로. Tibero 원본은 실측 전이라 예전 규칙(같은 시점 읽기면 한 테이블씩)을 유지하고, 확인용 IT 를 둔다
+- **Decision made**: 같은 시점 읽기와 동시 복사를 함께 허용한다(Oracle 원본, 결정 72 의 배타 규칙을 대신함). 원본 읽기 전용 트랜잭션을 연 직후, 대상에 아무것도 하기 전에 시작 SCN 하나를 잡는다(`DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER`, 권한이 없으면 `TIMESTAMP_TO_SCN(SYSTIMESTAMP)`, 둘 다 실패하면 대상에 손대지 않고 멈춤). 모든 레인의 원본 SELECT 와 부모 키 규칙의 원본 부모 테이블에 `AS OF SCN` 을 붙인다. SCN 은 작업 로그와 실행 화면에 보인다. 사전 점검에 「시작 SCN 으로 읽음」 항목(UNDO_RETENTION 경고 포함)과 다른 계정 테이블의 FLASHBACK 권한 검사를 둔다. ORA-01555·08180·08181 은 전체 중단, ORA-01031·01466 은 그 테이블만 실패로 두고, 어느 경우에도 지금 데이터로 바꿔 읽지 않는다. 동시 수 1 이면 예전 경로(읽기 전용 트랜잭션 하나) 그대로. Tibero 원본도 켠다(PF2b2, 2026-11-11, 조정자 회차 xdb-copy 결정 100 — 6.2.15 실측 #187 에서 TSN 읽기 세 방법과 `AS OF SCN`·`AS OF TSN` 이 됨): 시작 TSN 은 `DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER` → `TIMESTAMP_TO_TSN(SYSTIMESTAMP)` → `V$DATABASE.CURRENT_TSN` 순, 읽기는 같은 `AS OF SCN :ORANDA_SCN`, 로그·화면은 「TSN n」. 권한 부족(TBR-8053)은 그 테이블만 실패, 메시지에 「snapshot too old」 가 있으면 전체 중단, 번호를 실측하지 못한 그 밖의 서버 오류는 그 테이블만 실패(지금 데이터로 바꿔 읽지 않음). 다른 계정 테이블의 FLASHBACK 권한 검사는 Tibero 에서 확인 필요(오류 아님)
 - **Rationale**: 사용자 결정 2026-11-11. 같은 시점 읽기를 켜면 동시 복사가 꺼지던 제약이 속도에 걸림돌이었다
-- **Risk**: undo 보관 기간이 짧으면 긴 복사가 ORA-01555 로 멈춘다. `TIMESTAMP_TO_SCN` 은 몇 초 앞 SCN 일 수 있어 방금 DDL 한 테이블이 ORA-01466 으로 실패할 수 있다. 사용자 조건 안 하위 질의는 지금 데이터를 읽는다(사전 점검에 안내). LOB 의 ORA-22924 는 따로 분류하지 않는다. READ ONLY 트랜잭션 안 `AS OF SCN` 동작은 IT 로 확인한다
+- **Risk**: undo 보관 기간이 짧으면 긴 복사가 ORA-01555 로 멈춘다. `TIMESTAMP_TO_SCN` 은 몇 초 앞 SCN 일 수 있어 방금 DDL 한 테이블이 ORA-01466 으로 실패할 수 있다. 사용자 조건 안 하위 질의는 지금 데이터를 읽는다(사전 점검에 안내). LOB 의 ORA-22924 는 따로 분류하지 않는다. READ ONLY 트랜잭션 안 `AS OF SCN` 동작은 IT 로 확인한다. Tibero 의 시점 데이터 잃음·정의 바뀜·잘못된 TSN 오류 번호는 미실측(IT `TiberoCopyReadPointIt` 가 출력한다)이라 안내에 번호가 없다
 - **Reversible**: yes(배타 규칙으로 되돌리면 된다)
-- **Source**: 사용자 결정 2026-11-11, 조정자 회차 xdb-copy 결정 72(이를 대신함), 69
+- **Source**: 사용자 결정 2026-11-11, 조정자 회차 xdb-copy 결정 72(이를 대신함), 69, 100(Tibero 원본 켬, PF2b2)

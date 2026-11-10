@@ -19,8 +19,9 @@ public readonly record struct CopyConcurrencyDecision(int Tables, string? Reason
 /// <summary>
 /// 동시 테이블 수(<see cref="CopyOptions.ConcurrentTables"/>)를 실제로 쓸 수 있는지 정한다.
 /// <list type="bullet">
-/// <item>「같은 시점 읽기」(<see cref="CopyJob.ConsistentRead"/>) 켬: 원본 DBMS 가 시점 지정 읽기를 쓰면(<see cref="CopyReadPointDbms.Supports"/>, Oracle <c>AS OF SCN</c>)
-/// 동시로 돌고 모든 레인이 시작 SCN 하나로 읽는다(PF2b, <see cref="CopyConcurrencyDecision.ReadsAtPoint"/>). 쓰지 않으면(Tibero) 동시 끔 — 세션이 여럿이면 한 시점으로 읽을 수 없다.</item>
+/// <item>「같은 시점 읽기」(<see cref="CopyJob.ConsistentRead"/>) 켬: 원본 DBMS 가 시점 지정 읽기를 쓰면(<see cref="CopyReadPointDbms.Supports"/>, Oracle·Tibero <c>AS OF SCN</c>)
+/// 동시로 돌고 모든 레인이 시작 시점 번호(Oracle SCN·Tibero TSN) 하나로 읽는다(PF2b·PF2b2, <see cref="CopyConcurrencyDecision.ReadsAtPoint"/>).
+/// 쓰지 않는 원본이면 동시 끔 — 세션이 여럿이면 한 시점으로 읽을 수 없다(지금은 그런 DBMS 가 없다).</item>
 /// <item>「모두 끝난 뒤 한 번 커밋」 = 동시 끔: 세션마다 트랜잭션이 따로라 한꺼번에 되돌릴 수 없다(2PC 없음).</item>
 /// <item>「실패 행만 다시 넣기」 = 늘 한 테이블씩.</item>
 /// <item>점검 결과가 있으면 FK 단계(<see cref="PrecheckReport.Stages"/>) 안 테이블 수가 상한이다(모든 단계가 한 테이블이면 동시 끔).</item>
@@ -31,10 +32,10 @@ public static class CopyConcurrency
     /// <summary>화면에서 고를 수 있는 가장 큰 동시 테이블 수.</summary>
     public const int Max = 4;
 
-    /// <summary>같은 시점 읽기·「모두 끝난 뒤 한 번 커밋」 둘 다 켰을 때의 이유(시점 지정 읽기를 쓰지 않는 원본).</summary>
+    /// <summary>같은 시점 읽기·「모두 끝난 뒤 한 번 커밋」 둘 다 켰을 때의 이유(시점 지정 읽기를 쓰지 않는 원본 — 지금은 없다, PF2b2).</summary>
     public const string ConsistentReadAndAtEndReason = "같은 시점 읽기를 끄고 커밋을 「테이블마다」나 「배치마다」로 바꾸면 동시 복사가 켜집니다.";
 
-    /// <summary>같은 시점 읽기를 켰을 때의 이유(시점 지정 읽기를 쓰지 않는 원본 — Tibero).</summary>
+    /// <summary>같은 시점 읽기를 켰을 때의 이유(시점 지정 읽기를 쓰지 않는 원본 — 지금은 없다, PF2b2 에서 Tibero 도 쓴다).</summary>
     public const string ConsistentReadReason = "같은 시점 읽기를 끄면 동시 복사가 켜집니다.";
 
     /// <summary>「모두 끝난 뒤 한 번 커밋」일 때의 이유.</summary>
@@ -54,7 +55,7 @@ public static class CopyConcurrency
 
     /// <summary>같은 시점 읽기를 켠 채 동시로 돌 때의 안내(화면·사전 점검 확인 항목, PF2b).</summary>
     public const string ReadPointNote =
-        "같은 시점 읽기: 복사를 시작할 때 원본 SCN 하나를 잡아 모든 테이블을 그 시점(AS OF SCN)으로 읽습니다. 다른 계정의 테이블은 FLASHBACK 권한이 필요하고, 복사가 오래 걸리면 원본 UNDO 가 그동안 남아 있어야 합니다.";
+        "같은 시점 읽기: 복사를 시작할 때 원본 시점 번호(Oracle SCN, Tibero TSN) 하나를 잡아 모든 테이블을 그 시점(AS OF SCN)으로 읽습니다. 다른 계정의 테이블은 FLASHBACK 권한이 필요하고, 복사가 오래 걸리면 원본 UNDO 가 그동안 남아 있어야 합니다.";
 
     /// <summary>점검 뒤 같은 시점 읽기를 켜 시점 읽기 점검(<see cref="CopyCheckCodes.ReadPoint"/>)이 없을 때의 이유(실행기).</summary>
     public const string ReadPointUncheckedReason = "사전 점검 뒤 같은 시점 읽기 설정이 바뀌어 한 테이블씩 복사합니다. 동시에 복사하려면 사전 점검을 다시 하세요.";

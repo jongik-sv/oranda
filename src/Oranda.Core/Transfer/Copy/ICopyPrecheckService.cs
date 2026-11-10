@@ -94,7 +94,10 @@ public static class CopyCheckCodes
     /// </summary>
     public const string ReadPoint = "ReadPoint";
 
-    /// <summary>오류(PF2b, 원본 테이블마다): 같은 시점 읽기로 동시에 복사하는데 다른 계정의 원본 테이블(부모 키 규칙의 부모 포함)에 FLASHBACK 권한이 없다.</summary>
+    /// <summary>
+    /// 오류(PF2b, 원본 테이블마다): 같은 시점 읽기로 동시에 복사하는데 다른 계정의 원본 테이블(부모 키 규칙의 부모 포함)에 FLASHBACK 권한이 없다.
+    /// 권한 이름을 실측하지 못한 원본(PF2b2 Tibero, <see cref="CopyReadPointSupport.PrivilegeUnverified"/>)은 확인 필요다.
+    /// </summary>
     public const string FlashbackNoPrivilege = "FlashbackNoPrivilege";
 
     /// <summary>

@@ -60,6 +60,25 @@ public sealed class CopyPrecheckReadPointTests
         Assert.True(report.HasErrors);
     }
 
+    [Fact]
+    public async Task Unverified_privilege_names_make_a_missing_flashback_grant_a_confirmation_not_an_error()
+    {
+        // PF2b2 Tibero: 다른 계정 테이블에 FLASHBACK 권한이 필요한지 실측하지 못했다 — 막지 않고 확인 필요로 둔다(읽지 못하면 그 테이블만 실패).
+        var f = new Fixture(consistent: true, concurrent: 2, Dbms.Tibero, PointDialect.Tsn);
+
+        var report = await f.RunAsync();
+
+        var item = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.FlashbackNoPrivilege);
+        Assert.Equal(CheckLevel.Confirm, item.Level);
+        Assert.StartsWith("APP.CODES: 같은 시점 읽기로 동시에 복사하면 원본 APP.CODES 을(를) 시작 TSN 시점으로 읽는데", item.Message, StringComparison.Ordinal);
+        Assert.Contains("원본 Tibero 에서 이 권한이 필요한지는 확인되지 않았습니다.", item.Message, StringComparison.Ordinal);
+        Assert.Contains("지금 데이터로 바꿔 읽지 않습니다", item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("표", item.Message, StringComparison.Ordinal);
+        Assert.False(report.HasErrors);
+        Assert.Contains("원본 TSN 하나를 잡아", Assert.Single(report.Items, i => i.Code == CopyCheckCodes.ReadPoint).Message, StringComparison.Ordinal);
+        Assert.True(CopyConcurrency.ForRun(f.Job, report, Dbms.Tibero).ReadsAtPoint);
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
@@ -92,7 +111,7 @@ public sealed class CopyPrecheckReadPointTests
     {
         private readonly FakePrecheckBulk _bulk;
 
-        public Fixture(bool consistent, int? concurrent)
+        public Fixture(bool consistent, int? concurrent, Dbms dbms = Dbms.Oracle, CopyReadPointSupport? point = null)
         {
             Job = new CopyJob
             {
@@ -112,7 +131,7 @@ public sealed class CopyPrecheckReadPointTests
             metadata.Tables[new DbObjectRef("DST", "ORDERS", "TABLE")] = Table("DST", "ORDERS");
             metadata.Tables[new DbObjectRef("APP", "CODES", "TABLE")] = Table("APP", "CODES");
             metadata.Tables[new DbObjectRef("DST", "CODES", "TABLE")] = Table("DST", "CODES");
-            var parts = new CopyDbmsParts(Dbms.Oracle, new IdCatalog(), new FakeClassifier(), new PointDialect(), new FakePrecheckDialect(), new FakeCodec(),
+            var parts = new CopyDbmsParts(dbms, new IdCatalog(), new FakeClassifier(), new PointDialect { ReadPoint = point ?? PointDialect.Scn }, new FakePrecheckDialect(), new FakeCodec(),
                 new FakeRecreateStep());
             _bulk = new FakePrecheckBulk(Source, Target);
             Service = new CopyPrecheckService(_bulk, metadata, new AllowPolicy(), parts, parts);
@@ -264,10 +283,19 @@ public sealed class CopyPrecheckReadPointTests
     /// <summary>문장 글만 만드는 방언(값 자리 = <c>:이름</c>) + Oracle 과 같은 꼴의 시점 지정 읽기.</summary>
     private sealed class PointDialect : ICopyDialect
     {
-        public CopyReadPointSupport ReadPoint { get; } = new("SCN", "AS OF SCN :{0}", [new CopyReadPointQuery("SELECT X FROM DUAL", "x")], "FLASHBACK", "FLASHBACK ANY TABLE")
+        public static readonly CopyReadPointSupport Scn = new("SCN", "AS OF SCN :{0}", [new CopyReadPointQuery("SELECT X FROM DUAL", "x")], "FLASHBACK", "FLASHBACK ANY TABLE")
         {
             SnapshotTooOldErrors = "ORA-01555·ORA-08180",
         };
+
+        /// <summary>Tibero 모양(PF2b2): 이름 TSN, 권한 이름 미실측.</summary>
+        public static readonly CopyReadPointSupport Tsn = new("TSN", "AS OF SCN :{0}", [new CopyReadPointQuery("SELECT X FROM DUAL", "x")], "FLASHBACK", "FLASHBACK ANY TABLE")
+        {
+            PrivilegeUnverified = true,
+            UnmappedErrorsFailTable = true,
+        };
+
+        public CopyReadPointSupport ReadPoint { get; init; } = Scn;
 
         private static SqlStatement Ddl(string text) => new(text, default, StatementKind.Ddl);
 

@@ -153,7 +153,7 @@ public sealed class CopyReadPointTests(OracleFreeFixture db, ITestOutputHelper o
 
         if (grantDbmsFlashback)
         {
-            await scope.ExecAdminAsync($"GRANT EXECUTE ON SYS.DBMS_FLASHBACK TO {scope.SrcUser}");
+            await scope.ExecSysdbaAsync($"GRANT EXECUTE ON SYS.DBMS_FLASHBACK TO {scope.SrcUser}"); // SYSTEM 은 GRANT OPTION 이 없다(ORA-01031)
         }
 
         await Task.Delay(PointSettle);

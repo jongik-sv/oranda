@@ -1775,9 +1775,15 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                         .ConfigureAwait(false);
                     if (!held.Contains(support.ObjectPrivilege))
                     {
-                        _items.Add(new CheckItem(key, CopyCheckCodes.FlashbackNoPrivilege, CheckLevel.Error,
-                            $"{key}: 같은 시점 읽기로 동시에 복사하면 원본 {owner}.{table} 을(를) 시작 {support.Name} 시점으로 읽는데, 이 계정에 그 테이블의 {support.ObjectPrivilege} 권한"
-                            + $"({support.SystemPrivilege} 포함)이 없습니다. 권한을 받거나, 동시 테이블 수를 1로 하거나, 같은 시점 읽기를 끄세요."));
+                        // 권한 이름을 실측하지 못한 DBMS(PF2b2 Tibero)는 막지 않고 확인 필요로 둔다: 실제로 권한이 없으면 그 테이블만 실패한다(지금 데이터로 바꿔 읽지 않음).
+                        _items.Add(support.PrivilegeUnverified
+                            ? new CheckItem(key, CopyCheckCodes.FlashbackNoPrivilege, CheckLevel.Confirm,
+                                $"{key}: 같은 시점 읽기로 동시에 복사하면 원본 {owner}.{table} 을(를) 시작 {support.Name} 시점으로 읽는데, 이 계정에 그 테이블의 {support.ObjectPrivilege} 권한"
+                                + $"({support.SystemPrivilege} 포함)이 보이지 않습니다. 원본 {sourceParts.Dbms} 에서 이 권한이 필요한지는 확인되지 않았습니다."
+                                + " 그 시점으로 읽지 못하면 그 테이블은 실패하고 지금 데이터로 바꿔 읽지 않습니다. 걱정되면 동시 테이블 수를 1로 하세요.")
+                            : new CheckItem(key, CopyCheckCodes.FlashbackNoPrivilege, CheckLevel.Error,
+                                $"{key}: 같은 시점 읽기로 동시에 복사하면 원본 {owner}.{table} 을(를) 시작 {support.Name} 시점으로 읽는데, 이 계정에 그 테이블의 {support.ObjectPrivilege} 권한"
+                                + $"({support.SystemPrivilege} 포함)이 없습니다. 권한을 받거나, 동시 테이블 수를 1로 하거나, 같은 시점 읽기를 끄세요."));
                     }
                 }
             }

@@ -444,20 +444,83 @@ public sealed class CopyRunnerLanesTests
         Assert.Equal(CopyOutcome.Succeeded, result.Tables.Single(t => t.Table == "A").Outcome);
     }
 
-    [Fact]
-    public async Task Tibero_source_keeps_one_table_at_a_time_with_consistent_read_and_logs_why()
+    /// <summary>Tibero 모양의 시점 지정 읽기(PF2b2): 이름 TSN, 같은 AS OF SCN 글, 번호 미실측(모르는 서버 오류 = 그 테이블만 실패).</summary>
+    private static readonly CopyReadPointSupport TestTsn = new(
+        "TSN", "AS OF SCN :{0}",
+        [new CopyReadPointQuery("SELECT EXACT_TSN FROM DUAL", "DBMS_FLASHBACK"), new CopyReadPointQuery("SELECT TIME_TSN FROM DUAL", "TIMESTAMP_TO_TSN")],
+        "FLASHBACK", "FLASHBACK ANY TABLE")
     {
-        var f = new Fixture(Dbms.Tibero, new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, concurrent: 2, ("A", 2), ("B", 2)) { ConsistentRead = true };
+        SnapshotTooOldMessages = ["snapshot too old"],
+        UnmappedErrorsFailTable = true,
+        PrivilegeUnverified = true,
+    };
+
+    [Fact]
+    public async Task Tibero_source_copies_concurrently_with_consistent_read_as_of_one_start_tsn()
+    {
+        // PF2b2(조정자 회차 xdb-copy 결정 100): Tibero 원본도 시작 TSN 하나를 잡아 모든 레인이 AS OF SCN 으로 읽는다(예전 「한 테이블씩」 이유 글 없음).
+        var f = new Fixture(Dbms.Tibero, new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, concurrent: 2, ("A", 2), ("B", 2))
+        {
+            ConsistentRead = true,
+            ReadPointSupport = TestTsn,
+        };
 
         var result = await f.RunAsync().WaitAsync(Quick);
 
         Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
-        Assert.Null(result.ReadPoint);
-        Assert.Equal(["T1"], f.Bulk.DmlSessions().Distinct());
-        Assert.Contains(f.Progress.Logs, l => l.Text == "한 테이블씩 복사합니다: " + CopyConcurrency.ConsistentReadReason);
-        Assert.DoesNotContain(f.Progress.Logs, l => l.Text.Contains("동시 복사 전에 정리", StringComparison.Ordinal));
-        Assert.DoesNotContain(f.Bulk.Events, e => e.StartsWith("point ", StringComparison.Ordinal));
-        Assert.All(f.Bulk.SourceQueries, r => Assert.DoesNotContain(" AS OF ", r.Sql, StringComparison.Ordinal));
+        Assert.Equal("TSN 4242", result.ReadPoint);
+        Assert.Equal(["T1", "T2"], f.Bulk.DmlSessions().Distinct().Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(f.Progress.Logs, l => l.Text.Contains(CopyConcurrency.ConsistentReadReason, StringComparison.Ordinal));
+        Assert.Contains(f.Progress.Logs, l => l.Text.StartsWith("→ 원본 TSN 4242 · 모든 테이블을 이 시점으로 읽습니다(AS OF SCN :ORANDA_SCN, DBMS_FLASHBACK)", StringComparison.Ordinal));
+        Assert.All(f.Bulk.SourceQueries, r =>
+        {
+            Assert.Contains(" AS OF SCN :ORANDA_SCN", r.Sql, StringComparison.Ordinal);
+            Assert.Equal(4242m, r.Binds[CopyReadPoint.BindName].Value);
+        });
+    }
+
+    [Fact]
+    public async Task Tibero_source_unknown_error_at_the_tsn_fails_only_that_table_and_never_reads_current_data()
+    {
+        var f = new Fixture(Dbms.Tibero, new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, concurrent: 2, ("A", 2), ("B", 2))
+        {
+            ConsistentRead = true,
+            ReadPointSupport = TestTsn,
+        };
+        f.Bulk.BeforeRow = (table, index, _) => table == "A" && index == 0
+            ? throw new FakeDbException("TBR-99999: unmeasured flashback failure", DbErrorKind.Other, -99999)
+            : ValueTask.CompletedTask;
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.PartiallyFailed, result.Outcome);
+        var a = result.Tables.Single(t => t.Table == "A");
+        Assert.Equal(CopyOutcome.Failed, a.Outcome);
+        Assert.Contains("원본 테이블을 TSN 4242 시점으로 읽지 못했습니다(", a.Message, StringComparison.Ordinal);
+        Assert.Contains(CopyReadPointErrors.NoFallback, a.Message, StringComparison.Ordinal);
+        Assert.Equal(CopyOutcome.Succeeded, result.Tables.Single(t => t.Table == "B").Outcome);
+        Assert.Single(f.Bulk.SourceQueries, r => r.Sql.Contains("\"A\"", StringComparison.Ordinal)); // A 를 지금 데이터로 다시 읽지 않았다
+    }
+
+    [Fact]
+    public async Task Tibero_source_snapshot_too_old_message_stops_the_run()
+    {
+        var f = new Fixture(Dbms.Tibero, new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, concurrent: 2, ("A", 2), ("B", 2))
+        {
+            ConsistentRead = true,
+            ReadPointSupport = TestTsn,
+        };
+        f.Bulk.BeforeRow = (table, index, _) => table == "A" && index == 0
+            ? throw new FakeDbException("TBR-99998: Snapshot too old.", DbErrorKind.Other, -99998)
+            : ValueTask.CompletedTask;
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        var a = result.Tables.Single(t => t.Table == "A");
+        Assert.Equal(CopyOutcome.Failed, a.Outcome);
+        Assert.Contains("원본 TSN 4242 시점의 데이터가 원본 UNDO 에 남아 있지 않아 읽지 못했습니다", a.Message, StringComparison.Ordinal);
+        Assert.Contains(result.Notices, n => n.Contains("UNDO_RETENTION", StringComparison.Ordinal));
+        Assert.Single(f.Bulk.SourceQueries, r => r.Sql.Contains("\"A\"", StringComparison.Ordinal));
     }
 
     [Fact]

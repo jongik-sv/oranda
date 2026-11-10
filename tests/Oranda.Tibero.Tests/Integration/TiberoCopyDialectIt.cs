@@ -62,8 +62,8 @@ public class TiberoCopyDialectIt(ITestOutputHelper output)
         WriteAsync([BinTable], [], true, RecycleBinAsync);
 
     /// <summary>
-    /// PF2b 실측(Tibero 원본은 아직 시점 지정 읽기를 쓰지 않는다 — <c>TiberoCopyDialect.ReadPoint</c> = null): 지금 시점 번호(TSN)를 읽는 방법과
-    /// <c>AS OF SCN</c> 이 그 시점의 행을 돌려주는지 본다. 방법마다 되는지·오류 번호를 출력한다(이 결과로 Tibero 원본의 같은 시점 읽기 + 동시 복사를 켤지 정한다).
+    /// PF2b 실측: 지금 시점 번호(TSN)를 읽는 방법과 <c>AS OF SCN</c> 이 그 시점의 행을 돌려주는지 본다. 방법마다 되는지·오류 번호를 출력한다
+    /// (6.2.15 #187 에서 셋 다 됨 → PF2b2 가 Tibero 원본의 같은 시점 읽기 + 동시 복사를 켰다, <c>TiberoCopyDialect.ReadPoint</c>·<c>TiberoCopyReadPointIt</c>).
     /// </summary>
     [TiberoWriteFact]
     public Task Flashback_query_probe_reads_the_current_tsn_and_as_of_scn_returns_the_old_rows() =>

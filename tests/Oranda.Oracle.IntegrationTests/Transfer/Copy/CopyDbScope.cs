@@ -192,6 +192,22 @@ internal sealed class CopyDbScope : IAsyncDisposable
         NoteDdl(sql);
     }
 
+    /// <summary>
+    /// SYS AS SYSDBA 로 문장을 실행한다(SYS 소유 객체의 권한 주기, PF2b2). SYSTEM 은 <c>SYS.DBMS_FLASHBACK</c> 의 GRANT OPTION 이 없어
+    /// <c>GRANT EXECUTE ON SYS.DBMS_FLASHBACK</c> 이 ORA-01031 이다. gvenzl 이미지의 SYS 암호 = 컨테이너 ORACLE_PASSWORD = SYSTEM 암호.
+    /// </summary>
+    public async Task ExecSysdbaAsync(string sql)
+    {
+        var sys = new OracleConnectionStringBuilder(new ConnectionProfile("admin-sys", "sys", _dataSource).BuildConnectionString(_systemPassword))
+        {
+            DBAPrivilege = "SYSDBA",
+        };
+        await using var conn = ConnectionProfileExtensions.CreateConnection(sys.ConnectionString);
+        await conn.OpenAsync();
+        await ExecAsync(conn, sql);
+        NoteDdl(sql);
+    }
+
     /// <summary>원본 소유자 스키마에 표를 만든다. <paramref name="columns"/> 는 괄호 안의 열·제약 정의.</summary>
     public Task CreateSourceTableAsync(string table, string columns) => ExecSourceAsync($"CREATE TABLE {table} ({columns})");
 

@@ -163,21 +163,87 @@ public sealed class TiberoCopyDialectTests
         Assert.DoesNotContain("ORA-", note, StringComparison.Ordinal);
     }
 
+    // ---- 같은 시점 읽기 + 동시 복사(PF2b2, 조정자 회차 xdb-copy 결정 100) ----
+
     [Fact]
-    public void Read_point_is_not_used_yet_so_consistent_read_keeps_tibero_to_one_table_at_a_time()
+    public void Read_point_is_as_of_scn_named_tsn_with_the_exact_tsn_first_then_the_function_then_v_database()
     {
-        // PF2b: Tibero 의 AS OF SCN(TSN)·CURRENT_TSN 은 실측 전이라 쓰지 않는다. 판정 표(CopyReadPointDbms)와 방언이 같아야 한다.
         ICopyDialect dialect = Dialect;
-        Assert.Null(dialect.ReadPoint);
-        Assert.False(CopyReadPointDbms.Supports(Oranda.Core.Connection.Dbms.Tibero));
+
+        var point = Assert.IsType<CopyReadPointSupport>(dialect.ReadPoint);
+        Assert.Same(TiberoCopyDialect.Point, point);
+        Assert.Equal("TSN", point.Name);
+        Assert.Equal("AS OF SCN :ORANDA_SCN", point.Clause); // 6.2.15 실측(#187): AS OF SCN 이 TSN 을 받는다
+        Assert.Equal(
+            ["SELECT DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER FROM DUAL", "SELECT TIMESTAMP_TO_TSN(SYSTIMESTAMP) FROM DUAL", "SELECT CURRENT_TSN FROM V$DATABASE"],
+            point.Queries.Select(q => q.Sql));
+        Assert.Equal(["DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER", "TIMESTAMP_TO_TSN(SYSTIMESTAMP)", "V$DATABASE.CURRENT_TSN"], point.Queries.Select(q => q.Method));
+        Assert.All(point.Queries, q => Assert.StartsWith("SELECT ", q.Sql, StringComparison.Ordinal)); // 대량 읽기는 첫 낱말을 본다
+        Assert.Equal("FLASHBACK", point.ObjectPrivilege);
+        Assert.Equal("FLASHBACK ANY TABLE", point.SystemPrivilege);
+        Assert.True(point.PrivilegeUnverified); // 다른 계정 테이블 권한은 미실측 → 사전 점검은 확인 필요
+        Assert.True(point.UnmappedErrorsFailTable);
+        Assert.Null(point.SnapshotTooOldErrors); // 번호 미실측(추측해 넣지 않는다)
+        Assert.Equal(dialect.SnapshotTooOldErrorName, point.SnapshotTooOldErrors);
+        Assert.Empty(point.DefinitionChangedNumbers);
+        Assert.Empty(point.InvalidPointNumbers);
+        Assert.DoesNotContain(point.Queries, q => q.Sql.Contains("ORA-", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Read_point_turns_concurrency_on_with_consistent_read_and_the_source_select_reads_as_of_the_tsn()
+    {
+        Assert.True(CopyReadPointDbms.Supports(Oranda.Core.Connection.Dbms.Tibero)); // 판정 표와 방언이 같다
 
         var job = new CopyJob
         {
             Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
             SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==", ConsistentRead = true,
+            Tables = [new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert)],
             Options = new CopyOptions { ConcurrentTables = 3 },
         };
         var decision = CopyConcurrency.Effective(job, report: null, Oranda.Core.Connection.Dbms.Tibero);
-        Assert.Equal(new CopyConcurrencyDecision(1, CopyConcurrency.ConsistentReadReason), decision);
+        Assert.Equal(3, decision.Tables);
+        Assert.Null(decision.Reason);
+        Assert.True(decision.ReadsAtPoint);
+
+        var table = new Oranda.Core.Metadata.TableInfo(new Oranda.Core.Metadata.DbObjectRef("SRC", "ORDERS", "TABLE"),
+            [new Oranda.Core.Metadata.ColumnInfo("ID", 1, "NUMBER")]);
+        var builder = new CopySqlBuilder(job, new ResolvedPeriod(null, null),
+            new Dictionary<string, Oranda.Core.Metadata.TableInfo> { ["ORDERS"] = table },
+            new Dictionary<string, Oranda.Core.Metadata.TableInfo> { ["ORDERS"] = table with { Table = new Oranda.Core.Metadata.DbObjectRef("DST", "ORDERS", "TABLE") } });
+        var select = builder.SourceSelect("ORDERS", ["ID"], new CopyReadPoint(781925950, TiberoCopyDialect.Point));
+        Assert.Equal("SELECT \"ID\" FROM \"SRC\".\"ORDERS\" AS OF SCN :ORANDA_SCN", select.Sql);
+        Assert.Equal(new BindValue(BindDataType.Number, 781925950m), select.Binds[CopyReadPoint.BindName]);
+        Assert.Equal("TSN 781925950", new CopyReadPoint(781925950, TiberoCopyDialect.Point).Text);
+    }
+
+    [Fact]
+    public void Tibero_read_point_failures_map_known_kinds_and_fail_unknown_codes_per_table_without_fallback()
+    {
+        var point = new CopyReadPoint(1234, TiberoCopyDialect.Point);
+        static DbError Error(int number, string message) => TiberoErrorClassifier.Create(number, message);
+
+        // 권한 부족(TBR-8053, 분류기의 InsufficientPrivileges): 그 테이블만 실패, 권한 이름을 말한다.
+        var privilege = CopyReadPointErrors.Describe("A", point, Error(-8053, "TBR-8053: Not enough privilege."))!.Value;
+        Assert.False(privilege.AbortRun);
+        Assert.Contains("TSN 1234 시점으로 읽을 권한(FLASHBACK 또는 FLASHBACK ANY TABLE)이 없습니다(TBR-8053)", privilege.Message, StringComparison.Ordinal);
+
+        // 시점 데이터 잃음: 번호는 모르지만(아래 번호는 가짜) 메시지로 알아본다 → 전체 중단, 받은 코드를 적는다.
+        var old = CopyReadPointErrors.Describe("A", point, Error(-99001, "TBR-99001: Snapshot too old."))!.Value;
+        Assert.True(old.AbortRun);
+        Assert.Contains("원본 TSN 1234 시점의 데이터가 원본 UNDO 에 남아 있지 않아 읽지 못했습니다(TBR-99001)", old.Message, StringComparison.Ordinal);
+
+        // 실측하지 못한 번호(정의 바뀜·잘못된 TSN 등): 그 테이블만 실패, 지금 데이터로 바꿔 읽지 않는다.
+        var unknown = CopyReadPointErrors.Describe("A", point, Error(-99002, "TBR-99002: invalid flashback point."))!.Value;
+        Assert.False(unknown.AbortRun);
+        Assert.Contains("원본 테이블을 TSN 1234 시점으로 읽지 못했습니다(TBR-99002: invalid flashback point.)", unknown.Message, StringComparison.Ordinal);
+        Assert.Contains(CopyReadPointErrors.NoFallback, unknown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("ORA-", unknown.Message, StringComparison.Ordinal);
+
+        // 시점과 상관없는 분류(없는 객체·교착·끊김)는 예전 처리.
+        Assert.Null(CopyReadPointErrors.Describe("A", point, Error(-8033, "TBR-8033: Specified schema object was not found.")));
+        Assert.Null(CopyReadPointErrors.Describe("A", point, Error(-12032, "TBR-12032: deadlock")));
+        Assert.Null(CopyReadPointErrors.Describe("A", point, Error(-12001, "TBR-12001: session killed")));
     }
 }

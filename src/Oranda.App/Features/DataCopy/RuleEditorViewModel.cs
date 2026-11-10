@@ -459,7 +459,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             var decision = CopyConcurrency.Effective(probe, report: null, Source?.Profile.Dbms ?? Dbms.Oracle);
             if (decision.ReadsAtPoint)
             {
-                return DataCopyText.L(CopyConcurrency.ReadPointNote); // PF2b: 같은 시점 읽기를 켠 채 동시(Oracle 원본은 시작 SCN 으로 읽는다)
+                return DataCopyText.L(CopyConcurrency.ReadPointNote); // PF2b·PF2b2: 같은 시점 읽기를 켠 채 동시(Oracle 원본은 시작 SCN, Tibero 원본은 시작 TSN 으로 읽는다)
             }
 
             return decision.Tables > 1 || decision.Reason is null ? string.Empty : DataCopyText.L(decision.Reason);

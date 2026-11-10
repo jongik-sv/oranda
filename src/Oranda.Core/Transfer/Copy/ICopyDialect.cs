@@ -45,7 +45,7 @@ public interface ICopyDialect
     SqlStatement SetTransactionReadOnly();
 
     /// <summary>
-    /// 원본으로 쓸 때 동시 복사 레인 여럿이 한 시점으로 읽는 시점 지정 읽기(PF2b, Oracle <c>AS OF SCN</c>). null = 쓰지 않음 — 같은 시점 읽기면 한 테이블씩 복사한다.
+    /// 원본으로 쓸 때 동시 복사 레인 여럿이 한 시점으로 읽는 시점 지정 읽기(PF2b Oracle·PF2b2 Tibero, <c>AS OF SCN</c>). null = 쓰지 않음 — 같은 시점 읽기면 한 테이블씩 복사한다.
     /// <see cref="CopyReadPointDbms.Supports"/> 와 같아야 한다.
     /// </summary>
     CopyReadPointSupport? ReadPoint => null;

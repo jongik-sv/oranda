@@ -91,7 +91,7 @@ public partial class CopyRunner
     private static bool UsesReadPoint(RunState run) => run.LaneCount > 1 && run.Job.ConsistentRead;
 
     /// <summary>
-    /// 원본 시점(Oracle SCN)을 잡는다(원본 방언 <see cref="ICopyDialect.ReadPoint"/> 의 조회를 차례로, 서버 오류면 다음 방법). 끄기·정리보다 먼저 부른다:
+    /// 원본 시점(Oracle SCN·Tibero TSN)을 잡는다(원본 방언 <see cref="ICopyDialect.ReadPoint"/> 의 조회를 차례로, 서버 오류면 다음 방법). 끄기·정리보다 먼저 부른다:
     /// 어느 방법으로도 못 잡으면 대상에 아무것도 하지 않고 실행 전체를 멈춘다 — 시점 없이(지금 데이터로) 읽지 않는다.
     /// </summary>
     private async Task CaptureReadPointAsync(RunState run, CancellationToken ct)

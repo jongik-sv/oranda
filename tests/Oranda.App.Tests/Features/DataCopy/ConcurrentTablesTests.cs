@@ -51,7 +51,7 @@ public sealed class ConcurrentTablesTests
         ((INotifyPropertyChanged)editor).PropertyChanged += (_, e) => changed.Add(e.PropertyName);
         editor.ConcurrentTables = 2;
         Assert.Contains(nameof(RuleEditorViewModel.ConcurrencyReason), changed);
-        Assert.Equal(CopyConcurrency.ReadPointNote, editor.ConcurrencyReason); // PF2b: Oracle 원본은 같은 시점 읽기를 켠 채 동시(시작 SCN 으로 읽기)
+        Assert.Equal(CopyConcurrency.ReadPointNote, editor.ConcurrencyReason); // PF2b: Oracle 원본은 같은 시점 읽기를 켠 채 동시(시작 시점으로 읽기)
         Assert.True(editor.HasConcurrencyReason);
 
         changed.Clear();
@@ -69,19 +69,20 @@ public sealed class ConcurrentTablesTests
     }
 
     [Fact]
-    public void Tibero_source_keeps_the_point_in_time_read_reason_and_switching_the_source_updates_it()
+    public void Tibero_source_shows_the_read_point_note_too_and_switching_the_source_updates_it()
     {
-        // PF2b: Tibero 원본은 시점 지정 읽기를 아직 쓰지 않는다 — 같은 시점 읽기를 켜면 예전처럼 한 테이블씩(이유 글).
+        // PF2b2(조정자 회차 xdb-copy 결정 100): Tibero 원본도 같은 시점 읽기를 켠 채 동시(시작 TSN) — 「한 테이블씩」 이유 글이 없다.
         var h = new DataCopyHarness();
         var tibero = TestJobs.Profile("TBSRC", ConnectionEnvironment.Development, 9) with { Dbms = Dbms.Tibero };
         var editor = new RuleEditorViewModel(h.Services());
         editor.SetConnections([h.Source, tibero, h.Target]);
         editor.Load(TestJobs.Job("티베로", source: "TBSRC") with { Options = new CopyOptions { ConcurrentTables = 2 } }, tibero, h.Target);
-        Assert.Equal(CopyConcurrency.ConsistentReadReason, editor.ConcurrencyReason);
+        Assert.Equal(CopyConcurrency.ReadPointNote, editor.ConcurrencyReason);
+        Assert.Contains("Tibero TSN", editor.ConcurrencyReason, StringComparison.Ordinal);
 
         var changed = new List<string?>();
         ((INotifyPropertyChanged)editor).PropertyChanged += (_, e) => changed.Add(e.PropertyName);
-        editor.Source = editor.SourceOptions.Single(o => o.Profile.Name == "SRC"); // Oracle 원본으로 바꾸면 시작 SCN 안내
+        editor.Source = editor.SourceOptions.Single(o => o.Profile.Name == "SRC"); // Oracle 원본으로 바꿔도 같은 안내(시작 SCN)
         Assert.Contains(nameof(RuleEditorViewModel.ConcurrencyReason), changed);
         Assert.Equal(CopyConcurrency.ReadPointNote, editor.ConcurrencyReason);
     }
@@ -230,10 +231,11 @@ public sealed class ConcurrentTablesTests
     });
 
     [Fact]
-    public Task Tibero_source_with_point_in_time_read_opens_no_worker_session() => HeadlessHost.Run(async () =>
+    public Task Tibero_source_with_point_in_time_read_opens_workers_and_shows_the_tsn() => HeadlessHost.Run(async () =>
     {
+        // PF2b2: Tibero 원본도 점검 결과에 시점 읽기 점검이 있으면 레인 세션을 열고, 결과의 TSN 이 「읽기 시작」 옆에 보인다.
         var h = new DataCopyHarness();
-        var runner = new SessionsRunner();
+        var runner = new SessionsRunner { Behavior = () => Task.FromResult(TestJobs.Result() with { ReadPoint = "TSN 781925950" }) };
         var vm = new RunViewModel(Services(h, runner));
         var tibero = h.Source with { Dbms = Dbms.Tibero };
         var job = TestJobs.Job("티베로") with { Options = new CopyOptions { ConcurrentTables = 2 } };
@@ -242,11 +244,10 @@ public sealed class ConcurrentTablesTests
             Items = [.. ConcurrentReport().Items, new CheckItem(null, CopyCheckCodes.ReadPoint, CheckLevel.Pass, "시작 SCN 으로 읽습니다.")],
         };
 
-        await vm.StartAsync(new CopySessions(new FakeSession(tibero), new FakeSession(h.Target)), job, report, NoDecisions, new ResolvedPeriod(null, null));
+        await vm.StartAsync(new CopySessions(new FakeSession(tibero with { ReadOnly = true }), new FakeSession(h.Target)), job, report, NoDecisions, new ResolvedPeriod(null, null));
 
-        Assert.Empty(h.Opened);
-        Assert.Empty(Assert.IsType<CopySessions>(runner.Sessions).Workers);
-        Assert.DoesNotContain("SCN", vm.ReadStartedText, StringComparison.Ordinal);
+        Assert.Single(Assert.IsType<CopySessions>(runner.Sessions).Workers);
+        Assert.EndsWith(" · TSN 781925950", vm.ReadStartedText, StringComparison.Ordinal);
     });
 
     [Fact]

@@ -13,9 +13,9 @@ public sealed record CopyReadPointQuery(string Sql, string Method);
 /// <summary>
 /// 같은 시점 읽기를 동시 복사 레인 여럿에서 맞추는 원본 DBMS 의 시점 지정 읽기(PF2b, 원본 방언 <see cref="ICopyDialect.ReadPoint"/>).
 /// 실행을 시작할 때 원본 시점 번호 하나를 잡고(<see cref="Queries"/> 를 차례로, 처음 숫자를 준 것), 모든 테이블 SELECT 의 원본 표 뒤에
-/// <see cref="Clause"/>(Oracle <c>AS OF SCN :ORANDA_SCN</c>)를 붙여 그 시점으로 읽는다.
+/// <see cref="Clause"/>(Oracle·Tibero <c>AS OF SCN :ORANDA_SCN</c>)를 붙여 그 시점으로 읽는다.
 /// </summary>
-/// <param name="Name">시점 번호 이름(Oracle <c>SCN</c>). 작업 로그·화면에 「SCN 1234」로 보인다.</param>
+/// <param name="Name">시점 번호 이름(Oracle <c>SCN</c>, Tibero <c>TSN</c>). 작업 로그·화면에 「SCN 1234」로 보인다.</param>
 /// <param name="ClauseFormat">원본 표 이름 뒤에 붙는 글. <c>{0}</c> = 쌍점 없는 바인드 이름(<see cref="CopyReadPoint.BindName"/>).</param>
 /// <param name="Queries">지금 시점을 읽는 조회(순서대로 시도, 서버 오류면 다음).</param>
 /// <param name="ObjectPrivilege">다른 계정의 표를 시점 지정으로 읽을 때 필요한 객체 권한(Oracle <c>FLASHBACK</c>).</param>
@@ -31,12 +31,30 @@ public sealed record CopyReadPointSupport(string Name, string ClauseFormat, IRea
     /// <summary>시점 번호가 올바르지 않은 서버 오류 번호(Oracle 8181).</summary>
     public IReadOnlyList<int> InvalidPointNumbers { get; init; } = [];
 
+    /// <summary>
+    /// 오류 분류기가 번호로 모르는 「시점 데이터 잃음」을 메시지 글로 알아보는 조각(대소문자 무관, PF2b2 Tibero <c>snapshot too old</c>).
+    /// 번호를 실측하지 못한 DBMS 가 쓴다. 맞으면 <see cref="DbErrorKind.SnapshotTooOld"/> 와 같이(실행 전체 중단) 다룬다.
+    /// </summary>
+    public IReadOnlyList<string> SnapshotTooOldMessages { get; init; } = [];
+
+    /// <summary>
+    /// 참이면 위 번호표로 모르는 서버 오류(<see cref="DbErrorKind.Other"/>)도 시점 지정 읽기 실패로 그 테이블만 실패시키고 시점·「지금 데이터로 바꿔 읽지 않습니다」를 적는다
+    /// (PF2b2 Tibero: 시점 데이터 잃음·정의 바뀜·잘못된 시점의 번호를 실측하지 못했다). 거짓이면 그 오류는 예전 처리다.
+    /// </summary>
+    public bool UnmappedErrorsFailTable { get; init; }
+
+    /// <summary>
+    /// 참이면 다른 계정의 테이블을 시점 지정으로 읽는 권한(<see cref="ObjectPrivilege"/>·<see cref="SystemPrivilege"/>)이 이 DBMS 에서 맞는 이름인지 실측하지 못했다
+    /// (PF2b2 Tibero). 사전 점검은 권한이 안 보일 때 오류 대신 확인 필요로 둔다.
+    /// </summary>
+    public bool PrivilegeUnverified { get; init; }
+
     /// <summary>원본 표 이름 뒤에 붙는 글(바인드 이름 = <see cref="CopyReadPoint.BindName"/>).</summary>
     public string Clause => string.Format(CultureInfo.InvariantCulture, ClauseFormat, CopyReadPoint.BindName);
 }
 
 /// <summary>
-/// 이번 실행이 잡은 원본 시점(PF2b). <see cref="Number"/> = 시점 번호(Oracle SCN), <see cref="Support"/> = 원본 방언의 시점 지정 읽기.
+/// 이번 실행이 잡은 원본 시점(PF2b). <see cref="Number"/> = 시점 번호(Oracle SCN·Tibero TSN), <see cref="Support"/> = 원본 방언의 시점 지정 읽기.
 /// 원본 SELECT(<see cref="CopySqlBuilder.SourceSelect"/>)가 원본 표 뒤에 <see cref="CopyReadPointSupport.Clause"/> 를 붙이고 바인드 <see cref="BindName"/> 에 번호를 넣는다.
 /// </summary>
 public sealed record CopyReadPoint(long Number, CopyReadPointSupport Support)
@@ -74,9 +92,10 @@ public static class CopyReadPointErrors
         ArgumentNullException.ThrowIfNull(error);
         var support = point.Support;
         var at = point.Text;
-        if (error.Kind == DbErrorKind.SnapshotTooOld)
+        if (error.Kind == DbErrorKind.SnapshotTooOld || MatchesAny(error.Message, support.SnapshotTooOldMessages))
         {
-            var name = support.SnapshotTooOldErrors is { } n ? $"({n})" : string.Empty;
+            // 번호를 모르는 DBMS(Tibero)는 받은 오류 코드를 그대로 적는다.
+            var name = (support.SnapshotTooOldErrors ?? error.Code) is { Length: > 0 } n ? $"({n})" : string.Empty;
             return new CopyReadPointFailure(
                 $"{table}: 원본 {at} 시점의 데이터가 원본 UNDO 에 남아 있지 않아 읽지 못했습니다{name}. {NoFallback} 원본 UNDO_RETENTION 을 늘리거나 기간을 나눠 실행하거나, 동시 테이블 수를 줄이세요.",
                 AbortRun: true);
@@ -89,22 +108,43 @@ public static class CopyReadPointErrors
                 AbortRun: false);
         }
 
-        if (support.DefinitionChangedNumbers.Contains(error.Number))
+        var number = error.Number == int.MinValue ? 0 : Math.Abs(error.Number); // Tibero 드라이버는 번호를 음수로 준다
+        if (support.DefinitionChangedNumbers.Contains(number))
         {
             return new CopyReadPointFailure(
                 $"{table}: 원본 테이블 정의가 {at} 뒤에 바뀌어(DDL) 그 시점으로 읽을 수 없습니다({error.Code}). {NoFallback} 다시 실행하세요.",
                 AbortRun: false);
         }
 
-        if (support.InvalidPointNumbers.Contains(error.Number))
+        if (support.InvalidPointNumbers.Contains(number))
         {
             return new CopyReadPointFailure(
                 $"{table}: 원본이 {at} 을(를) 올바른 시점으로 받지 않았습니다({error.Code}). {NoFallback} 다시 실행하세요.",
                 AbortRun: true);
         }
 
+        if (support.UnmappedErrorsFailTable && error.Kind == DbErrorKind.Other)
+        {
+            return new CopyReadPointFailure(
+                $"{table}: 원본 테이블을 {at} 시점으로 읽지 못했습니다({ErrorText(error)}). {NoFallback}"
+                + " 시점 데이터가 UNDO 에 없거나, 그 시점 뒤에 테이블 정의가 바뀌었거나(DDL), 시점 번호를 받지 않았을 수 있습니다. 다시 실행하거나 동시 테이블 수를 1로 하세요.",
+                AbortRun: false);
+        }
+
         return null;
     }
+
+    /// <summary>오류 코드 + 메시지 첫 줄(따옴표 안 값은 가림, <see cref="CopyRunner.SafeError"/>). 메시지가 코드로 시작하면 코드를 두 번 쓰지 않는다.</summary>
+    private static string ErrorText(DbError error)
+    {
+        var detail = string.IsNullOrEmpty(error.Message) ? string.Empty : CopyRunner.SafeError(error.Message).Trim();
+        return detail.Length == 0 ? error.Code
+            : detail.StartsWith(error.Code, StringComparison.OrdinalIgnoreCase) ? detail
+            : error.Code + ": " + detail;
+    }
+
+    private static bool MatchesAny(string? message, IReadOnlyList<string> fragments) =>
+        !string.IsNullOrEmpty(message) && fragments.Any(f => message.Contains(f, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>
@@ -112,11 +152,12 @@ public static class CopyReadPointErrors
 /// 이 표와 원본 방언의 <see cref="ICopyDialect.ReadPoint"/> 가 같아야 한다(시험이 본다).
 /// <list type="bullet">
 /// <item>Oracle: 씀(<c>AS OF SCN</c>).</item>
-/// <item>Tibero: 아직 안 씀. <c>AS OF SCN</c>(로그에는 TSN)·<c>V$DATABASE.CURRENT_TSN</c> 이 있다는 자료는 있지만 실측하지 않았고,
-/// 이전 시점 데이터를 잃었을 때의 오류 번호도 모른다(<c>TiberoErrorClassifier</c> 가 SnapshotTooOld 를 분류하지 않는다). 같은 시점 읽기면 예전처럼 한 테이블씩이다.</item>
+/// <item>Tibero: 씀(PF2b2, 조정자 회차 xdb-copy 결정 100). 6.2.15 실측(#187): <c>DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER</c>·<c>TIMESTAMP_TO_TSN(SYSTIMESTAMP)</c>·
+/// <c>V$DATABASE.CURRENT_TSN</c> 이 같은 TSN 을 주고 <c>AS OF SCN</c>·<c>AS OF TSN</c> 이 그 시점의 행을 돌려준다. 시점 읽기 실패의 오류 번호는 실측하지 못해
+/// 모르는 서버 오류는 그 테이블만 실패로 둔다(<see cref="CopyReadPointSupport.UnmappedErrorsFailTable"/>).</item>
 /// </list>
 /// </summary>
 public static class CopyReadPointDbms
 {
-    public static bool Supports(Dbms source) => source == Dbms.Oracle;
+    public static bool Supports(Dbms source) => source is Dbms.Oracle or Dbms.Tibero;
 }

@@ -102,7 +102,7 @@ public sealed class CheckItemViewModel
         [CopyCheckCodes.CharPadDiffers] = "CHAR 뒤 공백 달라짐",
         [CopyCheckCodes.SequenceDefaultDropped] = "시퀀스 기본값 뺌",
         [CopyCheckCodes.ConcurrentCopy] = "동시 복사 안내",
-        [CopyCheckCodes.ReadPoint] = "시작 SCN 으로 읽기",
+        [CopyCheckCodes.ReadPoint] = "시작 시점으로 읽기",
         [CopyCheckCodes.FlashbackNoPrivilege] = "시점 읽기 권한 없음",
         [CopyCheckCodes.SequenceCreated] = "시퀀스 함께 만듦",
         [CopyCheckCodes.SequenceBehind] = "대상 시퀀스가 키보다 뒤",

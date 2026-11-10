@@ -71,6 +71,65 @@ public sealed class CopyReadPointTests
         Assert.Null(CopyReadPointErrors.Describe("T", Point, Error(number, kind)));
     }
 
+    // ---- 번호를 실측하지 못한 원본(PF2b2 Tibero 모양) ----
+
+    private static readonly CopyReadPointSupport Unmeasured = new("TSN", "AS OF SCN :{0}", [], "FLASHBACK", "FLASHBACK ANY TABLE")
+    {
+        SnapshotTooOldMessages = ["snapshot too old"],
+        UnmappedErrorsFailTable = true,
+        PrivilegeUnverified = true,
+    };
+
+    private static readonly CopyReadPoint TsnPoint = new(781925950, Unmeasured);
+
+    [Fact]
+    public void Snapshot_too_old_found_by_the_message_stops_the_run_with_the_received_code()
+    {
+        var failure = CopyReadPointErrors.Describe("SRC.ORDERS", TsnPoint, Tibero(-12345, DbErrorKind.Other, "TBR-12345: Snapshot too old."));
+
+        Assert.True(failure!.Value.AbortRun);
+        Assert.StartsWith("SRC.ORDERS: 원본 TSN 781925950 시점의 데이터가 원본 UNDO 에 남아 있지 않아 읽지 못했습니다(TBR-12345).", failure.Value.Message, StringComparison.Ordinal);
+        Assert.Contains(CopyReadPointErrors.NoFallback, failure.Value.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Unknown_server_errors_fail_only_the_table_with_the_point_and_never_fall_back()
+    {
+        var failure = CopyReadPointErrors.Describe("SRC.ORDERS", TsnPoint, Tibero(-5099, DbErrorKind.Other, "TBR-5099: something about 'SECRET' value" + "\n" + "second line"));
+
+        Assert.NotNull(failure);
+        Assert.False(failure!.Value.AbortRun);
+        Assert.StartsWith("SRC.ORDERS: 원본 테이블을 TSN 781925950 시점으로 읽지 못했습니다(TBR-5099: something about '…' value).", failure.Value.Message, StringComparison.Ordinal);
+        Assert.Contains(CopyReadPointErrors.NoFallback, failure.Value.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("SECRET", failure.Value.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("second line", failure.Value.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("표", failure.Value.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Known_kinds_keep_their_own_handling_and_numbers_match_without_the_driver_sign()
+    {
+        // 권한 부족(TBR-8053 = InsufficientPrivileges)은 권한 안내, 없는 객체·교착은 예전 처리(모르는 오류 처리는 Other 만).
+        var privilege = CopyReadPointErrors.Describe("T", TsnPoint, Tibero(-8053, DbErrorKind.InsufficientPrivileges, "TBR-8053: not enough privilege"));
+        Assert.StartsWith("T: 원본 테이블을 TSN 781925950 시점으로 읽을 권한(FLASHBACK 또는 FLASHBACK ANY TABLE)이 없습니다(TBR-8053).", privilege!.Value.Message, StringComparison.Ordinal);
+        Assert.False(privilege.Value.AbortRun);
+        Assert.Null(CopyReadPointErrors.Describe("T", TsnPoint, Tibero(-8033, DbErrorKind.ObjectNotFound, "TBR-8033: no object")));
+        Assert.Null(CopyReadPointErrors.Describe("T", TsnPoint, Tibero(-12032, DbErrorKind.Deadlock, "TBR-12032: deadlock")));
+
+        // 음수 번호도 번호표와 맞춘다(Tibero 드라이버는 번호를 음수로 준다).
+        var numbered = Unmeasured with { DefinitionChangedNumbers = [7777], InvalidPointNumbers = [8888] };
+        var point = new CopyReadPoint(1, numbered);
+        Assert.Contains("원본 테이블 정의가 TSN 1 뒤에 바뀌어(DDL)", CopyReadPointErrors.Describe("T", point, Tibero(-7777, DbErrorKind.Other, "x"))!.Value.Message, StringComparison.Ordinal);
+        Assert.True(CopyReadPointErrors.Describe("T", point, Tibero(-8888, DbErrorKind.Other, "x"))!.Value.AbortRun);
+    }
+
+    [Fact]
+    public void Without_the_unmapped_flag_unknown_errors_keep_the_old_handling()
+    {
+        Assert.Null(CopyReadPointErrors.Describe("T", Point, Error(1722, DbErrorKind.Other)));
+        Assert.Null(CopyReadPointErrors.Describe("T", Point, Error(1722, DbErrorKind.Other) with { Message = "ORA-01722: invalid number" }));
+    }
+
     [Fact]
     public void Messages_never_say_pyo()
     {
@@ -81,6 +140,9 @@ public sealed class CopyReadPointTests
 
         Assert.DoesNotContain("표", CopyConcurrency.ReadPointNote, StringComparison.Ordinal);
     }
+
+    private static DbError Tibero(int number, DbErrorKind kind, string message) =>
+        new("TBR-" + Math.Abs(number).ToString(System.Globalization.CultureInfo.InvariantCulture), message) { Number = number, Kind = kind };
 
     private static DbError Error(int number, DbErrorKind kind) =>
         new("ORA-" + number.ToString("D5", System.Globalization.CultureInfo.InvariantCulture), "msg") { Number = number, Kind = kind };
