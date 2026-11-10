@@ -33,17 +33,17 @@ public static class ColumnReorderBuilder
 
         if (traits.IsExternal)
         {
-            reasons.Add("외부 표는 " + what);
+            reasons.Add("외부 테이블은 " + what);
         }
 
         if (traits.IsTemporary)
         {
-            reasons.Add("임시 표는 " + what);
+            reasons.Add("임시 테이블은 " + what);
         }
 
         if (traits.IsClustered)
         {
-            reasons.Add($"클러스터 표({traits.ClusterName})는 " + what);
+            reasons.Add($"클러스터 테이블({traits.ClusterName})는 " + what);
         }
 
         if (method == ColumnReorderMethod.InvisibleVisible)
@@ -218,14 +218,14 @@ public static class ColumnReorderBuilder
         sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef} AS SELECT {selectList} FROM {target};");
         sb.AppendLine();
         AppendColumnFixes(sb, stagingRef, copied, ordered);
-        sb.AppendLine("-- 2) 이름을 바꾼다(이 사이에 쓰기가 없어야 한다). 이 표를 참조하는 외래키는 원본(이름을 바꾼 표)에 그대로 남는다");
+        sb.AppendLine("-- 2) 이름을 바꾼다(이 사이에 쓰기가 없어야 한다). 이 테이블을 참조하는 외래키는 원본(이름을 바꾼 테이블)에 그대로 남는다");
         sb.AppendLine(CultureInfo.InvariantCulture, $"ALTER TABLE {target} RENAME TO {SqlIdentifier.QuoteAlways(table.Name + "$OLD")};");
         sb.AppendLine(CultureInfo.InvariantCulture, $"ALTER TABLE {stagingRef} RENAME TO {SqlIdentifier.QuoteAlways(table.Name)};");
         sb.AppendLine();
         sb.AppendLine("-- 3) 행 수가 같은지 확인한다");
         sb.AppendLine(CultureInfo.InvariantCulture, $"-- SELECT (SELECT COUNT(*) FROM {oldRef}) AS old_rows, (SELECT COUNT(*) FROM {target}) AS new_rows FROM dual;");
         sb.AppendLine();
-        sb.AppendLine("-- 4) 원본을 지운다(휴지통으로 간다). 다른 표가 참조하는 외래키가 있으면 실패하니 그 외래키를 먼저 풀고 4) 뒤에 다시 만든다");
+        sb.AppendLine("-- 4) 원본을 지운다(휴지통으로 간다). 다른 테이블이 참조하는 외래키가 있으면 실패하니 그 외래키를 먼저 풀고 4) 뒤에 다시 만든다");
         sb.AppendLine(CultureInfo.InvariantCulture, $"DROP TABLE {oldRef};");
         sb.AppendLine();
     }
@@ -244,7 +244,7 @@ public static class ColumnReorderBuilder
         sb.AppendLine(CultureInfo.InvariantCulture, $"BEGIN DBMS_REDEFINITION.CAN_REDEF_TABLE({owner}, {name}, {option}); END;");
         sb.AppendLine("/");
         sb.AppendLine();
-        sb.AppendLine("-- 2) 새 열 순서의 중간 표를 만든다(행은 복사하지 않는다)");
+        sb.AppendLine("-- 2) 새 열 순서의 중간 테이블을 만든다(행은 복사하지 않는다)");
         sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef} AS SELECT {selectList} FROM {target} WHERE 1 = 0;");
         sb.AppendLine();
         AppendColumnFixes(sb, stagingRef, copied, ordered);
@@ -252,7 +252,7 @@ public static class ColumnReorderBuilder
         sb.AppendLine(CultureInfo.InvariantCulture, $"BEGIN DBMS_REDEFINITION.START_REDEF_TABLE(uname => {owner}, orig_table => {name}, int_table => {staging}, options_flag => {option}); END;");
         sb.AppendLine("/");
         sb.AppendLine();
-        sb.AppendLine("-- 4) 인덱스·트리거·제약·권한을 중간 표에 복사한다(열 주석은 복사하지 않으니 아래 의존 DDL 의 COMMENT 문을 따로 실행한다)");
+        sb.AppendLine("-- 4) 인덱스·트리거·제약·권한을 중간 테이블에 복사한다(열 주석은 복사하지 않으니 아래 의존 DDL 의 COMMENT 문을 따로 실행한다)");
         sb.AppendLine("DECLARE");
         sb.AppendLine("  l_errors PLS_INTEGER;");
         sb.AppendLine("BEGIN");
@@ -262,13 +262,13 @@ public static class ColumnReorderBuilder
         sb.AppendLine("END;");
         sb.AppendLine("/");
         sb.AppendLine();
-        sb.AppendLine("-- 5) 그동안 바뀐 행을 맞추고 끝낸다(끝나는 순간 두 표가 서로 바뀐다)");
+        sb.AppendLine("-- 5) 그동안 바뀐 행을 맞추고 끝낸다(끝나는 순간 두 테이블이 서로 바뀐다)");
         sb.AppendLine(CultureInfo.InvariantCulture, $"BEGIN DBMS_REDEFINITION.SYNC_INTERIM_TABLE(uname => {owner}, orig_table => {name}, int_table => {staging}); END;");
         sb.AppendLine("/");
         sb.AppendLine(CultureInfo.InvariantCulture, $"BEGIN DBMS_REDEFINITION.FINISH_REDEF_TABLE(uname => {owner}, orig_table => {name}, int_table => {staging}); END;");
         sb.AppendLine("/");
         sb.AppendLine();
-        sb.AppendLine("-- 6) 중간 표(이제 예전 순서)를 지운다");
+        sb.AppendLine("-- 6) 중간 테이블(이제 예전 순서)를 지운다");
         sb.AppendLine(CultureInfo.InvariantCulture, $"DROP TABLE {stagingRef};");
         sb.AppendLine();
     }
@@ -308,7 +308,7 @@ public static class ColumnReorderBuilder
 
     private static void AppendStatsComment(StringBuilder sb, DbObjectRef table)
     {
-        sb.AppendLine("-- 통계: 새 표의 통계를 다시 모은다.");
+        sb.AppendLine("-- 통계: 새 테이블의 통계를 다시 모은다.");
         sb.AppendLine(CultureInfo.InvariantCulture, $"-- BEGIN DBMS_STATS.GATHER_TABLE_STATS(ownname => {Lit(table.Owner)}, tabname => {Lit(table.Name)}); END;");
         sb.AppendLine("-- /");
         sb.AppendLine();
@@ -318,13 +318,13 @@ public static class ColumnReorderBuilder
     {
         if (string.IsNullOrWhiteSpace(dependentDdl))
         {
-            sb.AppendLine("-- 의존 객체(제약·인덱스·트리거·권한·주석) DDL 을 읽지 못했거나 없다. 표 상세의 DDL 탭에서 「종속 객체」를 켜서 확인한다.");
+            sb.AppendLine("-- 의존 객체(제약·인덱스·트리거·권한·주석) DDL 을 읽지 못했거나 없다. 테이블 상세의 DDL 탭에서 「종속 객체」를 켜서 확인한다.");
             return;
         }
 
         if (enterprise)
         {
-            sb.AppendLine("-- 참고: 원본 표의 의존 DDL(DBMS_METADATA). 4) 가 복사하지 않는 COMMENT 문만 골라 실행한다.");
+            sb.AppendLine("-- 참고: 원본 테이블의 의존 DDL(DBMS_METADATA). 4) 가 복사하지 않는 COMMENT 문만 골라 실행한다.");
             foreach (var line in dependentDdl.ReplaceLineEndings("\n").Split('\n'))
             {
                 sb.AppendLine("-- " + line);

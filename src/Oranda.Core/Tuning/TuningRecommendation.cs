@@ -410,7 +410,7 @@ public static class TuningRecommendationRules
         var full = plan.Where(IsLargeFullScan).ToList();
         if (full.Count > 0)
         {
-            reasons.Add(new(TuningRule.FullScanLargeTable, 20, "큰 표 전체 스캔",
+            reasons.Add(new(TuningRule.FullScanLargeTable, 20, "큰 테이블 전체 스캔",
                 string.Join(", ", full.Take(3).Select(l => $"Id {l.Id} {Name(l)} {Size(l)}"))));
         }
 

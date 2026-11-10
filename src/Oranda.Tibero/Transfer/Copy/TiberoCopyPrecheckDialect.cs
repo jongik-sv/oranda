@@ -69,8 +69,8 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
 
     public string RecycleBinNote(string? tablespace)
         => string.Equals(tablespace, SystemTablespace, StringComparison.OrdinalIgnoreCase)
-            ? " 이 표는 SYSTEM 테이블스페이스에 있어 휴지통에 남지 않고 영구 삭제됩니다."
-            : " 휴지통(USE_RECYCLEBIN)이 꺼져 있으면 지운 표는 영구 삭제되고, 켜져 있어도 휴지통 이름으로는 읽을 수 없어 FLASHBACK TABLE 로만 되살릴 수 있습니다.";
+            ? " 이 테이블은 SYSTEM 테이블스페이스에 있어 휴지통에 남지 않고 영구 삭제됩니다."
+            : " 휴지통(USE_RECYCLEBIN)이 꺼져 있으면 지운 테이블은 영구 삭제되고, 켜져 있어도 휴지통 이름으로는 읽을 수 없어 FLASHBACK TABLE 로만 되살릴 수 있습니다.";
 
     /// <summary>Tibero 의 초기화 파라미터 뷰는 <c>V$PARAMETERS</c>(<c>copy.parameter_value</c>, 이름은 대소문자 무관으로 비교).</summary>
     public string ReadConsistencyParameter => "undo_retention";
@@ -98,7 +98,7 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
     /// </summary>
     public string RecreateDifferenceNote(bool hasDomain) =>
         " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFERRABLE 제약(PK/UK 와, Tibero 카탈로그가 지연 여부를 알려 주지 않아 FK 도)은 즉시 검사로 바뀌고,"
-        + " 파티션·IOT·임시 표는 일반 표가 됩니다.";
+        + " 파티션·IOT·임시 테이블은 일반 테이블이 됩니다.";
 
     /// <summary>서버가 지은 이름 = <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>(#76 실측)·<c>_SYS_…</c>·Oracle 모양. 실행기의 <see cref="TiberoCopyDialect.IsServerName"/> 과 같은 판정.</summary>
     public bool IsServerName(string name, string owner) => TiberoRecreateStep.IsServerName(name, owner);

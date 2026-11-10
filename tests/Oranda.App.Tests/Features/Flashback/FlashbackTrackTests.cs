@@ -22,7 +22,7 @@ public sealed class FlashbackTrackTests
 
         var lines = sql.Split('\n');
         Assert.StartsWith("-- SCOTT.EMP 의 변경 이력(키: EMPNO = 7369)", lines[0], StringComparison.Ordinal);
-        Assert.Contains("undo 보존 기간과 표 정의 변경 시점까지만 보입니다", lines[0], StringComparison.Ordinal);
+        Assert.Contains("undo 보존 기간과 테이블 정의 변경 시점까지만 보입니다", lines[0], StringComparison.Ordinal);
         Assert.Contains("기간: 최근 1.5일(SYSDATE - 1.5)은 고쳐 다시 돌리거나 설정 > 결과 그리드 「변경 추적 기간」에서 바꿀 수 있습니다", lines[0], StringComparison.Ordinal);
         Assert.Contains("ORA-08180", lines[0], StringComparison.Ordinal);
         Assert.Equal("SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, EMPNO, ENAME", lines[1]);
@@ -75,7 +75,7 @@ public sealed class FlashbackTrackTests
 
         Assert.Contains("FROM SCOTT.EMP VERSIONS BETWEEN TIMESTAMP GREATEST(SYSDATE - 1.5, TO_DATE('2026-10-27 13:43:18', 'YYYY-MM-DD HH24:MI:SS') + INTERVAL '10' SECOND) AND MAXVALUE",
             sql, StringComparison.Ordinal);
-        Assert.Contains("표 정의가 마지막으로 바뀐 시각(2026-10-27 13:43:18)", sql.Split('\n')[0], StringComparison.Ordinal);
+        Assert.Contains("테이블 정의가 마지막으로 바뀐 시각(2026-10-27 13:43:18)", sql.Split('\n')[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class FlashbackTrackTests
         var other = FlashbackTrackSql.Build(Emp, ["EMPNO"], ["EMPNO"], [1m], "HR").Split('\n')[0];
         var own = FlashbackTrackSql.Build(Emp, ["EMPNO"], ["EMPNO"], [1m], "scott").Split('\n')[0];
 
-        Assert.EndsWith("다른 스키마 표는 FLASHBACK 권한이 있어야 합니다.", other, StringComparison.Ordinal);
+        Assert.EndsWith("다른 스키마 테이블은 FLASHBACK 권한이 있어야 합니다.", other, StringComparison.Ordinal);
         Assert.DoesNotContain("다른 스키마", own, StringComparison.Ordinal);
     }
 

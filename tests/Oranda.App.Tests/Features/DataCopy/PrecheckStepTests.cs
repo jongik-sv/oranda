@@ -34,7 +34,7 @@ public sealed class PrecheckStepTests
     [Fact]
     public void Create_if_missing_check_codes_show_readable_names()
     {
-        Assert.Equal("없으면 표 만들기", new CheckItemViewModel(new CheckItem("ORDERS", CopyCheckCodes.CreateTable, CheckLevel.Confirm, "만든다"), []).CodeText);
+        Assert.Equal("없으면 테이블 만들기", new CheckItemViewModel(new CheckItem("ORDERS", CopyCheckCodes.CreateTable, CheckLevel.Confirm, "만든다"), []).CodeText);
         Assert.Equal("없으면 만들기 권한 없음", new CheckItemViewModel(new CheckItem("ORDERS", CopyCheckCodes.CreateNoPrivilege, CheckLevel.Error, "권한"), []).CodeText);
         Assert.Equal("없으면 만들기 막힘", new CheckItemViewModel(new CheckItem("ORDERS", CopyCheckCodes.CreateBlocked, CheckLevel.Error, "막힘"), []).CodeText);
     }

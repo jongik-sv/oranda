@@ -96,7 +96,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
             var tableText = $"select * from {t[..5]}";
             var (w2, v2, _) = Show(tableText, tableText.Length);
             var tableOpened = await controller.ShowCompletionAsync(v2.TextEditorControl.TextArea, null, automatic: false);
-            Assert.True(tableOpened, $"표 이름 후보 {controller.LastResult?.Items.Count}개");
+            Assert.True(tableOpened, $"테이블 이름 후보 {controller.LastResult?.Items.Count}개");
             Assert.Contains(controller.LastResult!.Items, i => string.Equals(i.Label, t, StringComparison.OrdinalIgnoreCase));
             controller.CloseCompletion();
 
@@ -112,7 +112,7 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
                 w.Close();
             }
 
-            output.WriteLine("S2-1 OK: 별칭 열 자동완성(한글 열 포함)·표 이름·모르는 별칭·세션 없음");
+            output.WriteLine("S2-1 OK: 별칭 열 자동완성(한글 열 포함)·테이블 이름·모르는 별칭·세션 없음");
         }
         finally
         {

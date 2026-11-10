@@ -370,8 +370,8 @@ public sealed class TuningReportCollector
         if (plans.Count == 0)
         {
             return ReportPart<IReadOnlyList<ReportObjectStats>>.Fail(planPart.Failure is { } f
-                ? L(en, "계획을 받지 못해 관련 표를 알 수 없습니다: ", "No plan, so the tables are unknown: ") + f
-                : L(en, "계획을 받지 못해 관련 표를 알 수 없습니다.", "No plan, so the tables are unknown."));
+                ? L(en, "계획을 받지 못해 관련 테이블을 알 수 없습니다: ", "No plan, so the tables are unknown: ") + f
+                : L(en, "계획을 받지 못해 관련 테이블을 알 수 없습니다.", "No plan, so the tables are unknown."));
         }
 
         var tables = TablesOf(plans, defaultOwner);

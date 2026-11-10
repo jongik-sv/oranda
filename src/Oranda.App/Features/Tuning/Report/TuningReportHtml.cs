@@ -741,11 +741,11 @@ public static class TuningReportHtml
 
         if (objects.Count == 0)
         {
-            w.Raw("<p class=\"dim\">").Text(L(en, "계획에서 읽는 표가 없습니다.", "The plan reads no table.")).Raw("</p>");
+            w.Raw("<p class=\"dim\">").Text(L(en, "계획에서 읽는 테이블이 없습니다.", "The plan reads no table.")).Raw("</p>");
             return;
         }
 
-        w.Raw("<h3>").Text(L(en, "표", "Tables")).Raw("</h3>\n<div class=\"tw\"><table><thead><tr><th>").Text(L(en, "표", "Table")).Raw("</th><th class=\"n\">")
+        w.Raw("<h3>").Text(L(en, "테이블", "Tables")).Raw("</h3>\n<div class=\"tw\"><table><thead><tr><th>").Text(L(en, "테이블", "Table")).Raw("</th><th class=\"n\">")
             .Text(L(en, "행 수", "Rows")).Raw("</th><th class=\"n\">").Text(L(en, "블록", "Blocks")).Raw("</th><th class=\"n\">").Text(L(en, "평균 행", "Avg row"))
             .Raw("</th><th>").Text(L(en, "마지막 수집", "Last analyzed")).Raw("</th><th>stale</th></tr></thead><tbody>\n");
         foreach (var o in objects)

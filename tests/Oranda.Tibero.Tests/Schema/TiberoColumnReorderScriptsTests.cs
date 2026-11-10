@@ -61,8 +61,8 @@ public class TiberoColumnReorderScriptsTests
             ColumnReorderMethod.Rebuild, Columns, new ColumnReorderTraits(true, true, null), false, dependentDdlReady: true);
 
         Assert.Equal(2, reasons.Count);
-        Assert.Contains(reasons, r => r.StartsWith("외부 표", StringComparison.Ordinal));
-        Assert.Contains(reasons, r => r.StartsWith("임시 표", StringComparison.Ordinal));
+        Assert.Contains(reasons, r => r.StartsWith("외부 테이블", StringComparison.Ordinal));
+        Assert.Contains(reasons, r => r.StartsWith("임시 테이블", StringComparison.Ordinal));
     }
 
     [Fact]

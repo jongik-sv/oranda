@@ -485,10 +485,10 @@ public sealed class DataCopyRenderTests : IDisposable
         var at = new DateTimeOffset(2026, 11, 9, 14, 3, 0, TimeSpan.FromHours(9));
         void Log(int sec, string phase, string? table, string text, CopyLogKind kind = CopyLogKind.Info) =>
             h.Runner.Reports.Add(CopyProgress.ForLog(new CopyLogEntry(at.AddSeconds(sec), phase, table, text, kind)));
-        Log(0, "시작", null, "복사 시작: 작업 「월말 운영 데이터 복사」 · 원본 SRC → 대상 TGT · 표 3개 · 커밋 표마다 · 배치 5,000행 · 실패 행 상한 100 · 같은 시점 기준 읽기");
+        Log(0, "시작", null, "복사 시작: 작업 「월말 운영 데이터 복사」 · 원본 SRC → 대상 TGT · 테이블 3개 · 커밋 테이블마다 · 배치 5,000행 · 실패 행 상한 100 · 같은 시점 기준 읽기");
         Log(0, "시작", null, "기간: 2026-10-01 00:00:00 이상 ~ 2026-11-01 00:00:00 미만");
         Log(0, "원본 준비", null, "원본: ROLLBACK  — 앞 트랜잭션 닫기", CopyLogKind.Statement);
-        Log(0, "원본 준비", null, "원본: SET TRANSACTION READ ONLY  — 모든 표를 이 시점 기준으로 읽기", CopyLogKind.Statement);
+        Log(0, "원본 준비", null, "원본: SET TRANSACTION READ ONLY  — 모든 테이블을 이 시점 기준으로 읽기", CopyLogKind.Statement);
         Log(1, "끄기", "ORDERS", "대상: ALTER TRIGGER \"TGT\".\"TRG_ORDERS_AUDIT\" DISABLE", CopyLogKind.Statement);
         Log(1, "끄기", "ORDERS", "→ 완료 · 0.03초");
         Log(1, "정리", "ORDERS", "대상: DELETE FROM \"TGT\".\"ORDERS\" WHERE \"ORDER_DT\" >= :B1_FROM AND \"ORDER_DT\" < :B1_TO AND (CSM_DOC_NO IN (:CSM_DOC_NOS_1, …))  [바인드 :B1_FROM = 2026-10-01 00:00:00, :B1_TO = 2026-11-01 00:00:00, :CSM_DOC_NOS = 23개]", CopyLogKind.Statement);
@@ -500,7 +500,7 @@ public sealed class DataCopyRenderTests : IDisposable
         Log(6, "적재", "ORDERS", "실패 행 1: ORA-02291: integrity constraint violated - parent key not found", CopyLogKind.Error);
         Log(9, "적재", "ORDERS", "적재 끝 · 원본 15,000건 읽음 · 14,999행 넣음 · 실패 1행 · 9.02초");
         Log(30, "건수 비교", "ORDERS", "→ 원본 15,000건 · 대상 14,999건 · 다름", CopyLogKind.Warning);
-        Log(31, "마무리", null, "끝: 일부 실패 · 표 3개(성공 2) · 57,419행 넣음 · 실패 행 1 · 걸린 시간 31.40초", CopyLogKind.Warning);
+        Log(31, "마무리", null, "끝: 일부 실패 · 테이블 3개(성공 2) · 57,419행 넣음 · 실패 행 1 · 걸린 시간 31.40초", CopyLogKind.Warning);
         var (window, vm) = await OpenWindowAsync(h);
         try
         {
@@ -689,8 +689,8 @@ public sealed class DataCopyRenderTests : IDisposable
             Assert.True(cancel.IsCancel); // 기본 단추(Enter) = 취소
             Assert.Contains(buttons, b => !b.IsDefault && Equals(b.Content, "복사 실행"));
             var lines = dialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? string.Empty).ToList();
-            Assert.Contains(lines, l => l.StartsWith("APP2 · 표 1개", StringComparison.Ordinal));
-            Assert.Contains(lines, l => l.StartsWith("DST · 표 1개", StringComparison.Ordinal));
+            Assert.Contains(lines, l => l.StartsWith("APP2 · 테이블 1개", StringComparison.Ordinal));
+            Assert.Contains(lines, l => l.StartsWith("DST · 테이블 1개", StringComparison.Ordinal));
             Assert.Contains(lines, l => l.StartsWith("TGT_USER (접속 계정)", StringComparison.Ordinal));
             AssertNotClipped(dialog, "실행 확인");
             Shots(dialog, "3-run-confirm");
@@ -709,7 +709,7 @@ public sealed class DataCopyRenderTests : IDisposable
         var h = new DataCopyHarness();
         var items = new[]
         {
-            new CheckItem(null, CopyCheckCodes.OtherOwnerTargets, CheckLevel.Confirm, "대상 접속 계정(TGT_USER)이 아닌 계정 APP2, DST 의 표 2개를 지우고 넣습니다."),
+            new CheckItem(null, CopyCheckCodes.OtherOwnerTargets, CheckLevel.Confirm, "대상 접속 계정(TGT_USER)이 아닌 계정 APP2, DST 의 테이블 2개를 지우고 넣습니다."),
             new CheckItem("APP2.ORDERS", CopyCheckCodes.SynonymChanged, CheckLevel.Confirm, "더할 때 적은 시노님 ORDERS 가 지금은 APP3.ORDERS 를 가리킵니다. 작업은 저장된 APP2.ORDERS 를 복사합니다."),
             new CheckItem("SRC2.CODES", "TargetNoWrite", CheckLevel.Error, "DST.CODES 에 INSERT·DELETE 권한이 없습니다."),
             new CheckItem("CUSTOMERS", "ReadConsistency", CheckLevel.Pass, "예상 읽기 시간이 원본 UNDO_RETENTION 안에 끝납니다."),
@@ -735,8 +735,8 @@ public sealed class DataCopyRenderTests : IDisposable
             Assert.Contains("SRC2.CODES", tables);
             Assert.Contains("APP.CUSTOMERS", tables); // 기본 계정의 표도 계정.표
             var names = Enumerable.Range(0, 4).Select(r => checks.GetCellText(r, 2)).ToList();
-            Assert.Contains("다른 계정 표에 씀", names);
-            Assert.Contains("시노님이 가리키는 표 바뀜", names);
+            Assert.Contains("다른 계정 테이블에 씀", names);
+            Assert.Contains("시노님이 가리키는 테이블 바뀜", names);
             AssertNotClipped(window, "사전 점검(여러 계정)");
             Shots(window, "2-precheck-owners");
         }

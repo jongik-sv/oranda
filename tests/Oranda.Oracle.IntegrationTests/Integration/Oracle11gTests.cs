@@ -628,7 +628,7 @@ public sealed class Oracle11gTests : IAsyncLifetime
         {
             $"CREATE TABLE {dept} (dept_id NUMBER(6) CONSTRAINT {dept}_PK PRIMARY KEY, name VARCHAR2(30) NOT NULL, budget NUMBER(10,2) DEFAULT 0, " +
                 $"CONSTRAINT {dept}_CK CHECK (budget >= 0))",
-            $"COMMENT ON TABLE {dept} IS '부서 표'",
+            $"COMMENT ON TABLE {dept} IS '부서 테이블'",
             $"COMMENT ON COLUMN {dept}.name IS '부서 이름'",
             $"CREATE TABLE {emp} (emp_id NUMBER PRIMARY KEY, dept_id NUMBER(6) REFERENCES {dept}(dept_id), sal NUMBER, " +
                 "bonus AS (sal * 0.1) VIRTUAL, note CLOB)",
@@ -673,12 +673,12 @@ public sealed class Oracle11gTests : IAsyncLifetime
             Assert.Contains(empInfo.Constraints, c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable!.Name == dept);
 
             var deptInfo = await provider.GetTableAsync(s, new DbObjectRef(_db.Owner, dept, "TABLE"), default);
-            Assert.Equal("부서 표", deptInfo.Comment);
+            Assert.Equal("부서 테이블", deptInfo.Comment);
             Assert.Equal("부서 이름", deptInfo.Columns.Single(c => c.Name == "NAME").Comment);
 
             // 트리 줄의 테이블 명: 소유자 하나의 주석을 한 번에(meta.table_comments). 주석 없는 표는 빠진다.
             var comments = await provider.ListTableCommentsAsync(s, _db.Owner, default);
-            Assert.Equal("부서 표", comments[dept]);
+            Assert.Equal("부서 테이블", comments[dept]);
             Assert.False(comments.ContainsKey(emp));
             Assert.False(deptInfo.Columns.Single(c => c.Name == "NAME").IsNullable);
             Assert.Equal("0", deptInfo.Columns.Single(c => c.Name == "BUDGET").DefaultValue?.Trim());

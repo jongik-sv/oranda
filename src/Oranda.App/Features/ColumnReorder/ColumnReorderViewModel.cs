@@ -226,7 +226,7 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
         }
         catch (Exception ex)
         {
-            StatusText = "표를 읽지 못했다: " + FirstLine(ex.Message);
+            StatusText = "테이블을 읽지 못했다: " + FirstLine(ex.Message);
             IsUnsupported = true;
             return;
         }
@@ -302,7 +302,7 @@ public sealed partial class ColumnReorderViewModel : ObservableObject, IDisposab
                 if (result.Status != ExecutionStatus.Succeeded)
                 {
                     StatusText = (asBlock
-                        ? "한 블록 실행이 멈췄다(앞쪽 문장은 이미 적용됐을 수 있다. 표 상세에서 현재 순서를 확인한다): "
+                        ? "한 블록 실행이 멈췄다(앞쪽 문장은 이미 적용됐을 수 있다. 테이블 상세에서 현재 순서를 확인한다): "
                         : $"{done}/{statements.Count} 문장까지 실행하고 멈췄다: ") + Describe(result);
                     NotifyActions();
                     return false;

@@ -136,7 +136,7 @@ internal sealed class TiberoCopyDialect : ICopyDialect
     /// 휴지통에 FK 가 남는지 자체는 이 조합으로 재지 못했다(미실측) → 「있을 수 있다」 로 적는다.
     /// </summary>
     public string? RecycledChildForeignKeyNote(IReadOnlyList<string> children) =>
-        $"이 실행에서 먼저 지운 자식 표 {string.Join(", ", children)} 이(가) 휴지통에 남아 그 FK 가 이 표를 참조하고 있을 수 있습니다(휴지통의 그 표를 PURGE 해야 할 수 있습니다).";
+        $"이 실행에서 먼저 지운 자식 테이블 {string.Join(", ", children)} 이(가) 휴지통에 남아 그 FK 가 이 테이블을 참조하고 있을 수 있습니다(휴지통의 그 테이블을 PURGE 해야 할 수 있습니다).";
 
     /// <summary>미실측 → 번호 없음(Tibero 의 이전 시점 읽기 실패 번호를 재지 못했다, <c>TiberoErrorClassifier</c> 도 SnapshotTooOld 를 분류하지 않는다).</summary>
     public string? SnapshotTooOldErrorName => null;
@@ -145,7 +145,7 @@ internal sealed class TiberoCopyDialect : ICopyDialect
     /// 휴지통 이름은 <c>&lt;계정&gt;_…</c> 꼴(BIN$ 아님, 3.7 실측)이고, 그 이름으로 <c>FLASHBACK … RENAME TO</c> 가 된다. 트리거·인덱스·권한·참조 FK 가 함께 돌아오는지는 미실측이다.
     /// </summary>
     public string FlashbackRestoreNote =>
-        "(트리거·인덱스·권한과 이 표를 참조하던 FK 가 함께 돌아오는지는 Tibero 에서 확인되지 않았습니다. 돌아왔는지 확인하고 없는 것은 직접 만드세요)";
+        "(트리거·인덱스·권한과 이 테이블을 참조하던 FK 가 함께 돌아오는지는 Tibero 에서 확인되지 않았습니다. 돌아왔는지 확인하고 없는 것은 직접 만드세요)";
 
     public bool IsParentKeysNotFound(DbError? dbError) => Is(dbError, ParentKeysNotFound);
 

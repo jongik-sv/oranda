@@ -92,7 +92,7 @@ public class ObjectDetailKeyColumnsTests
         Assert.True(vm.HasKeyColumns);
 
         await vm.SelectKeyRowAsync(Row(vm, "EMP_DEPT_FK"));
-        Assert.Equal(["#", "열", "참조 표", "참조 열"], vm.KeyColumns!.Columns);
+        Assert.Equal(["#", "열", "참조 테이블", "참조 열"], vm.KeyColumns!.Columns);
         Assert.Equal([[1, "DEPT_ID", "HR.DEPT", "ID"], [2, "DEPT_SEQ", "HR.DEPT", "SEQ"]], vm.KeyColumns.Rows.Select(r => r.ToArray()));
 
         await vm.SelectKeyRowAsync(Row(vm, "EMP_PK"));
@@ -355,7 +355,7 @@ public class ObjectDetailKeyColumnsTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(keyTable.IsEffectivelyVisible);
             Assert.False(keyTable.RowNumbers); // 열 표는 자체 # 칸
-            Assert.True(keyTable.Bounds.Height > 60, "열 표 높이 " + keyTable.Bounds.Height);
+            Assert.True(keyTable.Bounds.Height > 60, "열 테이블 높이 " + keyTable.Bounds.Height);
             Assert.Contains("인덱스를 고르면", view.FindControl<TextBlock>("KeyStatusText")!.Text, StringComparison.Ordinal);
 
             Click(w, section, 1);

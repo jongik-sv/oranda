@@ -209,7 +209,7 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
     {
         if (TableStatsTarget.Parse(TargetText, DefaultOwner) is not { } target)
         {
-            StatusText = T("표 이름을 owner.table 또는 table 로 넣으세요.", "Type the table as owner.table or table.");
+            StatusText = T("테이블 이름을 owner.table 또는 table 로 넣으세요.", "Type the table as owner.table or table.");
             return Task.CompletedTask;
         }
 
@@ -223,7 +223,7 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
     {
         if (EditorTable?.Invoke() is not { } target)
         {
-            StatusText = T("편집기 커서 아래에 표 이름이 없습니다.", "There is no table name under the editor cursor.");
+            StatusText = T("편집기 커서 아래에 테이블 이름이 없습니다.", "There is no table name under the editor cursor.");
             return Task.CompletedTask;
         }
 
@@ -292,7 +292,7 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
                 Columns = [];
                 Indexes = [];
                 ClearHistogram();
-                SetHint(TuningPanelState.Denied, T("이 계정으로 볼 수 없는 표", "This account cannot see the table"),
+                SetHint(TuningPanelState.Denied, T("이 계정으로 볼 수 없는 테이블", "This account cannot see the table"),
                     T($"{target.Display} 이(가) 없거나 {session.Profile.User} 계정에 보이지 않습니다. 이름을 확인하거나 소유자 접속으로 여세요.",
                       $"{target.Display} does not exist or is not visible to {session.Profile.User}. Check the name or connect as the owner."));
                 StatusText = HintTitle;
@@ -430,7 +430,7 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
     {
         if (Target is not { } target || BuildGatherScript() is not { } script)
         {
-            StatusText = T("통계를 볼 표를 먼저 고르세요.", "Pick a table first.");
+            StatusText = T("통계를 볼 테이블을 먼저 고르세요.", "Pick a table first.");
             return false;
         }
 
@@ -556,8 +556,8 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
         else if (MonitorAccessState.IsPrivilegeError(ex))
         {
             var user = Session?.Profile.User ?? string.Empty;
-            SetHint(TuningPanelState.Denied, T("이 계정으로 볼 수 없는 표", "This account cannot see the table"),
-                T($"{user} 계정으로는 {target.Display} 의 통계를 읽을 수 없습니다(ORA-00942·ORA-01031). 소유자 접속으로 열거나 그 표의 SELECT 권한을 받으세요.",
+            SetHint(TuningPanelState.Denied, T("이 계정으로 볼 수 없는 테이블", "This account cannot see the table"),
+                T($"{user} 계정으로는 {target.Display} 의 통계를 읽을 수 없습니다(ORA-00942·ORA-01031). 소유자 접속으로 열거나 그 테이블의 SELECT 권한을 받으세요.",
                   $"The {user} account cannot read statistics of {target.Display} (ORA-00942/ORA-01031). Connect as the owner or get SELECT on the table."));
         }
         else
@@ -584,8 +584,8 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
         (HintTitle, HintText) = state switch
         {
             TuningPanelState.NoSession => (T("접속 없음", "No connection"), T("DB 에 접속한 뒤 다시 여세요.", "Connect to a database and open this again.")),
-            TuningPanelState.NoTarget => (T("통계를 볼 표를 고르세요", "Pick a table to see its statistics"),
-                T("편집기에서 표 이름에 커서를 두고 「편집기 표」를 누르거나, 위 칸에 owner.table 을 넣고 Enter.",
+            TuningPanelState.NoTarget => (T("통계를 볼 테이블을 고르세요", "Pick a table to see its statistics"),
+                T("편집기에서 테이블 이름에 커서를 두고 「편집기 테이블」를 누르거나, 위 칸에 owner.table 을 넣고 Enter.",
                   "Put the editor cursor on a table name and press Editor table, or type owner.table above and press Enter.")),
             TuningPanelState.Loading => (T("통계를 읽는 중…", "Reading statistics…"), Target?.Display ?? string.Empty),
             _ => (string.Empty, string.Empty),

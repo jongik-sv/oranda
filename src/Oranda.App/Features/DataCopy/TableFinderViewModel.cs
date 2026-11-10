@@ -147,7 +147,7 @@ public sealed partial class TableFinderViewModel : ObservableObject
 
     public string AddButtonText => $"선택한 {PickedCount.ToString(CultureInfo.InvariantCulture)}개 추가";
 
-    public string PickedText => $"검색을 바꿔도 고른 표는 유지됩니다 · 고른 표 {PickedCount.ToString(CultureInfo.InvariantCulture)}개";
+    public string PickedText => $"검색을 바꿔도 고른 테이블은 유지됩니다 · 고른 테이블 {PickedCount.ToString(CultureInfo.InvariantCulture)}개";
 
     /// <summary>보이는 줄 가운데 체크할 수 있는 것을 모두 골랐으면 true, 하나도 안 골랐으면 false, 일부면 null.</summary>
     public bool? AllVisibleChecked
@@ -215,12 +215,12 @@ public sealed partial class TableFinderViewModel : ObservableObject
         catch (Exception e)
         {
             _byOwner.Remove(owner);
-            _loadErrors[owner] = $"{owner} 계정의 표를 읽지 못했습니다: {e.Message}";
+            _loadErrors[owner] = $"{owner} 계정의 테이블을 읽지 못했습니다: {e.Message}";
             if (ReferenceEquals(cts, _loading))
             {
                 IsLoading = false;
                 Rows.Clear();
-                EmptyText = $"{owner} 계정의 표를 읽지 못했습니다: {e.Message}";
+                EmptyText = $"{owner} 계정의 테이블을 읽지 못했습니다: {e.Message}";
             }
 
             return;
@@ -243,7 +243,7 @@ public sealed partial class TableFinderViewModel : ObservableObject
         {
             SummaryText = $"{owner} 계정";
             // 읽기에 실패한 계정은 검색 값을 바꿔도 이유를 계속 보인다(계정을 다시 고르면 다시 읽는다).
-            EmptyText = IsLoading ? "표 목록을 읽는 중…" : _loadErrors.GetValueOrDefault(owner) ?? string.Empty;
+            EmptyText = IsLoading ? "테이블 목록을 읽는 중…" : _loadErrors.GetValueOrDefault(owner) ?? string.Empty;
             NotifyRows();
             return;
         }
@@ -270,7 +270,7 @@ public sealed partial class TableFinderViewModel : ObservableObject
 
         _lastMatch = (owner, pool.Count, hits.Count);
         SummaryText = MatchSummary(owner, pool.Count, hits.Count);
-        EmptyText = hits.Count == 0 ? $"「{query}」 와 맞는 표가 없습니다" : string.Empty;
+        EmptyText = hits.Count == 0 ? $"「{query}」 와 맞는 테이블이 없습니다" : string.Empty;
         NotifyRows();
     }
 

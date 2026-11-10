@@ -94,7 +94,7 @@ public interface ICopyDialect
     /// Oracle 은 휴지통 이름이 <c>BIN$…</c> 이고 트리거·인덱스·권한이 함께 돌아오지만 이 표를 참조하던 FK 는 돌아오지 않는다.
     /// </summary>
     string FlashbackRestoreNote =>
-        "(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다)";
+        "(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 테이블을 참조하던 FK 는 돌아오지 않습니다)";
 
     /// <summary>
     /// 컴파일 오류가 있는 트리거 CREATE 를 오류 없이 받는 서버(받으면 INVALID 로 남고 켜진 채 있다)에서 되살린 트리거의 컴파일 상태를 읽는 조회 글.

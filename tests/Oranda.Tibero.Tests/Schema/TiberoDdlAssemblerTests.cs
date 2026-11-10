@@ -131,7 +131,7 @@ public class TiberoDdlAssemblerTests
             "ALTER TABLE \"HR\".\"T\" ADD CONSTRAINT \"T_UK\" UNIQUE (\"A\") DISABLE;",
             "ALTER TABLE \"HR\".\"T\" ADD CONSTRAINT \"SYS_C0001\" CHECK (A > 0) ENABLE;",
             "ALTER TABLE \"HR\".\"T\" ADD CONSTRAINT \"T_FK\" FOREIGN KEY (\"D1\", \"D2\") REFERENCES \"HR\".\"T\" (\"ID\", \"ID2\") ON DELETE CASCADE ENABLE;",
-            "-- 외래키 T_FK2 의 참조 표·열을 사전에서 읽지 못해 DDL 을 만들지 못했다.",
+            "-- 외래키 T_FK2 의 참조 테이블·열을 사전에서 읽지 못해 DDL 을 만들지 못했다.",
         ], statements);
     }
 

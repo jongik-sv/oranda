@@ -111,7 +111,7 @@ public class FormatterOrangeOptionsTests
     [Fact]
     public void Right_align_keeps_own_line_comments_with_the_next_line()
     {
-        Assert.Equal("SELECT a\n  -- 표\n  FROM t", Fmt("select a\n-- 표\nfrom t", Right));
+        Assert.Equal("SELECT a\n  -- 테이블\n  FROM t", Fmt("select a\n-- 테이블\nfrom t", Right));
     }
 
     [Fact]

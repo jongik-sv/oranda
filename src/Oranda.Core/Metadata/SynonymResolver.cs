@@ -55,7 +55,7 @@ public static class SynonymResolver
             if (found.DbLink is { Length: > 0 } link)
             {
                 throw new SynonymResolutionException(dbLinkMessage?.Invoke(start, link)
-                    ?? $"시노님 {start} 은(는) DB 링크({link})를 거쳐 다른 DB 의 표를 가리켜 플래시백·편집 대상으로 쓸 수 없습니다(이 DB 의 표만 지원).");
+                    ?? $"시노님 {start} 은(는) DB 링크({link})를 거쳐 다른 DB 의 테이블을 가리켜 플래시백·편집 대상으로 쓸 수 없습니다(이 DB 의 테이블만 지원).");
             }
 
             // TABLE_OWNER 가 비어 있으면(드묾) 시노님 소유자 스키마의 이름이다.
@@ -68,7 +68,7 @@ public static class SynonymResolver
 
             if (depth > MaxDepth)
             {
-                throw new SynonymResolutionException($"시노님 {start} 을(를) {MaxDepth.ToString(System.Globalization.CultureInfo.InvariantCulture)}단계 넘게 따라가도 표가 나오지 않습니다.");
+                throw new SynonymResolutionException($"시노님 {start} 을(를) {MaxDepth.ToString(System.Globalization.CultureInfo.InvariantCulture)}단계 넘게 따라가도 테이블이 나오지 않습니다.");
             }
 
             found = await step(owner, name).ConfigureAwait(false);

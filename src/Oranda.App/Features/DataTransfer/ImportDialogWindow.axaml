@@ -29,8 +29,8 @@
       <Grid Grid.Row="1" ColumnDefinitions="Auto,160,Auto,*,Auto" ColumnSpacing="8">
         <TextBlock Text="대상 스키마" VerticalAlignment="Center" />
         <TextBox Grid.Column="1" Text="{Binding TargetOwner}" AutomationProperties.Name="대상 스키마" />
-        <TextBlock Grid.Column="2" Text="표" VerticalAlignment="Center" />
-        <TextBox Grid.Column="3" Text="{Binding TargetTable}" AutomationProperties.Name="대상 표 이름" />
+        <TextBlock Grid.Column="2" Text="테이블" VerticalAlignment="Center" />
+        <TextBox Grid.Column="3" Text="{Binding TargetTable}" AutomationProperties.Name="대상 테이블 이름" />
         <Button Grid.Column="4" Content="열 읽기" Command="{Binding LoadCommand}" />
       </Grid>
 

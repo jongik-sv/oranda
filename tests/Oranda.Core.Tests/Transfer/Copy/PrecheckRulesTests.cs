@@ -164,7 +164,7 @@ public sealed class PrecheckRulesTests
         Assert.Equal(CopyCheckCodes.OtherOwnerTargets, item.Code);
         Assert.Equal(CheckLevel.Confirm, item.Level);
         Assert.Null(item.Table);
-        Assert.Contains("대상 접속 계정(DST)이 아닌 계정 APP, APP2 의 표 2개에 씁니다(그중 1개는 지우고 넣습니다)", item.Message, StringComparison.Ordinal);
+        Assert.Contains("대상 접속 계정(DST)이 아닌 계정 APP, APP2 의 테이블 2개에 씁니다(그중 1개는 지우고 넣습니다)", item.Message, StringComparison.Ordinal);
         Assert.Contains("APP2.C", item.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("Z.D", item.Message, StringComparison.Ordinal);
 

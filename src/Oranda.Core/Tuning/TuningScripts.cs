@@ -24,7 +24,7 @@ public static partial class TuningScripts
 
         var sb = new StringBuilder();
         sb.AppendLine("-- 통계 수집 스크립트(Oranda 가 만든 문안, 실행하지 않았습니다).");
-        sb.AppendLine("-- DB 에 씁니다: 딕셔너리 통계를 새로 수집하고, 이 표를 쓰는 커서가 다시 파싱될 수 있습니다.");
+        sb.AppendLine("-- DB 에 씁니다: 딕셔너리 통계를 새로 수집하고, 이 테이블을 쓰는 커서가 다시 파싱될 수 있습니다.");
         sb.AppendLine("-- 라이선스: 필요 없음(DBMS_STATS).");
         sb.AppendLine("BEGIN");
         sb.AppendLine("  DBMS_STATS.GATHER_TABLE_STATS(");

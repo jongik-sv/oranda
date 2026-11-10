@@ -356,7 +356,7 @@ internal static class LintRules
             {
                 var r = refs.First(x => x.Unit == u);
                 ctx.Report(CartesianJoin, r.First.Start, r.First.End,
-                    $"{(r.IsSub ? "이 인라인 뷰" : r.Alias)} 와 다른 표를 잇는 조인 조건이 없어 행이 곱으로 늘어납니다. WHERE 에 조인 조건을 더하세요(의도한 곱이면 CROSS JOIN 으로 적으세요).");
+                    $"{(r.IsSub ? "이 인라인 뷰" : r.Alias)} 와 다른 테이블을 잇는 조인 조건이 없어 행이 곱으로 늘어납니다. WHERE 에 조인 조건을 더하세요(의도한 곱이면 CROSS JOIN 으로 적으세요).");
                 return;
             }
         }
@@ -535,7 +535,7 @@ internal static class LintRules
                 if (!plus)
                 {
                     ctx.Report(PartialOuterJoin, b.Toks[s].Start, b.Toks[e - 1].End,
-                        "같은 두 표의 다른 조인 조건에는 (+) 가 있는데 이 조건에는 없어 바깥 조인이 안쪽 조인으로 바뀝니다. 이 조건의 바깥 쪽 열에도 (+) 를 붙이세요.");
+                        "같은 두 테이블의 다른 조인 조건에는 (+) 가 있는데 이 조건에는 없어 바깥 조인이 안쪽 조인으로 바뀝니다. 이 조건의 바깥 쪽 열에도 (+) 를 붙이세요.");
                 }
             }
         }

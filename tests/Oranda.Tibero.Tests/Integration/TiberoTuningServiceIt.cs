@@ -41,7 +41,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
         var (owner, table, analyzed) = await PickTableAsync(session);
         if (owner is null || table is null)
         {
-            output.WriteLine("[T1] 인덱스가 있는 표를 찾지 못해 건너뜀");
+            output.WriteLine("[T1] 인덱스가 있는 테이블을 찾지 못해 건너뜀");
             return;
         }
 
@@ -123,7 +123,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
             var (o, t, _) = await PickTableAsync(session);
             if (o is null || t is null)
             {
-                output.WriteLine("[T2] 히스토그램 열도 표도 찾지 못해 건너뜀");
+                output.WriteLine("[T2] 히스토그램 열도 테이블도 찾지 못해 건너뜀");
                 return;
             }
 

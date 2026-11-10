@@ -596,7 +596,7 @@ public class TiberoCrossWriteMeasureIt(ITestOutputHelper output)
                 Note("ddl.index.expressions", await TryShowAsync(s,
                     $"SELECT INDEX_NAME, COLUMN_EXPRESSION FROM USER_IND_EXPRESSIONS WHERE TABLE_NAME = '{d4}' ORDER BY INDEX_NAME"));
 
-                Note("ddl.comment.table", await TryTextAsync(s, $"COMMENT ON TABLE {d4} IS '표 설명 it''s'"));
+                Note("ddl.comment.table", await TryTextAsync(s, $"COMMENT ON TABLE {d4} IS '테이블 설명 it''s'"));
                 Note("ddl.comment.column", await TryTextAsync(s, $"COMMENT ON COLUMN {d4}.A IS '열 설명'"));
                 Note("ddl.comment.table_catalog", await TryShowAsync(s, $"SELECT COMMENTS FROM USER_TAB_COMMENTS WHERE TABLE_NAME = '{d4}'"));
                 Note("ddl.comment.column_catalog", await TryShowAsync(s,

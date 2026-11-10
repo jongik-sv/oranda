@@ -79,13 +79,13 @@ internal sealed class TiberoColumnReorderScripts : IColumnReorderScripts
     }
 
     internal const string OriginalKept =
-        "-- 원본을 남긴다: 종속 객체(제약·인덱스·트리거·권한·주석) DDL 을 읽지 못해 원본을 지우면 되살릴 수 없다. 새 표를 확인하고 옮긴 뒤 직접 지운다";
+        "-- 원본을 남긴다: 종속 객체(제약·인덱스·트리거·권한·주석) DDL 을 읽지 못해 원본을 지우면 되살릴 수 없다. 새 테이블을 확인하고 옮긴 뒤 직접 지운다";
 
     /// <summary>Core 의 4) 머리 줄(「휴지통으로 간다」)은 Tibero 에서 사실과 다르다: 서버 기본이 휴지통 꺼짐이라 PURGE 없이도 영구 삭제다(실측 3.7).</summary>
     internal const string CoreDropHeading = "-- 4) 원본을 지운다(휴지통으로 간다).";
 
     internal const string DropHeading =
-        "-- 4) 원본을 지운다(Tibero 는 휴지통이 꺼져 있으면 — 서버 기본 — 영구 삭제된다. 되살릴 수 없으니 새 표를 먼저 확인한다). 다른 표가 참조하는 외래키가 있으면 실패하니 그 외래키를 먼저 풀고 4) 뒤에 다시 만든다";
+        "-- 4) 원본을 지운다(Tibero 는 휴지통이 꺼져 있으면 — 서버 기본 — 영구 삭제된다. 되살릴 수 없으니 새 테이블을 먼저 확인한다). 다른 테이블이 참조하는 외래키가 있으면 실패하니 그 외래키를 먼저 풀고 4) 뒤에 다시 만든다";
 
     internal const string KeptHeading = "-- 4) 원본은 지우지 않는다(아래 이유).";
 

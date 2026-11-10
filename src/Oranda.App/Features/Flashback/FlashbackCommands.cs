@@ -194,7 +194,7 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         {
             var ddl = await runner.LastDdlAsync(session, CatalogFor(services, session), target.Table, ct).ConfigureAwait(true);
             throw ddl is { } t
-                ? new InvalidOperationException($"{e.Message} 표 정의가 마지막으로 바뀐 시각: {t.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}. 그 이후 시각만 조회할 수 있습니다.", e)
+                ? new InvalidOperationException($"{e.Message} 테이블 정의가 마지막으로 바뀐 시각: {t.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}. 그 이후 시각만 조회할 수 있습니다.", e)
                 : e;
         }
 

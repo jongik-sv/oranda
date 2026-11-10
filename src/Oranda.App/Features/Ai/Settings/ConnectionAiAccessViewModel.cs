@@ -37,7 +37,7 @@ public sealed partial class ConnectionAiAccessViewModel : ObservableObject
     [
         (AiAccessLevel.Off, "끔", "AI 를 쓰지 않음", "아무것도 보내지 않습니다. 에이전트 접속 목록에도 나오지 않습니다.", "—"),
         (AiAccessLevel.Metadata, "메타데이터", "이름·형·주석", "객체 이름·형·주석·PK/FK·인덱스, PL/SQL 원문, 편집기 SQL 글", "list_objects · describe_object · get_ddl · get_source · validate_sql · propose_edit"),
-        (AiAccessLevel.Plan, "계획", "+ 계획·통계", "위에 더해 실행 계획·표/열 통계·자식 커서 (바인드 값은 가림)", "+ explain_plan · get_cursor_plan · get_table_stats · suggest_tuning"),
+        (AiAccessLevel.Plan, "계획", "+ 계획·통계", "위에 더해 실행 계획·테이블/열 통계·자식 커서 (바인드 값은 가림)", "+ explain_plan · get_cursor_plan · get_table_stats · suggest_tuning"),
         (AiAccessLevel.Query, "조회 실행", "+ SELECT 실행", "위에 더해 SELECT 결과의 행 수·열 형 (행 값은 보내지 않음)", "+ run_query · benchmark_queries · compare_results"),
         (AiAccessLevel.QueryRows, "조회 + 행 값", "+ 결과 행", "위에 더해 결과 행 값 (민감 컬럼 가림 뒤, 처음 한 번 동의)", "+ run_query 행 값 · fetch_more"),
     ];

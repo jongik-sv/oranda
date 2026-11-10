@@ -54,8 +54,8 @@ internal sealed class OracleCopyPrecheckDialect : ICopyPrecheckDialect
 
     public string RecycleBinNote(string? tablespace)
         => string.Equals(tablespace, "SYSTEM", StringComparison.OrdinalIgnoreCase)
-            ? " 이 표는 SYSTEM 테이블스페이스에 있어 휴지통에 남지 않고 영구 삭제됩니다."
-            : " 지운 표는 휴지통에 남습니다(PURGE 없음, 공간이 부족하면 휴지통 객체가 자동으로 지워질 수 있음).";
+            ? " 이 테이블은 SYSTEM 테이블스페이스에 있어 휴지통에 남지 않고 영구 삭제됩니다."
+            : " 지운 테이블은 휴지통에 남습니다(PURGE 없음, 공간이 부족하면 휴지통 객체가 자동으로 지워질 수 있음).";
 
     public string ReadConsistencyParameter => "undo_retention";
 

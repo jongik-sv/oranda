@@ -117,7 +117,7 @@ public partial class TiberoCopyCatalogIt
         var isTable = await CountAsync(session, "copy.target_is_table", ("OWN", owner), ("TBL", tableName));
         Assert.True(isTable is 0 or 1, "copy.target_is_table 이 0 이나 1 이 아니다");
         // 분할 표의 TABLE PARTITION 행·같은 이름의 인덱스도 세므로 1 이상이면 된다(Core 는 > 0 만 본다).
-        Assert.True(await CountAsync(session, "copy.object_exists", ("OWN", owner), ("NAME", tableName)) >= 1, "copy.object_exists 가 자기 표를 못 찾는다");
+        Assert.True(await CountAsync(session, "copy.object_exists", ("OWN", owner), ("NAME", tableName)) >= 1, "copy.object_exists 가 자기 테이블을 못 찾는다");
 
         var tablespace = (await RunAsync(session, "copy.tablespace", Binds("copy.tablespace", owner, tableName))).Rows;
         Assert.Single(tablespace);
@@ -231,7 +231,7 @@ public partial class TiberoCopyCatalogIt
         var notOnTableOrView = TiberoSessionQuery.Long(await TiberoSessionQuery.ScalarAsync(session,
             "SELECT COUNT(*) FROM user_triggers t WHERE t.table_name IS NOT NULL AND t.table_owner = USER"
             + " AND NOT EXISTS (SELECT 1 FROM user_objects o WHERE o.object_name = t.table_name AND o.object_type IN ('TABLE', 'VIEW'))"));
-        Assert.True(notOnTableOrView == 0, string.Create(CultureInfo.InvariantCulture, $"표·뷰가 아닌 대상에 table_name 이 채워진 트리거 {notOnTableOrView}개"));
+        Assert.True(notOnTableOrView == 0, string.Create(CultureInfo.InvariantCulture, $"테이블·뷰가 아닌 대상에 table_name 이 채워진 트리거 {notOnTableOrView}개"));
 
         // 보이는 SYS 표 하나: 소유자 아닌 쪽의 객체 권한 조회가 파싱되고 건수가 음수가 아니다.
         var sysTable = TiberoSessionQuery.Str(await TiberoSessionQuery.ScalarAsync(session,
@@ -241,8 +241,8 @@ public partial class TiberoCopyCatalogIt
             return;
         }
 
-        Assert.True(await CountAsync(session, "copy.trigger_count_all", ("OWN", "SYS"), ("TBL", sysTable)) >= 0, "SYS 표의 트리거 수가 음수다");
-        Assert.True(await CountAsync(session, "copy.other_grantor_count", ("OWN", "SYS"), ("TBL", sysTable)) >= 0, "SYS 표의 다른 계정 권한 수가 음수다");
+        Assert.True(await CountAsync(session, "copy.trigger_count_all", ("OWN", "SYS"), ("TBL", sysTable)) >= 0, "SYS 테이블의 트리거 수가 음수다");
+        Assert.True(await CountAsync(session, "copy.other_grantor_count", ("OWN", "SYS"), ("TBL", sysTable)) >= 0, "SYS 테이블의 다른 계정 권한 수가 음수다");
         Assert.True((await RunAsync(session, "copy.table_privs", ("OWN", "SYS"), ("TBL", sysTable))).Columns.Count == 2, "copy.table_privs 열 수");
     }
 

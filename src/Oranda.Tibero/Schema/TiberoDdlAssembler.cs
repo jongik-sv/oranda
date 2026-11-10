@@ -245,7 +245,7 @@ internal static partial class TiberoDdlAssembler
         {
             if (c.RefTable is null || c.Columns.Count == 0 || c.RefColumns.Count != c.Columns.Count || c.RefColumns.Any(r => r is null))
             {
-                result.Add($"-- 외래키 {c.Name} 의 참조 표·열을 사전에서 읽지 못해 DDL 을 만들지 못했다.");
+                result.Add($"-- 외래키 {c.Name} 의 참조 테이블·열을 사전에서 읽지 못해 DDL 을 만들지 못했다.");
                 continue;
             }
 

@@ -172,9 +172,9 @@ public class TiberoMetadataIt
             var step = await provider.GetNameStepAsync(session, user, name, CancellationToken.None);
 
             var listedOwn = listed.Count == 1 && TiberoItSessions.Same(user, listed[0].Owner) && listed[0].Name == name;
-            Assert.True(listedOwn, "목록에 시험 표 하나만 와야 한다");
+            Assert.True(listedOwn, "목록에 시험 테이블 하나만 와야 한다");
             var foundOwn = found.Any(o => TiberoItSessions.Same(user, o.Owner) && o.Name == name);
-            Assert.True(foundOwn, "접두어 찾기에 시험 표가 없다");
+            Assert.True(foundOwn, "접두어 찾기에 시험 테이블이 없다");
             Assert.Equal([("ID", 1, false), ("NAME", 2, true)], table.Columns.Select(c => (c.Name, c.Position, c.IsNullable)));
             Assert.Equal("NUMBER", table.Columns[0].DataType);
             Assert.StartsWith("VARCHAR", table.Columns[1].DataType, StringComparison.Ordinal); // Tibero 는 VARCHAR2 를 VARCHAR 로 적을 수 있다
@@ -235,9 +235,9 @@ public class TiberoMetadataIt
             var comment = (await AfterAsync($"COMMENT ON TABLE {name} IS 'T3E'")).Comment == "T3E";
             var constraint = (await AfterAsync($"ALTER TABLE {name} ADD CONSTRAINT {name}_CK CHECK (ID > 0)")).Constraints.Any(c => c.Name == name + "_CK");
 
-            Assert.True(before.Indexes.Count == 0 && before.Comment is null, "처음 읽은 표에 인덱스·주석이 이미 있다");
+            Assert.True(before.Indexes.Count == 0 && before.Comment is null, "처음 읽은 테이블에 인덱스·주석이 이미 있다");
             Assert.True(index && comment && constraint,
-                $"캐시한 표가 DDL 뒤에도 그대로다(LAST_DDL_TIME 안 오름): index={index} comment={comment} constraint={constraint}");
+                $"캐시한 테이블이 DDL 뒤에도 그대로다(LAST_DDL_TIME 안 오름): index={index} comment={comment} constraint={constraint}");
         }
         finally
         {

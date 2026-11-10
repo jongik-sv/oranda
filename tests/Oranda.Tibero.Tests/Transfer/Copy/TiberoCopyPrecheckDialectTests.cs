@@ -84,7 +84,7 @@ public sealed partial class TiberoCopyPrecheckDialectTests
             new ColumnInfo("DOC", 7, "CLOB"),
         ])
         {
-            Comment = "표 주석",
+            Comment = "테이블 주석",
             Constraints =
             [
                 new ConstraintInfo("FILM_USER_CON123", ConstraintKind.PrimaryKey, ["ID"]),
@@ -107,7 +107,7 @@ public sealed partial class TiberoCopyPrecheckDialectTests
             "CREATE TABLE \"FILM_CMN_USER\".\"ORT_T\" (\"ID\" NUMBER(10) NOT NULL, \"NM\" VARCHAR2(20 CHAR) DEFAULT 'x', \"CD\" CHAR(5 CHAR), \"NN\" NVARCHAR2(10),"
             + " \"AMT\" NUMBER(12,2), \"TS\" TIMESTAMP(6), \"DOC\" CLOB, PRIMARY KEY (\"ID\"), CHECK (AMT > 0), CONSTRAINT \"CK_NM\" CHECK (LENGTH(NM) > 0))",
             "CREATE INDEX \"FILM_CMN_USER\".\"IX_NM\" ON \"FILM_CMN_USER\".\"ORT_T\" (\"NM\")",
-            "COMMENT ON TABLE \"FILM_CMN_USER\".\"ORT_T\" IS '표 주석'",
+            "COMMENT ON TABLE \"FILM_CMN_USER\".\"ORT_T\" IS '테이블 주석'",
         ], built.Statements);
         Assert.Empty(built.Notes); // 같은 DBMS: 달라지는 것 없음
         Assert.Empty(built.OmittedConstraints);

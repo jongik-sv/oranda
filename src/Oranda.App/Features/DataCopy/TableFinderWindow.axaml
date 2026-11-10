@@ -47,7 +47,7 @@
         <Border DockPanel.Dock="Top" Classes="grid-header">
           <Grid ColumnDefinitions="34,240,70,*">
             <CheckBox Grid.Column="0" HorizontalAlignment="Center" IsThreeState="False" IsChecked="{Binding AllVisibleChecked, Mode=TwoWay}"
-                      IsEnabled="{Binding CanCheckAll}" ToolTip.Tip="보이는 표 모두 고르기·풀기" AutomationProperties.Name="보이는 표 모두 고르기" />
+                      IsEnabled="{Binding CanCheckAll}" ToolTip.Tip="보이는 테이블 모두 고르기·풀기" AutomationProperties.Name="보이는 테이블 모두 고르기" />
             <TextBlock Grid.Column="1" Padding="6,0" Text="이름" />
             <TextBlock Grid.Column="2" Padding="6,0" Text="유형" />
             <TextBlock Grid.Column="3" Padding="6,0" Text="테이블 명(주석)" />

@@ -255,7 +255,7 @@ public class CopyOwnersTests
     {
         var a = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk);
         var b = new TableRule("ORDERS", RuleKind.Exclude, TargetAction.MergeByPk) { SourceOwner = "SRC" };
-        Assert.Single(CopyOwners.Problems(Job(a, b)), p => p.Contains("같은 원본 표", StringComparison.Ordinal));
+        Assert.Single(CopyOwners.Problems(Job(a, b)), p => p.Contains("같은 원본 테이블", StringComparison.Ordinal));
 
         // 서로 다른 원본 표 둘이 같은 대상 표에 쓴다: 한쪽 DELETE 가 다른 쪽 행을 지운다.
         var c = new TableRule("ORDERS", RuleKind.All, TargetAction.MergeByPk) { SourceOwner = "APP2", TargetOwner = "DST" };

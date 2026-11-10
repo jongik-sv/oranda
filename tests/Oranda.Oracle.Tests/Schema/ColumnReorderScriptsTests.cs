@@ -66,9 +66,9 @@ public class ColumnReorderScriptsTests
         => Assert.Empty(ColumnReorderScripts.BlockReasons(ColumnReorderMethod.InvisibleVisible, [Col("A", 1)], Plain, atLeast12c: true));
 
     [Theory]
-    [InlineData(true, false, null, "외부 표")]
-    [InlineData(false, true, null, "임시 표")]
-    [InlineData(false, false, "CL1", "클러스터 표(CL1)")]
+    [InlineData(true, false, null, "외부 테이블")]
+    [InlineData(false, true, null, "임시 테이블")]
+    [InlineData(false, false, "CL1", "클러스터 테이블(CL1)")]
     public void BlockReasons_names_the_table_kind(bool external, bool temporary, string? cluster, string expected)
     {
         var reasons = ColumnReorderScripts.BlockReasons(

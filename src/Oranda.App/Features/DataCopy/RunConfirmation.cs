@@ -35,8 +35,8 @@ public sealed record RunConfirmation(string SessionUser, IReadOnlyList<RunOwnerL
 
     /// <summary>대화상자 첫 줄.</summary>
     public string Header => Owners.Count > 1
-        ? Fill(DataCopyText.L("대상 계정 {0}곳의 표를 지우고 넣습니다. 계속할까요?"), Owners.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))
-        : Fill(DataCopyText.L("대상 접속 계정({0})이 아닌 계정의 표를 지우고 넣습니다. 계속할까요?"), SessionUser);
+        ? Fill(DataCopyText.L("대상 계정 {0}곳의 테이블을 지우고 넣습니다. 계속할까요?"), Owners.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))
+        : Fill(DataCopyText.L("대상 접속 계정({0})이 아닌 계정의 테이블을 지우고 넣습니다. 계속할까요?"), SessionUser);
 
     // 문구 표의 글(한/영)에 값 하나를 넣는다.
     private static string Fill(string template, string value) => template.Replace("{0}", value, StringComparison.Ordinal);
@@ -45,7 +45,7 @@ public sealed record RunConfirmation(string SessionUser, IReadOnlyList<RunOwnerL
     public static string LineText(RunOwnerLine line)
     {
         ArgumentNullException.ThrowIfNull(line);
-        var tables = Fill(DataCopyText.L("표 {0}개"), line.Tables.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var tables = Fill(DataCopyText.L("테이블 {0}개"), line.Tables.ToString(System.Globalization.CultureInfo.InvariantCulture));
         var owner = line.IsSessionUser ? $"{line.Owner} ({DataCopyText.L("접속 계정")})" : line.Owner;
         return $"{owner} · {tables} · {line.Actions}";
     }

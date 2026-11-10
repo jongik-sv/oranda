@@ -114,7 +114,7 @@ public sealed class SchemaBrowserSavedFilterTests
 
         await SaveAndSelectAsync(h, new SchemaBrowserFilter
         {
-            Name = "표만 D",
+            Name = "테이블만 D",
             HiddenTypes = ["VIEW", "PROCEDURE"],
             NamePatterns = new Dictionary<string, string> { ["TABLE"] = "D*" },
         });
@@ -147,7 +147,7 @@ public sealed class SchemaBrowserSavedFilterTests
         var hr = Root(h, "HR");
         hr.IsExpanded = true;
         await h.Vm.ExpandAsync(hr);
-        var hidden = new SchemaBrowserFilter { Name = "표 숨김", HiddenTypes = ["TABLE"] };
+        var hidden = new SchemaBrowserFilter { Name = "테이블 숨김", HiddenTypes = ["TABLE"] };
         var all = new SchemaBrowserFilter { Name = "모두" };
         await h.Vm.SaveFiltersAsync([hidden, all], hidden.Id);
         Assert.Equal(["해당하는 객체가 없다"], Titles(Root(h, "HR")));

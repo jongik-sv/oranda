@@ -175,7 +175,7 @@ public sealed class TransferFlowTests(ItDb db, ITestOutputHelper output) : IClas
             var vm4 = new ImportDialogViewModel(service, meta, rig.Session, Oranda.App.Features.DbmsServices.For<IImportValueConverter>(rig.Container, rig.Session)) { FilePath = empty, TargetTable = dst };
             await vm4.LoadAsync();
             Assert.False(vm4.IsReady);
-            output.WriteLine("S6-2 OK: 중복 키 롤백·열 건너뜀·빈 값 NULL·숫자 오류·없는 파일/표·빈 파일");
+            output.WriteLine("S6-2 OK: 중복 키 롤백·열 건너뜀·빈 값 NULL·숫자 오류·없는 파일/테이블·빈 파일");
         }
         finally
         {

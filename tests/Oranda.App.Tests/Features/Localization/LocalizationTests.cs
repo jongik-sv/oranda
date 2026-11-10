@@ -239,7 +239,7 @@ public partial class LocalizationTests
     }
 
     [Theory]
-    [InlineData("ko", " (이번 실행)", " (기본값)", "표 통계 보기…", "파일로 내보내기…")]
+    [InlineData("ko", " (이번 실행)", " (기본값)", "테이블 통계 보기…", "파일로 내보내기…")]
     [InlineData("en", " (this run)", " (default)", "Table Statistics…", "Export to File…")]
     public void Run_state_toggles_say_this_run_and_settings_fields_say_default(string lang, string thisRun, string byDefault, string stats, string export)
     {

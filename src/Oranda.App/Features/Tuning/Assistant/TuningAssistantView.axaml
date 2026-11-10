@@ -199,7 +199,7 @@
                     <Border DockPanel.Dock="Top" Classes="grid-header">
                       <StackPanel Orientation="Horizontal" Classes="cells">
                         <TextBlock Classes="i-ico" Text="" />
-                        <TextBlock Classes="i-tbl" Text="표 (열)" />
+                        <TextBlock Classes="i-tbl" Text="테이블 (열)" />
                         <TextBlock Classes="i-basis" Text="근거" />
                         <TextBlock Classes="i-ovl" Text="겹침" ToolTip.Tip="기존 인덱스와 앞 열이 겹치는지(이미 있음·넓히기·첫 열만)" />
                       </StackPanel>

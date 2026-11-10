@@ -61,7 +61,7 @@ public interface ICopyPrecheckDialect
     string RecreateDifferenceNote(bool hasDomain) =>
         " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE"
         + (hasDomain ? "·도메인" : string.Empty)
-        + " 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.";
+        + " 은 빠지고, 파티션·IOT·임시 테이블은 일반 테이블이 됩니다.";
 
     /// <summary>
     /// 이름 없이 만든 제약·인덱스에 서버가 지어 준 이름인가(다시 만들 때 이름을 명시하지 않는다, 대상 이름 겹침 점검에서도 뺀다). <paramref name="owner"/> = 그 제약이 있던 표의 소유자.

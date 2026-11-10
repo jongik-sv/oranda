@@ -139,7 +139,7 @@ public sealed partial class ChildCursorsViewModel : ToolPanelViewModelBase, IDis
     public ChildCursorsViewModel()
     {
         SetHint(TuningPanelState.NoSession);
-        CompareHint = T("비교할 두 자식을 표 첫 칸에서 체크하세요", "Check two children in the first column to compare their plans");
+        CompareHint = T("비교할 두 자식을 테이블 첫 칸에서 체크하세요", "Check two children in the first column to compare their plans");
     }
 
     /// <summary>셸(DI)이 쓰는 생성자. 서비스는 처음 쓸 때 꺼낸다.</summary>
@@ -519,7 +519,7 @@ public sealed partial class ChildCursorsViewModel : ToolPanelViewModelBase, IDis
         await LoadAsync(ct).ConfigureAwait(true);
     }
 
-    /// <summary>「복사」: 자식 커서 표와 불일치 사유를 탭으로 나눈 글로.</summary>
+    /// <summary>「복사」: 자식 커서 목록과 불일치 사유를 탭으로 나눈 글로.</summary>
     public string BuildCopyText()
     {
         if (SqlId is null)
@@ -775,7 +775,7 @@ public sealed partial class ChildCursorsViewModel : ToolPanelViewModelBase, IDis
         PlanTable = null;
         CompareHint = Items.Count == 1
             ? T("자식이 하나라 비교할 계획이 없습니다", "There is only one child, so there is nothing to compare")
-            : T("비교할 두 자식을 표 첫 칸에서 체크하세요", "Check two children in the first column to compare their plans");
+            : T("비교할 두 자식을 테이블 첫 칸에서 체크하세요", "Check two children in the first column to compare their plans");
     }
 
     private void FinishCancelled(CancellationTokenSource cts, bool hadContent)

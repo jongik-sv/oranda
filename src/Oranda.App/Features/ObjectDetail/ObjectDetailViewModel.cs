@@ -565,7 +565,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
                 denied = result.Denied;
                 table = new ObjectDetailSection(new DetailSection(
                     "제약 열",
-                    ["#", "열", "참조 표", "참조 열"],
+                    ["#", "열", "참조 테이블", "참조 열"],
                     [.. result.Items.Select(c => (IReadOnlyList<object?>)
                     [
                         c.Position, c.Column,

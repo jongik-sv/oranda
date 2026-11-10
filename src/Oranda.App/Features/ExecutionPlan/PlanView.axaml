@@ -279,7 +279,7 @@
           <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding ShowTuningButtons}">
             <Separator Classes="toolbar" />
             <Button x:Name="StatsButton" Classes="tool" Content="통계 보기" icons:ButtonIcon.Key="table" IsVisible="{Binding HasStatsCommand}"
-                    ToolTip.Tip="이 계획의 표·인덱스·열 통계(SELECT 만)" />
+                    ToolTip.Tip="이 계획의 테이블·인덱스·열 통계(SELECT 만)" />
             <Button x:Name="ChildCursorsButton" Classes="tool" Content="자식 커서" icons:ButtonIcon.Key="diff" IsVisible="{Binding HasChildCursorsCommand}"
                     ToolTip.Tip="이 sql_id 의 자식 커서와 따로 생긴 사유" />
             <Button x:Name="TuningReportButton" Classes="tool" Content="튜닝 보고서…" icons:ButtonIcon.Key="exportFile" IsVisible="{Binding HasTuningReportCommand}"
@@ -624,8 +624,8 @@
                       </Border>
                     </StackPanel>
                     <WrapPanel>
-                      <Button x:Name="GraphStatsButton" Classes="tool" Content="이 표 통계" icons:ButtonIcon.Key="table" IsVisible="{Binding HasStatsCommand}"
-                              ToolTip.Tip="이 계획의 표 통계 보기(SELECT 만)" />
+                      <Button x:Name="GraphStatsButton" Classes="tool" Content="이 테이블 통계" icons:ButtonIcon.Key="table" IsVisible="{Binding HasStatsCommand}"
+                              ToolTip.Tip="이 계획의 테이블 통계 보기(SELECT 만)" />
                       <Button x:Name="GraphAssistantButton" Classes="tool" Content="튜닝 도우미" icons:ButtonIcon.Key="star" IsVisible="{Binding HasAssistantCommand}"
                               ToolTip.Tip="이 문장의 인덱스·재작성·힌트 후보" />
                     </WrapPanel>

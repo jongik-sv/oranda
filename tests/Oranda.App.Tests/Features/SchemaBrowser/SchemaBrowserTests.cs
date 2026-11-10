@@ -100,7 +100,7 @@ public class SchemaBrowserTests
         var h = new Harness();
         h.Meta.Comments[("SCOTT", "EMP")] = "사원";
         h.Meta.Comments[("SCOTT", "V_EMP")] = "사원 보기";
-        h.Meta.Comments[("SCOTT", "PROC1")] = "표가 아니다"; // 표·뷰가 아니면 붙이지 않는다
+        h.Meta.Comments[("SCOTT", "PROC1")] = "테이블이 아니다"; // 표·뷰가 아니면 붙이지 않는다
         await h.Vm.SetSessionAsync(h.Session);
         var scott = h.Vm.Roots.Single(r => r.Title == "SCOTT");
         foreach (var cat in scott.Children.ToList())

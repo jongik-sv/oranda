@@ -246,7 +246,7 @@ public sealed class ManualAiScreens
             await Task.Yield();
         }
 
-        yield return new AiTextDelta("`TRUNC(o.order_date)` 때문에 `ORDERS_DATE_IX` 를 쓰지 못해 **표 전체를 읽습니다**. 날짜 범위 조건으로 바꾸면 인덱스를 쓸 수 있습니다.");
+        yield return new AiTextDelta("`TRUNC(o.order_date)` 때문에 `ORDERS_DATE_IX` 를 쓰지 못해 **테이블 전체를 읽습니다**. 날짜 범위 조건으로 바꾸면 인덱스를 쓸 수 있습니다.");
         yield return new AiFinal(null, null, "example");
     }
 

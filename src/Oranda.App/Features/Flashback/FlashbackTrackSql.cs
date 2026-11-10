@@ -96,24 +96,24 @@ internal static class FlashbackTrackSql
             var since = "SYSDATE - " + n.ToString("0.##", inv);
             range = "TIMESTAMP " + since;
             sb.Append("기간: 최근 ").Append(n.ToString("0.##", inv)).Append("일(").Append(since).Append(")은 고쳐 다시 돌리거나 ").Append(SettingPath)
-              .Append("에서 바꿀 수 있습니다. undo 보존 기간과 표 정의 변경 시점까지만 보입니다. ORA-08180·ORA-30052 가 나면 기간을 줄이세요.");
+              .Append("에서 바꿀 수 있습니다. undo 보존 기간과 테이블 정의 변경 시점까지만 보입니다. ORA-08180·ORA-30052 가 나면 기간을 줄이세요.");
             if (lastDdl is { } ddl)
             {
                 var at = ddl.ToString("yyyy-MM-dd HH:mm:ss", inv);
                 range = $"TIMESTAMP GREATEST({since}, TO_DATE('{at}', 'YYYY-MM-DD HH24:MI:SS') + INTERVAL '{DdlMarginSeconds.ToString(inv)}' SECOND)";
-                sb.Append(" 표 정의가 마지막으로 바뀐 시각(").Append(at).Append(") ").Append(DdlMarginSeconds.ToString(inv)).Append("초 뒤부터 읽습니다(그 앞은 ORA-01466).");
+                sb.Append(" 테이블 정의가 마지막으로 바뀐 시각(").Append(at).Append(") ").Append(DdlMarginSeconds.ToString(inv)).Append("초 뒤부터 읽습니다(그 앞은 ORA-01466).");
             }
         }
         else
         {
             range = "SCN MINVALUE";
             sb.Append("기간: 가능한 전체 기간(SCN MINVALUE). DB 에 따라 ORA-08180 이 날 수 있으며 ").Append(SettingPath)
-              .Append("에서 최근 N일로 바꿀 수 있습니다. undo 보존 기간과 표 정의 변경 시점까지만 보입니다.");
+              .Append("에서 최근 N일로 바꿀 수 있습니다. undo 보존 기간과 테이블 정의 변경 시점까지만 보입니다.");
         }
 
         if (currentUser is not null && !string.Equals(table.Owner, currentUser, StringComparison.OrdinalIgnoreCase))
         {
-            sb.Append(" 다른 스키마 표는 FLASHBACK 권한이 있어야 합니다.");
+            sb.Append(" 다른 스키마 테이블은 FLASHBACK 권한이 있어야 합니다.");
         }
 
         var versions = versionsSql(

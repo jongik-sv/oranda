@@ -273,7 +273,7 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
             $"refused={dependents.Contains("-- ", StringComparison.Ordinal)}");
         void Expect(bool ok, string message) => Assert.True(ok, message + " | " + facts);
 
-        Expect(full.StartsWith(plain, StringComparison.Ordinal) && dependents.Length > 0, "종속 DDL 이 표 DDL 뒤에 붙지 않았다");
+        Expect(full.StartsWith(plain, StringComparison.Ordinal) && dependents.Length > 0, "종속 DDL 이 테이블 DDL 뒤에 붙지 않았다");
         Expect(!dependents.Contains("-- ", StringComparison.Ordinal), "종속 DDL 에 만들지 못한 객체의 주석 줄이 있다");
         Expect(!dependents.Contains("IS NOT NULL", StringComparison.OrdinalIgnoreCase), "NOT NULL 검사가 종속 DDL 에 들어갔다");
         Expect(Occurrences(dependents, " ADD CONSTRAINT ") == 5, "종속 DDL 의 제약이 기본키·유일 키·검사 둘·외래키 다섯 개가 아니다");
@@ -288,7 +288,7 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
         Expect(triggerDdl.EndsWith("\n/\nALTER TRIGGER " + Q(owner, Trigger) + " DISABLE;", StringComparison.Ordinal), "트리거 DDL 이 ALTER TRIGGER … DISABLE; 로 끝나지 않는다");
         Expect(dependents.Contains(triggerDdl, StringComparison.Ordinal), "트리거가 종속 DDL 에 없다");
         Expect(dependents.Contains("COMMENT ON TABLE " + Q(owner, Table), StringComparison.Ordinal)
-            && dependents.Contains("COMMENT ON COLUMN " + Q(owner, Table) + ".\"NAME\"", StringComparison.Ordinal), "표·열 주석이 종속 DDL 에 없다");
+            && dependents.Contains("COMMENT ON COLUMN " + Q(owner, Table) + ".\"NAME\"", StringComparison.Ordinal), "테이블·열 주석이 종속 DDL 에 없다");
         Expect(dependents.Contains("GRANT SELECT ON " + Q(owner, Table) + " TO PUBLIC;", StringComparison.Ordinal), "PUBLIC 권한이 종속 DDL 에 없다");
 
         // 1) 열 순서 바꾸기 CTAS 길: 제약 없는 복사본에 종속 부분만 다시 실행한다.
@@ -311,13 +311,13 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
                 $"SELECT COUNT(*) FROM user_constraints WHERE table_name = '{Table}' AND constraint_type = 'C' AND search_condition NOT LIKE '%IS NOT NULL'") == 2,
             "NOT NULL 이 아닌 검사 제약(이름 있는 것·없는 것)이 정확히 둘이 아니다");
         Expect(await CountAsync(session, $"SELECT COUNT(*) FROM user_constraints WHERE constraint_name = '{Fk}' AND delete_rule = 'CASCADE'") == 1, "외래키의 ON DELETE CASCADE 가 없다");
-        Expect(await CountAsync(session, $"SELECT COUNT(*) FROM user_indexes WHERE table_name = '{Table}'") == indexCount, "다시 만든 표의 인덱스 수가 원래와 다르다");
+        Expect(await CountAsync(session, $"SELECT COUNT(*) FROM user_indexes WHERE table_name = '{Table}'") == indexCount, "다시 만든 테이블의 인덱스 수가 원래와 다르다");
         foreach (var name in new[] { Index, DescIndex })
         {
             Expect(await CountAsync(session, $"SELECT COUNT(*) FROM user_indexes WHERE table_name = '{Table}' AND index_name = '{name}'") == 1, "다시 만든 인덱스가 정확히 하나가 아니다");
         }
 
-        Expect(await CountAsync(session, $"SELECT COUNT(*) FROM user_tab_comments WHERE table_name = '{Table}' AND comments = '시험 표'") == 1, "표 주석이 없다");
+        Expect(await CountAsync(session, $"SELECT COUNT(*) FROM user_tab_comments WHERE table_name = '{Table}' AND comments = '시험 테이블'") == 1, "테이블 주석이 없다");
         Expect(await CountAsync(session, $"SELECT COUNT(*) FROM user_col_comments WHERE table_name = '{Table}' AND column_name = 'NAME' AND comments = '이름'") == 1, "열 주석이 없다");
         Expect(await CountAsync(session, $"SELECT COUNT(*) FROM all_tab_privs WHERE owner = USER AND table_name = '{Table}' AND grantee = 'PUBLIC' AND privilege = 'SELECT'") == 1,
             "PUBLIC SELECT 권한이 정확히 하나가 아니다");
@@ -340,7 +340,7 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
             $"CREATE TABLE {Table} (ID NUMBER NOT NULL, NAME VARCHAR2(20) NOT NULL, CODE VARCHAR2(10), PARENT_ID NUMBER, " +
             $"CONSTRAINT {Pk} PRIMARY KEY (ID), CONSTRAINT {Uk} UNIQUE (CODE), CONSTRAINT {Ck} CHECK (ID > 0), CHECK (PARENT_ID <> 0), " +
             $"CONSTRAINT {Fk} FOREIGN KEY (PARENT_ID) REFERENCES {Table} (ID) ON DELETE CASCADE)",
-            $"COMMENT ON TABLE {Table} IS '시험 표'",
+            $"COMMENT ON TABLE {Table} IS '시험 테이블'",
             $"COMMENT ON COLUMN {Table}.NAME IS '이름'",
             $"CREATE INDEX {Index} ON {Table} (NAME)",
             $"CREATE INDEX {DescIndex} ON {Table} (PARENT_ID DESC)",

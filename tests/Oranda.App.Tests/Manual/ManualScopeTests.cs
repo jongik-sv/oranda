@@ -48,7 +48,7 @@ public sealed partial class ManualScopeTests
             Assert.True(scanned.Count >= MinimumCounts[kind], $"[{kind}] 코드에서 뽑은 항목이 {scanned.Count}개뿐이다(최소 {MinimumCounts[kind]}개). 스캔 방법이 깨졌다.");
             var listed = table[kind].Keys.ToHashSet(StringComparer.Ordinal);
             problems.AddRange(scanned.Except(listed).Order().Select(id => $"[{kind}] 범위표에 없음 → \"{id}\""));
-            problems.AddRange(listed.Except(scanned).Order().Select(id => $"[{kind}] 코드에 없는 항목이 표에 있음(지워진 기능이면 줄을 뺀다) → \"{id}\""));
+            problems.AddRange(listed.Except(scanned).Order().Select(id => $"[{kind}] 코드에 없는 항목이 테이블에 있음(지워진 기능이면 줄을 뺀다) → \"{id}\""));
         }
 
         Assert.True(problems.Count == 0, "매뉴얼 범위표(site/scope.json)가 코드와 맞지 않는다." + Environment.NewLine + string.Join(Environment.NewLine, problems) + HowToFix);

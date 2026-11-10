@@ -76,7 +76,7 @@ public class TuningStatsHeadlessTests
 
             vm.Attach(new TuningFakeSession(), null);
             Pump();
-            Assert.Equal("통계를 볼 표를 고르세요", view.FindControl<TextBlock>("HintTitleText")!.Text);
+            Assert.Equal("통계를 볼 테이블을 고르세요", view.FindControl<TextBlock>("HintTitleText")!.Text);
             Render(window, "stats-no-target", 1000, 520);
 
             var service = TuningSamples.LotHist();
@@ -96,7 +96,7 @@ public class TuningStatsHeadlessTests
             view.DataContext = denied;
             await denied.LoadAsync();
             Pump();
-            Assert.Equal("이 계정으로 볼 수 없는 표", view.FindControl<TextBlock>("HintTitleText")!.Text);
+            Assert.Equal("이 계정으로 볼 수 없는 테이블", view.FindControl<TextBlock>("HintTitleText")!.Text);
             Render(window, "stats-denied", 1000, 520);
 
             var failing = new FakeTuningService { Failure = new InvalidOperationException("ORA-03113: end-of-file on communication channel") };

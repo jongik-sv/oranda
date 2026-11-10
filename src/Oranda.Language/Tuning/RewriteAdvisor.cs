@@ -144,7 +144,7 @@ public static partial class RewriteAdvisor
                 }
                 else if (innerTables.Count == 0)
                 {
-                    why = en ? "the subquery has no table" : "하위 질의에 표가 없습니다";
+                    why = en ? "the subquery has no table" : "하위 질의에 테이블이 없습니다";
                 }
                 else
                 {
@@ -164,7 +164,7 @@ public static partial class RewriteAdvisor
                         var oq = outerTables.Count == 1 ? outerTables[0].Qualifier : null;
                         if (oq is null || innerTables.Any(r => string.Equals(r.Qualifier, oq, StringComparison.OrdinalIgnoreCase)))
                         {
-                            why = en ? "the outer column cannot be qualified (add a table alias)" : "바깥 열을 한정할 수 없습니다(표 별칭을 붙이세요)";
+                            why = en ? "the outer column cannot be qualified (add a table alias)" : "바깥 열을 한정할 수 없습니다(테이블 별칭을 붙이세요)";
                         }
                         else
                         {
@@ -557,11 +557,11 @@ public static partial class RewriteAdvisor
                 else if (innerTables.Count != 1 || innerTables[0].Name is null || HasCommaAt(t, inner.From + 1, inner.FromEnd - 1, inner.Depth)
                     || Enumerable.Range(inner.From + 1, Math.Max(0, inner.FromEnd - inner.From - 1)).Any(x => t.Depth[x] == inner.Depth && t.Is(x, "JOIN")))
                 {
-                    why = en ? "the subquery reads more than one table" : "하위 질의가 표를 여럿 읽습니다";
+                    why = en ? "the subquery reads more than one table" : "하위 질의가 테이블을 여럿 읽습니다";
                 }
                 else if (innerTables[0].Alias is null)
                 {
-                    why = en ? "the subquery table has no alias" : "하위 질의 표에 별칭이 없습니다";
+                    why = en ? "the subquery table has no alias" : "하위 질의 테이블에 별칭이 없습니다";
                 }
                 else if (inner.Where < 0)
                 {
@@ -574,7 +574,7 @@ public static partial class RewriteAdvisor
                 }
                 else if ((BareName(t, itemFrom, itemEnd) ?? BareName(t, inner.Where + 1, close - 1)) is { } bare)
                 {
-                    why = en ? $"the column {bare} is not qualified, so its table is unknown" : $"한정하지 않은 열({bare})이 있어 어느 표 열인지 모릅니다";
+                    why = en ? $"the column {bare} is not qualified, so its table is unknown" : $"한정하지 않은 열({bare})이 있어 어느 테이블 열인지 모릅니다";
                 }
                 else
                 {
@@ -660,7 +660,7 @@ public static partial class RewriteAdvisor
                 {
                     var detail = en
                         ? "Selecting only the needed columns reads and sends less, and may let an index answer alone. The result shape also changes when the table gains columns."
-                        : "필요한 열만 고르면 읽는 양·전송량이 줄고 인덱스만으로 답할 수도 있습니다. 표에 열이 늘면 결과 모양도 바뀝니다.";
+                        : "필요한 열만 고르면 읽는 양·전송량이 줄고 인덱스만으로 답할 수도 있습니다. 테이블에 열이 늘면 결과 모양도 바뀝니다.";
                     detail += en
                         ? " Only listing the columns runs the same plan, so there is nothing to benchmark — pick just the columns you need."
                         : " 열 목록을 펼치기만 해서는 같은 계획이라 벤치마크할 것이 없습니다 — 필요한 열만 고르세요.";

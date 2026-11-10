@@ -86,10 +86,10 @@
         <Button x:Name="PlanButton" Classes="tool" Content="실제 계획" icons:ButtonIcon.Key="plan" IsEnabled="{Binding CanOpenPlan}"
                 ToolTip.Tip="지금 행의 자식 계획을 계획 창에서 엽니다(DISPLAY_CURSOR, 읽기만)" />
         <Button x:Name="StatsButton" Classes="tool" Content="통계 보기" icons:ButtonIcon.Key="table" IsEnabled="{Binding CanOpenStats}"
-                ToolTip.Tip="비교한 계획의 첫 표 통계를 엽니다" />
+                ToolTip.Tip="비교한 계획의 첫 테이블 통계를 엽니다" />
         <Separator Classes="toolbar" />
         <Button x:Name="CopyButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding ShowContent}"
-                ToolTip.Tip="자식 커서 표와 불일치 사유를 탭으로 나눈 글로 복사합니다" />
+                ToolTip.Tip="자식 커서 목록과 불일치 사유를 탭으로 나눈 글로 복사합니다" />
       </WrapPanel>
     </Border>
     <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="2" MinHeight="2"
@@ -162,7 +162,7 @@
               </DockPanel>
             </Border>
             <Border DockPanel.Dock="Bottom" Classes="note" IsVisible="{Binding IsComparing}">
-              <TextBlock Text="계획 창 「비교」와 같은 표 · 자식 커서 행을 두 번 누르면 계획 창에서 그 자식 계획을 엽니다" TextWrapping="Wrap" />
+              <TextBlock Text="계획 창 「비교」와 같은 테이블 · 자식 커서 행을 두 번 누르면 계획 창에서 그 자식 계획을 엽니다" TextWrapping="Wrap" />
             </Border>
             <Panel>
               <StackPanel x:Name="CompareHintBox" IsVisible="{Binding HasCompareHint}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="16">

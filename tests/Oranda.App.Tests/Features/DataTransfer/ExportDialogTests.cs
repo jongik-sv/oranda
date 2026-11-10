@@ -324,7 +324,7 @@ public sealed class ExportDialogTests : IDisposable
     [Fact]
     public async Task A_failing_export_shows_the_error_and_leaves_no_file()
     {
-        var service = new RecordingTransfer { Throw = new InvalidOperationException("ORA-00942: 표가 없습니다") };
+        var service = new RecordingTransfer { Throw = new InvalidOperationException("ORA-00942: 테이블이 없습니다") };
         var path = Path.Combine(_dir, "bad.csv");
         using var vm = new ExportDialogViewModel(service, Source()) { FilePath = path };
 

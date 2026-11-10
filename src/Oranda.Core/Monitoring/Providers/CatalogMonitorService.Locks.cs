@@ -88,7 +88,7 @@ public abstract partial class CatalogMonitorService
         var objectType = Str(rows[0][2]) ?? string.Empty;
         if (!RowValueObjectTypes.Contains(objectType, StringComparer.Ordinal))
         {
-            return LockedRowError(info, $"표가 아닌 객체({objectType})라 행 값을 읽지 않습니다.");
+            return LockedRowError(info, $"테이블이 아닌 객체({objectType})라 행 값을 읽지 않습니다.");
         }
 
         if (LockedRowSelect(monitor, owner, table) is not { } sql)
@@ -105,7 +105,7 @@ public abstract partial class CatalogMonitorService
         }
         catch (Exception ex) when (IsNoAccess(ex))
         {
-            return LockedRowError(info, $"이 표를 읽을 권한이 없습니다: {FirstLine(ex.Message)}");
+            return LockedRowError(info, $"이 테이블을 읽을 권한이 없습니다: {FirstLine(ex.Message)}");
         }
         catch (Exception ex) when (IsServerError(ex))
         {

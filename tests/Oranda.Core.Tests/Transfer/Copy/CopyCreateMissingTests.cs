@@ -152,7 +152,7 @@ public sealed class CopyCreateMissingTests
         Assert.DoesNotContain(f.Order, x => x.StartsWith("BULK ", StringComparison.Ordinal));
         var table = Assert.Single(result.Tables);
         Assert.Equal(CopyOutcome.Failed, table.Outcome);
-        Assert.Contains("대상에 표를 만들지 못했습니다", table.Message, StringComparison.Ordinal);
+        Assert.Contains("대상에 테이블을 만들지 못했습니다", table.Message, StringComparison.Ordinal);
         Assert.Contains("ORA-00955", table.Message, StringComparison.Ordinal);
         Assert.Equal(-1, table.TargetRows); // 만들지 못한 표는 건수를 세지 않는다
         Assert.Empty(result.Notices);
@@ -277,7 +277,7 @@ public sealed class CopyCreateMissingTests
         var report = await p.RunAsync();
 
         var item = Assert.Single(report.Items, i => i.Code == "TargetMissing");
-        Assert.Contains("같은 이름의 표가 아닌 객체가 있습니다", item.Message, StringComparison.Ordinal);
+        Assert.Contains("같은 이름의 테이블이 아닌 객체가 있습니다", item.Message, StringComparison.Ordinal);
         Assert.Empty(report.Order);
     }
 

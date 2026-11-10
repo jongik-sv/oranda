@@ -48,7 +48,7 @@ public class AiScreenLayoutTests
         var model = new TuningStartViewModel(new TuningStartInfo(
             "AI 튜닝 — 커서 위치 문장", "8~15행 · SELECT d.dept_id, d.dept_nm, COUNT(*) …", "sql_id 7h35uxf5uhmm1 · 실행 1,240회 · 실행당 1.82 s",
             "문장 + 참조 객체: TB_ORDER 1,823만 행 · TB_DEPT 120 행 · CLOSED_DEPTS 36 행 (통계 어제)",
-            "실제 계획 · 인덱스(열 순서·clustering factor) · 표·열 통계 · 히스토그램 개수", "행 값 · 히스토그램 끝값 · 바인드 값 · 비밀번호·호스트",
+            "실제 계획 · 인덱스(열 순서·clustering factor) · 테이블·열 통계 · 히스토그램 개수", "행 값 · 히스토그램 끝값 · 바인드 값 · 비밀번호·호스트",
             new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Query), [new TuningModelOption("default", "기본 모델 — Claude Code · opus")]));
         var dialog = new TuningStartDialog { DataContext = model };
         dialog.Show();

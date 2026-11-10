@@ -124,7 +124,7 @@ public sealed class EmbeddedCatalogCharacterizationTests
     {
         const string expected =
             "-- SCOTT.EMP 의 변경 이력(키: EMPNO = 7369). 기간: 최근 1.5일(SYSDATE - 1.5)은 고쳐 다시 돌리거나 설정 > 결과 그리드 「변경 추적 기간」에서 바꿀 수 있습니다. " +
-            "undo 보존 기간과 표 정의 변경 시점까지만 보입니다. ORA-08180·ORA-30052 가 나면 기간을 줄이세요.\n" +
+            "undo 보존 기간과 테이블 정의 변경 시점까지만 보입니다. ORA-08180·ORA-30052 가 나면 기간을 줄이세요.\n" +
             "SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, EMPNO, ENAME\n" +
             "FROM SCOTT.EMP VERSIONS BETWEEN TIMESTAMP SYSDATE - 1.5 AND MAXVALUE\n" +
             "WHERE EMPNO = 7369\n" +
@@ -137,8 +137,8 @@ public sealed class EmbeddedCatalogCharacterizationTests
     {
         const string expected =
             "-- SCOTT.EMP 의 변경 이력(키: EMPNO = 7369). 기간: 가능한 전체 기간(SCN MINVALUE). DB 에 따라 ORA-08180 이 날 수 있으며 " +
-            "설정 > 결과 그리드 「변경 추적 기간」에서 최근 N일로 바꿀 수 있습니다. undo 보존 기간과 표 정의 변경 시점까지만 보입니다. " +
-            "다른 스키마 표는 FLASHBACK 권한이 있어야 합니다.\n" +
+            "설정 > 결과 그리드 「변경 추적 기간」에서 최근 N일로 바꿀 수 있습니다. undo 보존 기간과 테이블 정의 변경 시점까지만 보입니다. " +
+            "다른 스키마 테이블은 FLASHBACK 권한이 있어야 합니다.\n" +
             "SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, EMPNO\n" +
             "FROM SCOTT.EMP VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE\n" +
             "WHERE EMPNO = 7369\n" +
@@ -151,8 +151,8 @@ public sealed class EmbeddedCatalogCharacterizationTests
     {
         const string expected =
             "-- SCOTT.EMP 의 변경 이력(키: A = 'O''Neil', B = 5). 기간: 최근 0.25일(SYSDATE - 0.25)은 고쳐 다시 돌리거나 설정 > 결과 그리드 「변경 추적 기간」에서 바꿀 수 있습니다. " +
-            "undo 보존 기간과 표 정의 변경 시점까지만 보입니다. ORA-08180·ORA-30052 가 나면 기간을 줄이세요. " +
-            "표 정의가 마지막으로 바뀐 시각(2026-10-27 09:30:15) 10초 뒤부터 읽습니다(그 앞은 ORA-01466).\n" +
+            "undo 보존 기간과 테이블 정의 변경 시점까지만 보입니다. ORA-08180·ORA-30052 가 나면 기간을 줄이세요. " +
+            "테이블 정의가 마지막으로 바뀐 시각(2026-10-27 09:30:15) 10초 뒤부터 읽습니다(그 앞은 ORA-01466).\n" +
             "SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, A, B\n" +
             "FROM SCOTT.EMP VERSIONS BETWEEN TIMESTAMP GREATEST(SYSDATE - 0.25, TO_DATE('2026-10-27 09:30:15', 'YYYY-MM-DD HH24:MI:SS') + INTERVAL '10' SECOND) AND MAXVALUE\n" +
             "WHERE A = 'O''Neil' AND B = 5\n" +

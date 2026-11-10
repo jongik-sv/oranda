@@ -50,7 +50,7 @@ public sealed class UserDocsTests
     {
         var unmapped = FocusScopes.SlotsOf(null).Where(s => !ManualCatalog.ScreenPaths.ContainsKey(s)).ToList();
 
-        Assert.True(unmapped.Count == 0, "화면 → 경로 표에 없는 포커스 자리: " + string.Join(", ", unmapped));
+        Assert.True(unmapped.Count == 0, "화면 → 경로 테이블에 없는 포커스 자리: " + string.Join(", ", unmapped));
     }
 
     [Theory]

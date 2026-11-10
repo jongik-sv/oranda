@@ -130,10 +130,10 @@
       <WrapPanel>
         <TextBox x:Name="TargetBox" Classes="compact search" Width="240" Margin="0,0,6,0" VerticalAlignment="Center"
                  PlaceholderText="owner.table" Text="{Binding TargetText, Mode=TwoWay}"
-                 FontFamily="{DynamicResource OrandaGridFontFamily}" AutomationProperties.Name="통계를 볼 표"
-                 ToolTip.Tip="owner.table 또는 table(접속 계정의 표). Enter 로 읽습니다" />
-        <Button x:Name="EditorTableButton" Classes="tool" Content="편집기 표" icons:ButtonIcon.Key="find"
-                ToolTip.Tip="편집기 커서 아래 표의 통계를 읽습니다" />
+                 FontFamily="{DynamicResource OrandaGridFontFamily}" AutomationProperties.Name="통계를 볼 테이블"
+                 ToolTip.Tip="owner.table 또는 table(접속 계정의 테이블). Enter 로 읽습니다" />
+        <Button x:Name="EditorTableButton" Classes="tool" Content="편집기 테이블" icons:ButtonIcon.Key="find"
+                ToolTip.Tip="편집기 커서 아래 테이블의 통계를 읽습니다" />
         <Button x:Name="RefreshButton" Classes="tool" Content="새로 고침 (F5)" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True"
                 IsEnabled="{Binding CanRefresh}" />
         <Separator Classes="toolbar" />

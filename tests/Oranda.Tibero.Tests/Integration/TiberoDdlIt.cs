@@ -73,7 +73,7 @@ public class TiberoDdlIt
         var withSemicolon = await QuietAsync("GetDdlAsync(TABLE)", () => provider.GetDdlAsync(session, obj, new DdlOptions(), CancellationToken.None));
         var bare = await QuietAsync("GetDdlAsync(TABLE, no terminator)", () => provider.GetDdlAsync(session, obj, new DdlOptions { SqlTerminator = false }, CancellationToken.None));
 
-        Assert.True(bare.StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase), "표 DDL 이 CREATE TABLE 로 시작하지 않는다");
+        Assert.True(bare.StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase), "테이블 DDL 이 CREATE TABLE 로 시작하지 않는다");
         Assert.True(withSemicolon.EndsWith(';') && !bare.EndsWith(';'), "끝 표시 ; 가 켬·끔을 따르지 않는다");
     }
 
@@ -109,9 +109,9 @@ public class TiberoDdlIt
             var procWithTerminator = await QuietAsync("GetDdlAsync(PROCEDURE, terminator)", () => provider.GetDdlAsync(session, procRef, new DdlOptions(), CancellationToken.None));
 
             var tableHead = tableDdl.StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase) && !tableDdl.EndsWith(';');
-            Assert.True(tableHead, "표 DDL 이 CREATE TABLE 로 시작하지 않거나 ; 로 끝난다");
-            Assert.True(tableDdl.Contains("\"비고\"", StringComparison.Ordinal), "표 DDL 에 한글 열 이름이 없다");
-            Assert.True(tableWithTerminator.EndsWith(';'), "끝 표시를 켠 표 DDL 이 ; 로 끝나지 않는다");
+            Assert.True(tableHead, "테이블 DDL 이 CREATE TABLE 로 시작하지 않거나 ; 로 끝난다");
+            Assert.True(tableDdl.Contains("\"비고\"", StringComparison.Ordinal), "테이블 DDL 에 한글 열 이름이 없다");
+            Assert.True(tableWithTerminator.EndsWith(';'), "끝 표시를 켠 테이블 DDL 이 ; 로 끝나지 않는다");
             var procHead = procDdl.StartsWith("CREATE OR REPLACE PROCEDURE " + TiberoDdlText.Qualified(owner, Procedure), StringComparison.Ordinal);
             Assert.True(procHead, "프로시저 DDL 의 머리가 CREATE OR REPLACE PROCEDURE \"계정\".\"이름\" 이 아니다");
             Assert.True(procWithTerminator.EndsWith("\n/", StringComparison.Ordinal), "끝 표시를 켠 프로시저 DDL 이 새 줄 / 로 끝나지 않는다");

@@ -414,7 +414,7 @@ public static class LockHints
             var obj = g.Key.Length > 0 ? g.Key : "(객체 모름)";
             hints.Add(new LockHint(LockHintSeverity.Warning,
                 $"enq: TM - contention · {obj}",
-                $"부모 표의 행을 지우거나 키를 바꿀 때 자식 표 {obj} 전체에 잠금을 요청했습니다. 외래 키 열에 인덱스가 없을 때 흔합니다.",
+                $"부모 테이블의 행을 지우거나 키를 바꿀 때 자식 테이블 {obj} 전체에 잠금을 요청했습니다. 외래 키 열에 인덱스가 없을 때 흔합니다.",
                 $"{obj} 의 외래 키 열에 인덱스가 있는지 확인",
                 g.Key.Length > 0 ? foreignKeyIndexCheck(g.Key) : null));
         }

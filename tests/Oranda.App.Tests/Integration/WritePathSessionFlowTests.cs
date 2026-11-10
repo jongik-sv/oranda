@@ -64,7 +64,7 @@ public sealed class WritePathSessionFlowTests(ItDb db, ITestOutputHelper output)
 
             var kept = await CountAsync(rig, keep);
             var imported = await CountAsync(rig, dst);
-            output.WriteLine($"{db.Service}: 앞 미커밋 {kept}행, 가져온 표 {imported}행, 미커밋={session.HasPendingTransaction}");
+            output.WriteLine($"{db.Service}: 앞 미커밋 {kept}행, 가져온 테이블 {imported}행, 미커밋={session.HasPendingTransaction}");
             Assert.Equal("1", kept); // 세션 전체 ROLLBACK 이 아니다
             Assert.Equal("0", imported); // 가져오기 몫만 되돌렸다
             Assert.True(session.HasPendingTransaction);

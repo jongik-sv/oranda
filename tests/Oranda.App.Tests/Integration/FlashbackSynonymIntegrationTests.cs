@@ -80,7 +80,7 @@ public sealed class FlashbackSynonymIntegrationTests(ItDb db) : IClassFixture<It
             foreach (var days in new decimal?[] { FlashbackTrackSql.DefaultDays, null })
             {
                 var text = FlashbackTrackSql.Build(expected, ["ID", "V"], ["ID"], [1m], db.User, days, ddl);
-                Assert.Contains("다른 스키마 표는 FLASHBACK 권한", text.Split('\n')[0], StringComparison.Ordinal);
+                Assert.Contains("다른 스키마 테이블은 FLASHBACK 권한", text.Split('\n')[0], StringComparison.Ordinal);
                 var body = text[(text.IndexOf('\n', StringComparison.Ordinal) + 1)..];
                 var rs = await runner.QueryAsync(rig.Session, new FlashbackQuery(Select(body), new Dictionary<string, BindValue>()), default);
                 var rows = await FlashbackRunner.ReadAllAsync(rs, default);

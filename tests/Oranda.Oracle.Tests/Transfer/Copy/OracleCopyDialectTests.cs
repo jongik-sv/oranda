@@ -347,7 +347,7 @@ public sealed class OracleCopyDialectTests
         Assert.Equal("ORA-02449", dialect.ReferencedByForeignKeysErrorName);
         Assert.Equal("ORA-24344", dialect.TriggerCompileErrorName);
         Assert.Equal("ORA-01555", dialect.SnapshotTooOldErrorName);
-        Assert.Equal("(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 표를 참조하던 FK 는 돌아오지 않습니다)", dialect.FlashbackRestoreNote);
+        Assert.Equal("(트리거는 BIN$ 이름으로, 인덱스·권한과 함께 돌아옵니다. 이 테이블을 참조하던 FK 는 돌아오지 않습니다)", dialect.FlashbackRestoreNote);
     }
 
     [Fact]
@@ -372,8 +372,8 @@ public sealed class OracleCopyDialectTests
     }
 
     [Theory]
-    [InlineData(false, " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.")]
-    [InlineData(true, " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE·도메인 은 빠지고, 파티션·IOT·임시 표는 일반 표가 됩니다.")]
+    [InlineData(false, " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE 은 빠지고, 파티션·IOT·임시 테이블은 일반 테이블이 됩니다.")]
+    [InlineData(true, " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE·도메인 은 빠지고, 파티션·IOT·임시 테이블은 일반 테이블이 됩니다.")]
     public void Recreate_difference_note_is_the_text_the_precheck_wrote_before(bool hasDomain, string expected)
     {
         ICopyPrecheckDialect dialect = OracleCopyPrecheckDialect.Instance;

@@ -81,8 +81,8 @@
             <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
-          <TextBlock Text="표 이름" VerticalAlignment="Center" Margin="0,0,12,0" />
-          <TextBox x:Name="InsertTableBox" Grid.Column="1" Text="{Binding InsertTableName}" AutomationProperties.Name="INSERT 대상 표 이름" />
+          <TextBlock Text="테이블 이름" VerticalAlignment="Center" Margin="0,0,12,0" />
+          <TextBox x:Name="InsertTableBox" Grid.Column="1" Text="{Binding InsertTableName}" AutomationProperties.Name="INSERT 대상 테이블 이름" />
         </Grid>
 
         <Grid>

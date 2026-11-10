@@ -96,7 +96,7 @@ public static class AiIndexReview
         {
             if (!suggestion.IsModify)
             {
-                notes.Add("기존 인덱스를 확인하지 못했습니다. 이 표에 이미 쓸 만한 인덱스가 있는지 먼저 보세요.");
+                notes.Add("기존 인덱스를 확인하지 못했습니다. 이 테이블에 이미 쓸 만한 인덱스가 있는지 먼저 보세요.");
             }
 
             return (null, notes);
@@ -106,7 +106,7 @@ public static class AiIndexReview
         {
             if (!string.IsNullOrWhiteSpace(suggestion.ExistingIndex) && !existing.Any(ix => IsIndex(ix, suggestion.ExistingIndex)))
             {
-                notes.Add($"AI 가 말한 기존 인덱스 {suggestion.ExistingIndex} 를 이 표에서 찾지 못했습니다. 이름을 확인하세요.");
+                notes.Add($"AI 가 말한 기존 인덱스 {suggestion.ExistingIndex} 를 이 테이블에서 찾지 못했습니다. 이름을 확인하세요.");
             }
 
             // 바꿀 인덱스 자신과는 견주지 않는다. 다른 인덱스가 이미 덮으면 변형할 이유가 없다.

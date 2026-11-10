@@ -104,9 +104,9 @@ public class FlashbackTests
     [InlineData("ORA-01555: snapshot too old", "undo_retention")]
     [InlineData("ORA-08180: no snapshot found based on specified time", "SCN")]
     [InlineData("ORA-08180: no snapshot found based on specified time", "기간")]
-    [InlineData("ORA-01466: unable to read data - table definition has changed", "표 정의")]
+    [InlineData("ORA-01466: unable to read data - table definition has changed", "테이블 정의")]
     [InlineData("ORA-01031: insufficient privileges", "FLASHBACK 권한")]
-    [InlineData("ORA-41900: FLASHBACK 권한이 \"MDM_USER\".\"TB_CODE\"에 누락되었습니다", "GRANT FLASHBACK ON <소유자.표> TO <접속 사용자>")]
+    [InlineData("ORA-41900: FLASHBACK 권한이 \"MDM_USER\".\"TB_CODE\"에 누락되었습니다", "GRANT FLASHBACK ON <소유자.테이블> TO <접속 사용자>")]
     public void Advisor_explains_each_error(string message, string expected)
     {
         Assert.Contains(expected, FlashbackErrorAdvisor.Explain(message), StringComparison.Ordinal);

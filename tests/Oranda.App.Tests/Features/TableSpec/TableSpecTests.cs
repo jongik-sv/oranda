@@ -165,7 +165,7 @@ public class TableSpecTests
 
         Assert.False(await vm.GenerateAsync(path));
 
-        Assert.Equal("조건에 맞는 표가 없다", vm.StatusText);
+        Assert.Equal("조건에 맞는 테이블이 없다", vm.StatusText);
         Assert.False(File.Exists(path));
     }
 

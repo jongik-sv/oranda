@@ -314,7 +314,7 @@ public sealed class CopyOwnersUiTests
         Assert.True(Assert.Single(row.Choices).IsVisible); // 계획을 규칙 키로 찾았다(같은 이름 다른 계정과 섞이지 않음)
         Assert.Equal("APP.CUSTOMERS", precheck.Items.Single(i => i.Table == "CUSTOMERS").TableText);
         Assert.Equal(string.Empty, precheck.Items.Single(i => i.Table is null).TableText);
-        Assert.Equal("다른 계정 표에 씀", precheck.Items.Single(i => i.Table is null).CodeText);
+        Assert.Equal("다른 계정 테이블에 씀", precheck.Items.Single(i => i.Table is null).CodeText);
 
         row.Choices[0].IsChosen = true;
         Assert.Equal(["APP2.ORDERS"], precheck.BuildDecisions().DisableTriggerTables);
@@ -361,7 +361,7 @@ public sealed class CopyOwnersUiTests
         Assert.True(confirmation.Owners[0].IsSessionUser);
         Assert.Equal(1, confirmation.Owners[1].Tables);
         Assert.Contains("3", confirmation.Header, StringComparison.Ordinal);
-        Assert.Contains("APP2 · 표 1개 · 같은 범위 지우고 넣기 1", RunConfirmation.LineText(confirmation.Owners[1]), StringComparison.Ordinal);
+        Assert.Contains("APP2 · 테이블 1개 · 같은 범위 지우고 넣기 1", RunConfirmation.LineText(confirmation.Owners[1]), StringComparison.Ordinal);
 
         var excluded = single with { Tables = [TestJobs.Rule("ORDERS", RuleKind.Exclude) with { TargetOwner = "ELSE" }, .. single.Tables] };
         Assert.Null(RunConfirmation.For(excluded, "TGT_USER")); // 제외 규칙은 지우지 않는다

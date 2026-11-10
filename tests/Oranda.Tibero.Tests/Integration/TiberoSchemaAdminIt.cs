@@ -30,7 +30,7 @@ public class TiberoSchemaAdminIt
         var name = TiberoSessionQuery.Str(await TiberoSessionQuery.ScalarAsync(session,
             "SELECT object_name FROM (SELECT object_name FROM all_objects WHERE owner = 'SYS' AND object_type IN ('TABLE', 'VIEW') " +
             "AND object_name NOT LIKE 'BIN$%' ORDER BY object_name) WHERE ROWNUM = 1"));
-        Assert.True(name is not null, "all_objects 에 보이는 SYS 표·뷰가 없다");
+        Assert.True(name is not null, "all_objects 에 보이는 SYS 테이블·뷰가 없다");
 
         // 이름의 _ 는 LIKE 와일드카드라 막는다(다른 이름이 걸리지 않게).
         var pattern = name.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);

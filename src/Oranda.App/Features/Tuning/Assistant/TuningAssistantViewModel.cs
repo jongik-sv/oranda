@@ -217,8 +217,8 @@ public sealed partial class TuningAssistantViewModel : ToolPanelViewModelBase
     public static string RewriteEmptyText => L("규칙에 걸린 곳이 없습니다", "No rule matched");
 
     public string HintEmptyText =>
-        !HasPlan ? L("계획이 있어야 표 이름·별칭으로 힌트를 만듭니다", "Hints are built from the plan's tables and aliases")
-        : L("힌트 대안이 없습니다 — 계획에 표 읽기 단계가 없습니다", "No hint alternatives — the plan reads no table");
+        !HasPlan ? L("계획이 있어야 테이블 이름·별칭으로 힌트를 만듭니다", "Hints are built from the plan's tables and aliases")
+        : L("힌트 대안이 없습니다 — 계획에 테이블 읽기 단계가 없습니다", "No hint alternatives — the plan reads no table");
 
     public bool IndexEmpty => IndexItems.Count == 0;
 

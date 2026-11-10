@@ -49,7 +49,7 @@ public class CopyRunner : ICopyRunner
     internal const string PhaseCount = "건수 비교";
     internal const string PhaseRetry = "다시 넣기";
     internal const string PhaseRecreate = "다시 만들기";
-    internal const string PhaseCreate = "표 만들기";
+    internal const string PhaseCreate = "테이블 만들기";
     internal const string PhaseRestore = "되살리기";
     internal const string PhaseStart = "시작";
     internal const string PhaseSource = "원본 준비";
@@ -251,12 +251,12 @@ public class CopyRunner : ICopyRunner
         {
             CommitMode.PerBatch => "배치마다",
             CommitMode.AtEnd => "모두 끝난 뒤 한 번",
-            _ => "표마다",
+            _ => "테이블마다",
         };
         run.Enter(PhaseStart);
-        run.Log($"{what}: 작업 「{job.Name}」 · 원본 {job.Source.Name} → 대상 {job.Target.Name} · 표 {run.Report.Order.Count.ToString(CultureInfo.InvariantCulture)}개"
+        run.Log($"{what}: 작업 「{job.Name}」 · 원본 {job.Source.Name} → 대상 {job.Target.Name} · 테이블 {run.Report.Order.Count.ToString(CultureInfo.InvariantCulture)}개"
                 + $" · 커밋 {commit} · 배치 {options.BatchSize.ToString("N0", CultureInfo.InvariantCulture)}행 · 실패 행 상한 {options.MaxFailedRows.ToString("N0", CultureInfo.InvariantCulture)}"
-                + (job.ConsistentRead ? " · 같은 시점 기준 읽기" : " · 표마다 따로 읽기"));
+                + (job.ConsistentRead ? " · 같은 시점 기준 읽기" : " · 테이블마다 따로 읽기"));
         if (period is { } p && (p.TimeFrom is not null || p.TimeTo is not null))
         {
             static string At(DateTime? d) => d?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? "(열림)";
@@ -316,7 +316,7 @@ public class CopyRunner : ICopyRunner
         {
             if (DeleteText(builder, CopyOwners.Key(job, plan.Rule)) is { } text && !previewed.Contains(text))
             {
-                throw new InvalidOperationException("사전 점검 뒤 대상 지우기 문장이 바뀌었습니다(계정·부모 표). 사전 점검을 다시 하세요.");
+                throw new InvalidOperationException("사전 점검 뒤 대상 지우기 문장이 바뀌었습니다(계정·부모 테이블). 사전 점검을 다시 하세요.");
             }
         }
     }
@@ -411,13 +411,13 @@ public class CopyRunner : ICopyRunner
 
         if (!CopyTargetGuard.CanRecreate(sessions.Target.Profile))
         {
-            throw new InvalidOperationException($"대상 접속 '{sessions.Target.Profile.Name}' 은 개발 접속이 아니라 「없으면 만들기」로 표를 만들 수 없습니다.");
+            throw new InvalidOperationException($"대상 접속 '{sessions.Target.Profile.Name}' 은 개발 접속이 아니라 「없으면 만들기」로 테이블을 만들 수 없습니다.");
         }
 
         // 대상 DBMS 가 표 만들기를 막으면 오류 없는 점검 결과를 받았어도 CREATE 전에 멈춘다.
         if (_targetPrecheck.CreateBlockedReason(sessions.Target) is { } blocked)
         {
-            throw new InvalidOperationException($"대상 DBMS({_targetDbms}) 에서는 「없으면 만들기」로 표를 만들 수 없습니다: {blocked}");
+            throw new InvalidOperationException($"대상 DBMS({_targetDbms}) 에서는 「없으면 만들기」로 테이블을 만들 수 없습니다: {blocked}");
         }
 
         var user = SessionUser(sessions.Target.DbKey);
@@ -448,7 +448,7 @@ public class CopyRunner : ICopyRunner
 
         if (SameSourceTargets(sessions, job) is { Count: > 0 } same)
         {
-            throw new InvalidOperationException($"원본과 대상이 같은 DB 이고 대상 표 {same[0].Table} 을(를) 원본으로도 읽습니다. 원본 행을 지울 수 있어 실행하지 않습니다.");
+            throw new InvalidOperationException($"원본과 대상이 같은 DB 이고 대상 테이블 {same[0].Table} 을(를) 원본으로도 읽습니다. 원본 행을 지울 수 있어 실행하지 않습니다.");
         }
     }
 
@@ -492,7 +492,7 @@ public class CopyRunner : ICopyRunner
         // 「같은 시점 기준 읽기」를 꺼도 원본에는 DB 수준 READ ONLY 를 건다(그때는 표마다 새로 연다, BeginTableReadAsync).
         run.ReadStartedAt = DateTimeOffset.Now;
         var set = await ControlLoggedAsync(run, run.Source, _sourceDialect.SetTransactionReadOnly(), ct,
-            run.Job.ConsistentRead ? "모든 표를 이 시점 기준으로 읽기" : "읽기 전용(표마다 새로 엽니다)");
+            run.Job.ConsistentRead ? "모든 테이블을 이 시점 기준으로 읽기" : "읽기 전용(테이블마다 새로 엽니다)");
         if (set.Status != ExecutionStatus.Succeeded)
         {
             run.Abort("원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다: " + Describe(set));
@@ -622,7 +622,7 @@ public class CopyRunner : ICopyRunner
                                        && (CopyErrors.IsServer(_errors, ex) || ex is InvalidOperationException or BulkDeniedException or ArgumentException))
             {
                 table.Fail("지우기 전에 트리거·권한·참조 FK 를 받아 두거나 CREATE 문장을 만들지 못했습니다: " + SafeError(ex.Message));
-                run.Abort($"{table.Name}: 다시 만들 준비를 하지 못해 아무 표도 지우지 않고 멈췄습니다.");
+                run.Abort($"{table.Name}: 다시 만들 준비를 하지 못해 아무 테이블도 지우지 않고 멈췄습니다.");
                 return;
             }
         }
@@ -635,7 +635,7 @@ public class CopyRunner : ICopyRunner
         }
         catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
         {
-            run.Abort("실행 기록에 보존 DDL 을 쓰지 못해 아무 표도 지우지 않고 멈췄습니다: " + SafeError(ex.Message));
+            run.Abort("실행 기록에 보존 DDL 을 쓰지 못해 아무 테이블도 지우지 않고 멈췄습니다: " + SafeError(ex.Message));
             return;
         }
 
@@ -645,10 +645,10 @@ public class CopyRunner : ICopyRunner
         {
             foreach (var plan in plans)
             {
-                run.Table(plan).Fail("휴지통을 켜지 못해 표를 지우지 않았습니다: " + Describe(bin));
+                run.Table(plan).Fail("휴지통을 켜지 못해 테이블을 지우지 않았습니다: " + Describe(bin));
             }
 
-            run.Abort("휴지통을 켜지 못해 아무 표도 지우지 않고 멈췄습니다.");
+            run.Abort("휴지통을 켜지 못해 아무 테이블도 지우지 않고 멈췄습니다.");
             return;
         }
 
@@ -671,7 +671,7 @@ public class CopyRunner : ICopyRunner
             var create = await CleanupStatementAsync(run, CopyCommonStatements.RecreateDdl(statements[0]), CleanupTimeout);
             if (create.Status != ExecutionStatus.Succeeded)
             {
-                table.Fail("지운 표를 다시 만들지 못했습니다: " + Describe(create));
+                table.Fail("지운 테이블을 다시 만들지 못했습니다: " + Describe(create));
                 await FlashbackDroppedAsync(run, table);
                 continue;
             }
@@ -679,7 +679,7 @@ public class CopyRunner : ICopyRunner
             table.Created = true;
             foreach (var text in statements.Skip(1))
             {
-                await ApplyOrNoteAsync(run, table, text, "다시 만든 표에 적용하지 못한 문장이 있습니다");
+                await ApplyOrNoteAsync(run, table, text, "다시 만든 테이블에 적용하지 못한 문장이 있습니다");
             }
         }
     }
@@ -703,7 +703,7 @@ public class CopyRunner : ICopyRunner
         }
         else
         {
-            table.Note("옛 표를 휴지통에서 되살리지 못했습니다: " + Describe(back));
+            table.Note("옛 테이블을 휴지통에서 되살리지 못했습니다: " + Describe(back));
         }
     }
 
@@ -778,21 +778,21 @@ public class CopyRunner : ICopyRunner
             catch (Exception ex) when (!ct.IsCancellationRequested
                                        && (CopyErrors.IsServer(_errors, ex) || ex is InvalidOperationException or BulkDeniedException or ArgumentException))
             {
-                table.Fail("만들 표의 문장을 준비하지 못했습니다: " + SafeError(ex.Message));
+                table.Fail("만들 테이블의 문장을 준비하지 못했습니다: " + SafeError(ex.Message));
                 continue;
             }
 
             var create = await CleanupStatementAsync(run, CopyCommonStatements.RecreateDdl(table.CreateDdl[0]), CleanupTimeout);
             if (create.Status != ExecutionStatus.Succeeded)
             {
-                table.Fail("대상에 표를 만들지 못했습니다: " + Describe(create));
+                table.Fail("대상에 테이블을 만들지 못했습니다: " + Describe(create));
                 continue;
             }
 
             table.Created = true;
             table.CreatedNew = true;
             table.Preserved = PreservedDdl.Empty; // 새 표: 되살릴 트리거·권한·참조 FK 가 없다
-            table.Note("대상에 표가 없어 원본 구조로 만들었습니다.");
+            table.Note("대상에 테이블이 없어 원본 구조로 만들었습니다.");
             if (CrossNote(built) is { } crossNote)
             {
                 table.Note(crossNote);
@@ -805,7 +805,7 @@ public class CopyRunner : ICopyRunner
 
             foreach (var text in table.CreateDdl.Skip(1))
             {
-                await ApplyOrNoteAsync(run, table, text, "만든 표에 적용하지 못한 문장이 있습니다");
+                await ApplyOrNoteAsync(run, table, text, "만든 테이블에 적용하지 못한 문장이 있습니다");
             }
         }
     }
@@ -831,23 +831,23 @@ public class CopyRunner : ICopyRunner
             }
             catch (Exception ex) when (IsCleanupFailure(ex))
             {
-                run.Notices.Add($"{t.Name}: 만든 표를 지우지 못했습니다: {SafeError(ex.Message)}");
+                run.Notices.Add($"{t.Name}: 만든 테이블을 지우지 못했습니다: {SafeError(ex.Message)}");
             }
 
             if (r is { Status: ExecutionStatus.Succeeded })
             {
                 t.Purged = true;
-                t.Degrade("적재를 끝내지 못해 이번에 만든 표를 지웠습니다(DROP … PURGE). 다시 실행하면 다시 만듭니다.");
-                run.Notices.Add($"{t.Name}: 적재를 끝내지 못해 이번에 만든 표 {t.TargetName} 을(를) 지웠습니다(DROP … PURGE).");
+                t.Degrade("적재를 끝내지 못해 이번에 만든 테이블을 지웠습니다(DROP … PURGE). 다시 실행하면 다시 만듭니다.");
+                run.Notices.Add($"{t.Name}: 적재를 끝내지 못해 이번에 만든 테이블 {t.TargetName} 을(를) 지웠습니다(DROP … PURGE).");
                 continue;
             }
 
             if (r is not null)
             {
-                run.Log("만든 표를 지우지 못했습니다: " + Describe(r), CopyLogKind.Warning, t.Name);
+                run.Log("만든 테이블을 지우지 못했습니다: " + Describe(r), CopyLogKind.Warning, t.Name);
             }
 
-            var message = $"적재를 끝내지 못했고 이번에 만든 표 {t.TargetName} 을(를) 지우지 못했습니다. 직접 지우세요: {drop.Text}";
+            var message = $"적재를 끝내지 못했고 이번에 만든 테이블 {t.TargetName} 을(를) 지우지 못했습니다. 직접 지우세요: {drop.Text}";
             t.Degrade(message);
             run.Notices.Add($"{t.Name}: {message}");
         }
@@ -862,7 +862,7 @@ public class CopyRunner : ICopyRunner
         }
 
         await record.RecordStatementAsync(
-            $"-- 보존 DDL: 다시 만들 표 {string.Join(", ", plans.Select(p => run.Table(p).TargetName))}(옛 표는 휴지통으로). 다시 만들기가 끝나지 않았으면 아래 문장을 직접 실행하세요.", ct);
+            $"-- 보존 DDL: 다시 만들 테이블 {string.Join(", ", plans.Select(p => run.Table(p).TargetName))}(옛 테이블은 휴지통으로). 다시 만들기가 끝나지 않았으면 아래 문장을 직접 실행하세요.", ct);
         foreach (var plan in plans)
         {
             var t = run.Table(plan);
@@ -892,7 +892,7 @@ public class CopyRunner : ICopyRunner
             var r = await CleanupStatementAsync(run, _dialect.DropConstraint(fk), CleanupTimeout);
             if (r.Status != ExecutionStatus.Succeeded)
             {
-                table.Fail($"이 표를 참조하는 FK {fk.Owner}.{fk.Name} 을(를) 먼저 떼어 내지 못해 표를 지우지 않았습니다: {Describe(r)}");
+                table.Fail($"이 테이블을 참조하는 FK {fk.Owner}.{fk.Name} 을(를) 먼저 떼어 내지 못해 테이블을 지우지 않았습니다: {Describe(r)}");
                 run.Abort($"{table.Name}: 참조 FK 를 떼어 내지 못해 복사를 멈췄습니다. 떼어 낸 FK 는 다시 붙입니다.");
                 return false;
             }
@@ -920,20 +920,20 @@ public class CopyRunner : ICopyRunner
                 var recycled = children.Count > 0 ? _dialect.RecycledChildForeignKeyNote(children) : null;
                 var name = ErrorNameNote(_dialect.ReferencedByForeignKeysErrorName);
                 table.Fail(recycled is null
-                    ? $"대상 계정에 보이지 않는 FK(다른 스키마)가 이 표를 참조하고 있어 지우지 않았습니다{name}. 그 FK 를 확인하거나 대상 처리를 바꾸세요."
-                    : $"이 표를 참조하는 FK 가 남아 있어 지우지 않았습니다{name}. {recycled} 아니면 대상 계정에 보이지 않는 FK(다른 스키마)일 수도 있습니다. 그 FK 를 확인하거나 대상 처리를 바꾸세요.");
-                run.Abort($"{table.Name}: 참조 FK 때문에 표를 지우지 않고 멈췄습니다. 떼어 낸 FK 는 다시 붙입니다.");
+                    ? $"대상 계정에 보이지 않는 FK(다른 스키마)가 이 테이블을 참조하고 있어 지우지 않았습니다{name}. 그 FK 를 확인하거나 대상 처리를 바꾸세요."
+                    : $"이 테이블을 참조하는 FK 가 남아 있어 지우지 않았습니다{name}. {recycled} 아니면 대상 계정에 보이지 않는 FK(다른 스키마)일 수도 있습니다. 그 FK 를 확인하거나 대상 처리를 바꾸세요.");
+                run.Abort($"{table.Name}: 참조 FK 때문에 테이블을 지우지 않고 멈췄습니다. 떼어 낸 FK 는 다시 붙입니다.");
                 return false;
             }
 
             if (!await TableGoneAsync(run, owner, table.TableName))
             {
-                table.Fail("표를 지우지 못했습니다: " + Describe(drop));
-                run.Abort($"{table.Name}: 표를 지우지 못해 복사를 멈췄습니다. 이미 지운 표는 다시 만들고 트리거·권한·FK 를 되살립니다.");
+                table.Fail("테이블을 지우지 못했습니다: " + Describe(drop));
+                run.Abort($"{table.Name}: 테이블을 지우지 못해 복사를 멈췄습니다. 이미 지운 테이블은 다시 만들고 트리거·권한·FK 를 되살립니다.");
                 return false;
             }
 
-            table.Note("DROP 결과를 받지 못했지만 표가 없어 지운 것으로 봅니다.");
+            table.Note("DROP 결과를 받지 못했지만 테이블이 없어 지운 것으로 봅니다.");
         }
 
         // 지운 표는 비었다: 「지운 뒤 적재를 끝내지 못함」 알림이 이 표에도 걸린다(DDL 이라 바로 확정).
@@ -1036,7 +1036,7 @@ public class CopyRunner : ICopyRunner
             {
                 if (run.ByTarget(t.Owner, parent) is { Purged: true } or { CreateRequested: true, Created: false })
                 {
-                    var message = $"부모 표 {parent} 를 이번에 만들지 못했거나 적재를 끝내지 못해 지웠으므로 FK 를 만들지 않았습니다. 다시 실행하세요.";
+                    var message = $"부모 테이블 {parent} 를 이번에 만들지 못했거나 적재를 끝내지 못해 지웠으므로 FK 를 만들지 않았습니다. 다시 실행하세요.";
                     t.Degrade(message);
                     run.Notices.Add($"{t.Name}: {message}");
                     continue;
@@ -1044,7 +1044,7 @@ public class CopyRunner : ICopyRunner
 
                 if (run.ByTarget(t.Owner, parent) is { Dropped: true, Created: false })
                 {
-                    var message = $"부모 표 {parent} 를 다시 만들지 못해 FK 를 만들지 않았습니다. 부모를 되돌린 뒤 직접 실행하세요: {text}";
+                    var message = $"부모 테이블 {parent} 를 다시 만들지 못해 FK 를 만들지 않았습니다. 부모를 되돌린 뒤 직접 실행하세요: {text}";
                     t.Degrade(message);
                     run.Notices.Add($"{t.Name}: {message}");
                     continue;
@@ -1130,7 +1130,7 @@ public class CopyRunner : ICopyRunner
 
         if (status is null)
         {
-            RestoreFailed(run, t, $"트리거 {obj.Owner}.{obj.Name} 을 되살렸지만 컴파일 상태를 확인하지 못했습니다. 컴파일 오류로 INVALID 이면 이 표의 DML 이 막힐 수 있으니 상태를 확인하세요.");
+            RestoreFailed(run, t, $"트리거 {obj.Owner}.{obj.Name} 을 되살렸지만 컴파일 상태를 확인하지 못했습니다. 컴파일 오류로 INVALID 이면 이 테이블의 DML 이 막힐 수 있으니 상태를 확인하세요.");
             return;
         }
 
@@ -1147,7 +1147,7 @@ public class CopyRunner : ICopyRunner
         var compile = ErrorNameNote(_dialect.TriggerCompileErrorName);
         RestoreFailed(run, t, off is { Status: ExecutionStatus.Succeeded }
             ? $"트리거 {obj.Owner}.{obj.Name} 은 다시 만든 열 구조와 맞지 않아 컴파일 오류{compile}로 INVALID 입니다. 꺼 두었으니 고친 뒤 켜세요."
-            : $"트리거 {obj.Owner}.{obj.Name} 은 컴파일 오류{compile}로 INVALID 이고 끄지도 못했습니다. 이 표의 DML 이 막힐 수 있으니 직접 고치거나 지우세요.");
+            : $"트리거 {obj.Owner}.{obj.Name} 은 컴파일 오류{compile}로 INVALID 이고 끄지도 못했습니다. 이 테이블의 DML 이 막힐 수 있으니 직접 고치거나 지우세요.");
     }
 
     /// <summary>
@@ -1212,14 +1212,14 @@ public class CopyRunner : ICopyRunner
 
         if (!_dialect.IsParentKeysNotFound(r?.Error))
         {
-            RestoreFailed(run, t, $"이 표를 참조하던 FK {fk.Owner}.{fk.Name} 을(를) 되살리지 못했습니다({DescribeRestore(r)}). 직접 실행하세요: {text}");
+            RestoreFailed(run, t, $"이 테이블을 참조하던 FK {fk.Owner}.{fk.Name} 을(를) 되살리지 못했습니다({DescribeRestore(r)}). 직접 실행하세요: {text}");
             return;
         }
 
         var loose = await TryRestoreAsync(run, _dialect.AddForeignKeyWithoutValidation(text), CleanupTimeout);
         if (loose is not { Status: ExecutionStatus.Succeeded })
         {
-            RestoreFailed(run, t, $"이 표를 참조하던 FK {fk.Owner}.{fk.Name} 을(를) 되살리지 못했습니다({DescribeRestore(loose)}). 직접 실행하세요: {text}");
+            RestoreFailed(run, t, $"이 테이블을 참조하던 FK {fk.Owner}.{fk.Name} 을(를) 되살리지 못했습니다({DescribeRestore(loose)}). 직접 실행하세요: {text}");
             return;
         }
 
@@ -1274,16 +1274,16 @@ public class CopyRunner : ICopyRunner
             }
             else if (t.BinKnown && t.BinName is null)
             {
-                const string Lost = "지운 옛 표가 휴지통에 남지 않았습니다(영구 삭제: 테이블스페이스가 휴지통을 지원하지 않거나 공간이 부족했습니다).";
+                const string Lost = "지운 옛 테이블이 휴지통에 남지 않았습니다(영구 삭제: 테이블스페이스가 휴지통을 지원하지 않거나 공간이 부족했습니다).";
                 t.Degrade(Lost);
                 run.Notices.Add($"{t.Name}: {Lost}");
             }
             else
             {
                 var hint = t.Created
-                    ? $"지운 옛 표는 휴지통에 있습니다. 옛 표를 보려면 FLASHBACK TABLE {source} TO BEFORE DROP RENAME TO {SqlIdentifier.QuoteAlways(t.TableName + "_OLD")}"
+                    ? $"지운 옛 테이블은 휴지통에 있습니다. 옛 테이블을 보려면 FLASHBACK TABLE {source} TO BEFORE DROP RENAME TO {SqlIdentifier.QuoteAlways(t.TableName + "_OLD")}"
                       + " 로 다른 이름으로 되살리세요(Flashback 화면에서도 할 수 있습니다)."
-                    : $"지운 표를 다시 만들지 못해 표가 없습니다. FLASHBACK TABLE {source} TO BEFORE DROP 으로 휴지통에서 되돌리세요"
+                    : $"지운 테이블을 다시 만들지 못해 테이블이 없습니다. FLASHBACK TABLE {source} TO BEFORE DROP 으로 휴지통에서 되돌리세요"
                       + _dialect.FlashbackRestoreNote + ".";
                 t.Note(hint);
                 run.Notices.Add($"{t.Name}: {hint}");
@@ -1398,7 +1398,7 @@ public class CopyRunner : ICopyRunner
             LogDroppedColumns(run, table, shape);
 
             // 실패 행 상한을 넘거나 원본 읽기가 실패하면 이 표의 적재분만 되돌린다(앞 표의 정리·적재는 남긴다).
-            var savepoint = await ControlLoggedAsync(run, run.Target, _dialect.Savepoint(CopyCommonStatements.TableSavepoint), ct, "이 표를 되돌릴 자리");
+            var savepoint = await ControlLoggedAsync(run, run.Target, _dialect.Savepoint(CopyCommonStatements.TableSavepoint), ct, "이 테이블을 되돌릴 자리");
             if (!RunState.Accept(savepoint, table, "적재를 시작하지 못했습니다", ct))
             {
                 return;
@@ -1460,7 +1460,7 @@ public class CopyRunner : ICopyRunner
 
             if (run.Job.Options.Commit == CommitMode.PerTable)
             {
-                var commit = await ControlLoggedAsync(run, run.Target, CopyCommonStatements.Commit(), ct, "표마다 커밋");
+                var commit = await ControlLoggedAsync(run, run.Target, CopyCommonStatements.Commit(), ct, "테이블마다 커밋");
                 if (RunState.Accept(commit, table, "커밋하지 못했습니다", ct))
                 {
                     run.DeletesPersisted = true;
@@ -1673,7 +1673,7 @@ public class CopyRunner : ICopyRunner
             run.Notices.Add($"{table.Name}: 상한을 넘은 배치를 되돌리지 못했습니다: " + Describe(undo));
         }
 
-        table.Fail($"실패 행이 상한({run.Job.Options.MaxFailedRows.ToString(CultureInfo.InvariantCulture)})을 넘어 이 표를 멈췄습니다.");
+        table.Fail($"실패 행이 상한({run.Job.Options.MaxFailedRows.ToString(CultureInfo.InvariantCulture)})을 넘어 이 테이블을 멈췄습니다.");
         return true;
     }
 
@@ -1718,10 +1718,10 @@ public class CopyRunner : ICopyRunner
         }
 
         var token = ct.IsCancellationRequested ? CancellationToken.None : ct;
-        var r = await ControlLoggedAsync(run, run.Target, _dialect.RollbackToSavepoint(CopyCommonStatements.TableSavepoint), token, "이 표의 적재분 되돌리기");
+        var r = await ControlLoggedAsync(run, run.Target, _dialect.RollbackToSavepoint(CopyCommonStatements.TableSavepoint), token, "이 테이블의 적재분 되돌리기");
         if (r.Status != ExecutionStatus.Succeeded)
         {
-            run.Notices.Add("실패한 표의 적재분을 되돌리지 못했습니다: " + Describe(r));
+            run.Notices.Add("실패한 테이블의 적재분을 되돌리지 못했습니다: " + Describe(r));
             return;
         }
 
@@ -1772,7 +1772,7 @@ public class CopyRunner : ICopyRunner
             return false;
         }
 
-        var set = await ControlLoggedAsync(run, run.Source, _sourceDialect.SetTransactionReadOnly(), ct, "이 표를 읽을 시점");
+        var set = await ControlLoggedAsync(run, run.Source, _sourceDialect.SetTransactionReadOnly(), ct, "이 테이블을 읽을 시점");
         return RunState.Accept(set, table, "원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다", ct);
     }
 
@@ -1824,7 +1824,7 @@ public class CopyRunner : ICopyRunner
             run.Log(CopyLogText.Statement(run.SideOf(run.Source), query.Text)
                     + $"  [바인드 키 :K1…:K{plan.KeyColumns.Count.ToString(CultureInfo.InvariantCulture)}, {rows.Count.ToString("N0", CultureInfo.InvariantCulture)}행을 한 행씩]", CopyLogKind.Statement);
             run.Log(CopyLogText.Statement(run.SideOf(run.Target), dml.Text), CopyLogKind.Statement);
-            var savepoint = await ControlLoggedAsync(run, run.Target, _dialect.Savepoint(CopyCommonStatements.TableSavepoint), ct, "이 표를 되돌릴 자리");
+            var savepoint = await ControlLoggedAsync(run, run.Target, _dialect.Savepoint(CopyCommonStatements.TableSavepoint), ct, "이 테이블을 되돌릴 자리");
             if (!RunState.Accept(savepoint, table, "다시 넣기를 시작하지 못했습니다", ct))
             {
                 return;
@@ -1878,7 +1878,7 @@ public class CopyRunner : ICopyRunner
             }
 
             // 다시 넣기는 표마다 커밋한다. 커밋하지 못한 표의 입력 행은 끝낼 때 그대로 돌려준다(FinishAsync).
-            var commit = await ControlLoggedAsync(run, run.Target, CopyCommonStatements.Commit(), ct, "표마다 커밋");
+            var commit = await ControlLoggedAsync(run, run.Target, CopyCommonStatements.Commit(), ct, "테이블마다 커밋");
             // 연결 끊김, 또는 보내는 도중 중지로 취소되면 서버에서 확정됐는지 알 수 없다.
             table.CommitUnknown = (commit.Status == ExecutionStatus.Failed && commit.Error is { Kind: DbErrorKind.Disconnected })
                                   || (commit.Status == ExecutionStatus.Cancelled && ct.IsCancellationRequested);
@@ -1940,7 +1940,7 @@ public class CopyRunner : ICopyRunner
                 var maxCell = await ScalarAsync(run, run.Target, maxQuery, NoBinds, ct);
                 if (_codec.NumberText(maxCell) is not { } maxText)
                 {
-                    run.Log("→ 대상 표가 비어 보정하지 않습니다");
+                    run.Log("→ 대상 테이블이 비어 보정하지 않습니다");
                     continue; // 대상 표가 비었다.
                 }
 
@@ -2075,7 +2075,7 @@ public class CopyRunner : ICopyRunner
             {
                 // 지우는 DROP 도 DDL(묵시 커밋)이라 대상 트랜잭션을 끝내지 못했으면 보내지 않는다.
                 var left = run.Tables.Values.Where(t => t.CreatedNew && (!t.LoadCompleted || run.Job.Options.Commit == CommitMode.AtEnd)).Select(t => t.TargetName);
-                run.Notices.Add("대상 트랜잭션을 끝내지 못해 적재를 끝내지 못한 새 표를 지우지 않았습니다. 세션을 정리한 뒤 직접 지우세요(DROP … PURGE): " + string.Join(", ", left));
+                run.Notices.Add("대상 트랜잭션을 끝내지 못해 적재를 끝내지 못한 새 테이블을 지우지 않았습니다. 세션을 정리한 뒤 직접 지우세요(DROP … PURGE): " + string.Join(", ", left));
             }
 
             if (run.Disabled.Count > 0)
@@ -2090,7 +2090,7 @@ public class CopyRunner : ICopyRunner
             {
                 // 되살리기도 DDL 이라 미커밋 행을 확정한다. 문장 원문은 NoteRecreated 가 표마다 남긴다.
                 run.RestoreFailed = true;
-                run.Notices.Add("대상 트랜잭션을 끝내지 못해 다시 만든 표의 트리거·권한·참조 FK 를 되살리지 않았습니다. 세션을 정리한 뒤 아래 DDL 을 직접 실행하세요.");
+                run.Notices.Add("대상 트랜잭션을 끝내지 못해 다시 만든 테이블의 트리거·권한·참조 FK 를 되살리지 않았습니다. 세션을 정리한 뒤 아래 DDL 을 직접 실행하세요.");
             }
         }
 
@@ -2207,7 +2207,7 @@ public class CopyRunner : ICopyRunner
                        CopyOutcome.Stopped => "끝: 중지",
                        _ => "끝: 실패",
                    })
-                   + $" · 표 {results.Count.ToString(CultureInfo.InvariantCulture)}개(성공 {results.Count(r => r.Outcome == CopyOutcome.Succeeded).ToString(CultureInfo.InvariantCulture)})"
+                   + $" · 테이블 {results.Count.ToString(CultureInfo.InvariantCulture)}개(성공 {results.Count(r => r.Outcome == CopyOutcome.Succeeded).ToString(CultureInfo.InvariantCulture)})"
                    + $" · {run.Tables.Values.Sum(t => t.Loaded).ToString("N0", CultureInfo.InvariantCulture)}행 넣음"
                    + $" · 실패 행 {run.FailedRows.Count.ToString("N0", CultureInfo.InvariantCulture)}"
                    + " · 걸린 시간 " + CopyLogText.Elapsed(run.Clock.Elapsed);
@@ -2242,7 +2242,7 @@ public class CopyRunner : ICopyRunner
             {
                 if (t.Created)
                 {
-                    t.Degrade("표를 지우고 다시 만들었지만 적재를 끝내지 못했습니다(비어 있거나 일부만 들어 있습니다). 다시 실행하거나 휴지통에서 되돌리세요.");
+                    t.Degrade("테이블을 지우고 다시 만들었지만 적재를 끝내지 못했습니다(비어 있거나 일부만 들어 있습니다). 다시 실행하거나 휴지통에서 되돌리세요.");
                 }
             }
             else
@@ -2253,7 +2253,7 @@ public class CopyRunner : ICopyRunner
 
         if (tables.Count > 0)
         {
-            run.Notices.Add("대상 행을 지운 뒤 적재를 끝내지 못한 표가 있습니다(" + string.Join(", ", tables.Select(t => t.Name))
+            run.Notices.Add("대상 행을 지운 뒤 적재를 끝내지 못한 테이블이 있습니다(" + string.Join(", ", tables.Select(t => t.Name))
                             + "). 다시 실행하면 같은 결과가 됩니다.");
         }
     }
@@ -2304,25 +2304,25 @@ public class CopyRunner : ICopyRunner
         // 새로 만든 표(「없으면 만들기」)는 옛 표가 없다: 비어 있다고만 알린다(끝낼 때 적재를 끝내지 못한 표는 지운다, PurgeUnloadedNewTablesAsync).
         foreach (var t in run.Tables.Values.Where(t => t.CreatedNew && t.LoadCompleted && !t.Confirmed && run.Job.Options.Commit != CommitMode.AtEnd))
         {
-            t.Degrade("적재를 되돌려 이번에 만든 표가 비어 있습니다. 다시 실행하세요(표가 있으므로 만들지 않고 규칙대로 넣습니다).");
+            t.Degrade("적재를 되돌려 이번에 만든 테이블이 비어 있습니다. 다시 실행하세요(테이블이 있으므로 만들지 않고 규칙대로 넣습니다).");
         }
 
         var emptied = run.Tables.Values.Where(t => t.Created && !t.CreatedNew && t.LoadCompleted && !t.Confirmed).ToList();
         foreach (var t in emptied)
         {
-            t.Degrade("적재를 되돌려 다시 만든 표가 비어 있습니다(DROP·CREATE 는 되돌릴 수 없습니다). 옛 행은 휴지통의 옛 표에 있습니다. 다시 실행하세요.");
+            t.Degrade("적재를 되돌려 다시 만든 테이블이 비어 있습니다(DROP·CREATE 는 되돌릴 수 없습니다). 옛 행은 휴지통의 옛 테이블에 있습니다. 다시 실행하세요.");
         }
 
         if (emptied.Count > 0)
         {
-            run.Notices.Add("다시 만든 표(" + string.Join(", ", emptied.Select(t => t.Name))
-                            + ")는 적재를 되돌려 비어 있습니다. DROP·CREATE 는 되돌릴 수 없어 옛 행은 휴지통의 옛 표에 있습니다.");
+            run.Notices.Add("다시 만든 테이블(" + string.Join(", ", emptied.Select(t => t.Name))
+                            + ")는 적재를 되돌려 비어 있습니다. DROP·CREATE 는 되돌릴 수 없어 옛 행은 휴지통의 옛 테이블에 있습니다.");
         }
 
         if (run.Job.Options.Commit == CommitMode.AtEnd && !run.Stopped)
         {
             run.Notices.Add(run.Tables.Values.Any(t => t.Created)
-                ? "「모두 끝난 뒤 한 번 커밋」이라 실패 때문에 적재를 되돌렸습니다(다시 만든 표의 DROP·CREATE 는 되돌리지 못합니다)."
+                ? "「모두 끝난 뒤 한 번 커밋」이라 실패 때문에 적재를 되돌렸습니다(다시 만든 테이블의 DROP·CREATE 는 되돌리지 못합니다)."
                 : "「모두 끝난 뒤 한 번 커밋」이라 실패 때문에 모든 변경을 되돌렸습니다.");
             run.RolledBackAll = true;
         }
@@ -2651,7 +2651,7 @@ public class CopyRunner : ICopyRunner
                 dropped = DroppedColumns(cross, plan, target);
                 if (plan.KeyColumns.FirstOrDefault(k => dropped.Any(d => string.Equals(d.Name, k, StringComparison.Ordinal))) is { } lostKey)
                 {
-                    throw new InvalidOperationException($"{plan.Rule.Table}.{lostKey}: 키 열을 대상 DBMS 로 옮길 형식이 없어 이 표를 복사할 수 없습니다.");
+                    throw new InvalidOperationException($"{plan.Rule.Table}.{lostKey}: 키 열을 대상 DBMS 로 옮길 형식이 없어 이 테이블을 복사할 수 없습니다.");
                 }
 
                 copyColumns = [.. kept.Select(x => x.Column.Name)];

@@ -269,7 +269,7 @@ public class TuningStatsTests
         var vm = StatsVm(service);
         await vm.LoadAsync();
         Assert.Equal(TuningPanelState.Denied, vm.State);
-        Assert.Equal("이 계정으로 볼 수 없는 표", vm.HintTitle);
+        Assert.Equal("이 계정으로 볼 수 없는 테이블", vm.HintTitle);
         Assert.False(vm.IsBusy);
 
         service.Failure = new InvalidOperationException("ORA-01031: insufficient privileges");

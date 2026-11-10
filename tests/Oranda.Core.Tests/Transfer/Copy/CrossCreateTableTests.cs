@@ -88,7 +88,7 @@ public sealed class CrossCreateTableTests
         ])
         {
             Constraints = [new ConstraintInfo("PK_T", ConstraintKind.PrimaryKey, ["ID"])],
-            Comment = "표",
+            Comment = "테이블",
         };
 
         var built = CrossTableMap.Build(Dbms.Oracle, Dbms.Oracle, table, "DST", NoJobTables);

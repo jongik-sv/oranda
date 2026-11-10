@@ -93,7 +93,7 @@ public sealed class TableFinderTests : IDisposable
 
         vm.FilterText = "zzz";
         Assert.Empty(vm.Rows);
-        Assert.Equal("「zzz」 와 맞는 표가 없습니다", vm.EmptyText);
+        Assert.Equal("「zzz」 와 맞는 테이블이 없습니다", vm.EmptyText);
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public sealed class TableFinderTests : IDisposable
         Assert.Equal(3, vm.PickedCount);
         Assert.True(vm.CanAdd);
         Assert.Equal("선택한 3개 추가", vm.AddButtonText);
-        Assert.Contains("고른 표 3개", vm.PickedText, StringComparison.Ordinal);
+        Assert.Contains("고른 테이블 3개", vm.PickedText, StringComparison.Ordinal);
         Assert.Equal(
             [new DbObjectRef("APP", "MO_HEADER", "TABLE"), new DbObjectRef("APP", "MO_LINE", "TABLE"), new DbObjectRef("APP", "ORD_SYN", "SYNONYM")],
             vm.PickedTables.OrderBy(t => t.Name, StringComparer.Ordinal));
@@ -245,15 +245,15 @@ public sealed class TableFinderTests : IDisposable
     [Fact]
     public async Task Load_failure_shows_the_reason()
     {
-        var loader = new Loader { Failure = new InvalidOperationException("ORA-00942: 표가 없습니다") };
+        var loader = new Loader { Failure = new InvalidOperationException("ORA-00942: 테이블이 없습니다") };
         var (vm, _) = await FinderAsync(loader: loader);
 
         Assert.Empty(vm.Rows);
         Assert.False(vm.IsLoading);
-        Assert.Equal("APP 계정의 표를 읽지 못했습니다: ORA-00942: 표가 없습니다", vm.EmptyText);
+        Assert.Equal("APP 계정의 테이블을 읽지 못했습니다: ORA-00942: 테이블이 없습니다", vm.EmptyText);
 
         vm.FilterText = "mo"; // 검색 값을 바꿔도 이유가 지워지지 않는다
-        Assert.Equal("APP 계정의 표를 읽지 못했습니다: ORA-00942: 표가 없습니다", vm.EmptyText);
+        Assert.Equal("APP 계정의 테이블을 읽지 못했습니다: ORA-00942: 테이블이 없습니다", vm.EmptyText);
         vm.FilterText = string.Empty;
 
         loader.Failure = null; // 실패한 계정은 다시 고르면 다시 읽는다
@@ -446,7 +446,7 @@ public sealed class TableFinderTests : IDisposable
         loader.ByOwner["APP"] =
         [
             .. AppTables,
-            new("APP", "MO_PRODUCTION_ORDER_HISTORY_ARCHIVE", "TABLE", "제조 오더 이력 보관(오래된 오더를 옮겨 두는 표, 조회 전용)"),
+            new("APP", "MO_PRODUCTION_ORDER_HISTORY_ARCHIVE", "TABLE", "제조 오더 이력 보관(오래된 오더를 옮겨 두는 테이블, 조회 전용)"),
             new("APP", "MO_SYN", "SYNONYM", "다른 계정 제조 오더"),
         ];
         var vm = new TableFinderViewModel(["APP", "APP2"], "APP", loader.Load, (_, table) => table == "MO_LINE");

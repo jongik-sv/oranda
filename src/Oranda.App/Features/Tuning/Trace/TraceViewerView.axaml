@@ -128,7 +128,7 @@
                   SelectedIndex="{Binding SortIndex, Mode=TwoWay}" IsEnabled="{Binding IsSummaryView}" AutomationProperties.Name="정렬" />
         <Separator Classes="toolbar" />
         <Button x:Name="CopyButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding IsReady}"
-                ToolTip.Tip="요약 표 또는 보이는 본문 줄을 클립보드에 복사" />
+                ToolTip.Tip="요약 목록 또는 보이는 본문 줄을 클립보드에 복사" />
         <Button x:Name="SaveButton" Classes="tool" Content="저장" icons:ButtonIcon.Key="exportFile" IsEnabled="{Binding IsReady}"
                 ToolTip.Tip="요약 또는 보이는 본문 줄을 파일로 저장" />
         <Separator Classes="toolbar" />

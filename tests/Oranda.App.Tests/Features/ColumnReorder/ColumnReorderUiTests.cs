@@ -103,7 +103,7 @@ public class ColumnReorderUiTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(vm.HasBlockReasons);
-        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("외부 표", StringComparison.Ordinal) == true);
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("외부 테이블", StringComparison.Ordinal) == true);
         window.Close();
     });
 

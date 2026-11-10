@@ -12,7 +12,7 @@ public static class TuningReportText
         TuningReportSection.Plans => L(en, "실행 계획", "Execution plans"),
         TuningReportSection.Graph => L(en, "계획 그래프", "Plan graph"),
         TuningReportSection.ExecStats => L(en, "실행 통계", "Execution statistics"),
-        TuningReportSection.ObjectStats => L(en, "표·인덱스·열 통계", "Table, index and column statistics"),
+        TuningReportSection.ObjectStats => L(en, "테이블·인덱스·열 통계", "Table, index and column statistics"),
         TuningReportSection.ChildCursors => L(en, "자식 커서·불일치 사유", "Child cursors and mismatch reasons"),
         TuningReportSection.Waits => L(en, "대기 분해", "Wait breakdown"),
         TuningReportSection.Awr => L(en, "AWR 계획 이력", "AWR plan history"),

@@ -265,9 +265,9 @@
                       </ComboBox.ItemTemplate>
                     </ComboBox>
                     <TextBlock Grid.Row="2" Classes="field" Text="기본 계정"
-                               ToolTip.Tip="표 이름만 적어 더할 때 먼저 찾는 원본 계정입니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다. 다른 계정의 표는 계정.표로 적거나 시노님으로 더합니다." />
+                               ToolTip.Tip="테이블 이름만 적어 더할 때 먼저 찾는 원본 계정입니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다. 다른 계정의 테이블은 계정.테이블로 적거나 시노님으로 더합니다." />
                     <TextBox Grid.Row="2" Grid.Column="1" Classes="compact" Text="{Binding SourceOwner, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="원본 기본 계정"
-                             ToolTip.Tip="표 이름만 적어 더할 때 먼저 찾는 원본 계정입니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다. 다른 계정의 표는 계정.표로 적거나 시노님으로 더합니다." />
+                             ToolTip.Tip="테이블 이름만 적어 더할 때 먼저 찾는 원본 계정입니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다. 다른 계정의 테이블은 계정.테이블로 적거나 시노님으로 더합니다." />
                     <CheckBox Grid.Row="3" Grid.ColumnSpan="2" Classes="compact" Content="같은 시점으로 읽기" IsChecked="{Binding ConsistentRead}"
                               ToolTip.Tip="원본 세션을 읽기 전용 트랜잭션 하나로 열어 모든 테이블을 같은 시점으로 읽습니다. 끄면 테이블마다 따로 읽습니다." />
                   </Grid>
@@ -293,9 +293,9 @@
                       </ComboBox.ItemTemplate>
                     </ComboBox>
                     <TextBlock Grid.Row="2" Classes="field" Text="기본 계정"
-                               ToolTip.Tip="기본 원본 계정의 표를 넣을 대상 계정입니다. 다른 원본 계정의 표는 같은 이름의 계정에 넣고, 표마다 오른쪽 칸에서 바꿀 수 있습니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다." />
+                               ToolTip.Tip="기본 원본 계정의 테이블을 넣을 대상 계정입니다. 다른 원본 계정의 테이블은 같은 이름의 계정에 넣고, 테이블마다 오른쪽 칸에서 바꿀 수 있습니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다." />
                     <TextBox Grid.Row="2" Grid.Column="1" Classes="compact" Text="{Binding TargetOwner, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="대상 기본 계정"
-                             ToolTip.Tip="기본 원본 계정의 표를 넣을 대상 계정입니다. 다른 원본 계정의 표는 같은 이름의 계정에 넣고, 표마다 오른쪽 칸에서 바꿀 수 있습니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다." />
+                             ToolTip.Tip="기본 원본 계정의 테이블을 넣을 대상 계정입니다. 다른 원본 계정의 테이블은 같은 이름의 계정에 넣고, 테이블마다 오른쪽 칸에서 바꿀 수 있습니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다." />
                     <TextBlock Grid.Row="3" Classes="field" Text="커밋" />
                     <ComboBox Grid.Row="3" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" ItemsSource="{Binding CommitModes}" SelectedItem="{Binding Commit}" AutomationProperties.Name="커밋 단위">
                       <ComboBox.ItemTemplate>
@@ -348,7 +348,7 @@
                     <TextBlock Grid.Row="6" Grid.Column="2" Text="행씩" VerticalAlignment="Center" Classes="dim" />
                     <TextBlock Grid.Row="7" Classes="field" Text="실패 상한" />
                     <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="1" Maximum="100000" Increment="10" FormatString="0" Value="{Binding MaxFailedRows}"
-                                   AutomationProperties.Name="실패 행 상한" ToolTip.Tip="한 표에서 넣지 못한 행이 이 수를 넘으면 그 표를 멈춥니다" />
+                                   AutomationProperties.Name="실패 행 상한" ToolTip.Tip="한 테이블에서 넣지 못한 행이 이 수를 넘으면 그 테이블을 멈춥니다" />
                     <TextBlock Grid.Row="7" Grid.Column="2" Text="행" VerticalAlignment="Center" Classes="dim" />
                   </Grid>
                 </Border>
@@ -488,7 +488,7 @@
                                      TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SourceName}" />
                           <TextBlock Grid.Column="2" Text="{Binding SynonymText}" IsVisible="{Binding HasSynonym}" Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}"
                                      VerticalAlignment="Center" TextTrimming="CharacterEllipsis" AutomationProperties.Name="더할 때 적은 시노님"
-                                     ToolTip.Tip="이 이름(시노님)으로 더했습니다. 복사는 저장된 실제 표로 합니다." />
+                                     ToolTip.Tip="이 이름(시노님)으로 더했습니다. 복사는 저장된 실제 테이블로 합니다." />
                         </Grid>
                       </DockPanel>
                     </Border>
@@ -499,12 +499,12 @@
                           <!-- 원본 계정(바꾸려면 표를 다시 더한다) · 대상 계정(고르거나 적는다) -->
                           <TextBlock Text="원본 계정" />
                           <TextBlock x:Name="RuleSourceOwnerText" Grid.Column="1" Text="{Binding SourceOwner}" Classes="mono" VerticalAlignment="Center"
-                                     AutomationProperties.Name="원본 계정" ToolTip.Tip="원본 계정은 바꿀 수 없습니다. 다른 계정의 표는 계정.표로 다시 추가하세요." />
+                                     AutomationProperties.Name="원본 계정" ToolTip.Tip="원본 계정은 바꿀 수 없습니다. 다른 계정의 테이블은 계정.테이블로 다시 추가하세요." />
                           <TextBlock Grid.Row="1" Text="대상 계정" />
                           <!-- 글자는 코드(SyncRulePanel)가 고른 규칙과 맞춘다: 바인딩으로 두면 규칙을 바꾸는 순간 앞 규칙에 새 규칙 값이 써진다. -->
                           <ComboBox x:Name="TargetOwnerBox" Grid.Row="1" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch" IsEditable="True"
                                     AutomationProperties.Name="대상 계정" PlaceholderText="{Binding DefaultTarget}"
-                                    ToolTip.Tip="이 표를 넣을 대상 계정입니다. 고르거나 직접 적습니다.">
+                                    ToolTip.Tip="이 테이블을 넣을 대상 계정입니다. 고르거나 직접 적습니다.">
                             <ComboBox.ItemTemplate>
                               <DataTemplate x:DataType="dc:TargetOwnerOption">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -540,8 +540,8 @@
                           <!-- 대상에 같은 이름 표가 없으면 원본 구조로 만든 뒤 넣는다. 다시 만들기는 이미 만들므로 끈다(값도 false). -->
                           <StackPanel Grid.Row="6" Grid.Column="1" Spacing="1">
                             <CheckBox x:Name="CreateIfMissingBox" Classes="compact" IsChecked="{Binding CreateIfMissing}" IsEnabled="{Binding CanCreateIfMissing}"
-                                      Content="대상에 표가 없으면 원본 구조로 만들기" AutomationProperties.Name="대상에 표가 없으면 원본 구조로 만들기"
-                                      ToolTip.Tip="대상 계정에 같은 이름의 표가 없을 때 원본 구조로 만든 뒤 넣습니다. 개발 접속에서만 만들 수 있고, 표가 이미 있으면 지금처럼 처리합니다. 「테이블 다시 만들기」에는 쓰지 않습니다." />
+                                      Content="대상에 테이블이 없으면 원본 구조로 만들기" AutomationProperties.Name="대상에 테이블이 없으면 원본 구조로 만들기"
+                                      ToolTip.Tip="대상 계정에 같은 이름의 테이블이 없을 때 원본 구조로 만든 뒤 넣습니다. 개발 접속에서만 만들 수 있고, 테이블이 이미 있으면 지금처럼 처리합니다. 「테이블 다시 만들기」에는 쓰지 않습니다." />
                             <TextBlock Text="개발 접속에서만 만들 수 있습니다" Classes="dim" TextWrapping="Wrap" Margin="22,0,0,0"
                                        FontSize="{DynamicResource OrandaFontSizeSmall}" />
                           </StackPanel>
@@ -606,7 +606,7 @@
                         <!-- 마스킹 -->
                         <StackPanel Spacing="4">
                           <TextBlock Classes="section-label" Text="마스킹" Margin="0,4,0,0" ToolTip.Tip="대상에 넣기 전에 값을 바꿉니다" />
-                          <TextBlock Text="대상에 넣기 전에 바꿉니다. 여러 표의 조인 키면 해시를 쓰세요." Classes="dim" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                          <TextBlock Text="대상에 넣기 전에 바꿉니다. 여러 테이블의 조인 키면 해시를 쓰세요." Classes="dim" TextWrapping="Wrap" FontSize="{DynamicResource OrandaFontSizeSmall}" />
                           <ItemsControl ItemsSource="{Binding Masks}">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="dc:MaskRowViewModel">

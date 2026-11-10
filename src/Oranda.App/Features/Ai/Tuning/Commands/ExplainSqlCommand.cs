@@ -55,7 +55,7 @@ public sealed class ExplainSqlCommand : AiCommandSpec
     public override bool SupportsCustomCli => true;
 
     /// <summary>기타 CLI 로 보낸 뒤 대화 창 첫 줄에 덧붙이는 글: 문장만 보냈다는 사실.</summary>
-    internal const string CustomCliSentNoteText = "문장 글만 보냈고, DB 의 값이나 객체 정보는 보내지 않았습니다. 표·열의 뜻은 이름으로 짐작한 설명일 수 있습니다.";
+    internal const string CustomCliSentNoteText = "문장 글만 보냈고, DB 의 값이나 객체 정보는 보내지 않았습니다. 테이블·열의 뜻은 이름으로 짐작한 설명일 수 있습니다.";
 
     public override string? CustomCliSentNote => CustomCliSentNoteText;
 

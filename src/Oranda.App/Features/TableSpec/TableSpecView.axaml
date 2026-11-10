@@ -13,7 +13,7 @@
       <StackPanel Grid.Column="0" Margin="8" Spacing="6">
         <TextBlock Text="1. 대상" FontWeight="SemiBold" />
         <TextBox PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" AutomationProperties.Name="스키마" />
-        <TextBox PlaceholderText="표 이름 (* 와일드카드, 비우면 전체)" Text="{Binding NameText, Mode=TwoWay}" AutomationProperties.Name="표 이름" />
+        <TextBox PlaceholderText="테이블 이름 (* 와일드카드, 비우면 전체)" Text="{Binding NameText, Mode=TwoWay}" AutomationProperties.Name="테이블 이름" />
         <TextBlock Text="2. 형식" FontWeight="SemiBold" />
         <ComboBox x:Name="FormatBox" HorizontalAlignment="Stretch" ItemsSource="{x:Static vm:TableSpecViewModel.Formats}"
                   SelectedItem="{Binding Format, Mode=TwoWay}" AutomationProperties.Name="출력 형식">

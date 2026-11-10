@@ -190,7 +190,7 @@ public sealed partial class TableSpecViewModel : ToolPanelViewModelBase
             var targets = await ResolveTargetsAsync(ct);
             if (targets.Count == 0)
             {
-                StatusText = "조건에 맞는 표가 없다";
+                StatusText = "조건에 맞는 테이블이 없다";
                 return false;
             }
 
@@ -219,7 +219,7 @@ public sealed partial class TableSpecViewModel : ToolPanelViewModelBase
             }
 
             Progress = 100;
-            StatusText = $"표 {doc.Tables.Count}개 → {path}";
+            StatusText = $"테이블 {doc.Tables.Count}개 → {path}";
             return true;
         }
         catch (OperationCanceledException)

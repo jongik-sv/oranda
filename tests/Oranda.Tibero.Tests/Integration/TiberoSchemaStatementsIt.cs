@@ -64,7 +64,7 @@ public class TiberoSchemaStatementsIt
 
             await ExecAsync(session, _statements.PurgeItem(again).Text);
             var left = await FindRecycledAsync(session);
-            Assert.True(left is null, "Purge 문장을 실행했는데도 휴지통에 표 항목이 남아 있다");
+            Assert.True(left is null, "Purge 문장을 실행했는데도 휴지통에 테이블 항목이 남아 있다");
         }
         finally
         {

@@ -23,7 +23,7 @@ public static class DataCopyConverters
     {
         RuleKind.All => "모든 행",
         RuleKind.Period => "기간 열 + 추가 조건(AND)",
-        RuleKind.ParentKey => "부모 표와 FK 로 이은 행",
+        RuleKind.ParentKey => "부모 테이블과 FK 로 이은 행",
         RuleKind.Custom => "WHERE 절 직접 입력",
         RuleKind.Exclude => "복사하지 않음",
         _ => string.Empty,

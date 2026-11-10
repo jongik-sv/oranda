@@ -59,7 +59,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         {
             return new PrecheckReport(
                 [.. same.Select(x => new CheckItem(x.Key, "SameSourceTarget", CheckLevel.Error,
-                    $"{x.Key}: 대상 표 {x.Table} 이(가) 같은 DB 에서 원본으로 읽는 표입니다. 대상 정리가 원본 행을 지울 수 있어 실행할 수 없습니다. 대상 계정을 바꾸세요."))],
+                    $"{x.Key}: 대상 테이블 {x.Table} 이(가) 같은 DB 에서 원본으로 읽는 표입니다. 대상 정리가 원본 행을 지울 수 있어 실행할 수 없습니다. 대상 계정을 바꾸세요."))],
                 [], [], new Dictionary<string, long>());
         }
 
@@ -164,10 +164,10 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 if (source is null)
                 {
                     var hint = rule.WrittenAs is null && await IsSynonymAsync(sourceOwner, rule.Table, ct).ConfigureAwait(false)
-                        ? " 시노님 이름이면 원본 접속을 연 뒤 표를 다시 추가하세요(실제 계정·표로 풀어 저장합니다)."
+                        ? " 시노님 이름이면 원본 접속을 연 뒤 테이블을 다시 추가하세요(실제 계정·테이블로 풀어 저장합니다)."
                         : string.Empty;
                     _items.Add(new CheckItem(key, "SourceNoSelect", CheckLevel.Error,
-                        $"{key}: 원본에 표 {sourceOwner}.{rule.Table} 이(가) 없거나 SELECT 권한이 없습니다(권한이 없으면 표가 없는 것처럼 보입니다).{hint}"));
+                        $"{key}: 원본에 테이블 {sourceOwner}.{rule.Table} 이(가) 없거나 SELECT 권한이 없습니다(권한이 없으면 테이블이 없는 것처럼 보입니다).{hint}"));
                 }
 
                 // 대상은 표여야 한다(뷰·시노님·MV 에 지우고 넣지 않는다). 표가 아니거나 확인하지 못하면(조회 오류) 구조를 읽지 않고 막는다.
@@ -193,7 +193,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 {
                     _items.Add(new CheckItem(key, "TargetMissing", CheckLevel.Error, isTable is null
                         ? $"{key}: 대상 {targetOwner}.{rule.Table} 이(가) 표인지 확인하지 못했습니다(ALL_TABLES·ALL_MVIEWS 조회 실패). 확인할 수 있을 때까지 실행하지 않습니다."
-                        : $"{key}: 대상에 표 {targetOwner}.{rule.Table} 이(가) 없거나 표가 아니거나(뷰·시노님·MV) 접근 권한이 없습니다(권한이 없으면 표가 없는 것처럼 보입니다)."
+                        : $"{key}: 대상에 테이블 {targetOwner}.{rule.Table} 이(가) 없거나 테이블이 아니거나(뷰·시노님·MV) 접근 권한이 없습니다(권한이 없으면 테이블이 없는 것처럼 보입니다)."
                           + (createRefused is null ? string.Empty : $" 「없으면 만들기」를 쓸 수 없습니다: {createRefused}")));
                 }
 
@@ -294,14 +294,14 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         {
             if (!CanRecreate)
             {
-                return $"대상 접속 '{Target.Profile.Name}' 이 개발 접속이 아니라 표를 만들 수 없습니다. 개발 접속에서만 만들 수 있습니다.";
+                return $"대상 접속 '{Target.Profile.Name}' 이 개발 접속이 아니라 테이블을 만들 수 없습니다. 개발 접속에서만 만들 수 있습니다.";
             }
 
             var objects = await TryCountAsync(TargetSql("copy.object_exists"), ct, ("OWN", targetOwner), ("NAME", table)).ConfigureAwait(false);
             return objects switch
             {
                 null => "같은 이름의 객체가 있는지 확인하지 못했습니다(ALL_OBJECTS 조회 실패).",
-                > 0 => $"{targetOwner} 에 같은 이름의 표가 아닌 객체가 있습니다.",
+                > 0 => $"{targetOwner} 에 같은 이름의 테이블이 아닌 객체가 있습니다.",
                 _ => null,
             };
         }
@@ -326,7 +326,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
 
             _items.Add(new CheckItem(key, CopyCheckCodes.SynonymChanged, CheckLevel.Confirm, now.Table is { } moved
-                ? $"{key}: 더할 때 적은 시노님 {rule.WrittenAs} 이(가) 지금은 {moved.Owner}.{moved.Table} 을(를) 가리킵니다. 작업은 저장된 {saved} 를 그대로 복사합니다. 바꾸려면 표를 다시 추가하세요."
+                ? $"{key}: 더할 때 적은 시노님 {rule.WrittenAs} 이(가) 지금은 {moved.Owner}.{moved.Table} 을(를) 가리킵니다. 작업은 저장된 {saved} 를 그대로 복사합니다. 바꾸려면 테이블을 다시 추가하세요."
                 : $"{key}: 더할 때 적은 시노님 {rule.WrittenAs} 을(를) 지금 풀 수 없습니다({now.Problem}). 작업은 저장된 {saved} 를 그대로 복사합니다."));
         }
 
@@ -479,7 +479,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 return true;
             }
 
-            _items.Add(new CheckItem(Key(rule), "SourceNoSelect", CheckLevel.Error, $"{Key(rule)}: 원본 표 {SourceOwner(rule)}.{rule.Table} 에 SELECT 권한이 없습니다."));
+            _items.Add(new CheckItem(Key(rule), "SourceNoSelect", CheckLevel.Error, $"{Key(rule)}: 원본 테이블 {SourceOwner(rule)}.{rule.Table} 에 SELECT 권한이 없습니다."));
             return false;
         }
 
@@ -491,7 +491,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             if (missing.Count > 0)
             {
                 _items.Add(new CheckItem(Key(rule), "TargetNoWrite", CheckLevel.Error,
-                    $"{Key(rule)}: 대상 표 {TargetOwner(rule)}.{rule.Table} 에 필요한 권한이 없습니다: {string.Join(", ", missing)}."));
+                    $"{Key(rule)}: 대상 테이블 {TargetOwner(rule)}.{rule.Table} 에 필요한 권한이 없습니다: {string.Join(", ", missing)}."));
             }
         }
 
@@ -535,7 +535,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             if (missing.Count > 0)
             {
                 _items.Add(new CheckItem(key, "RecreateNoPrivilege", CheckLevel.Error,
-                    $"{key}: 표를 지우고 다시 만들 권한이 없습니다: {string.Join(", ", missing)}."));
+                    $"{key}: 테이블을 지우고 다시 만들 권한이 없습니다: {string.Join(", ", missing)}."));
                 return;
             }
 
@@ -557,14 +557,14 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && !IsLinkedParent(p, rule, linked))
                 .Select(c => $"{c.Name}(→{c.ReferencedTable!.Name})")
                 .ToList();
-            var message = $"{key}: 대상 표 {owner}.{rule.Table} 을(를) 지우고 원본 구조로 다시 만든 뒤 넣습니다."
+            var message = $"{key}: 대상 테이블 {owner}.{rule.Table} 을(를) 지우고 원본 구조로 다시 만든 뒤 넣습니다."
                           + dialect.RecycleBinNote(tablespace)
                           + " DROP·CREATE 는 DDL 이라 커밋 방식과 상관없이 되돌릴 수 없습니다."
-                          + $" 대상의 트리거 {Number(triggerCount)}개·다른 계정에 준 권한·이 표를 참조하던 FK 는 적재 뒤 되살립니다"
+                          + $" 대상의 트리거 {Number(triggerCount)}개·다른 계정에 준 권한·이 테이블을 참조하던 FK 는 적재 뒤 되살립니다"
                           + "(참조 FK 는 지우기 전에 떼어 내고, 대상 계정에 보이지 않는 FK 가 있으면 지우지 않고 멈춥니다).";
             if (skipped.Count > 0)
             {
-                message += $" 함께 다시 만들지 않는 표를 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
+                message += $" 함께 다시 만들지 않는 테이블을 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
             }
 
             message += CrossSkippedForeignKeyNote(rule, source, linked);
@@ -613,7 +613,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             if (!_targetAccess.Has("CREATE TABLE") && !_targetAccess.Has("CREATE ANY TABLE"))
             {
                 _items.Add(new CheckItem(key, CopyCheckCodes.CreateNoPrivilege, CheckLevel.Error,
-                    $"{key}: 표를 만들 권한이 없습니다: CREATE TABLE."));
+                    $"{key}: 테이블을 만들 권한이 없습니다: CREATE TABLE."));
                 return;
             }
 
@@ -630,12 +630,12 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 .Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && !IsLinkedParent(p, rule, linked))
                 .Select(c => $"{c.Name}(→{c.ReferencedTable!.Name})")
                 .ToList();
-            var message = $"{key}: 대상에 표 {owner}.{rule.Table} 이(가) 없어 원본 구조로 만든 뒤 넣습니다(만드는 문장은 미리 보기에 있습니다). 새 표라 대상을 지우지 않습니다."
-                          + " 넣기가 실패하면 만든 표를 휴지통 없이 지웁니다(DROP … PURGE)."
+            var message = $"{key}: 대상에 테이블 {owner}.{rule.Table} 이(가) 없어 원본 구조로 만든 뒤 넣습니다(만드는 문장은 미리 보기에 있습니다). 새 표라 대상을 지우지 않습니다."
+                          + " 넣기가 실패하면 만든 테이블을 휴지통 없이 지웁니다(DROP … PURGE)."
                           + " 만들지 않는 것: 트리거·다른 계정에 준 권한·시노님(원본 것을 가져오지 않습니다).";
             if (skipped.Count > 0)
             {
-                message += $" 함께 만들지 않는 표를 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
+                message += $" 함께 만들지 않는 테이블을 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
             }
 
             message += CrossSkippedForeignKeyNote(rule, source, linked);
@@ -770,7 +770,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
             if (inUse.Count > 0)
             {
-                blocked.Add($"대상 소유자의 다른 표가 이미 쓰는 이름 {string.Join(", ", inUse.Distinct(StringComparer.Ordinal))}");
+                blocked.Add($"대상 소유자의 다른 테이블이 이미 쓰는 이름 {string.Join(", ", inUse.Distinct(StringComparer.Ordinal))}");
             }
 
             return blocked;
@@ -886,7 +886,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             {
                 // 소유자가 아닌 쓰기 계정은 ALL_TRIGGERS·ALL_CONSTRAINTS 에서 남의 표 트리거·참조 FK 를 못 볼 수 있다.
                 _items.Add(new CheckItem(key, "TargetTriggers", CheckLevel.Pass,
-                    $"{key}: 대상 계정이 소유자가 아니라 트리거·이 표를 참조하는 FK 가 보이지 않을 수 있습니다. 있으면 복사한 행에도 트리거가 실행됩니다."));
+                    $"{key}: 대상 계정이 소유자가 아니라 트리거·이 테이블을 참조하는 FK 가 보이지 않을 수 있습니다. 있으면 복사한 행에도 트리거가 실행됩니다."));
             }
 
             return (canDisable, owned);
@@ -928,7 +928,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             var children = string.Join(", ", blocking.Select(fk => (CopyOwners.SameOwner(fk.Owner, TargetOwner(rule)) ? "" : fk.Owner + ".")
                                                                     + $"{fk.Table}({fk.Name})").Distinct(StringComparer.Ordinal));
             _items.Add(new CheckItem(Key(rule), "ChildRowsMayBlock", CheckLevel.Confirm,
-                $"{Key(rule)}: 자식 표 {children} 의 행이 남아 있으면 지울 때 {dialect.ChildRecordFoundError} 가 날 수 있습니다. 대상 처리를 PK 기준 MERGE 로 바꾸세요.")
+                $"{Key(rule)}: 자식 테이블 {children} 의 행이 남아 있으면 지울 때 {dialect.ChildRecordFoundError} 가 날 수 있습니다. 대상 처리를 PK 기준 MERGE 로 바꾸세요.")
             {
                 Choices = choices,
             });
@@ -973,7 +973,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
             catch (Exception ex) when (CopyErrors.IsNoAccess(errors, ex))
             {
-                _items.Add(new CheckItem(key, "SourceNoSelect", CheckLevel.Error, $"{key}: 원본 표(또는 부모 키 규칙의 부모 표)를 읽을 권한이 없습니다."));
+                _items.Add(new CheckItem(key, "SourceNoSelect", CheckLevel.Error, $"{key}: 원본 테이블(또는 부모 키 규칙의 부모 테이블)를 읽을 권한이 없습니다."));
             }
             catch (Exception ex) when (CopyErrors.IsServer(errors, ex))
             {
@@ -1051,7 +1051,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 if (!_creating.Contains(key) && rule.Action == TargetAction.DeleteRangeInsert && _creating.Contains(CopyOwners.ParentKey(job, rule)))
                 {
                     _items.Add(new CheckItem(key, "ParentWillBeCreated", CheckLevel.Error,
-                        $"{key}: 부모 표 {rule.Parent.ParentTable} 를 이번에 새로 만들어 비어 있어서, 부모 범위로 대상을 지우는 이 규칙은 아무것도 지우지 못합니다. 대상 처리를 바꾸거나 부모의 「없으면 만들기」를 끄세요."));
+                        $"{key}: 부모 테이블 {rule.Parent.ParentTable} 를 이번에 새로 만들어 비어 있어서, 부모 범위로 대상을 지우는 이 규칙은 아무것도 지우지 못합니다. 대상 처리를 바꾸거나 부모의 「없으면 만들기」를 끄세요."));
                 }
 
                 var parent = CopyOwners.Parent(job, rule);
@@ -1063,7 +1063,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 var sourceParent = $"{CopyOwners.ParentSource(job, rule)}.{rule.Parent.ParentTable}";
                 var targetParent = $"{CopyOwners.ParentTarget(job, rule)}.{rule.Parent.ParentTable}";
                 _items.Add(new CheckItem(key, "ParentExcluded", CheckLevel.Confirm,
-                    $"{key}: 부모 표 {sourceParent} 가 {(parent is null ? "작업에 없어" : "제외되어 있어")} 부모 전체를 기준으로 연결합니다(대상 쪽은 {targetParent})."));
+                    $"{key}: 부모 테이블 {sourceParent} 가 {(parent is null ? "작업에 없어" : "제외되어 있어")} 부모 전체를 기준으로 연결합니다(대상 쪽은 {targetParent})."));
 
                 // 작업 밖 부모는 다른 규칙이 권한을 보지 않는다: 원본 조회·대상 범위 지우기·건수 비교가 부모 표를 읽으므로 양쪽 SELECT 를 본다.
                 var sourceHeld = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, sourceParts.Catalog, sourceParts.Codec, Source, _sourceAccess,
@@ -1071,7 +1071,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 if (!sourceHeld.Contains("SELECT"))
                 {
                     _items.Add(new CheckItem(key, "SourceNoSelect", CheckLevel.Error,
-                        $"{key}: 부모 키 규칙이 읽는 원본 부모 표 {sourceParent} 에 SELECT 권한이 없습니다."));
+                        $"{key}: 부모 키 규칙이 읽는 원본 부모 테이블 {sourceParent} 에 SELECT 권한이 없습니다."));
                 }
 
                 var targetHeld = await CopyCatalogQueries.ReadObjectPrivilegesAsync(bulk, catalog, codec, Target, _targetAccess,
@@ -1079,7 +1079,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 if (!targetHeld.Contains("SELECT"))
                 {
                     _items.Add(new CheckItem(key, "TargetNoWrite", CheckLevel.Error,
-                        $"{key}: 부모 키 규칙이 대상 범위를 정할 때 읽는 대상 부모 표 {targetParent} 에 SELECT 권한이 없습니다."));
+                        $"{key}: 부모 키 규칙이 대상 범위를 정할 때 읽는 대상 부모 테이블 {targetParent} 에 SELECT 권한이 없습니다."));
                 }
             }
         }
@@ -1109,7 +1109,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             foreach (var cycle in sorted.Cycles)
             {
                 _items.Add(new CheckItem(null, "FkCycle", CheckLevel.Confirm,
-                    $"표 {string.Join(", ", cycle)} 가 외래키로 서로 이어져 있어 부모 → 자식 순서를 정할 수 없습니다. 적재 순서에 따라 실패하는 행이 생길 수 있습니다."));
+                    $"테이블 {string.Join(", ", cycle)} 가 외래키로 서로 이어져 있어 부모 → 자식 순서를 정할 수 없습니다. 적재 순서에 따라 실패하는 행이 생길 수 있습니다."));
             }
 
             var byName = plans.ToDictionary(p => Key(p.Rule), StringComparer.Ordinal);

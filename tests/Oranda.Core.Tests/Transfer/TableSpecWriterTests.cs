@@ -58,7 +58,7 @@ public class TableSpecWriterTests
         var toc = Part(zip, "xl/worksheets/sheet1.xml");
         var rows = Rows(toc);
         Assert.Equal("SCOTT 테이블 정의서", rows[0][0]);
-        Assert.Equal(["순번", "표", "주석"], rows[3]);
+        Assert.Equal(["순번", "테이블", "주석"], rows[3]);
         Assert.Equal(["1", "SCOTT.EMP", "사원 | 급여"], rows[4]);
         Assert.Equal(["2", "SCOTT.A/B:C?", string.Empty], rows[5]);
         var links = toc.Descendants(Ns + "hyperlink").Select(h => ((string?)h.Attribute("ref"), (string?)h.Attribute("location"))).ToArray();

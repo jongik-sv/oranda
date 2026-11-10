@@ -128,7 +128,7 @@ public sealed class AiChatStyleTests
 
         Assert.Equal(0, MarkdownView.ConclusionAt(MarkdownParser.Parse(Answer)));
         Assert.Equal(-1, MarkdownView.ConclusionAt(MarkdownParser.Parse("보통 문단\n\n| a | b |\n|---|---|\n| 1 | 2 |"))); // 굵지 않은 줄
-        Assert.Equal(-1, MarkdownView.ConclusionAt(MarkdownParser.Parse("**굵게**\n\n- 표 아님"))); // 뒤가 표가 아님
+        Assert.Equal(-1, MarkdownView.ConclusionAt(MarkdownParser.Parse("**굵게**\n\n- 테이블 아님"))); // 뒤가 표가 아님
     }
 
     [Fact]
@@ -246,7 +246,7 @@ public sealed class AiChatStyleTests
             Assert.Equal(2, tables.Count);
             foreach (var table in tables)
             {
-                Assert.True(table.FitWidth < 300, "표가 대화 폭을 받지 못함");
+                Assert.True(table.FitWidth < 300, "테이블이 대화 폭을 받지 못함");
                 var scroll = table.FindAncestorOfType<ScrollViewer>()!;
                 if (table.Bounds.Width <= table.FitWidth + 0.5)
                 {
@@ -259,7 +259,7 @@ public sealed class AiChatStyleTests
                 else
                 {
                     Assert.All(table.ColumnWidths.Where((_, c) => table.WrapsColumn(c)), w => Assert.True(w <= MarkdownTablePanel.MinWrapWidth + 0.5, $"글 칸({w:0})을 더 줄일 수 있는데 넘침"));
-                    Assert.True(scroll.Extent.Width > scroll.Viewport.Width, "넘치는 표가 가로로 스크롤되지 않음");
+                    Assert.True(scroll.Extent.Width > scroll.Viewport.Width, "넘치는 테이블이 가로로 스크롤되지 않음");
                 }
             }
 

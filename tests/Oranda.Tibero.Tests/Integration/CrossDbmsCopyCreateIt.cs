@@ -31,7 +31,7 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
     private const string DateFormat = "'YYYY-MM-DD HH24:MI:SS'";
     private const string TimestampFormat = "'YYYY-MM-DD HH24:MI:SS.FF9'";
 
-    private const string TableComment = "교차 만들기 표";
+    private const string TableComment = "교차 만들기 테이블";
     private const string ColumnComment = "글자 열";
 
     private static readonly ResolvedPeriod Period = new(null, null);
@@ -184,7 +184,7 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         var problems = await CheckRichStructureAsync(env, source, target, plan, names, "recreate.T2O");
         if ((await ColumnsAsync(env, target, names.Table)).Any(c => c.Name == "OLD"))
         {
-            problems.Add("옛 열 OLD 가 다시 만든 표에 남음");
+            problems.Add("옛 열 OLD 가 다시 만든 테이블에 남음");
         }
 
         if (await env.CountAsync(target, names.Table, "ID > 900") != 0)
@@ -817,10 +817,10 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
 
         var tableComment = (await env.QueryAsync(target, $"SELECT COMMENTS FROM USER_TAB_COMMENTS WHERE TABLE_NAME = '{t}'")).FirstOrDefault()?[0];
         var columnComment = (await env.QueryAsync(target, $"SELECT COMMENTS FROM USER_COL_COMMENTS WHERE TABLE_NAME = '{t}' AND COLUMN_NAME = 'VC'")).FirstOrDefault()?[0];
-        Note(env, item + ".comments", $"표 {tableComment ?? "<null>"} / VC {columnComment ?? "<null>"}");
+        Note(env, item + ".comments", $"테이블 {tableComment ?? "<null>"} / VC {columnComment ?? "<null>"}");
         if (tableComment != TableComment)
         {
-            problems.Add("표 주석이 다름");
+            problems.Add("테이블 주석이 다름");
         }
 
         if (columnComment != ColumnComment)

@@ -40,7 +40,7 @@ public static class CopyTableInput
         var text = input.Trim();
         if (text.Length == 0)
         {
-            return (null, string.Empty, "표 이름을 입력하세요.");
+            return (null, string.Empty, "테이블 이름을 입력하세요.");
         }
 
         var parts = new List<string>();
@@ -93,7 +93,7 @@ public static class CopyTableInput
         parts.Add(Finish(current, wasQuoted));
         if (parts.Count > 2 || parts.Any(p => p.Length == 0))
         {
-            return (null, string.Empty, $"{text}: 표 이름은 「표」 또는 「계정.표」 꼴로 적으세요.");
+            return (null, string.Empty, $"{text}: 테이블 이름은 「테이블」 또는 「계정.테이블」 꼴로 적으세요.");
         }
 
         return parts.Count == 2 ? (parts[0], parts[1], null) : (null, parts[0], null);
@@ -148,7 +148,7 @@ public static class CopyTableInput
         {
             return CopyTableResolution.Fail(owner is not null
                 ? $"{written}: 원본에서 찾을 수 없습니다(없거나 권한이 없습니다)."
-                : $"{written}: 원본에서 찾을 수 없습니다(기본 계정·접속 계정의 표·시노님과 PUBLIC 시노님을 봤습니다).");
+                : $"{written}: 원본에서 찾을 수 없습니다(기본 계정·접속 계정의 테이블·시노님과 PUBLIC 시노님을 봤습니다).");
         }
 
         DbObjectRef resolved;

@@ -123,7 +123,7 @@
                 <TextBlock Classes="panel-caption warning-text" Text="{x:Static vm:TuningReportDialogViewModel.BindWarning}" />
               </StackPanel>
               <StackPanel Classes="item"><CheckBox Content="계획 그래프 (SVG)" IsChecked="{Binding IncludeGraph}" /></StackPanel>
-              <StackPanel Classes="item"><CheckBox Content="표·인덱스·열 통계·히스토그램" IsChecked="{Binding IncludeObjectStats}" /></StackPanel>
+              <StackPanel Classes="item"><CheckBox Content="테이블·인덱스·열 통계·히스토그램" IsChecked="{Binding IncludeObjectStats}" /></StackPanel>
               <StackPanel Classes="item">
                 <CheckBox x:Name="WaitsBox" Content="대기 분해" IsChecked="{Binding IncludeWaits}" />
                 <TextBlock Classes="panel-caption" Text="{Binding WaitNote}" />

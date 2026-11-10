@@ -237,7 +237,7 @@ public sealed class TableLayoutView : UserControl
         var hasAudit = TableLayoutAudit.Parse(o.AuditColumns).Count > 0;
         _audit.IsEnabled = hasAudit;
         _audit.IsChecked = hasAudit && o.HideAudit;
-        ToolTip.SetTip(_audit, hasAudit ? "설정의 감사 컬럼 목록에 맞는 컬럼을 표에서 뺀다" : "설정에서 감사 컬럼을 정하세요");
+        ToolTip.SetTip(_audit, hasAudit ? "설정의 감사 컬럼 목록에 맞는 컬럼을 테이블에서 뺀다" : "설정에서 감사 컬럼을 정하세요");
         AutomationProperties.SetName(_audit, "감사 컬럼 빼기");
     }
 

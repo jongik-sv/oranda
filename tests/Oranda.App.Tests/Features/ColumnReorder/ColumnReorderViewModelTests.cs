@@ -159,9 +159,9 @@ public class ColumnReorderViewModelTests
     }
 
     [Theory]
-    [InlineData(true, false, null, "외부 표")]
-    [InlineData(false, true, null, "임시 표")]
-    [InlineData(false, false, "CL", "클러스터 표(CL)")]
+    [InlineData(true, false, null, "외부 테이블")]
+    [InlineData(false, true, null, "임시 테이블")]
+    [InlineData(false, false, "CL", "클러스터 테이블(CL)")]
     public async Task Unsupported_table_kinds_are_blocked_with_a_reason(bool external, bool temporary, string? cluster, string reason)
     {
         var (vm, _, _, _) = await OpenAsync(setup: (_, r) => r.Traits = new ColumnReorderTraits(external, temporary, cluster));

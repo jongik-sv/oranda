@@ -124,7 +124,7 @@ public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
 
     public override string ResponseRules =>
         "Response style (applies to every answer, including follow-ups; the summary field is this chat answer in Markdown): write in Korean and be brief. "
-        + "1) The cause as one bold line, for example **ORA-00942 · 표 이름 오타**. "
+        + "1) The cause as one bold line, for example **ORA-00942 · 테이블 이름 오타**. "
         + "2) Up to 3 bullets, each about 40 characters on one line, saying what was changed. "
         + "3) One line starting with > that says what the user must check before applying. "
         + "Put the corrected SQL only in the structured result (rewrites), never in the chat text. "

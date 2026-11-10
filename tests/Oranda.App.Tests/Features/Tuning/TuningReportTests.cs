@@ -261,7 +261,7 @@ public partial class TuningReportTests
         Assert.True(data.SqlText.Value!.FromEditor);
         Assert.Contains("편집기 문장을 담았습니다", html, StringComparison.Ordinal);
         Assert.Contains("자식 커서가 없어 실제 계획을 받을 수 없습니다", data.Plans.Failure, StringComparison.Ordinal);
-        Assert.Contains("계획을 받지 못해 관련 표를 알 수 없습니다", data.Objects.Failure, StringComparison.Ordinal);
+        Assert.Contains("계획을 받지 못해 관련 테이블을 알 수 없습니다", data.Objects.Failure, StringComparison.Ordinal);
         Assert.Contains("공유 풀에 이 sql_id 의 자식 커서가 없습니다.", Section(html, TuningReportSection.ChildCursors), StringComparison.Ordinal);
 
         var noText = await ReportFixtures.CollectAsync(new FakeReportTuning(), monitor: new FakeReportMonitor { Fail = true });

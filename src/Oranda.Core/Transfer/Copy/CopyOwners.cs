@@ -282,17 +282,17 @@ public static class CopyOwners
         var problems = new List<string>();
         foreach (var sequence in job.Sequences.Where(s => Find(job, s.Table) is null))
         {
-            problems.Add($"시퀀스 {sequence.Sequence}: 연결한 표 {sequence.Table} 의 규칙이 작업에 없습니다(기본 계정을 바꾸면 표 키가 달라집니다). 시퀀스 연결을 지우거나 다시 연결하세요.");
+            problems.Add($"시퀀스 {sequence.Sequence}: 연결한 테이블 {sequence.Table} 의 규칙이 작업에 없습니다(기본 계정을 바꾸면 테이블 키가 달라집니다). 시퀀스 연결을 지우거나 다시 연결하세요.");
         }
 
         foreach (var g in job.Tables.GroupBy(r => Key(job, r), StringComparer.Ordinal).Where(g => g.Count() > 1))
         {
-            problems.Add($"{g.Key}: 같은 원본 표의 규칙이 {g.Count().ToString(System.Globalization.CultureInfo.InvariantCulture)}개 있습니다. 하나만 남기세요.");
+            problems.Add($"{g.Key}: 같은 원본 테이블의 규칙이 {g.Count().ToString(System.Globalization.CultureInfo.InvariantCulture)}개 있습니다. 하나만 남기세요.");
         }
 
         foreach (var g in job.Tables.GroupBy(r => QualifiedKey(Target(job, r), r.Table), StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
         {
-            problems.Add($"대상 표 {TargetName(job, g.First())} 에 쓰는 규칙이 여럿입니다({string.Join(", ", g.Select(r => Key(job, r)))}). 대상 계정을 바꾸거나 하나만 남기세요.");
+            problems.Add($"대상 테이블 {TargetName(job, g.First())} 에 쓰는 규칙이 여럿입니다({string.Join(", ", g.Select(r => Key(job, r)))}). 대상 계정을 바꾸거나 하나만 남기세요.");
         }
 
         return problems;

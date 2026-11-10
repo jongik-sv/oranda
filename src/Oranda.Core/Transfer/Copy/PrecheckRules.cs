@@ -390,7 +390,7 @@ public static class PrecheckRules
             }
 
             items.Add(new CheckItem(table, CopyCheckCodes.KeyColumnDropped, CheckLevel.Error,
-                $"{table}.{column}: {string.Join("·", roles)} 열을 {targetDbms} 로 옮길 형식이 없어 복사할 수 없습니다. {string.Join(" ", reasons)} 이 표를 규칙에서 빼세요.") { Column = column });
+                $"{table}.{column}: {string.Join("·", roles)} 열을 {targetDbms} 로 옮길 형식이 없어 복사할 수 없습니다. {string.Join(" ", reasons)} 이 테이블을 규칙에서 빼세요.") { Column = column });
         }
 
         return items;
@@ -704,7 +704,7 @@ public static class PrecheckRules
             : " 끝 날짜를 시작보다 늦게 고르세요.";
         return new CheckItem(null, CopyCheckCodes.EmptyPeriod, CheckLevel.Error,
             string.Create(CultureInfo.InvariantCulture,
-                $"기간 {from:yyyy-MM-dd} 이상 {to:yyyy-MM-dd} 미만에 드는 날이 없어 기간 규칙 표는 한 행도 복사하지 않습니다.{hint}"));
+                $"기간 {from:yyyy-MM-dd} 이상 {to:yyyy-MM-dd} 미만에 드는 날이 없어 기간 규칙 테이블은 한 행도 복사하지 않습니다.{hint}"));
     }
 
     // ---- 계정(묶음 B) ----
@@ -727,8 +727,8 @@ public static class PrecheckRules
         var deleting = rules.Count(r => r.Action is TargetAction.DeleteAllInsert or TargetAction.DeleteRangeInsert or TargetAction.Recreate);
         var n = rules.Count.ToString(CultureInfo.InvariantCulture);
         var what = deleting == rules.Count
-            ? $"표 {n}개를 지우고 넣습니다"
-            : $"표 {n}개에 씁니다(그중 {deleting.ToString(CultureInfo.InvariantCulture)}개는 지우고 넣습니다)";
+            ? $"테이블 {n}개를 지우고 넣습니다"
+            : $"테이블 {n}개에 씁니다(그중 {deleting.ToString(CultureInfo.InvariantCulture)}개는 지우고 넣습니다)";
         return new CheckItem(null, CopyCheckCodes.OtherOwnerTargets, CheckLevel.Confirm,
             $"대상 접속 계정({sessionUser})이 아닌 계정 {string.Join(", ", owners)} 의 {what}: {string.Join(", ", rules.Select(r => CopyOwners.TargetName(job, r)))}.");
     }

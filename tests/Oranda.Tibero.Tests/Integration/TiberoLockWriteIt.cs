@@ -200,7 +200,7 @@ public class TiberoLockWriteIt(ITestOutputHelper output)
             finished = await CompletesAsync(waiting, DoneTimeout);
             if (!finished)
             {
-                output.WriteLine("[W1] 정리: B 가 A 롤백 뒤에도 끝나지 않았다. 취소를 요청하고 표 삭제를 건너뛴다(세션은 하니스가 닫는다).");
+                output.WriteLine("[W1] 정리: B 가 A 롤백 뒤에도 끝나지 않았다. 취소를 요청하고 테이블 삭제를 건너뛴다(세션은 하니스가 닫는다).");
                 await cts.CancelAsync();
             }
             else
@@ -214,7 +214,7 @@ public class TiberoLockWriteIt(ITestOutputHelper output)
             await TryAsync("B 롤백", () => b.RollbackAsync(CancellationToken.None));
             if (created)
             {
-                await TryAsync("표 삭제", () => WithTimeoutAsync(DropIfExistsAsync(a, table), DoneTimeout));
+                await TryAsync("테이블 삭제", () => WithTimeoutAsync(DropIfExistsAsync(a, table), DoneTimeout));
             }
         }
     }

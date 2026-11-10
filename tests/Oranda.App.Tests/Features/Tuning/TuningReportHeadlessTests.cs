@@ -174,7 +174,7 @@ public sealed class TuningReportHeadlessTests
             vm.ProgressValue = 68;
             vm.ProgressText = "대기 분해 표본 모으는 중… 12 / 30 초";
             vm.ProgressCount = "절 8 / 11";
-            vm.FinishedText = "끝난 절: SQL 전문 · 자식 커서·불일치 사유 · 실행 계획 · 계획 그래프 · 실행 통계 · 표·인덱스·열 통계";
+            vm.FinishedText = "끝난 절: SQL 전문 · 자식 커서·불일치 사유 · 실행 계획 · 계획 그래프 · 실행 통계 · 테이블·인덱스·열 통계";
             Pump();
             Assert.True(Named<StackPanel>(dialog, "ProgressPanel").IsVisible);
             Assert.False(Named<Button>(dialog, "CreateButton").IsVisible);

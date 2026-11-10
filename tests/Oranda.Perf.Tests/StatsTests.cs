@@ -108,13 +108,13 @@ public class StatsTests
     public void Report_writes_json_and_markdown_with_korean_verdicts()
     {
         var report = new Report("제목", "환경 한 줄");
-        report.Rows.Add(ReportRow.Create("항목 A", "ms", 16, [5, 6, 7], "p95", "비고|표 깨짐 없음"));
+        report.Rows.Add(ReportRow.Create("항목 A", "ms", 16, [5, 6, 7], "p95", "비고|테이블 깨짐 없음"));
         report.Rows.Add(ReportRow.Create("항목 B", "ms", 16, [50, 60], "median"));
         report.Rows.Add(ReportRow.Skipped("항목 C", "ms", 16, "창이 필요"));
         var md = report.ToMarkdown();
         Assert.Contains("# 제목", md, StringComparison.Ordinal);
         Assert.Contains("| 항목 A | ≤ 16.0 ms | 3 | 6.0 | 7.0 | 7.0 | p95 | 충족 |", md, StringComparison.Ordinal);
-        Assert.Contains("비고\\|표 깨짐 없음", md, StringComparison.Ordinal);
+        Assert.Contains("비고\\|테이블 깨짐 없음", md, StringComparison.Ordinal);
         Assert.Contains("| 항목 B | ≤ 16.0 ms | 2 | 55.0 | 60.0 | 60.0 | median | 초과 |", md, StringComparison.Ordinal);
         Assert.Contains("| 항목 C | ≤ 16.0 ms | 0 | - | - | - | - | 미측정 | 창이 필요 |", md, StringComparison.Ordinal);
 

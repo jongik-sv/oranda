@@ -134,7 +134,7 @@ internal static class FirstRowScenario
             await Task.Delay(200);
         }
 
-        ctx.Report.Rows.Add(ReportRow.Create("첫 행 표시: 첫 묶음 수신 → 화면에 그려짐", "ms", 100, afterPage, "p95", $"{rows} 행 표 전체 조회, 묶음 500행. 모델 Changed → 렌더 스레드가 그림. 놓친 표본 {missed}"));
+        ctx.Report.Rows.Add(ReportRow.Create("첫 행 표시: 첫 묶음 수신 → 화면에 그려짐", "ms", 100, afterPage, "p95", $"{rows} 행 테이블 전체 조회, 묶음 500행. 모델 Changed → 렌더 스레드가 그림. 놓친 표본 {missed}"));
         ctx.Report.Rows.Add(ReportRow.Create("첫 행 표시: 실행 시작 → 화면에 그려짐(서버 시간 포함)", "ms", null, wholeRun, "p95", "참고"));
     }
 }

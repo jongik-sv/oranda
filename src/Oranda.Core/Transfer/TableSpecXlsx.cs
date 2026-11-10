@@ -141,7 +141,7 @@ internal static class TableSpecXlsx
             new[] { new Cell(doc.Title, StyleTitle) },
             new[] { new Cell("생성: " + doc.GeneratedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture), StyleNormal) },
             Array.Empty<Cell>(),
-            new[] { new Cell("순번", StyleHeader), new Cell("표", StyleHeader), new Cell("주석", StyleHeader) },
+            new[] { new Cell("순번", StyleHeader), new Cell("테이블", StyleHeader), new Cell("주석", StyleHeader) },
         };
         var links = new List<(string Ref, string Location)>();
         for (var i = 0; i < doc.Tables.Count; i++)

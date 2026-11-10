@@ -150,7 +150,7 @@ public sealed class ManualCopyScreens : IDisposable
         {
             ExampleJob(MainJobId, "월말 테스트 DB 갱신", Local(2026, 11, 5, 18, 20), CopyOutcome.Succeeded, 61_420, ExampleRules(), [new SequenceRule("SEQ_CODE_ID", "CODES", "CODE_ID")]),
             ExampleJob("20261102mask", "고객 마스킹 복사", Local(2026, 11, 2, 9, 5), CopyOutcome.PartiallyFailed, 880),
-            ExampleJob("20261028code", "코드 표 동기화", Local(2026, 10, 28, 14, 40), CopyOutcome.Succeeded, 320),
+            ExampleJob("20261028code", "코드 테이블 동기화", Local(2026, 10, 28, 14, 40), CopyOutcome.Succeeded, 320),
             ExampleJob("20261020ord3", "주문 3개월 복사"),
         };
         foreach (var job in jobs)
@@ -328,7 +328,7 @@ public sealed class ManualCopyScreens : IDisposable
                 new(Named<TextBox>(window, "FilterBox"), 2),
                 new(ManualCapture.Find<CheckBox>(window, c => c.Content is string s && s == "시노님 포함"), 3),
                 new(VisibleText(window, vm.SummaryText), 4, -14, 0),
-                new(ByAutomationName<CheckBox>(window, "보이는 표 모두 고르기"), 5),
+                new(ByAutomationName<CheckBox>(window, "보이는 테이블 모두 고르기"), 5),
                 new(VisibleText(window, "이미 있음", under: list), 6, -14, 0),
                 new(ByAutomationName<CheckBox>(list, "ORDER_HIST"), 7),
                 new(VisibleText(window, vm.PickedText), 8, -14, 0),
@@ -414,7 +414,7 @@ public sealed class ManualCopyScreens : IDisposable
                 Choices = [CheckChoice.DisableTriggers],
             },
             new CheckItem("CODES", "ChildRowsMayBlock", CheckLevel.Confirm,
-                "CODES: 자식 표 ORDER_ITEMS(FK_ITEMS_CODES) 의 행이 남아 있으면 지울 때 ORA-02292 가 날 수 있습니다. 대상 처리를 PK 기준 MERGE 로 바꾸세요.")
+                "CODES: 자식 테이블 ORDER_ITEMS(FK_ITEMS_CODES) 의 행이 남아 있으면 지울 때 ORA-02292 가 날 수 있습니다. 대상 처리를 PK 기준 MERGE 로 바꾸세요.")
             {
                 Choices = [CheckChoice.SwitchToMerge, CheckChoice.DisableForeignKeys],
             },
@@ -495,12 +495,12 @@ public sealed class ManualCopyScreens : IDisposable
         var items = new[]
         {
             new CheckItem("CODES", "RecreateTable", CheckLevel.Confirm,
-                "CODES: 대상 표를 지우고 원본 구조로 다시 만든 뒤 넣습니다. 지운 표는 휴지통에 남습니다(PURGE 없음, 공간이 부족하면 휴지통 객체가 자동으로 지워질 수 있음)."
+                "CODES: 대상 테이블을 지우고 원본 구조로 다시 만든 뒤 넣습니다. 지운 테이블은 휴지통에 남습니다(PURGE 없음, 공간이 부족하면 휴지통 객체가 자동으로 지워질 수 있음)."
                 + " DROP·CREATE 는 DDL 이라 커밋 방식과 상관없이 되돌릴 수 없습니다."
-                + " 대상의 트리거 1개·다른 계정에 준 권한·이 표를 참조하던 FK 는 적재 뒤 되살립니다"
+                + " 대상의 트리거 1개·다른 계정에 준 권한·이 테이블을 참조하던 FK 는 적재 뒤 되살립니다"
                 + "(참조 FK 는 지우기 전에 떼어 내고, 대상 계정에 보이지 않는 FK 가 있으면 지우지 않고 멈춥니다)."
                 + " 원본과 다르게 만들어지는 것: 문자 길이는 글자 단위(CHAR), DEFAULT ON NULL·IDENTITY 옵션(ALWAYS·시작·증가)·DEFERRABLE PK/UK·COLLATE 은 빠지고,"
-                + " 파티션·IOT·임시 표는 일반 표가 됩니다. 되살리지 않는 것: 열 권한 2개."),
+                + " 파티션·IOT·임시 테이블은 일반 테이블이 됩니다. 되살리지 않는 것: 열 권한 2개."),
             new CheckItem("CODES", "MaskedColumns", CheckLevel.Pass, "CODES: 가리는 열이 없습니다."),
         };
 
@@ -628,7 +628,7 @@ public sealed class ManualCopyScreens : IDisposable
             log.Clear();
             void Line(int second, string phase, string? table, string body, CopyLogKind kind = CopyLogKind.Info) =>
                 log.Append(new CopyLogEntry(Local(2026, 11, 6, 10, 30, second), phase, table, body, kind));
-            Line(0, "시작", null, "작업 「월말 테스트 DB 갱신」 · prod-db → test-db · 표 2개 · 커밋 테이블마다 · 배치 5,000행 · 실패 상한 100행 · 같은 시점 읽기");
+            Line(0, "시작", null, "작업 「월말 테스트 DB 갱신」 · prod-db → test-db · 테이블 2개 · 커밋 테이블마다 · 배치 5,000행 · 실패 상한 100행 · 같은 시점 읽기");
             Line(0, "시작", null, "기간 2026-10-07 00:00:00 이상 ~ 2026-11-07 00:00:00 미만");
             Line(0, "원본 준비", null, "원본: SET TRANSACTION READ ONLY", CopyLogKind.Statement);
             Line(1, "정리", "ORDERS", "대상: DELETE FROM ACME_SALES.ORDERS WHERE ORDER_DT >= :FROM_DT AND ORDER_DT < :TO_DT  [바인드 :FROM_DT = 2026-10-07 00:00:00, :TO_DT = 2026-11-07 00:00:00]", CopyLogKind.Statement);
@@ -645,7 +645,7 @@ public sealed class ManualCopyScreens : IDisposable
             Line(9, "건수 비교", "ORDERS", "대상: SELECT COUNT(*) FROM ACME_SALES.ORDERS WHERE ORDER_DT >= :FROM_DT AND ORDER_DT < :TO_DT", CopyLogKind.Statement);
             Line(9, "건수 비교", "ORDERS", "→ 원본 15,000건 · 대상 15,000건 · 같음");
             Line(9, "마무리", null, "원본 트랜잭션을 닫지 못했습니다: ORA-03113", CopyLogKind.Error);
-            Line(9, "마무리", null, "끝: 성공 · 표 2개 · 넣음 15,120행 · 실패 0행 · 9.84초");
+            Line(9, "마무리", null, "끝: 성공 · 테이블 2개 · 넣음 15,120행 · 실패 0행 · 9.84초");
             vm.Step = DataCopyStep.Run;
             vm.Run.DetailTab = 0;
             Settle(window);

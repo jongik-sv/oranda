@@ -153,7 +153,7 @@ public sealed class AiCustomCliClosedBindingTests
         Pump();
         Assert.Equal(session.Profile.Id, rig.Router.ShownMissing);
 
-        await rig.SendAsync("이 표에서 뭘 지워도 돼?");
+        await rig.SendAsync("이 테이블에서 뭘 지워도 돼?");
 
         Assert.Null(rig.Driver.Last);
         Assert.Contains(AiTuningCustomCli.MaskingBlockedText, rig.Chat.Entries.OfType<ChatAssistantEntry>().Select(e => e.Text));
