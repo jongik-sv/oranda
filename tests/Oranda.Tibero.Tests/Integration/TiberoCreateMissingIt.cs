@@ -21,7 +21,8 @@ namespace Oranda.Tibero.Tests.Integration;
 /// <item>시나리오: 첫 계정에 <c>ORT_</c> 원본 표 둘(PK 있음·없음; CHECK·DEFAULT·일반 인덱스·표/열 주석; 글자·숫자·DATE·TIMESTAMP·LOB)을 만들고 행을 넣은 뒤,
 /// 두 번째 계정으로 「비우고 넣기 + 없으면 만들기」로 복사한다. 사전 점검이 만들기를 막지 않고, 표가 만들어지고, 값·제약·기본값·인덱스·주석이 따라오는지 본다.
 /// 두 번째 실행(표가 이미 있음)은 대상의 남은 행을 비우고 다시 넣는다.</item>
-/// <item>끝에 두 계정 모두 <c>DROP TABLE … PURGE</c>. 접속 값(계정·주소·DB)은 단언 메시지에 넣지 않는다 — 점검 항목은 코드만 싣는다.</item>
+/// <item>반대 방향(두 번째 계정 → 첫 계정)도 같은 시나리오로 돈다: 두 번째 계정에 DROP 을 막는 DDL 트리거가 있으면 앞 시험은 건너뛰고 이 시험이 실제로 만든다(결정 65).</item>
+/// <item>끝에 두 계정 모두 <c>DROP TABLE … PURGE</c>(DROP 을 막는 트리거를 본 계정은 시도하지 않음). 접속 값(계정·주소·DB)은 단언 메시지에 넣지 않는다 — 점검 항목은 코드만 싣는다.</item>
 /// </list>
 /// </summary>
 [Trait("Category", "Integration")]
@@ -50,15 +51,18 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
         var opened = new List<ISession>();
         var setup = await it.OpenAsync();
         TiberoSession? verify = null;
+        var secondGuarded = false;
         try
         {
             verify = await OpenSecondAsync(it, user2, password2, SessionPurpose.Work, readOnly: false);
             opened.Add(verify);
 
-            // 대상 계정에 DROP 을 막는 DDL 트리거가 있으면 만든 표를 지울 수 없다(#141: <owner>_NO_DROP_TRUNCATE, ODP-20102 / TBR-15163).
-            // 트리거를 끄거나 돌아가지 않고, 표를 만들기 전에 이유를 남기고 건너뛴다(결정 59).
+            // 대상 계정에 DROP 을 막는 DDL 트리거가 있으면 만든 테이블을 지울 수 없다(#141: <owner>_NO_DROP_TRUNCATE, ODP-20102 / TBR-15163).
+            // 트리거를 끄거나 돌아가지 않고, 테이블을 만들기 전에 이유를 남기고 건너뛴다(결정 59). 그 계정에는 DROP 도 시도하지 않는다(결정 65).
+            // xUnit 2 에는 실행 중 건너뜀이 없어 통과로 집계된다 — 첫 계정을 대상으로 하는 반대 방향 시험(Reverse_…)이 실제 만들기·복사·정리를 맡는다.
             if (await DropGuardAsync(verify) is { } guard)
             {
+                secondGuarded = true;
                 output.WriteLine("XC8b skipped: the target account has a DDL trigger that refuses DROP — " + guard);
                 return;
             }
@@ -74,6 +78,7 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
             // 카탈로그로 못 본 트리거라도 지우기가 트리거 오류로 거부되면 같은 이유로 건너뛴다.
             if (dropFailures.FirstOrDefault(IsTriggerRefusal) is { } refused)
             {
+                secondGuarded = true;
                 output.WriteLine("XC8b skipped: DROP was refused by a DDL trigger — " + refused);
                 return;
             }
@@ -108,18 +113,8 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
         {
             // 복사에 쓴 대상 세션(두 번째 계정)이 열려 있으면 DROP 이 막혀 표가 남는다(#138: 두 번째 계정에 ORT_CM_A·B 가 남음).
             // 그 세션들을 먼저 닫고, 확인용 세션으로 두 계정을 지운 뒤 남은 표가 있는지 보고 한 번 더 지운다.
-            foreach (var session in opened.Where(o => !ReferenceEquals(o, verify)))
-            {
-                await session.DisposeAsync();
-            }
-
-            await DropBothAsync(setup, verify);
-            if (await LeftoverAsync(setup) + (verify is null ? 0 : await LeftoverAsync(verify)) > 0)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(2));
-                await DropBothAsync(setup, verify);
-            }
-
+            // DROP 을 막는 트리거를 본 계정은 지우지 않는다(지우기 시도도 하지 않음).
+            await CleanupAsync(opened, setup, secondGuarded ? null : verify, keep: verify);
             if (verify is not null)
             {
                 await verify.DisposeAsync();
@@ -127,7 +122,113 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
         }
     }
 
-    /// <summary>이 시험이 만드는 표(<see cref="TableA"/>·<see cref="TableB"/>)가 세션 계정에 몇 개 남았는가. 읽지 못하면 0(정리를 막지 않는다).</summary>
+    /// <summary>
+    /// 반대 방향: 두 번째 계정을 원본(읽기 전용)으로, 첫 계정을 대상으로 「비우고 넣기 + 없으면 만들기」. 테이블을 만들고 지우는 쪽은 첫 계정뿐이라
+    /// 두 번째 계정에 DROP 을 막는 DDL 트리거가 있어도 만들기·복사·정리가 실제로 돈다(결정 65).
+    /// 원본 테이블은 두 번째 계정에 있어야 한다: 없으면 만들되 트리거가 있으면 지울 수 없는 테이블이 남으므로 만들지 않고 건너뛴다.
+    /// 이미 있으면(앞 실행이 남긴 테이블) 행만 지우고 다시 넣어 쓴다(DML 은 트리거가 막지 않는다).
+    /// </summary>
+    [TiberoCreateMissingFact]
+    public async Task Reverse_create_if_missing_from_the_second_account_into_the_first_creates_loads_and_keeps_structure_then_reruns()
+    {
+        await using var it = TiberoItSessions.Create();
+        if (it is null)
+        {
+            return;
+        }
+
+        var user2 = Environment.GetEnvironmentVariable("ORANDA_IT_TIBERO_USER2");
+        var password2 = Environment.GetEnvironmentVariable("ORANDA_IT_TIBERO_PASSWORD2");
+        if (string.IsNullOrEmpty(user2) || string.IsNullOrEmpty(password2) || TiberoItSessions.SkipWrite())
+        {
+            Assert.False(it.Env.RequireMode, "the second account (ORANDA_IT_TIBERO_USER2/PASSWORD2) and the write switch are required");
+            return;
+        }
+
+        var opened = new List<ISession>();
+        var target = await it.OpenAsync();
+        TiberoSession? source = null;
+        var sourceGuarded = false;
+        try
+        {
+            source = await OpenSecondAsync(it, user2, password2, SessionPurpose.Work, readOnly: false);
+            opened.Add(source);
+            var guard = await DropGuardAsync(source);
+            sourceGuarded = guard is not null;
+
+            // 대상(첫 계정)에 남은 테이블은 지운다. 남으면 만들기 시나리오가 성립하지 않는다.
+            var dropFailures = await DropBothAsync(target, null);
+            Assert.True(await LeftoverAsync(target) == 0, "tables left in the first account could not be dropped: " + string.Join(" | ", dropFailures));
+
+            // 원본(두 번째 계정) 준비.
+            switch (await LeftoverAsync(source))
+            {
+                case 2:
+                    await RefillSourceRowsAsync(source);
+                    break;
+                case 0 when !sourceGuarded:
+                    await CreateSourcesAsync(source);
+                    break;
+                case 1 when !sourceGuarded:
+                    await DropBothAsync(source, null);
+                    await CreateSourcesAsync(source);
+                    break;
+                default:
+                    output.WriteLine("XC8b reverse skipped: the source tables are missing in the second account and a DDL trigger refuses DROP there, so they are not created — " + guard);
+                    return;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(2)); // 방금 만든·고친 테이블을 읽기 전용 트랜잭션이 읽을 수 있도록 시각을 지나게 한다.
+
+            // ---- 1회차: 첫 계정에 테이블이 없다 → 만들고 넣는다 ----
+            var first = await CopyAsync(it, user2, password2, opened, expectCreate: true, reverse: true);
+            Assert.Equal(CopyOutcome.Succeeded, first.Outcome);
+            Assert.True(first.Tables.Count == 2 && first.Tables.All(t => t.Outcome == CopyOutcome.Succeeded), "first run: both tables must succeed");
+            await AssertSameDataAsync(source, target, TableA, FingerprintA);
+            await AssertSameDataAsync(source, target, TableB, FingerprintB);
+            await AssertStructureAsync(source, target);
+
+            // ---- 2회차: 테이블이 이미 있다 → 만들지 않고, 대상의 남은 행을 비우고 다시 넣는다 ----
+            await ExecAsync(target, $"INSERT INTO {TableB} (ID, NM, AMT) VALUES (999, 'stray', 1)");
+            await ExecAsync(target, "COMMIT");
+            Assert.Equal(4L, await CountAsync(target, TableB));
+
+            var second = await CopyAsync(it, user2, password2, opened, expectCreate: false, reverse: true);
+            Assert.Equal(CopyOutcome.Succeeded, second.Outcome);
+            Assert.Equal(3L, await CountAsync(target, TableB)); // 999 는 지워졌다
+            await AssertSameDataAsync(source, target, TableA, FingerprintA);
+            await AssertSameDataAsync(source, target, TableB, FingerprintB);
+        }
+        finally
+        {
+            // 첫 계정(대상)은 지운다. 두 번째 계정의 원본은 트리거가 없을 때만 지운다(있으면 다음 실행이 다시 쓴다).
+            await CleanupAsync(opened, target, sourceGuarded ? null : source, keep: source);
+            if (source is not null)
+            {
+                await source.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 정리: 복사에 쓴 세션을 먼저 닫고(열려 있으면 DROP 이 막혀 테이블이 남는다, #138) <paramref name="first"/>·<paramref name="second"/>(null 이면 그 계정은 건너뜀)를 지운다.
+    /// 남은 테이블이 있으면 한 번 더. <paramref name="keep"/> 는 확인용으로 아직 닫지 않는 세션(부른 쪽이 닫는다).
+    /// </summary>
+    private async Task CleanupAsync(List<ISession> opened, TiberoSession first, TiberoSession? second, TiberoSession? keep = null)
+    {
+        foreach (var session in opened.Where(o => !ReferenceEquals(o, keep ?? second)))
+        {
+            await session.DisposeAsync();
+        }
+
+        await DropBothAsync(first, second);
+        if (await LeftoverAsync(first) + (second is null ? 0 : await LeftoverAsync(second)) > 0)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await DropBothAsync(first, second);
+        }
+    }
+
     /// <summary>
     /// 세션 계정에 걸리는 켜진 스키마·DB 단위 DDL 트리거(DROP·TRUNCATE·DDL 사건, 표 트리거 아님) 이름과 사건. 없거나 카탈로그를 못 읽으면 null.
     /// Tibero ALL_TRIGGERS 에는 BASE_OBJECT_TYPE 이 없어(-8026) 표 트리거가 아닌 것(TABLE_NAME 없음)으로 가른다.
@@ -177,11 +278,16 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
 
     // ---- 복사 ----
 
-    private async Task<CopyRunResult> CopyAsync(TiberoItSessions it, string user2, string password2, List<ISession> opened, bool expectCreate)
+    /// <summary>복사 한 번. 기본 = 첫 계정 → 두 번째 계정, <paramref name="reverse"/> = 두 번째 계정 → 첫 계정. 원본 세션은 읽기 전용.</summary>
+    private async Task<CopyRunResult> CopyAsync(TiberoItSessions it, string user2, string password2, List<ISession> opened, bool expectCreate, bool reverse = false)
     {
-        var source = await it.OpenAsync(SessionPurpose.Dedicated, it.Profile() with { ReadOnly = true });
+        var source = reverse
+            ? await OpenSecondAsync(it, user2, password2, SessionPurpose.Dedicated, readOnly: true)
+            : await it.OpenAsync(SessionPurpose.Dedicated, it.Profile() with { ReadOnly = true });
         opened.Add(source);
-        var target = await OpenSecondAsync(it, user2, password2, SessionPurpose.Dedicated, readOnly: false);
+        var target = reverse
+            ? await it.OpenAsync(SessionPurpose.Dedicated, it.Profile())
+            : await OpenSecondAsync(it, user2, password2, SessionPurpose.Dedicated, readOnly: false);
         opened.Add(target);
         var sessions = new CopySessions(source, target);
         var sourceOwner = source.Server.SessionUser;
@@ -233,15 +339,28 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
         await ExecAsync(s, $"CREATE INDEX {TableA}_IX ON {TableA} (NM)");
         await ExecAsync(s, $"COMMENT ON TABLE {TableA} IS 'create missing A'");
         await ExecAsync(s, $"COMMENT ON COLUMN {TableA}.NM IS 'name of A'");
-        await ExecAsync(s, $"INSERT INTO {TableA} (ID, NM, CD, AMT, DT, TS, DOC) VALUES (1, 'alpha', 'ab', 10.5, DATE '2026-11-01', TIMESTAMP '2026-11-01 10:20:30.123456', TO_CLOB('clob one'))");
-        await ExecAsync(s, $"INSERT INTO {TableA} (ID, NM, CD, AMT, DT, TS, DOC) VALUES (2, '한글이름', 'cd', 0, NULL, NULL, NULL)");
-        await ExecAsync(s, $"INSERT INTO {TableA} (ID, AMT) VALUES (3, 7.25)"); // NM 은 DEFAULT 'x'
 
         await ExecAsync(s, $"CREATE TABLE {TableB} (ID NUMBER(10), NM VARCHAR2(20 BYTE) DEFAULT 'y', AMT NUMBER(12,2), DT DATE, TS TIMESTAMP(6), BL BLOB,"
                            + $" CONSTRAINT {TableB}_CK CHECK (AMT >= 0))");
         await ExecAsync(s, $"CREATE INDEX {TableB}_IX ON {TableB} (ID, NM)");
         await ExecAsync(s, $"COMMENT ON TABLE {TableB} IS 'create missing B'");
         await ExecAsync(s, $"COMMENT ON COLUMN {TableB}.AMT IS 'amount of B'");
+        await InsertSourceRowsAsync(s);
+    }
+
+    /// <summary>이미 있는 원본 테이블(앞 실행이 남긴 것)의 행을 지우고 같은 행을 다시 넣는다(DDL 없음).</summary>
+    private static async Task RefillSourceRowsAsync(TiberoSession s)
+    {
+        await ExecAsync(s, $"DELETE FROM {TableB}");
+        await ExecAsync(s, $"DELETE FROM {TableA}");
+        await InsertSourceRowsAsync(s);
+    }
+
+    private static async Task InsertSourceRowsAsync(TiberoSession s)
+    {
+        await ExecAsync(s, $"INSERT INTO {TableA} (ID, NM, CD, AMT, DT, TS, DOC) VALUES (1, 'alpha', 'ab', 10.5, DATE '2026-11-01', TIMESTAMP '2026-11-01 10:20:30.123456', TO_CLOB('clob one'))");
+        await ExecAsync(s, $"INSERT INTO {TableA} (ID, NM, CD, AMT, DT, TS, DOC) VALUES (2, '한글이름', 'cd', 0, NULL, NULL, NULL)");
+        await ExecAsync(s, $"INSERT INTO {TableA} (ID, AMT) VALUES (3, 7.25)"); // NM 은 DEFAULT 'x'
         await ExecAsync(s, $"INSERT INTO {TableB} (ID, NM, AMT, DT, TS, BL) VALUES (1, 'one', 1.5, DATE '2026-11-02', TIMESTAMP '2026-11-02 01:02:03.5', TO_BLOB(HEXTORAW('00FF10')))");
         await ExecAsync(s, $"INSERT INTO {TableB} (ID, NM, AMT) VALUES (2, 'two', 2)");
         await ExecAsync(s, $"INSERT INTO {TableB} (ID, NM, AMT) VALUES (2, 'two', 2)"); // PK 가 없어 같은 행이 겹쳐도 들어간다
