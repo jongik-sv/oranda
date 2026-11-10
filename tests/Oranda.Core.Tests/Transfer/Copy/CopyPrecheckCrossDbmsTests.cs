@@ -425,6 +425,31 @@ public sealed class CopyPrecheckCrossDbmsTests
         Assert.Equal(sent[0], ddl);
     }
 
+    [Theory]
+    [InlineData("11.2.0.4.0", true)]
+    [InlineData("19.0.0.0.0", false)]
+    public async Task Cross_create_into_oracle_11g_drops_the_sequence_default_even_when_the_sequence_exists(string targetVersion, bool dropped)
+    {
+        var source = Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false, DefaultValue = "SEQ_ORD.NEXTVAL" }, new ColumnInfo("NAME", 2, "VARCHAR2") { Length = 20 });
+
+        var report = await new Fixture(Dbms.Tibero, Dbms.Oracle, source, target: null, createMissing: true, targetSequences: ["SEQ_ORD"], targetVersion: targetVersion).RunAsync();
+
+        Assert.False(report.HasErrors);
+        if (dropped)
+        {
+            var item = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.SequenceDefaultDropped);
+            Assert.Equal(CheckLevel.Confirm, item.Level);
+            Assert.Equal("ID", item.Column);
+            Assert.Contains("Oracle 11", item.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("NEXTVAL", CreateDdl(report), StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.SequenceDefaultDropped);
+            Assert.Contains("DEFAULT SEQ_ORD.NEXTVAL", CreateDdl(report), StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public async Task Same_dbms_create_with_a_missing_sequence_is_unchanged_and_still_blocked()
     {
@@ -467,7 +492,7 @@ public sealed class CopyPrecheckCrossDbmsTests
     private sealed class Fixture
     {
         public Fixture(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TableInfo? target, string[]? unsupportedBySource = null,
-                       string[]? unsupportedByTarget = null, string[]? crossWritableByTarget = null, bool createMissing = false, string[]? targetSequences = null)
+                       string[]? unsupportedByTarget = null, string[]? crossWritableByTarget = null, bool createMissing = false, string[]? targetSequences = null, string? targetVersion = null)
         {
             Job = new CopyJob
             {
@@ -476,7 +501,7 @@ public sealed class CopyPrecheckCrossDbmsTests
                 Tables = [new TableRule("ORDERS", RuleKind.All, TargetAction.DeleteAllInsert) { CreateIfMissing = createMissing }],
             };
             Source = new FakeSession(TestData.Profile(readOnly: true), TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" };
-            Target = new FakeSession(TestData.Profile(ConnectionEnvironment.Development) with { Name = "dev" }, TestData.Server()) { DbKey = "DSTDB/PDB1/DST" };
+            Target = new FakeSession(TestData.Profile(ConnectionEnvironment.Development) with { Name = "dev" }, targetVersion is null ? TestData.Server() : TestData.Server() with { Version = targetVersion }) { DbKey = "DSTDB/PDB1/DST" };
             var metadata = new FakeMetadataProvider();
             metadata.Tables[new DbObjectRef("SRC", "ORDERS", "TABLE")] = source;
             if (target is not null)

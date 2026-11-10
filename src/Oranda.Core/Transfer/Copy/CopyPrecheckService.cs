@@ -232,10 +232,23 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             var sourceOwner = SourceOwner(rule);
             var known = new Dictionary<string, HashSet<string>?>(CopyOwners.OwnerComparer);
             var drop = new HashSet<string>(StringComparer.Ordinal);
+            // Oracle 11g 는 시퀀스.NEXTVAL 을 열 기본값으로 쓸 수 없다(12c 부터, ORA-00984). 버전을 알면(주 버전 11 이하) 시퀀스가 있어도 그 DEFAULT 를 뺀다.
+            var oldOracleTarget = targetDbms == Dbms.Oracle && Target.Server.MajorVersion is > 0 and < 12;
             foreach (var c in source.Columns.Where(c => !c.IsVirtual && !c.IsIdentity))
             {
                 foreach (var (owner, name) in PrecheckRules.SequenceReferences(c.DefaultValue))
                 {
+                    if (oldOracleTarget)
+                    {
+                        drop.Add(c.Name);
+                        _items.Add(new CheckItem(key, CopyCheckCodes.SequenceDefaultDropped, CheckLevel.Confirm,
+                            $"{key}: 대상 서버(Oracle {Target.Server.MajorVersion})는 시퀀스를 열 기본값으로 쓸 수 없어(12c 부터 가능) 열 {c.Name} 의 기본값({c.DefaultValue!.Trim()})을 빼고 만듭니다. 값은 그대로 복사되며, 새 행에 값을 채우려면 트리거 등으로 따로 처리해야 합니다.")
+                        {
+                            Column = c.Name,
+                        });
+                        break;
+                    }
+
                     var resolved = owner is null || CopyOwners.SameOwner(owner, sourceOwner) ? targetOwner : owner;
                     if (!known.TryGetValue(resolved, out var names))
                     {

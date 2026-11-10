@@ -31,3 +31,72 @@ Tibero 드라이버(TDP.NET Core, `Tibero.DataAccess.dll`)는 TmaxTibero 라이�
 ## 접속
 
 접속 관리자에서 DBMS 를 Tibero 로 고르고 호스트·포트(기본 8629)·DB 이름을 적습니다. 드라이버가 지정되지 않으면 접속 대화 상자에 안내 띠가 나오고 [연결]·[접속 시험]은 꺼집니다.
+
+## Oracle↔Tibero·Tibero↔Tibero 복사
+
+데이터 복사(「데이터 복사」 창)로 Oracle 과 Tibero 사이, 그리고 Tibero 끼리 테이블 데이터를 옮길 수 있습니다. 사내 전용 기능이며 공개 설명서에는 싣지 않습니다. 설계는 `docs/design/cross-dbms-copy.md` 에 있습니다.
+
+### 되는 것
+
+- 쌍: Oracle→Tibero, Tibero→Oracle, Tibero→Tibero. 그 밖의 다른 DBMS 쌍은 「복사할 수 없습니다」 안내가 나오고 막힙니다.
+- Tibero→Tibero 는 같은 DBMS 끼리라 값을 바꾸지 않고 그대로 옮깁니다. Oracle→Oracle 복사 동작도 바뀌지 않았습니다.
+- Oracle↔Tibero 는 Tibero 쪽 복사 부품이 앱에 등록돼야 열립니다. 등록되기 전에는 Oracle↔Tibero 쌍을 고르면 「복사할 수 없습니다」 안내가 나오고 사전 점검·실행이 막힙니다(Tibero→Tibero 는 이미 됩니다).
+- 「없으면 만들기」: 대상에 테이블이 없으면 원본 구조로 만든 뒤 넣습니다(양방향 범위).
+- 「테이블 다시 만들기」: **Tibero→Oracle 만** 됩니다. Oracle→Tibero 는 막힙니다. 옛 테이블을 지운 뒤 새 테이블을 만들지 못하면(이름 충돌 등) 그 자리에서 휴지통에서 되살려 옛 테이블과 데이터를 그대로 돌려놓고 결과에 알립니다(같은 DBMS 끼리의 다시 만들기도 같습니다).
+- 한 번에 읽고 쓰다가 배치가 실패하면 한 행씩 다시 넣는 방식, 실패 행 기록·재시도, 중지는 같은 DBMS 복사와 같습니다.
+
+### 바뀌어 옮겨지는 형식
+
+상대 DBMS 에 같은 형식이 없으면 가장 가까운 형식으로 바꿉니다. 바뀌는 열은 사전 점검 「형식 바꿔 옮김」에 테이블마다 한 줄로 나옵니다.
+
+| 원본 | 대상에서는 | 비고 |
+|---|---|---|
+| Oracle BINARY_FLOAT·BINARY_DOUBLE | NUMBER 글자로 보내 Tibero 가 BINARY_* 로 바꿈 | NaN·무한대 값은 그 행이 실패합니다 |
+| Oracle TIMESTAMP WITH TIME ZONE 의 시간대 지역 이름 | 그 시각의 UTC 오프셋(±HH:MM) | 지역 이름은 잃습니다 |
+| Tibero TIMESTAMP WITH TIME ZONE | 오프셋만 옮김 | Tibero 대량 읽기가 지역을 주지 않아 지역은 잃습니다 |
+| Tibero VARCHAR2 > 4000 | CLOB | 테이블을 만들 때만. 이미 있는 대상 테이블은 「대상 열이 좁음」으로 알립니다 |
+| Tibero NVARCHAR2 > 2000·NCHAR > 1000 | NCLOB | Oracle 4000바이트 한도 때문 |
+| Oracle RAW > 2000(EXTENDED) | BLOB | 테이블을 만들 때 |
+| Tibero LONG / LONG RAW | CLOB / BLOB | Oracle 원본의 LONG 은 아래 「빠지는 열」 |
+| Oracle IDENTITY 열 | 일반 열 | 테이블을 만들 때. Tibero 에 IDENTITY 가 없어 값만 옮깁니다 |
+| 길이 0 인 Oracle BLOB | Tibero 에서 NULL | Tibero 가 길이 0 BLOB 을 NULL 로 저장합니다. BLOB 열이 있으면 사전 점검 「빈 BLOB 은 NULL」로 알립니다 |
+
+그 밖의 NUMBER·FLOAT·CHAR·VARCHAR2·NCHAR·NVARCHAR2·CLOB·NCLOB·BLOB·RAW(≤2000)·DATE·TIMESTAMP·INTERVAL 은 그대로 옮깁니다. 숫자는 글자로 옮기며 Tibero 가 39자리 이상은 반올림해 저장합니다. Tibero 의 BINARY_FLOAT·BINARY_DOUBLE 은 Oracle 로 그대로 옮깁니다.
+
+### 빠지는 열
+
+대상으로 옮길 형식이 없는 열은 오류가 아니라 복사에서 **빠집니다**.
+
+- 양방향: TIMESTAMP WITH LOCAL TIME ZONE, ROWID·UROWID, BFILE·XMLTYPE·객체·모르는 형식.
+- Oracle 원본만: LONG·LONG RAW, JSON·VECTOR·BOOLEAN(23ai)·컬렉션·SDO_GEOMETRY.
+- Tibero 원본만: TIME·GEOMETRY.
+
+빠지는 열은 사전 점검 「형식 때문에 뺀 열」(`ColumnDropped`)로 열마다 알리고 확인을 받으며, 실행 로그에도 「… 로 옮길 형식이 없는 열을 빼고 복사합니다」 한 줄이 남습니다. 대상 테이블을 원본에서 만드는 경우 그 열은 만들지도 않습니다.
+
+- 빠지는 열이 기본키·기간 조건·부모 키 연결 열이면 「옮길 수 없는 키 열」(`KeyColumnDropped`) 오류가 되어 그 테이블을 규칙에서 빼야 합니다. 키가 없어져 행을 구별할 수 없기 때문입니다.
+- 빠지는 열이 이미 있는 대상 테이블에서 NOT NULL 이고 기본값이 없으면 「필수 열 값 없음」 오류가 그대로 납니다.
+
+### 사전 점검·실행 로그 안내
+
+| 점검 이름(코드) | 등급 | 뜻 |
+|---|---|---|
+| 형식 때문에 뺀 열(`ColumnDropped`) | 확인 | 위 「빠지는 열」 |
+| 옮길 수 없는 키 열(`KeyColumnDropped`) | 오류 | 키·기간 조건·부모 키 연결 열이 빠짐 |
+| 형식 바꿔 옮김(`TypeConverted`) | 확인(값이 바뀌는 열이 있을 때) 또는 통과 | 위 「바뀌어 옮겨지는 형식」. BINARY_*→NUMBER·시간대 지역→오프셋처럼 값에 닿는 변환이 있으면 확인, 테이블 만들기에만 해당하는 변환(IDENTITY·RAW→BLOB·긴 문자열→LOB 등)만 있으면 통과 |
+| 대상 문자셋 안내(`CrossCharset`) | 확인 | Oracle→Tibero 에 문자 열이 있으면 작업 전체에 한 번. 대상 DB 문자셋이 원본보다 좁으면 그 밖 글자가 실패하거나 바뀔 수 있습니다. 앱은 대상 문자셋을 조회하지 않고 늘 같은 안내를 냅니다 |
+| 빈 BLOB 은 NULL(`BlobEmptyToNull`) | 통과 | Oracle→Tibero 에서 BLOB 열이 있을 때 |
+
+### 제약과 주의
+
+- 값 하나가 변환에 실패하면(NaN·무한대, 기원전 날짜, 모르는 시간대 지역 등) **그 행만** 실패로 기록됩니다. 열 전체를 빼지 않으며, 실패 행은 같은 DBMS 복사처럼 기록·재시도할 수 있습니다. 실패 이유에는 값을 싣지 않습니다.
+- 시각 앞의 부호가 음수이고 시가 0 인 오프셋(`-00:30` 처럼 `-00:MM`)은 같은 시각을 `+00:00` 으로 바꿔 옮깁니다(Tibero 가 부호를 잃기 때문). 원본에 이미 `-00:MM` 으로 저장된 Tibero 값은 읽을 때 이미 부호가 틀려 있습니다.
+- 테이블을 만들 때 함수 기반 인덱스·DESC(내림차순 열) 인덱스와 가상 열은 만들지 않습니다(함수 기반 인덱스의 식을 카탈로그에서 읽지 못하고, 서버가 내림차순 열을 함수 기반 형태로 기록하는 인덱스도 같은 판정에 걸립니다). 옮기지 않는 열이나 LOB 로 바뀐 열을 쓰는 제약·인덱스도 만들지 않습니다. 이런 것은 사전 점검 「없으면 테이블 만들기」 안내와 실행 결과에 적힙니다. Oracle 23ai 의 도메인과 INVISIBLE 은 지우고(보이는 일반 열로) 만듭니다.
+- 테이블을 만들 때 원본의 CHECK 조건·DEFAULT 식은 글 그대로 보냅니다. 대상이 받지 않으면 그 테이블의 만들기가 실패합니다(테이블 단위 실패).
+- Tibero 의 CREATE TABLE 은 앞서 열린 트랜잭션을 **묵시 커밋**합니다. 테이블 만들기는 대상 트랜잭션을 열기 전에 하며, 넣기가 실패하면 만든 테이블을 휴지통 없이 지웁니다(`DROP TABLE … PURGE`).
+- Tibero 원본의 외래 키는 지연(DEFERRABLE) 여부를 카탈로그로 알 수 없어, Tibero→Oracle 로 테이블을 만들 때 지연 FK 도 즉시 검사 FK 로 만들어집니다.
+- Tibero 의 읽기 전용 트랜잭션은 쓰기를 막지 않습니다. 원본 보호는 앱의 정책 관문(읽기 전용 접속 등)이 합니다.
+- Tibero 의 BLOB·큰 CLOB 은 한 행씩 쓰므로 Oracle→Tibero 대용량 복사는 느릴 수 있습니다.
+- 시험은 Tibero 6.2.15(UTF-8 DB)에서만 했습니다. CP949 DB 로 옮길 때의 글자 손실은 확인하지 못했습니다.
+- 문자 길이 단위: Oracle `CHAR(n CHAR)` 는 바이트로 채우고(CHAR(2000 CHAR) 는 2000바이트) Tibero 는 글자로 채워, 한글처럼 여러 바이트인 값은 뒤쪽 공백 수가 달라집니다(값 자체는 같음). 사전 점검 안내로 알리며 값을 맞추지 않습니다.
+- 다바이트 값과 Oracle 4000바이트 한도: Tibero `VARCHAR(n CHAR)`(n ≤ 4000)를 Oracle 로 만들면 `VARCHAR2(n CHAR)` 열 그대로 만들어지고, 값이 4000바이트를 넘는 행은 그 행만 실패합니다(ORA-12899). 사전 점검이 안내합니다.
+- 대상에 없는 시퀀스를 DEFAULT 로 쓰는 열(`DEFAULT 시퀀스.NEXTVAL`): Tibero 카탈로그는 시퀀스 이름을 소유자·따옴표 없이 저장하므로 Oracle DDL 에서는 대상 계정의 같은 이름 시퀀스를 가리킵니다. 대상에 그 시퀀스가 없으면 그 DEFAULT 만 빼고 테이블을 만들고 안내합니다. 대상이 Oracle 11g 이면 시퀀스가 있어도 열 기본값으로 쓸 수 없어(12c 부터 가능) 같은 방식으로 DEFAULT 를 빼고 안내합니다.

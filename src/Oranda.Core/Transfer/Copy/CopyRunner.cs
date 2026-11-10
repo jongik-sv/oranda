@@ -672,6 +672,7 @@ public class CopyRunner : ICopyRunner
             if (create.Status != ExecutionStatus.Succeeded)
             {
                 table.Fail("지운 표를 다시 만들지 못했습니다: " + Describe(create));
+                await FlashbackDroppedAsync(run, table);
                 continue;
             }
 
@@ -680,6 +681,29 @@ public class CopyRunner : ICopyRunner
             {
                 await ApplyOrNoteAsync(run, table, text, "다시 만든 표에 적용하지 못한 문장이 있습니다");
             }
+        }
+    }
+
+    /// <summary>
+    /// 다시 만들기에서 지운 뒤 CREATE 가 실패한 표를(같은 DBMS·교차 모두: 데이터 보호가 우선, 조정 결정 67) 그 자리에서 휴지통에서 되살린다(<c>FLASHBACK TABLE … TO BEFORE DROP</c>): 옛 표와 데이터가 그대로 돌아온다.
+    /// 휴지통에 남지 않았거나(영구 삭제) 되살리기도 실패하면 아무것도 하지 않고, 그때는 <see cref="NoteRecreated"/> 가 직접 되돌리는 안내를 낸다.
+    /// </summary>
+    private async Task FlashbackDroppedAsync(RunState run, TableState table)
+    {
+        if (table.BinKnown && table.BinName is null)
+        {
+            return; // 휴지통에 남지 않았다(영구 삭제)
+        }
+
+        var source = table.BinName is { } binName ? CopyCommonStatements.Qualified(table.Owner, binName) : CopyCommonStatements.Qualified(table.Owner, table.TableName);
+        var back = await CleanupStatementAsync(run, CopyCommonStatements.RecreateDdl($"FLASHBACK TABLE {source} TO BEFORE DROP"), LongCleanupTimeout);
+        if (back.Status == ExecutionStatus.Succeeded)
+        {
+            table.Flashbacked = true;
+        }
+        else
+        {
+            table.Note("옛 표를 휴지통에서 되살리지 못했습니다: " + Describe(back));
         }
     }
 
@@ -1241,7 +1265,14 @@ public class CopyRunner : ICopyRunner
         {
             var owner = t.Owner;
             var source = t.BinName is { } binName ? CopyCommonStatements.Qualified(owner, binName) : CopyCommonStatements.Qualified(owner, t.TableName);
-            if (t.BinKnown && t.BinName is null)
+            if (t.Flashbacked)
+            {
+                var back = "새 테이블을 만들지 못해 지운 옛 테이블을 휴지통에서 되살렸습니다. 옛 테이블과 데이터는 그대로이고 이 테이블은 복사하지 않았습니다"
+                           + _dialect.FlashbackRestoreNote + ".";
+                t.Note(back);
+                run.Notices.Add($"{t.Name}: {back}");
+            }
+            else if (t.BinKnown && t.BinName is null)
             {
                 const string Lost = "지운 옛 표가 휴지통에 남지 않았습니다(영구 삭제: 테이블스페이스가 휴지통을 지원하지 않거나 공간이 부족했습니다).";
                 t.Degrade(Lost);
@@ -2849,6 +2880,9 @@ public class CopyRunner : ICopyRunner
 
         /// <summary>CREATE TABLE 이 성공했다(되살리기 대상).</summary>
         public bool Created { get; set; }
+
+        /// <summary>지운 뒤 CREATE 가 실패해 옛 표를 휴지통에서 되살렸다(<see cref="Created"/> 는 거짓, 옛 표·데이터가 그대로 돌아왔다).</summary>
+        public bool Flashbacked { get; set; }
 
         /// <summary>대상에 없던 표를 이번 실행이 만들었다(「없으면 만들기」, <see cref="Created"/> 도 참). 옛 표가 없으니 휴지통·보존 DDL 이 없다.</summary>
         public bool CreatedNew { get; set; }

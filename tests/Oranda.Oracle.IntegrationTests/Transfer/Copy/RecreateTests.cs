@@ -239,20 +239,20 @@ public sealed class RecreateTests
         Assert.Equal(CopyOutcome.Failed, table.Outcome);
         Assert.NotNull(table.Message);
         Assert.Contains("다시 만들지 못했습니다", table.Message, StringComparison.Ordinal);
-        Assert.Contains($"FLASHBACK TABLE \"{scope.DstUser}\".\"BIN$", table.Message, StringComparison.Ordinal);
+        // 결정 67: 지운 뒤 CREATE 가 실패하면 실행기가 그 자리에서 휴지통에서 되살린다(안내만 하지 않는다).
+        Assert.Contains("휴지통에서 되살렸습니다", table.Message, StringComparison.Ordinal);
         Assert.Contains("되살리지 않은 DDL", table.Message, StringComparison.Ordinal);
         Assert.Contains("RF_T_TRG", table.Message, StringComparison.Ordinal);
         Assert.Contains("GRANT SELECT", table.Message, StringComparison.Ordinal);
-        Assert.Contains(result.Notices, n => n.Contains("표가 없습니다", StringComparison.Ordinal));
+        Assert.Contains(result.Notices, n => n.Contains("휴지통에서 되살렸습니다", StringComparison.Ordinal));
 
         // 실행 기록의 표 결과에도 같은 안내와 남은 DDL 이 남는다(다음에 기록을 열어도 알 수 있다).
         var recorded = Assert.Single(log.Tables);
         Assert.Equal(table.Message, recorded.Message);
         Assert.Equal("Complete:Failed", log.Events[^1]);
 
-        // 표는 없고 휴지통에 있다. 안내대로 되돌리면 옛 행이 그대로다.
-        Assert.Equal(0, await CountAsync($"SELECT COUNT(*) FROM DBA_TABLES WHERE OWNER = '{scope.DstUser}' AND TABLE_NAME = 'RF_T'"));
-        await scope.ExecTargetAsync("FLASHBACK TABLE RF_T TO BEFORE DROP");
+        // 표는 되살아나 있고 옛 행이 그대로다.
+        Assert.Equal(1, await CountAsync($"SELECT COUNT(*) FROM DBA_TABLES WHERE OWNER = '{scope.DstUser}' AND TABLE_NAME = 'RF_T'"));
         Assert.Equal("5,6", await ListAsync($"SELECT ID FROM {scope.DstUser}.RF_T ORDER BY ID"));
     }
 
