@@ -20,6 +20,10 @@ public partial class SettingsWindow : Window
                 vm.CloseRequested += (_, _) => Close();
                 vm.Drivers.PickFile ??= () => PickDriverAsync(vm.Drivers, folder: false);
                 vm.Drivers.PickFolder ??= () => PickDriverAsync(vm.Drivers, folder: true);
+                foreach (var tool in vm.Drivers.ExternalTools)
+                {
+                    tool.PickFile ??= () => PickToolAsync(tool);
+                }
             }
         };
         Opened += (_, _) => FitLargestCategory();
@@ -45,6 +49,19 @@ public partial class SettingsWindow : Window
             Title = page.FileDialogTitle,
             AllowMultiple = false,
             FileTypeFilter = [new FilePickerFileType(page.FileTypeName) { Patterns = ["*.dll", "*.nupkg"] }],
+        }).ConfigureAwait(true);
+        return files.Count > 0 ? files[0].TryGetLocalPath() : null;
+    }
+
+    /// <summary>「외부 적재 도구」의 찾아보기: 도구 실행 파일 하나의 로컬 경로. 취소하거나 로컬 경로가 아니면 null.</summary>
+    private async Task<string?> PickToolAsync(ExternalToolEntry tool)
+    {
+        var name = tool.ExecutableName;
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = tool.FileDialogTitle,
+            AllowMultiple = false,
+            FileTypeFilter = [new FilePickerFileType(tool.FileTypeName) { Patterns = [name + ".exe", name] }, FilePickerFileTypes.All],
         }).ConfigureAwait(true);
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }

@@ -19,6 +19,9 @@ public sealed record CopySessions(ISession Source, ISession Target)
     /// </summary>
     public Func<ISession, CancellationToken, Task<ISession?>>? OpenMonitor { get; init; }
 
+    /// <summary>외부 적재 도구 준비물(조정 결정 88). null = 쓸 수 없음 — 적재 방식이 외부 도구인 테이블도 기본 방식으로 넣는다(사전 점검 알림).</summary>
+    public ExternalLoad.CopyExternalLoad? ExternalLoad { get; init; }
+
     /// <summary>
     /// 동시 테이블 복사(PF2)의 추가 레인 세션 쌍(원본 읽기 전용·대상, 전용 세션). 주 쌍(<see cref="Source"/>·<see cref="Target"/>)이 첫 레인이고 이것들이 둘째 레인부터다.
     /// 비면(기본) 한 테이블씩 복사한다. 여닫기는 부른 쪽(앱)이 한다: 실행기는 열지도 닫지도 않는다. 사전 점검은 쓰지 않는다.
@@ -99,6 +102,16 @@ public static class CopyCheckCodes
     /// 빼는 것이 있으면 확인 필요, 없으면 통과(조정 결정 78).
     /// </summary>
     public const string CompanionObjects = "CompanionObjects";
+
+    /// <summary>
+    /// 확인 필요(외부 도구로 넣는 테이블마다 한 항목, 조정 결정 88): 적재 도구(SQL*Loader·tbLoader)로 넣는다. 대상 정리(DELETE)는 도구가 잠금에 막히지 않게 적재 전에 확정하고,
+    /// 이번에 만든 테이블은 direct path, 이미 있는 테이블은 일반 경로로 넣는다. 도구가 실패하면 기본 방식으로 다시 넣는다(추가만 하기는 도구가 넣은 행이 남아 다시 하지 않는다).
+    /// 제어 파일은 미리 보기에 있다.
+    /// </summary>
+    public const string ExternalLoad = "ExternalLoad";
+
+    /// <summary>통과(테이블마다 한 항목): 적재 방식을 외부 도구로 골랐지만 기본 방식으로 넣는다 — 그 이유(도구 없음·버전·키로 맞추기·커밋 방식·열 형식·인증 방식).</summary>
+    public const string ExternalLoadFallback = "ExternalLoadFallback";
 }
 
 public enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }
@@ -137,8 +150,16 @@ public sealed record CopyTablePlan(TableRule Rule, TableInfo Source, TableInfo T
     /// <summary>만드는 표에 적재 뒤 함께 만드는 객체(<see cref="CopyCheckCodes.CompanionObjects"/>). 만들지 않는 표는 비어 있다.</summary>
     public CompanionDdl Companions { get; init; } = CompanionDdl.Empty;
 
+    /// <summary>
+    /// 실제 적재 방식(사전 점검이 정한 것, <see cref="CopyLoad"/>). 외부 도구로 골랐어도 못 쓰면 <see cref="LoadMethod.Standard"/>(<see cref="CopyCheckCodes.ExternalLoadFallback"/> 알림).
+    /// </summary>
+    public LoadMethod Load { get; init; }
+
     public bool CanDisableTriggers { get; init; }
     public IReadOnlyList<string> Triggers { get; init; } = [];
+
+    /// <summary>이미 있는 대상 테이블에 트리거가 하나도 없다(대상 소유자 세션으로 확인, 결정 96). 외부 도구의 direct path 판정(<see cref="CopyLoad.Direct"/>)에 쓴다.</summary>
+    public bool NoTargetTriggers { get; init; }
     public IReadOnlyList<DisabledObject> DisablableForeignKeys { get; init; } = [];
 }
 
@@ -159,4 +180,7 @@ public sealed record PrecheckReport(IReadOnlyList<CheckItem> Items, IReadOnlyLis
     /// null 이면(이 칸이 없던 점검 결과) 동시에 복사하지 않는다.
     /// </summary>
     public IReadOnlyList<IReadOnlyList<string>>? Stages { get; init; }
+
+    /// <summary>외부 도구로 넣는 테이블이 있을 때 확인한 도구(경로·버전, 조정 결정 88). 없으면 null.</summary>
+    public ExternalLoad.ExternalToolInfo? ExternalTool { get; init; }
 }

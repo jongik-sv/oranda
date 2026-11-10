@@ -697,6 +697,16 @@ public partial class CopyRunner : ICopyRunner
             run.Progress(table.Name, 0, estimated, PhaseLoad);
             run.Log("적재 시작" + (estimated is { } est ? $" · 예상 {est.ToString("N0", CultureInfo.InvariantCulture)}건" : string.Empty));
             LogDroppedColumns(run, table, shape);
+            if (UsesExternalTool(run, plan))
+            {
+                // 외부 적재 도구(조정 결정 88, CopyRunner.External.cs). 못 넣어 테이블을 정리했으면 아래 기본 방식으로 다시 넣는다.
+                if (await LoadExternalAsync(run, plan, table, shape, estimated, ct) != ExternalEnd.Fallback)
+                {
+                    return;
+                }
+
+                run.Log("기본 방식(배열 INSERT)으로 다시 넣습니다", CopyLogKind.Warning);
+            }
 
             // 실패 행 상한을 넘거나 원본 읽기가 실패하면 이 표의 적재분만 되돌린다(앞 표의 정리·적재는 남긴다).
             var savepoint = await ControlLoggedAsync(run, run.Target, _dialect.Savepoint(CopyCommonStatements.TableSavepoint), ct, "이 테이블을 되돌릴 자리");
@@ -1878,10 +1888,10 @@ public partial class CopyRunner : ICopyRunner
 
     /// <summary>DELETE·ALTER: 실행 엔진(정책·이력)으로 보내고, 성공하면 실행 기록에도 같은 글을 남긴다.</summary>
     private async Task<ExecutionResult> ExecuteLoggedAsync(RunState run, ISession s, SqlStatement stmt,
-                                                           IReadOnlyDictionary<string, BindValue> binds, CancellationToken ct)
+                                                           IReadOnlyDictionary<string, BindValue> binds, CancellationToken ct, ExecutionOptions? options = null)
     {
         run.LogStatement(s, stmt.Text, binds);
-        var r = await _execution.ExecuteAsync(s, stmt, binds, run.HistoryOptions, ct);
+        var r = await _execution.ExecuteAsync(s, stmt, binds, options ?? run.HistoryOptions, ct);
         LogResult(run, r);
         if (r.Status == ExecutionStatus.Cancelled && ct.IsCancellationRequested)
         {
@@ -2109,6 +2119,33 @@ public partial class CopyRunner : ICopyRunner
                 .Select(c => (Column: c, Map: CrossTypeMap.Map(cross.Source, cross.Target, c)))
                 .Where(x => x.Map.IsDropped)
                 .Select(x => new DroppedColumn(x.Column.Name, x.Column.DataType, x.Map.DropReason))];
+        }
+
+        /// <summary>
+        /// 외부 도구 적재(조정 결정 88): 마스킹한 원본 행 → 이식 값 행(원본 코덱 <c>ToPortable</c>, 같은 DBMS·교차 모두). 데이터 파일은 이 값을 대상 형식의 글자로 쓴다.
+        /// 못 바꾸면 false 와 고정 글 사유(<see cref="TryToTarget"/> 와 같은 규칙: 값은 넣지 않는다).
+        /// </summary>
+        public bool TryToPortable(object?[] row, out object?[] values, out string? error)
+        {
+            var portable = new object?[row.Length];
+            for (var i = 0; i < row.Length; i++)
+            {
+                var sourceType = _targetCodec is null ? Columns[i].ServerType : _sourceTypes[i];
+                try
+                {
+                    portable[i] = row[i] is null ? null : _codec.ToPortable(row[i], sourceType);
+                }
+                catch (Exception ex) when (ex is PortableConversionException or InvalidCastException or FormatException or OverflowException)
+                {
+                    values = [];
+                    error = $"열 {CopyColumns[i]} 의 값(원본 형식 {sourceType})을 외부 도구용 값으로 바꾸지 못했습니다.";
+                    return false;
+                }
+            }
+
+            values = portable;
+            error = null;
+            return true;
         }
 
         /// <summary>
@@ -2474,6 +2511,7 @@ public partial class CopyRunner : ICopyRunner
         {
             _source = sessions.Source;
             _target = sessions.Target;
+            External = sessions.ExternalLoad;
             Job = job;
             Report = report;
             _progress = progress;
@@ -2484,6 +2522,15 @@ public partial class CopyRunner : ICopyRunner
             BulkOptions = new ExecutionOptions { Source = HistorySource.DataCopy, SkipHistory = true, PreConfirmed = preConfirmed };
             Notices = new NoticeList(text => Log(text, CopyLogKind.Warning));
         }
+
+        /// <summary>오래된 외부 도구 임시 폴더를 이 실행에서 지웠는가(1 = 지움, 레인 여럿이 함께 본다).</summary>
+        public int ExternalStaleCleaned;
+
+        /// <summary>이 실행의 짧은 식별자(외부 도구 임시 폴더 이름).</summary>
+        public string RunId { get; } = Guid.NewGuid().ToString("N")[..12];
+
+        /// <summary>외부 적재 도구 준비물(<see cref="CopySessions.ExternalLoad"/>). null = 쓸 수 없음.</summary>
+        public ExternalLoad.CopyExternalLoad? External { get; }
 
         /// <summary>원본 세션(지금 흐름이 레인이면 그 레인의 원본).</summary>
         public ISession Source => _lane.Value?.Source ?? _source;

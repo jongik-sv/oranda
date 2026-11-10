@@ -11,6 +11,7 @@ using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Core.Storage;
 using Oranda.Core.Transfer.Copy;
+using Oranda.Core.Transfer.Copy.ExternalLoad;
 
 namespace Oranda.App.Features.DataCopy;
 
@@ -44,6 +45,15 @@ public sealed class DataCopyServices
     public IConnectionStore? Connections { get => field ?? Get<IConnectionStore>(); init; }
 
     public TimeProvider Time { get; init; } = TimeProvider.System;
+
+    /// <summary>외부 적재 도구 찾기·확인(조정 결정 88). 등록되지 않았으면 null — 외부 도구로 고른 테이블도 기본 방식으로 넣는다.</summary>
+    public IExternalToolProbe? ToolProbe { get => field ?? Get<IExternalToolProbe>(); init; }
+
+    /// <summary>외부 도구 프로세스 실행기(Platform). 등록되지 않았으면 null.</summary>
+    public IExternalProcessRunner? ProcessRunner { get => field ?? Get<IExternalProcessRunner>(); init; }
+
+    /// <summary>설정의 도구 경로(<c>drivers.sqlLoaderPath</c>·<c>drivers.tbLoaderPath</c>). 바꿔 쓰지 않으면 설정 서비스에서 실행 때마다 읽는다.</summary>
+    public Func<ExternalToolPaths>? ToolPathsSource { get; init; }
 
     /// <summary>접속 목록을 바꿔 쓴다(시험). 없으면 <see cref="Connections"/> 에서 읽는다.</summary>
     public Func<CancellationToken, Task<IReadOnlyList<ConnectionProfile>>>? ProfileLoader { get; init; }
@@ -183,6 +193,57 @@ public sealed class DataCopyServices
             return await container.GetRequiredService<ISessionManager>()
                 .OpenAsync(profile, credential, SessionPurpose.Monitor, ct).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>
+    /// 실행 한 번의 외부 도구 준비물(<see cref="CopySessions.ExternalLoad"/>). 찾기·실행기가 없으면 null. 대상 접속 정보는 이 창이 세션을 열 때 받은 비밀번호,
+    /// 없으면 안전 저장소의 것을 쓴다(새로 묻지 않는다, 둘 다 없으면 null → 그 테이블은 기본 방식).
+    /// </summary>
+    public CopyExternalLoad? ExternalLoad(ConnectionProfile target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (ToolProbe is not { } probe || ProcessRunner is not { } runner)
+        {
+            return null;
+        }
+
+        var paths = ToolPathsSource?.Invoke() ?? SettingsToolPaths();
+        return new CopyExternalLoad(probe, runner, paths, token => TargetLoginAsync(target, token));
+    }
+
+    private ExternalToolPaths SettingsToolPaths()
+    {
+        if (Get<Shell.Settings.SettingsService>() is not { } settings)
+        {
+            return ExternalToolPaths.None;
+        }
+
+        return settings.Current.Drivers.ToExternalToolPaths();
+    }
+
+    /// <summary>외부 도구가 대상에 접속할 정보. 비밀번호는 도구의 표준 입력(또는 현재 사용자만 읽는 임시 parfile)으로만 간다.</summary>
+    private async Task<ExternalLoadLogin?> TargetLoginAsync(ConnectionProfile profile, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        string? password = null;
+        if (_secrets.TryGetValue(profile.Id, out var kept))
+        {
+            try
+            {
+                password = new string(kept.Secret);
+            }
+            catch (ObjectDisposedException)
+            {
+                // 창이 닫히는 중이다.
+            }
+        }
+
+        if (password is null && _provider is ServiceContainer container)
+        {
+            password = await StoredSecretAsync(container, profile).ConfigureAwait(true);
+        }
+
+        return string.IsNullOrEmpty(password) ? null : new ExternalLoadLogin(profile.User, profile.DataSource, password, profile.TnsAdmin);
     }
 
     /// <summary>들고 있던 비밀번호를 지운다(창을 닫을 때).</summary>

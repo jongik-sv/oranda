@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -6,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Oranda.Core.Connection;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
+using Oranda.Core.Transfer.Copy.ExternalLoad;
 
 namespace Oranda.App.Shell.Settings;
 
@@ -14,6 +16,8 @@ namespace Oranda.App.Shell.Settings;
 /// [확인] 은 <see cref="IDbmsDriverStatus.Check"/> 로 칸의 경로만 사전 검사한다(올리지 않음). 칸의 값은 설정 창의 「저장」이 <c>drivers.tiberoPath</c> 로 쓰고,
 /// [지우기] 는 칸을 비우고 바로 저장한다. 이 탭은 Tibero 가 접속 대화상자에 보이든 아니든 항상 있다.
 /// 로더(<see cref="IDbmsDriverStatus"/> 구현)가 없으면 [확인] 은 흐리고 상태 줄이 이유(이 빌드에 Tibero 없음 / 로더 없음)를 말한다.
+/// 아래 「외부 적재 도구」 묶음(XL1·XL3)은 SQL*Loader·tbLoader 경로 칸(<see cref="ExternalToolEntry"/>)이며, 설정 창 「저장」이 Tibero 경로와 함께 쓴다.
+/// tbLoader 줄은 이 빌드에 Tibero 가 있을 때만 보인다.
 /// </summary>
 public sealed partial class DriverSettingsPage : ObservableObject
 {
@@ -28,9 +32,16 @@ public sealed partial class DriverSettingsPage : ObservableObject
     /// <param name="settings">저장소(지우기가 바로 쓴다).</param>
     /// <param name="text">화면 글자 조회.</param>
     /// <param name="status">Tibero 드라이버 상태(로더). null = 구현 없음.</param>
-    /// <param name="tiberoIncluded">이 빌드에 Tibero 공급자 어셈블리가 있나(없으면 상태 줄이 「이 빌드에는 Tibero 가 포함되어 있지 않음」).</param>
-    public DriverSettingsPage(SettingsService settings, IShellText text, IDbmsDriverStatus? status, bool tiberoIncluded = true)
+    /// <param name="tiberoIncluded">이 빌드에 Tibero 공급자 어셈블리가 있나(없으면 상태 줄이 「이 빌드에는 Tibero 가 포함되어 있지 않음」, tbLoader 줄도 숨김).</param>
+    /// <param name="toolProbe">외부 적재 도구 찾기·확인. null = 서비스 없음([도구 확인] 이 흐리다).</param>
+    public DriverSettingsPage(SettingsService settings, IShellText text, IDbmsDriverStatus? status, bool tiberoIncluded = true, IExternalToolProbe? toolProbe = null)
     {
+        var drivers = settings.Current.Drivers;
+        SqlLoader = new ExternalToolEntry(ExternalLoaderKind.SqlLoader, drivers.SqlLoaderPath, toolProbe, text);
+        TbLoader = new ExternalToolEntry(ExternalLoaderKind.TbLoader, drivers.TbLoaderPath, toolProbe, text);
+        ExternalTools = tiberoIncluded ? [SqlLoader, TbLoader] : [SqlLoader];
+        SqlLoader.PropertyChanged += OnToolChanged;
+        TbLoader.PropertyChanged += OnToolChanged;
         _settings = settings;
         _text = text;
         _status = status;
@@ -67,8 +78,19 @@ public sealed partial class DriverSettingsPage : ObservableObject
     /// <summary>로더가 있어 [확인] 을 누를 수 있다.</summary>
     public bool CanCheck => _status is not null;
 
-    /// <summary>칸을 바꿨는데 아직 저장하지 않았다.</summary>
-    public bool IsDirty => DriverPathSource.Normalize(Path) != _saved;
+    /// <summary>칸(Tibero 드라이버·외부 적재 도구)을 바꿨는데 아직 저장하지 않았다.</summary>
+    public bool IsDirty => TiberoDirty || SqlLoader.IsDirty || TbLoader.IsDirty;
+
+    private bool TiberoDirty => DriverPathSource.Normalize(Path) != _saved;
+
+    /// <summary>「외부 적재 도구」의 SQL*Loader(Oracle 대상) 줄.</summary>
+    public ExternalToolEntry SqlLoader { get; }
+
+    /// <summary>「외부 적재 도구」의 tbLoader(Tibero 대상) 줄. 이 빌드에 Tibero 가 없으면 화면에 없지만 저장된 값은 그대로 둔다.</summary>
+    public ExternalToolEntry TbLoader { get; }
+
+    /// <summary>화면에 보이는 도구 줄(Tibero 가 없는 빌드는 SQL*Loader 만).</summary>
+    public IReadOnlyList<ExternalToolEntry> ExternalTools { get; }
 
     /// <summary>찾아보기(파일: dll·nupkg)가 부르는 선택 길. 화면이 넣는다(시험은 가짜). 취소하면 null.</summary>
     public Func<Task<string?>>? PickFile { get; set; }
@@ -101,6 +123,13 @@ public sealed partial class DriverSettingsPage : ObservableObject
     public string FolderDialogTitle => L("Shell.settings.drivers.folderDialogTitle");
 
     public string FileTypeName => L("Shell.settings.drivers.fileTypeName");
+
+    public string ExternalTitle => ExternalToolEntry.Translate(_text, "외부 적재 도구");
+
+    public string ExternalNotice => ExternalToolEntry.Translate(_text, ExternalNoticeKo);
+
+    internal const string ExternalNoticeKo =
+        "데이터 복사에서 적재 방식을 「외부 도구」로 고른 테이블은 이 도구의 direct path 로 넣습니다. 적재 방식은 데이터 복사 창의 테이블 규칙에서 고릅니다. 도구는 라이선스 때문에 앱에 들어 있지 않으니 따로 설치하세요. 도구가 없거나 실패하면 그 테이블은 기본 방식으로 복사합니다.";
 
     private string L(string key) => _text.Lookup(key);
 
@@ -167,19 +196,50 @@ public sealed partial class DriverSettingsPage : ObservableObject
         Recompute();
     }
 
-    /// <summary>설정 창 「저장」이 쓸 값: 칸을 바꿨으면 <c>TiberoPath</c> 만 바꾼 사본, 아니면 그대로(다른 곳에서 바뀐 값을 덮지 않는다).</summary>
-    public DriverSettings ToSettings(DriverSettings current) =>
-        IsDirty ? current with { TiberoPath = DriverPathSource.Normalize(Path) } : current;
+    /// <summary>
+    /// 설정 창 「저장」이 쓸 값: 바꾼 칸(<c>TiberoPath</c>·<c>SqlLoaderPath</c>·<c>TbLoaderPath</c>)만 바꾼 사본, 아무것도 안 바꿨으면 그대로(다른 곳에서 바뀐 값을 덮지 않는다).
+    /// </summary>
+    public DriverSettings ToSettings(DriverSettings current)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        var next = current;
+        if (TiberoDirty)
+        {
+            next = next with { TiberoPath = DriverPathSource.Normalize(Path) };
+        }
+
+        if (SqlLoader.IsDirty)
+        {
+            next = next with { SqlLoaderPath = SqlLoader.NormalizedPath };
+        }
+
+        if (TbLoader.IsDirty)
+        {
+            next = next with { TbLoaderPath = TbLoader.NormalizedPath };
+        }
+
+        return next;
+    }
 
     /// <summary>저장 직후에 부른다: 바뀜 표시를 지우고 「다시 시작하면 적용」 상태를 다시 읽는다.</summary>
     public void AcceptSaved()
     {
         _saved = DriverPathSource.Normalize(Path);
+        SqlLoader.AcceptSaved();
+        TbLoader.AcceptSaved();
         OnPropertyChanged(nameof(IsDirty));
         Recompute();
     }
 
     partial void OnPathChanged(string value) => OnPropertyChanged(nameof(IsDirty));
+
+    private void OnToolChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ExternalToolEntry.IsDirty))
+        {
+            OnPropertyChanged(nameof(IsDirty));
+        }
+    }
 
     private static DriverCheck? Guard(Func<DriverCheck> check)
     {

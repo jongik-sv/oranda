@@ -104,7 +104,22 @@ public enum RuleKind { All, Period, ParentKey, Custom, Exclude }
 /// 테이블 규칙의 전체 기본값. <paramref name="Kind"/> 가 null 이면 「자동」(기간이 있고 기간 열이 있는 테이블은 기간, 아니면 모든 행),
 /// <paramref name="Action"/> 이 null 이면 「자동」(규칙 종류별 기본 대상 처리, <see cref="TargetActions.DefaultFor"/>).
 /// </summary>
-public sealed record TableDefaults(RuleKind? Kind, TargetAction? Action, bool CreateIfMissing);
+public sealed record TableDefaults(RuleKind? Kind, TargetAction? Action, bool CreateIfMissing)
+{
+    /// <summary>
+    /// 적재 방식의 전체 기본값(조정 결정 88). 테이블이 따로 고르지 않으면(<see cref="TableRule.Load"/> 가 null) 이것을 따른다. 기본이면 파일에 쓰지 않는다.
+    /// 스키마 버전은 올리지 않는다(<see cref="CopyJobSchema"/>): 예전 앱이 버려도 기본 방식으로 넣을 뿐 무엇을 지우고 넣는지는 같다.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public LoadMethod Load { get; init; }
+}
+
+/// <summary>
+/// 대상에 넣는 방식(조정 결정 88). <see cref="Standard"/> = 앱이 배열 INSERT(지금 동작). <see cref="ExternalTool"/> = 앱이 원본을 읽어 데이터 파일을 쓰고
+/// 대상 DBMS 의 적재 도구(Oracle SQL*Loader·Tibero tbLoader, direct path)로 넣는다. 외부 도구로 못 하는 테이블(키로 맞추기·「모두 끝난 뒤 한 번」 커밋·도구 없음)은
+/// 사전 점검이 기본 방식으로 바꾸고 알린다(<see cref="CopyLoad"/>).
+/// </summary>
+public enum LoadMethod { Standard, ExternalTool }
 
 /// <summary>테이블이 전체 기본값을 따르지 않고 따로 바꾼 항목.</summary>
 [Flags]
@@ -170,6 +185,13 @@ public sealed record TableRule(string Table, RuleKind Kind, TargetAction Action)
     /// <summary>전체 기본값(<see cref="CopyJob.TableDefaults"/>)을 따르지 않고 이 테이블에서 따로 바꾼 항목. 없음이면 파일에 쓰지 않는다.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public RuleOverrides Overrides { get; init; }
+
+    /// <summary>
+    /// 이 테이블의 적재 방식. null = 전체 기본값(<see cref="TableDefaults.Load"/>)을 따른다. 따로 고른 값은 전체 기본값을 바꿔도 그대로다.
+    /// <see cref="RuleOverrides"/> 에 값을 더하지 않고 따로 둔다: 열거형이 문자열로 저장돼 예전 앱이 모르는 이름을 읽으면 파일을 열지 못한다.
+    /// null 이면 파일에 쓰지 않는다(스키마 버전은 올리지 않는다, <see cref="TableDefaults.Load"/>).
+    /// </summary>
+    public LoadMethod? Load { get; init; }
 }
 
 public enum CommitMode { PerTable, PerBatch, AtEnd }

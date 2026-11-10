@@ -1023,7 +1023,12 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             }
 
             // 대기 원인 감시(WH1): 실행기가 30초 넘게 기다리는 대상 명령의 원인을 보려고 짧은 세션을 같은 접속으로 연다(비밀번호를 다시 묻지 않는다).
-            _sessions = opened with { OpenMonitor = (session, token) => _services.OpenMonitorAsync(session.Profile, token) };
+            // 외부 적재 도구(조정 결정 88): 도구 찾기·실행기·대상 접속 정보(받은 비밀번호를 다시 쓴다). 없으면 외부 도구로 고른 테이블도 기본 방식으로 넣는다.
+            _sessions = opened with
+            {
+                OpenMonitor = (session, token) => _services.OpenMonitorAsync(session.Profile, token),
+                ExternalLoad = _services.ExternalLoad(opened.Target.Profile),
+            };
             OnPropertyChanged(nameof(HasSessions));
             return _sessions;
         }

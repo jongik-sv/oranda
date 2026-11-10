@@ -481,6 +481,8 @@
                             SelectedValue="{Binding DefaultAction}" AutomationProperties.Name="전체 기본 대상 처리" />
                   <CheckBox x:Name="DefaultCreateBox" Classes="compact" IsChecked="{Binding DefaultCreateIfMissing}" Content="없으면 만들기" AutomationProperties.Name="전체 기본 없으면 만들기"
                             ToolTip.Tip="대상에 같은 이름의 테이블이 없으면 원본 구조로 만든 뒤 넣습니다. 대상에 이미 있는 테이블과 만들 수 없는 테이블에는 켜지 않습니다." />
+                  <CheckBox x:Name="DefaultExternalLoadBox" Classes="compact" IsChecked="{Binding DefaultExternalLoad}" Content="외부 도구로 적재" AutomationProperties.Name="전체 기본 외부 도구로 적재"
+                            ToolTip.Tip="대상 DBMS 의 적재 도구(Oracle SQL*Loader, Tibero tbLoader)로 넣습니다. 도구 경로는 설정의 드라이버 탭 「외부 적재 도구」에서 정합니다. 키로 맞추기(MERGE)·「모두 끝난 뒤 한 번」 커밋·도구가 없는 경우는 기본 방식으로 넣습니다. tbLoader(Tibero 대상)는 실험 기능입니다(실제 DB 시험 전)." />
                 </StackPanel>
                 <Border Classes="grid-frame">
                   <!-- 조회 결과와 같은 그리드(MonitorGrid). 행은 코드(MonitorGridBinder)가 Rules 에서 채운다. -->
@@ -513,7 +515,7 @@
                     <ScrollViewer DataContext="{Binding SelectedRule}" x:DataType="dc:TableRuleViewModel" HorizontalScrollBarVisibility="Disabled"
                                   IsVisible="{Binding ., Converter={x:Static ObjectConverters.IsNotNull}}">
                       <StackPanel Spacing="5" Margin="8,6,10,8">
-                        <Grid ColumnDefinitions="68,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4" Classes="form">
+                        <Grid ColumnDefinitions="68,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4" Classes="form">
                           <!-- 원본 계정(바꾸려면 표를 다시 더한다) · 대상 계정(고르거나 적는다) -->
                           <TextBlock Text="원본 계정" />
                           <TextBlock x:Name="RuleSourceOwnerText" Grid.Column="1" Text="{Binding SourceOwner}" Classes="mono" VerticalAlignment="Center"
@@ -563,6 +565,12 @@
                             <TextBlock Text="개발 접속에서만 만들 수 있습니다" Classes="dim" TextWrapping="Wrap" Margin="22,0,0,0"
                                        FontSize="{DynamicResource OrandaFontSizeSmall}" />
                           </StackPanel>
+                          <!-- 적재 방식(조정 결정 88): 전체 값 따름 · 기본(앱이 넣음) · 외부 도구(SQL*Loader·tbLoader) -->
+                          <TextBlock Grid.Row="7" Text="적재 방식" />
+                          <ComboBox x:Name="LoadBox" Grid.Row="7" Grid.Column="1" Classes="compact" HorizontalAlignment="Stretch"
+                                    ItemsSource="{x:Static dc:TableRuleViewModel.LoadOptions}" SelectedValueBinding="{ReflectionBinding Value}" SelectedValue="{Binding Load}"
+                                    AutomationProperties.Name="적재 방식"
+                                    ToolTip.Tip="이 테이블을 넣는 방식입니다. 외부 도구는 대상 DBMS 의 적재 도구로 넣고, 못 쓰면 사전 점검이 기본 방식으로 바꾸고 알립니다. tbLoader(Tibero 대상)는 실험 기능입니다(실제 DB 시험 전)." />
                         </Grid>
 
                         <!-- 기간 규칙 -->

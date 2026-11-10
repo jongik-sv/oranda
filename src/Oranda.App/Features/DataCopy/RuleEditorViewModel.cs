@@ -110,6 +110,13 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     [ObservableProperty]
     private bool _defaultCreateIfMissing = true;
 
+    /// <summary>
+    /// 전체 기본값 「외부 도구로 적재」(조정 결정 88). 테이블이 따로 고르지 않으면 따른다(규칙에 값을 넣지 않고 실행 때 정한다).
+    /// 대상 DBMS 의 적재 도구(SQL*Loader·tbLoader)가 설정에 있어야 하고, 못 쓰는 테이블은 사전 점검이 기본 방식으로 바꾸고 알린다.
+    /// </summary>
+    [ObservableProperty]
+    private bool _defaultExternalLoad;
+
     private bool _applyingTableDefaults;
 
     private static readonly TableDefaults InitialTableDefaults = new(null, null, true);
@@ -140,7 +147,10 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             DefaultActionChoice.MergeByPk => TargetAction.MergeByPk,
             _ => null,
         },
-        DefaultCreateIfMissing);
+        DefaultCreateIfMissing)
+    {
+        Load = DefaultExternalLoad ? LoadMethod.ExternalTool : LoadMethod.Standard,
+    };
 
     private void SetTableDefaults(TableDefaults defaults)
     {
@@ -163,6 +173,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
                 _ => DefaultActionChoice.Auto,
             };
             DefaultCreateIfMissing = defaults.CreateIfMissing;
+            DefaultExternalLoad = defaults.Load == LoadMethod.ExternalTool;
         }
         finally
         {

@@ -74,7 +74,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
     /// 한 번의 점검이 쓰는 상태. 점검 항목을 순서대로 쌓는다. <paramref name="catalog"/>·<paramref name="dialect"/>·<paramref name="statements"/>·<paramref name="codec"/> 은
     /// 대상 벌, <paramref name="errors"/> 는 원본·대상을 합친 분류기, 원본 쪽 것은 <paramref name="sourceParts"/> 에서 꺼낸다.
     /// </summary>
-    private sealed class Run(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, CopyDbmsParts sourceParts, Dbms targetDbms, ISqlCatalog catalog,
+    private sealed partial class Run(IBulkExecutionService bulk, IMetadataProvider metadata, IExecutionPolicy policy, CopyDbmsParts sourceParts, Dbms targetDbms, ISqlCatalog catalog,
                              IDbErrorClassifier errors, ICopyPrecheckDialect dialect, ICopyDialect statements, IBulkValueCodec codec,
                              CopySessions sessions, CopyJob job, ResolvedPeriod period, IProgress<string>? progress)
     {
@@ -146,9 +146,10 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
 
             order = await CheckSequencesAsync(plans, order, ct).ConfigureAwait(false);
+            order = await CheckExternalLoadAsync(order, ct).ConfigureAwait(false);
             await CheckReadConsistencyAsync(ct).ConfigureAwait(false);
             var preview = await BuildPreviewAsync(order, ct).ConfigureAwait(false);
-            return new PrecheckReport(_items, order, preview, _estimated) { Stages = _stages };
+            return new PrecheckReport(_items, order, [.. preview, .. ExternalLoadPreview(order)], _estimated) { Stages = _stages, ExternalTool = _externalTool };
         }
 
         // ---- 표 구조 ----
@@ -594,6 +595,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             var readable = await CheckSourcePrivilegeAsync(rule, ct).ConfigureAwait(false);
             var canDisableTriggers = false;
             IReadOnlyList<string> triggers = [];
+            var noTargetTriggers = false;
             if (creating)
             {
                 // 대상에 표가 없어 만든다: 옛 대상의 제약·권한·트리거·자식 FK 가 없다. 새 표라 지우지도 않는다.
@@ -608,7 +610,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             {
                 await CheckTargetPrivilegesAsync(rule, keys, ct).ConfigureAwait(false);
                 AddTargetOnlyConstraints(rule, source, target);
-                (canDisableTriggers, triggers) = await CheckTriggersAsync(rule, ct).ConfigureAwait(false);
+                (canDisableTriggers, triggers, noTargetTriggers) = await CheckTriggersAsync(rule, ct).ConfigureAwait(false);
             }
 
             IReadOnlyList<DisabledObject> disablable = creating ? [] : await CheckChildForeignKeysAsync(rule, keys, ct).ConfigureAwait(false);
@@ -629,6 +631,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 Companions = companions,
                 CanDisableTriggers = canDisableTriggers,
                 Triggers = triggers,
+                NoTargetTriggers = noTargetTriggers,
                 DisablableForeignKeys = disablable,
             };
         }
@@ -1195,7 +1198,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
         }
 
-        private async Task<(bool CanDisable, IReadOnlyList<string> Triggers)> CheckTriggersAsync(TableRule rule, CancellationToken ct)
+        private async Task<(bool CanDisable, IReadOnlyList<string> Triggers, bool None)> CheckTriggersAsync(TableRule rule, CancellationToken ct)
         {
             var key = Key(rule);
             var owner = TargetOwner(rule);
@@ -1226,7 +1229,8 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                     $"{key}: 대상 계정이 소유자가 아니라 트리거·이 테이블을 참조하는 FK 가 보이지 않을 수 있습니다. 있으면 복사한 행에도 트리거가 실행됩니다."));
             }
 
-            return (canDisable, owned);
+            // 「없음」은 소유자로 봤을 때만 믿는다(소유자가 아니면 남의 표 트리거가 안 보일 수 있다).
+            return (canDisable, owned, all.Count == 0 && _targetAccess.IsOwner(owner));
         }
 
         // 이 표를 참조하는 대상 외래키 중 ORA-02292 를 낼 수 있는 것(메모 D15). 작업 밖 자식 표도 본다.

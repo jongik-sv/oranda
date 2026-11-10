@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.ConnectionManager;
 using Oranda.App.ViewModels;
 using Oranda.Core.Metadata;
 using Oranda.Core.Transfer.Copy;
@@ -173,6 +174,12 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         _action = rule.Action;
         _createIfMissing = rule.CreateIfMissing && rule.Action != TargetAction.Recreate;
         Overrides = rule.Overrides;
+        _load = rule.Load switch
+        {
+            LoadMethod.Standard => LoadChoice.Standard,
+            LoadMethod.ExternalTool => LoadChoice.ExternalTool,
+            _ => LoadChoice.Default,
+        };
         _customWhere = rule.CustomWhere;
         _extraWhere = rule.ExtraWhere;
         _parent = rule.Parent;
@@ -383,7 +390,25 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     }
 
     /// <summary>「전체 값으로」: 따로 바꾼 표시를 모두 지운다. 값은 호출한 쪽이 <see cref="ApplyDefaults"/> 로 전체 값에 맞춘다.</summary>
-    public void ClearOverrides() => Overrides = RuleOverrides.None;
+    public void ClearOverrides()
+    {
+        Overrides = RuleOverrides.None;
+        Load = LoadChoice.Default;
+    }
+
+    /// <summary>
+    /// 적재 방식(조정 결정 88). <see cref="LoadChoice.Default"/> = 전체 기본값을 따른다(<see cref="TableRule.Load"/> = null). 따로 고르면 전체 값을 바꿔도 그대로다.
+    /// </summary>
+    [ObservableProperty]
+    private LoadChoice _load;
+
+    /// <summary>상세 칸의 적재 방식 고르기.</summary>
+    public static IReadOnlyList<ChoiceItem<LoadChoice>> LoadOptions { get; } =
+    [
+        new(LoadChoice.Default, "전체 값 따름"),
+        new(LoadChoice.Standard, "기본(앱이 넣음)"),
+        new(LoadChoice.ExternalTool, "외부 도구"),
+    ];
 
     public bool IsPeriod => Kind == RuleKind.Period;
 
@@ -707,6 +732,12 @@ public sealed partial class TableRuleViewModel : ViewModelBase
             SkipColumns = skips,
             CreateIfMissing = CreateIfMissing && CanCreateIfMissing,
             Overrides = Overrides,
+            Load = Load switch
+            {
+                LoadChoice.Standard => LoadMethod.Standard,
+                LoadChoice.ExternalTool => LoadMethod.ExternalTool,
+                _ => null,
+            },
         };
     }
 
@@ -715,3 +746,6 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     private static bool IsStringType(string dataType) =>
         dataType.StartsWith("VARCHAR", StringComparison.OrdinalIgnoreCase) || dataType.StartsWith("CHAR", StringComparison.OrdinalIgnoreCase);
 }
+
+/// <summary>테이블 적재 방식 고르기(<see cref="TableRuleViewModel.Load"/>). <see cref="Default"/> = 전체 기본값을 따른다.</summary>
+public enum LoadChoice { Default, Standard, ExternalTool }

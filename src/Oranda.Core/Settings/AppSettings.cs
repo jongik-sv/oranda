@@ -66,12 +66,30 @@ public sealed record AppSettings
 
 /// <summary>
 /// DBMS 드라이버 위치. 드라이버는 라이선스 때문에 앱에 들어 있지 않아 사용자가 위치를 지정한다(docs/design/tibero.md 1장).
-/// JSON: <c>"drivers": { "tiberoPath": "…" }</c>. 환경 변수 <c>ORANDA_TIBERO_DRIVER</c> 가 이 값보다 먼저다(로더 몫).
+/// JSON: <c>"drivers": { "tiberoPath": "…", "sqlLoaderPath": "…", "tbLoaderPath": "…" }</c>. 환경 변수 <c>ORANDA_TIBERO_DRIVER</c> 가 이 값보다 먼저다(로더 몫).
 /// </summary>
 public sealed record DriverSettings
 {
     /// <summary>Tibero.DataAccess.dll 의 위치: dll 파일, 그 dll 이 든 폴더, 또는 <c>.nupkg</c>. null·빈 값 = 지정 안 함.</summary>
     public string? TiberoPath { get; init; }
+
+    /// <summary>
+    /// 외부 적재 도구 SQL*Loader(<c>sqlldr</c>, Oracle 대상, XL1·XL3)의 위치: 실행 파일 또는 그것이 든 폴더. null·빈 값 = 찾기(PATH·ORACLE_HOME 등).
+    /// 새 키라 스키마 버전은 그대로, 키가 없는 옛 파일 = 찾기.
+    /// </summary>
+    public string? SqlLoaderPath { get; init; }
+
+    /// <summary>
+    /// 외부 적재 도구 tbLoader(<c>tbloader</c>, Tibero 대상, XL1·XL3)의 위치: 실행 파일 또는 그것이 든 폴더. null·빈 값 = 찾기(PATH·TB_HOME/client/bin 등).
+    /// 새 키라 스키마 버전은 그대로, 키가 없는 옛 파일 = 찾기.
+    /// </summary>
+    public string? TbLoaderPath { get; init; }
+
+    /// <summary>외부 적재 도구 경로(앞뒤 공백을 걷어 내고 빈 값은 null = 찾기). 메서드라 설정 파일에는 쓰이지 않는다.</summary>
+    public Oranda.Core.Transfer.Copy.ExternalLoad.ExternalToolPaths ToExternalToolPaths() =>
+        new(Normalize(SqlLoaderPath), Normalize(TbLoaderPath));
+
+    private static string? Normalize(string? path) => string.IsNullOrWhiteSpace(path) ? null : path.Trim();
 }
 
 /// <summary>AI 호출 방식(설계 §2). 새 값은 맨 끝에 추가한다.</summary>

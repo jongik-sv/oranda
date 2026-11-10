@@ -105,6 +105,8 @@ public sealed class CheckItemViewModel
         [CopyCheckCodes.SequenceCreated] = "시퀀스 함께 만듦",
         [CopyCheckCodes.SequenceBehind] = "대상 시퀀스가 키보다 뒤",
         [CopyCheckCodes.CompanionObjects] = "함께 만드는 객체",
+        [CopyCheckCodes.ExternalLoad] = "외부 도구로 적재",
+        [CopyCheckCodes.ExternalLoadFallback] = "기본 방식으로 적재",
     };
 
     public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices, string? tableText = null)

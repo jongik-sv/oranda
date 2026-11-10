@@ -223,7 +223,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <param name="sqlFormat">「SQL 포맷」 쪽. null 이면 앱 서비스(프로필 저장소·포매터)로 만든다(앱 밖이면 저장하지 않는 기본값 쪽).</param>
     /// <param name="featureGate">「기능」 탭의 재시작 안내를 읽을 게이트. null 이면 앱 서비스에서 찾는다(앱 밖이면 안내 없음).</param>
-    /// <param name="drivers">「드라이버」 탭. null 이면 앱 서비스에서 Tibero 드라이버 상태(로더)를 찾아 만든다(앱 밖이면 로더 없음).</param>
+    /// <param name="drivers">「드라이버」 탭. null 이면 앱 서비스에서 Tibero 드라이버 상태(로더)·외부 적재 도구 확인을 찾아 만든다(앱 밖이면 둘 다 없음).</param>
     public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null, IFeatureGate? featureGate = null, DriverSettingsPage? drivers = null)
     {
         _settings = settings;
@@ -337,7 +337,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var services = (Avalonia.Application.Current as App)?.Services;
         var selector = Oranda.App.Features.DbmsServices.SelectorOf(services);
         var status = selector?.Find<Oranda.Core.Connection.IDbmsDriverStatus>(Oranda.Core.Connection.Dbms.Tibero);
-        return new DriverSettingsPage(settings, text, status, Oranda.App.Features.ConnectionManager.DbmsAvailability.Current.Contains(Oranda.Core.Connection.Dbms.Tibero));
+        // 외부 적재 도구 찾기·확인(XL1·XL3): 등록돼 있지 않으면 null 이고 [도구 확인] 이 흐리다.
+        var toolProbe = services?.GetService<Oranda.Core.Transfer.Copy.ExternalLoad.IExternalToolProbe>();
+        return new DriverSettingsPage(settings, text, status, Oranda.App.Features.ConnectionManager.DbmsAvailability.Current.Contains(Oranda.Core.Connection.Dbms.Tibero), toolProbe);
     }
 
     private static SqlFormatPage CreateSqlFormatPage(SettingsService settings, IShellText text)
