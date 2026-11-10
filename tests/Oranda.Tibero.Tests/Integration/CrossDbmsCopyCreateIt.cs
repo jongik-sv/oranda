@@ -338,7 +338,10 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
     /// <summary>
     /// 측정: Oracle <c>VARCHAR2(n CHAR)</c>·<c>CHAR(n CHAR)</c> 원본을 Tibero 에 만들 때 Tibero 바이트 한도에 걸리는지 —
     /// EXTENDED <c>VARCHAR2(32767 CHAR)</c>(Oracle 이 STANDARD 면 원본을 못 만들어 건너뜀 줄), <c>CHAR(2000 CHAR)</c>, <c>VARCHAR2(4000 CHAR)</c>.
-    /// 만들어졌는지(만든 문장·Tibero 사전의 길이), 한 바이트 글자·한글로 꽉 채운 값이 들어갔는지(LENGTH/LENGTHB·값 비교)를 관찰 줄로만 남긴다.
+    /// 만들어졌는지(만든 문장·Tibero 사전의 길이), 한 바이트 글자·한글로 꽉 채운 값이 들어갔는지(LENGTH/LENGTHB·값 비교)를 관찰 줄로 남기고,
+    /// win144 #137 에서 관찰한 결과를 단언한다: <c>VARCHAR2(4000 CHAR)</c> = 3행 모두 들어가고 값 같음, <c>CHAR(2000 CHAR)</c> = 3행 모두 들어가나
+    /// Tibero 가 2000 글자로 채워 뒤 공백 수가 달라짐, <c>VARCHAR2(32767 CHAR)</c> = STANDARD Oracle 은 원본을 못 만들어(ORA-00910) 건너뜀.
+    /// EXTENDED Oracle 에서 32767 CHAR 원본을 만든 경우는 아직 관찰하지 않아 관찰 줄만 남긴다.
     /// </summary>
     [CrossDbmsTheory]
     [InlineData("varchar2_32767_char")]
@@ -373,9 +376,14 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         Note(env, item + ".oracle_source_create", createSource);
         if (createSource != "OK")
         {
+            // 원본을 못 만드는 것은 STANDARD Oracle 의 32767 CHAR 뿐이다(ORA-00910: 데이터 형식에 지정한 길이가 너무 깁니다).
+            Assert.Equal("varchar2_32767_char", label);
+            Assert.Contains("ORA-00910", createSource, StringComparison.Ordinal);
             Note(env, item, $"건너뜀: Oracle 원본 {type} 을 만들지 못함(EXTENDED 가 아니면 32767 CHAR 는 만들 수 없다)");
             return;
         }
+
+        var observed = label != "varchar2_32767_char"; // 결과를 관찰해 단언하는 경우(EXTENDED 32767 CHAR 는 아직 관찰 줄만)
 
         foreach (var (id, value) in new[] { (1, new string('a', ascii)), (2, new string('가', korean)), (3, "짧은 값") })
         {
@@ -398,6 +406,8 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
 
         if (ctx.Report.HasErrors)
         {
+            Assert.False(observed, env.Scrub(item + ": the precheck must not report errors: "
+                                             + string.Join(" | ", ctx.Report.Items.Where(i => i.Level == CheckLevel.Error).Select(i => i.Code + " " + i.Message))));
             Note(env, item, "사전 점검 오류로 실행하지 않음");
             return;
         }
@@ -406,6 +416,7 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         NoteResult(env, item, result);
         if (await env.CountAsync(target, "USER_TABLES", $"TABLE_NAME = '{t}'") == 0)
         {
+            Assert.False(observed, item + ": the Tibero table must be created");
             Note(env, item + ".tibero_table", "만들어지지 않음(또는 정리로 지워짐)");
             return;
         }
@@ -413,7 +424,28 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         Note(env, item + ".tibero_column", await TryTextAsync(env, async () =>
             Text(await env.QueryAsync(target, $"SELECT DATA_TYPE, DATA_LENGTH, CHAR_LENGTH, CHAR_USED FROM USER_TAB_COLUMNS WHERE TABLE_NAME = '{t}' AND COLUMN_NAME = 'V'"))));
         Note(env, item + ".tibero_lengths", await TryTextAsync(env, async () => Text(await env.QueryAsync(target, $"SELECT ID, LENGTH(V), LENGTHB(V) FROM {t} ORDER BY ID"))));
-        await NoteValueComparisonAsync(env, ctx, target, t, item);
+        var values = await NoteValueComparisonAsync(env, ctx, target, t, item);
+        if (!observed)
+        {
+            return;
+        }
+
+        // 세 행(한 바이트 글자로 꽉 채운 값·한글로 꽉 채운 값·짧은 값)이 모두 들어간다: Tibero 문자 단위 열은 바이트 한도에 걸리지 않는다.
+        var entry = Assert.Single(result.Tables);
+        Assert.Equal(CopyOutcome.Succeeded, entry.Outcome);
+        Assert.Empty(result.FailedRows);
+        Assert.Equal(3, await env.CountAsync(target, t));
+        if (label == "char_2000_char")
+        {
+            // Oracle CHAR(2000 CHAR) 는 2000바이트까지 채우고 Tibero 는 2000글자까지 채운다: 모든 행이 2000글자이고, 한글·짧은 값은 뒤 공백 수가 달라진다.
+            Assert.Equal(3, await env.CountAsync(target, t, "LENGTH(V) = 2000"));
+            Assert.False(values.StartsWith("값 같음", StringComparison.Ordinal), env.Scrub(item + ": trailing blanks were expected to differ: " + values));
+            Assert.False(values.StartsWith("오류:", StringComparison.Ordinal), env.Scrub(item + ": " + values));
+        }
+        else
+        {
+            Assert.Equal("값 같음(행 3)", values);
+        }
     }
 
     /// <summary>
@@ -872,8 +904,8 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         Assert.True(all.Count == 0, env.Scrub(item + ": " + string.Join(" | ", all.Take(20))));
     }
 
-    /// <summary>측정형 값 비교: 단언하지 않고 다른 칸·행 수 차이를 관찰 줄로만 남긴다.</summary>
-    private async Task NoteValueComparisonAsync(CrossDbmsItEnvironment env, CopyContext ctx, Dbms target, string table, string item)
+    /// <summary>측정형 값 비교: 다른 칸·행 수 차이를 관찰 줄로 남기고 그 글을 돌려준다(같으면 <c>값 같음(행 n)</c>, 비교 실패면 <c>오류: …</c>). 단언은 부르는 쪽이 한다.</summary>
+    private async Task<string> NoteValueComparisonAsync(CrossDbmsItEnvironment env, CopyContext ctx, Dbms target, string table, string item)
     {
         var plan = ctx.Plan(table);
         var targetInfo = await TargetInfoAsync(env, ctx, target, table);
@@ -885,5 +917,6 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
             return mismatches.Count == 0 ? "값 같음(행 " + N(targetRows.Count) + ")" : string.Join(" | ", mismatches.Take(10));
         });
         Note(env, item + ".values", text);
+        return text;
     }
 }

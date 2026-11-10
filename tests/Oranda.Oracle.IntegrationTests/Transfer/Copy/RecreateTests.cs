@@ -241,10 +241,13 @@ public sealed class RecreateTests
         Assert.Contains("다시 만들지 못했습니다", table.Message, StringComparison.Ordinal);
         // 결정 67: 지운 뒤 CREATE 가 실패하면 실행기가 그 자리에서 휴지통에서 되살린다(안내만 하지 않는다).
         Assert.Contains("휴지통에서 되살렸습니다", table.Message, StringComparison.Ordinal);
-        Assert.Contains("되살리지 않은 DDL", table.Message, StringComparison.Ordinal);
-        Assert.Contains("RF_T_TRG", table.Message, StringComparison.Ordinal);
-        Assert.Contains("GRANT SELECT", table.Message, StringComparison.Ordinal);
+        // 되살린 옛 표는 트리거·권한이 함께 돌아온다: 「되살리지 않은 DDL」 안내를 내지 않는다(FK 도 없다).
+        Assert.DoesNotContain("되살리지 않은 DDL", table.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("돌아오지 않는 FK", table.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("RF_T_TRG", table.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("GRANT SELECT", table.Message, StringComparison.Ordinal);
         Assert.Contains(result.Notices, n => n.Contains("휴지통에서 되살렸습니다", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Notices, n => n.Contains("되살리지 않은 DDL", StringComparison.Ordinal));
 
         // 실행 기록의 표 결과에도 같은 안내와 남은 DDL 이 남는다(다음에 기록을 열어도 알 수 있다).
         var recorded = Assert.Single(log.Tables);
@@ -254,6 +257,9 @@ public sealed class RecreateTests
         // 표는 되살아나 있고 옛 행이 그대로다.
         Assert.Equal(1, await CountAsync($"SELECT COUNT(*) FROM DBA_TABLES WHERE OWNER = '{scope.DstUser}' AND TABLE_NAME = 'RF_T'"));
         Assert.Equal("5,6", await ListAsync($"SELECT ID FROM {scope.DstUser}.RF_T ORDER BY ID"));
+        // 트리거(BIN$ 이름으로 돌아온다)·권한도 그대로 있다(안내를 빼도 잃은 것이 없다).
+        Assert.Equal(1, await CountAsync($"SELECT COUNT(*) FROM DBA_TRIGGERS WHERE TABLE_OWNER = '{scope.DstUser}' AND TABLE_NAME = 'RF_T'"));
+        Assert.Equal(1, await CountAsync($"SELECT COUNT(*) FROM DBA_TAB_PRIVS WHERE OWNER = '{scope.DstUser}' AND TABLE_NAME = 'RF_T' AND PRIVILEGE = 'SELECT'"));
     }
 
     [Fact]

@@ -72,15 +72,8 @@ public abstract class CachedMetadataProvider
         _backgroundRefreshInterval = backgroundRefreshInterval;
 
         // 세션이 닫히거나 끊기면 그 세션으로 다시 하기를 기다리던 뒤 갱신을 바로 깨운다(옛 세션에 묶여 같은 DbKey 의 새 세션 갱신을 막지 않게).
-        // 구독을 받지 않는 버스(발행만 기록하는 버스)면 깨우기 없이 지낸다 — 다시 하기는 대기 한도가 지나 세션 상태를 보고 끝난다. 제공자 만들기를 막지 않는다.
-        try
-        {
-            events?.Subscribe<SessionClosed>(this, e => WakeRunsOf(e.SessionId));
-            events?.Subscribe<SessionBroken>(this, e => WakeRunsOf(e.SessionId));
-        }
-        catch (NotSupportedException)
-        {
-        }
+        events?.Subscribe<SessionClosed>(this, e => WakeRunsOf(e.SessionId));
+        events?.Subscribe<SessionBroken>(this, e => WakeRunsOf(e.SessionId));
     }
 
     /// <summary>

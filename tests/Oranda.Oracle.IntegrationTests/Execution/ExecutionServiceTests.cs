@@ -618,9 +618,19 @@ internal sealed class ExecBus : IEventBus
 {
     public List<OrandaEvent> Events { get; } = [];
 
+    // 구독은 받되 알리지 않는다(메타데이터 제공자가 만들 때 세션 닫힘을 구독한다).
     public IDisposable Subscribe<TEvent>(object owner, Action<TEvent> handler)
         where TEvent : OrandaEvent
-        => throw new NotSupportedException();
+        => NoSubscription.Instance;
+
+    private sealed class NoSubscription : IDisposable
+    {
+        public static readonly NoSubscription Instance = new();
+
+        public void Dispose()
+        {
+        }
+    }
 
     public void Publish<TEvent>(TEvent e)
         where TEvent : OrandaEvent

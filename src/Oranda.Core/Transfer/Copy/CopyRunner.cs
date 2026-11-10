@@ -1299,16 +1299,22 @@ public partial class CopyRunner : ICopyRunner
                     .SelectMany(o => o.Preserved!.ReferencingConstraints.Select((fk, i) => (fk, i, o.Preserved!))
                         .Where(x => CopyOwners.SameOwner(x.fk.Owner, owner) && x.fk.Table == t.TableName && x.i < x.Item3.ReferencingForeignKeys.Count)
                         .Select(x => x.Item3.ReferencingForeignKeys[x.i]));
-                var pending = kept.Triggers.Concat(kept.Grants).Concat(kept.ReferencingForeignKeys)
-                    .Concat(t.JobForeignKeys.Select(f => f.Ddl))
-                    .Concat(t.Created ? [] : asChild)
+                // 휴지통에서 되살린 옛 표는 트리거·권한이 함께 돌아온다: FK(떼어 낸 참조 FK, 이 표가 자식인 옛 FK)만 남는다.
+                // 작업 안 FK 는 새로 만들 표의 원본 FK 라 옛 표에는 해당하지 않는다. (Tibero 대상 다시 만들기는 막혀 있어(TB4) 되살리기는 Oracle 대상만 닿는다.)
+                var pending = (t.Flashbacked
+                        ? kept.ReferencingForeignKeys.Concat(asChild)
+                        : kept.Triggers.Concat(kept.Grants).Concat(kept.ReferencingForeignKeys)
+                            .Concat(t.JobForeignKeys.Select(f => f.Ddl))
+                            .Concat(t.Created ? [] : asChild))
                     .Distinct(StringComparer.Ordinal)
                     .ToList();
                 if (pending.Count > 0)
                 {
-                    var text = (t.Created
-                                   ? "되살리지 않은 DDL(직접 실행하세요): "
-                                   : "되살리지 않은 DDL(휴지통에서 되돌렸다면 트리거·권한은 이미 있으니 FK 만 직접 실행하세요): ")
+                    var text = (t.Flashbacked
+                                   ? "되살린 옛 테이블에 돌아오지 않는 FK(직접 실행하세요): "
+                                   : t.Created
+                                       ? "되살리지 않은 DDL(직접 실행하세요): "
+                                       : "되살리지 않은 DDL(휴지통에서 되돌렸다면 트리거·권한은 이미 있으니 FK 만 직접 실행하세요): ")
                                + string.Join(" ; ", pending);
                     t.Note(text);
                     run.Notices.Add($"{t.Name}: {text}");
