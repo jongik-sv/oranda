@@ -85,6 +85,39 @@ public class PreConfirmedPolicyTests
         Assert.Equal(ExecutionStatus.Cancelled, bulk.Status);
     }
 
+    // D-065(사용자 요청 2026-11-11): 개발 접속은 위험 명령·WHERE 없는 DML 의 확인을 묻지 않고 진행한다. 판단 자체는 그대로 Confirm 이다.
+    [Fact]
+    public async Task Development_profile_runs_dangerous_and_unfiltered_statements_without_asking()
+    {
+        var rig = new Rig(readOnly: false, ConnectionEnvironment.Development) { Answer = false };
+        var drop = new SqlStatement("DROP TABLE T", default, StatementKind.Ddl) { Verb = "DROP", DangerousTarget = "T" };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => rig.Exec.ExecuteAsync(rig.Session, drop, new Dictionary<string, BindValue>(),
+            Options(null), CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => rig.Bulk.ExecuteArrayAsync(rig.Session, Unfiltered(), [], [[]], Options(null),
+            CancellationToken.None));
+
+        Assert.Empty(rig.Ui.Confirmations); // 「아니오」 로 답하는 창구인데도 진행했다: 묻지 않았다
+        Assert.Equal(2, rig.Bus.Decisions.Count);
+        Assert.All(rig.Bus.Decisions, d => Assert.Equal(PolicyDecisionKind.Confirm, d.Kind));
+        Assert.Equal("T", rig.Bus.Decisions[0].RetypeText);
+    }
+
+    [Theory]
+    [InlineData(ConnectionEnvironment.Test)]
+    [InlineData(ConnectionEnvironment.Production)]
+    public async Task Non_development_profile_still_asks_before_a_drop(ConnectionEnvironment environment)
+    {
+        var rig = new Rig(readOnly: false, environment) { Answer = false };
+        var drop = new SqlStatement("DROP TABLE T", default, StatementKind.Ddl) { Verb = "DROP", DangerousTarget = "T" };
+
+        var r = await rig.Exec.ExecuteAsync(rig.Session, drop, new Dictionary<string, BindValue>(), Options(null), CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Cancelled, r.Status);
+        Assert.Equal("T", Assert.Single(rig.Ui.Confirmations).RetypeText);
+        Assert.False(r.Policy!.ConfirmationSkipped);
+    }
+
     [Theory]
     [InlineData(Delete, 0)] // 치환 뒤 글 = 미리 받은 확인
     [InlineData("DELETE FROM &X", 1)] // 치환 전 글은 미리 받은 확인이 아니다
@@ -209,9 +242,10 @@ public class PreConfirmedPolicyTests
 
     private sealed class Rig
     {
-        public Rig(bool readOnly)
+        // 기본은 시험 접속: 개발 접속은 확인을 묻지 않는다(D-065).
+        public Rig(bool readOnly, ConnectionEnvironment environment = ConnectionEnvironment.Test)
         {
-            Session = new FakeSession(new ConnectionProfile("p", "scott", "db.example.com:1521/ORCL", ReadOnly: readOnly));
+            Session = new FakeSession(new ConnectionProfile("p", "scott", "db.example.com:1521/ORCL", ReadOnly: readOnly, Environment: environment));
             Ui = new RecordingInteraction(this);
             Exec = new OracleExecutionService(new ExecutionPolicy(), Ui, Bus, null, pageSize: 500);
             Bulk = new OracleBulkExecutionService(new ExecutionPolicy(), Ui, Bus);

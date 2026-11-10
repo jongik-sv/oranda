@@ -28,6 +28,11 @@ public sealed partial class ExecutionController
         var runBinds = SnapshotBinds(stmt, binds);
         var title = "결과 " + ordinal.ToString(CultureInfo.InvariantCulture);
         var text = Describe(r);
+        if (r.Policy is { ConfirmationSkipped: true })
+        {
+            Log.AddMessage(MessageKind.Info, $"{Brief(stmt)} — 개발 접속이라 확인 생략");
+        }
+
         switch (r.Status)
         {
             case ExecutionStatus.Succeeded:

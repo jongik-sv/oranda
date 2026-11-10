@@ -1,3 +1,4 @@
+using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Sessions;
 
@@ -21,6 +22,8 @@ public readonly record struct PolicyGateResult(PolicyGateOutcome Outcome, Policy
 /// 판단을 <see cref="PolicyDecisionMade"/> 로 알린 뒤, 거부면 그대로 끝내고 확인이면 사용자에게 묻는다.
 /// 호출한 쪽이 미리 받은 확인(<see cref="ExecutionOptions.PreConfirmed"/>)에 같은 문장 텍스트(서수 비교)가 있으면 묻지 않는다.
 /// 미리 받은 확인은 Confirm 에만 쓴다. Deny 는 어떤 경우에도 넘지 못한다.
+/// 세션 접속의 환경이 <see cref="ConnectionEnvironment.Development"/> 이면 Confirm 을 묻지 않고 진행한다(D-065, 사용자 요청 2026-11-11).
+/// 그때 결과에 싣는 판단은 <see cref="PolicyDecision.ConfirmationSkipped"/> 가 켜져 있다. 판단 자체(이벤트·사전 점검)는 그대로 Confirm 이다.
 /// </summary>
 public static class PolicyGate
 {
@@ -36,6 +39,11 @@ public static class PolicyGate
             case PolicyDecisionKind.Allow:
                 return new PolicyGateResult(PolicyGateOutcome.Proceed, decision, null);
             case PolicyDecisionKind.Confirm:
+                if (s.Profile.Environment == ConnectionEnvironment.Development)
+                {
+                    return new PolicyGateResult(PolicyGateOutcome.Proceed, decision, decision with { ConfirmationSkipped = true });
+                }
+
                 if (!IsPreConfirmed(options, stmt) && !await interaction.ConfirmAsync(stmt, decision, ct))
                 {
                     return new PolicyGateResult(PolicyGateOutcome.Cancelled, decision, null);

@@ -58,7 +58,8 @@ public class ExecutionServiceLogicTests
     {
         var ui = new ExecInteraction { ConfirmAnswer = false };
         var service = new OracleExecutionService(new ExecutionPolicy(), ui, new ExecBus(), null, pageSize: 500);
-        var session = new DriverlessSession(new ConnectionProfile("p", "u", "h:1521/s"));
+        // 시험 접속: 개발 접속은 확인을 묻지 않는다(D-065).
+        var session = new DriverlessSession(new ConnectionProfile("p", "u", "h:1521/s", Environment: ConnectionEnvironment.Test));
         var stmt = new SqlStatement("DELETE FROM emp", default, StatementKind.Dml) { Verb = "DELETE", IsUnfilteredDml = true };
 
         var r = await service.ExecuteAsync(session, stmt, new Dictionary<string, BindValue>(), null, default);

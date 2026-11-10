@@ -39,7 +39,8 @@ public class SessionMonitorLogicTests
         var ui = new ExecInteraction { ConfirmAnswer = false };
         var exec = new OracleExecutionService(new ExecutionPolicy(), ui, new ExecBus(), null, pageSize: 500);
         var service = new OracleMonitorService(exec);
-        var session = new DriverlessSession(new ConnectionProfile("p", "u", "h:1521/s"));
+        // 시험 접속: 개발 접속은 확인을 묻지 않는다(D-065).
+        var session = new DriverlessSession(new ConnectionProfile("p", "u", "h:1521/s", Environment: ConnectionEnvironment.Test));
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => service.KillAsync(session, new SessionKey(1, 12, 345), true, default));
 

@@ -601,6 +601,31 @@ public sealed class ExecutionTests
         Assert.Equal(PolicyRule.ProductionChange, request.Decision.Rule);
     }
 
+    // D-065: 개발 접속이라 정책 관문이 확인을 묻지 않고 진행한 문장은 실행 로그에 한 줄을 남긴다.
+    [Fact]
+    public Task Run_log_says_the_confirmation_was_skipped_for_a_development_connection() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        rig.Host.NewDocument("drop table t_emp");
+        rig.Exec.Handler = (s, _) => Task.FromResult(new ExecutionResult(s, ExecutionStatus.Succeeded)
+        {
+            Policy = new PolicyDecision(PolicyDecisionKind.Confirm, PolicyRule.DangerousCommand, "위험 명령") { RetypeText = "T_EMP", ConfirmationSkipped = true },
+        });
+
+        await rig.Controller.RunAsync(RunMode.Statement);
+
+        Assert.Empty(rig.Dialogs.Confirms);
+        Assert.Single(rig.Log.Messages, m => m.Kind == MessageKind.Info && m.Text.EndsWith("개발 접속이라 확인 생략", StringComparison.Ordinal));
+
+        // 확인을 거쳐 진행한 문장(또는 확인이 없던 문장)에는 그 줄이 없다.
+        rig.Exec.Handler = (s, _) => Task.FromResult(new ExecutionResult(s, ExecutionStatus.Succeeded)
+        {
+            Policy = new PolicyDecision(PolicyDecisionKind.Confirm, PolicyRule.DangerousCommand, "위험 명령") { RetypeText = "T_EMP" },
+        });
+        await rig.Controller.RunAsync(RunMode.Statement);
+        Assert.Single(rig.Log.Messages, m => m.Text.Contains("확인 생략", StringComparison.Ordinal));
+    });
+
     [Fact]
     public async Task Interaction_remembers_substitution_values_in_memory_only()
     {
@@ -1762,7 +1787,7 @@ public sealed class ExecutionIntegrationTests
     });
 
     [Fact]
-    public Task Production_label_asks_before_update_and_unfiltered_dml_asks_everywhere() => Ui.Run(async () =>
+    public Task Production_label_asks_before_update_and_unfiltered_dml_asks_outside_development() => Ui.Run(async () =>
     {
         if (!Configured)
         {
@@ -1777,7 +1802,8 @@ public sealed class ExecutionIntegrationTests
             await rig.RunSqlAsync($"create table {table} (id number primary key, v number);\ninsert into {table} values (1, 1);\ncommit;", "oranda.exec.runScript");
             Assert.Empty(rig.Dialogs.Confirms); // 개발 접속의 DDL·WHERE 있는 DML 은 묻지 않는다.
 
-            // WHERE 없는 DELETE 는 개발 접속에서도 확인한다.
+            // WHERE 없는 DELETE 는 개발이 아닌 접속에서 확인한다(개발 접속은 묻지 않는다, D-065).
+            await rig.ConnectAsync(Profile(ConnectionEnvironment.Test));
             rig.Dialogs.ConfirmAnswer = false;
             await rig.RunSqlAsync($"delete from {table}");
             var unfiltered = Assert.Single(rig.Dialogs.Confirms);

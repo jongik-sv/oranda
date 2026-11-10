@@ -133,7 +133,9 @@ internal sealed class DbaFlowEnv : IAsyncDisposable
     {
         user ??= "system";
         password ??= ResidentDb.SystemPassword;
-        var profile = new ConnectionProfile("res-" + user, user, ResidentDb.DataSource, ReadOnly: readOnly, LicensePack: pack);
+        // 시험 접속: Kill 확인을 묻는 흐름을 본다(개발 접속은 확인을 묻지 않는다, D-065).
+        var profile = new ConnectionProfile("res-" + user, user, ResidentDb.DataSource, ReadOnly: readOnly, LicensePack: pack,
+            Environment: ConnectionEnvironment.Test);
         using var cred = new SecureCredential(password);
         var session = await Manager.OpenAsync(profile, cred, purpose, default);
         _sessions.Add(session);

@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -17,6 +19,7 @@ namespace Oranda.App.Features.Execution;
 /// <summary>
 /// <see cref="IExecutionDialogs"/> 의 Avalonia 구현. XAML 없이 코드로 만든다(작고 이 Task 안에서만 쓴다).
 /// 모든 대화상자는 UI 스레드에서 열린다. 기본 단추는 「취소」다(Enter 로 바로 실행되지 않는다, ui-shell.md 4.3).
+/// 예외: 실행 확인의 이름 재입력 칸에서 친 Enter 는 이름이 맞을 때만 실행하고, 틀리면 창을 둔다(취소하지 않는다).
 /// </summary>
 public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 {
@@ -109,12 +112,41 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         cancel.Click += (_, _) => dialog.Close();
         if (retype is not null)
         {
-            retype.TextChanged += (_, _) => run.IsEnabled = model.CanAccept(retype.Text ?? string.Empty);
+            var mismatch = new TextBlock { Text = "입력한 이름이 맞지 않습니다.", IsVisible = false, Classes = { "warning-text" } };
+            DialogShell.AutomationName(mismatch, "다시 입력 상태");
+            body.Children.Add(mismatch);
+            retype.TextChanged += (_, _) =>
+            {
+                run.IsEnabled = model.CanAccept(retype.Text ?? string.Empty);
+                mismatch.IsVisible = false;
+            };
+
+            // 이름을 다시 친 칸의 Enter 는 그 입력을 확정하는 동작이다. 기본 단추(「취소」)로 흘려보내지 않는다:
+            // 맞으면 실행하고, 틀리면 창을 둔 채 맞지 않는다고만 알린다. Esc 는 그대로 「취소」(IsCancel).
+            retype.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+            {
+                if (e.Key != Key.Enter || e.KeyModifiers != KeyModifiers.None)
+                {
+                    return;
+                }
+
+                e.Handled = true;
+                if (model.CanAccept(retype.Text ?? string.Empty))
+                {
+                    accepted = true;
+                    dialog.Close();
+                }
+                else
+                {
+                    mismatch.IsVisible = true;
+                }
+            }, RoutingStrategies.Tunnel);
         }
 
         body.Children.Add(DialogShell.Buttons(run, cancel));
         dialog.Content = new StackPanel { Children = { header, body } };
-        dialog.Opened += (_, _) => cancel.Focus();
+        // 이름 재입력이 있으면 그 칸에서 시작한다(바로 칠 수 있게). 없으면 기본 단추 「취소」.
+        dialog.Opened += (_, _) => (retype as Control ?? cancel).Focus();
         await ShowAsync(dialog).ConfigureAwait(true);
         return accepted;
     }

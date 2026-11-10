@@ -166,8 +166,9 @@ public class ExtensionTestTests
     [Fact]
     public Task Panel_drop_asks_for_retyping_the_target_name() => Ui.Run(async () =>
     {
-        var dev = new ConnectionProfile("DEV", "scott", "db:1521/S");
-        var rig = new EngineRig(dev);
+        // 시험 접속: 개발 접속은 위험 명령도 묻지 않는다(D-065).
+        var test = new ConnectionProfile("TEST", "scott", "db:1521/S", Environment: ConnectionEnvironment.Test);
+        var rig = new EngineRig(test);
         var vm = rig.Panel("drop table emp_backup");
 
         var result = await vm.RunCurrentStatementAsync(default);

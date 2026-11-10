@@ -586,3 +586,12 @@
 - **Risk**: undo 보관 기간이 짧으면 긴 복사가 ORA-01555 로 멈춘다. `TIMESTAMP_TO_SCN` 은 몇 초 앞 SCN 일 수 있어 방금 DDL 한 테이블이 ORA-01466 으로 실패할 수 있다. 사용자 조건 안 하위 질의는 지금 데이터를 읽는다(사전 점검에 안내). LOB 의 ORA-22924 는 따로 분류하지 않는다. READ ONLY 트랜잭션 안 `AS OF SCN` 동작은 IT 로 확인한다. Tibero 의 시점 데이터 잃음·정의 바뀜·잘못된 TSN 오류 번호는 미실측(IT `TiberoCopyReadPointIt` 가 출력한다)이라 안내에 번호가 없다
 - **Reversible**: yes(배타 규칙으로 되돌리면 된다)
 - **Source**: 사용자 결정 2026-11-11, 조정자 회차 xdb-copy 결정 72(이를 대신함), 69, 100(Tibero 원본 켬, PF2b2)
+
+## D-065 (2026-11-11T06:00:00Z)
+- **Phase**: 회차 밖(실행 확인, 사용자 요청)
+- **Decision needed**: 개발 접속에서도 위험 명령(DROP·TRUNCATE·PURGE·ALTER SYSTEM·세션 Kill)과 WHERE 없는 UPDATE/DELETE 의 실행 확인 창(위험 명령은 이름 재입력)을 띄울지
+- **Decision made**: 세션 접속의 환경이 「개발」(`ConnectionEnvironment.Development`)이면 정책 관문이 확인을 묻지 않고 바로 실행한다. 판단은 한 곳, 정책 관문 단계(`PolicyGate.DecideAsync`, Oracle·Tibero 실행·대량 실행 서비스가 함께 쓴다)에서 한다. 정책 판단 자체(`ExecutionPolicy`, `PolicyDecisionMade` 이벤트, 데이터 복사 사전 점검의 Confirm 항목)는 그대로 Confirm 이고, 결과에 싣는 판단에 `ConfirmationSkipped` 가 켜진다. SQL 편집기 실행 로그에 「개발 접속이라 확인 생략」 한 줄을 남긴다. 시험·운영 접속은 지금 그대로 묻는다. 거부(읽기 전용·조회 전용 Role·라이선스·AI 에이전트 출처)는 개발 접속에서도 그대로 거부다. 환경을 따로 정하지 않은 접속은 지금 코드의 기본값(개발)을 따른다
+- **Rationale**: 사용자 요청 2026-11-11(「개발계로 설정이 되어 있으면 실행확인 하지 않고 실행이 되게 해줘」). 개발 DB 에서는 DROP·전체 DELETE 를 자주 하는데 매번 이름을 다시 치는 것이 걸림돌이었다
+- **Risk**: 운영·시험 DB 를 「개발」 로 잘못 표시하거나 환경을 정하지 않은 채 두면(기본값 개발) DROP·PURGE·WHERE 없는 DELETE·Kill 이 묻지 않고 바로 실행된다. ui-shell.md 4.3·SAFE-03·SAFE-08 의 「WHERE 없는 DML 은 모든 접속에서 확인」 을 개발 접속에 한해 대신한다
+- **Reversible**: yes(`PolicyGate` 의 분기 하나를 지우면 예전처럼 묻는다)
+- **Source**: 사용자 요청 2026-11-11(조정자 전달)

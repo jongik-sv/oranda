@@ -51,4 +51,10 @@ public sealed record PolicyDecision(PolicyDecisionKind Kind, PolicyRule Rule = P
     public static PolicyDecision Allowed { get; } = new(PolicyDecisionKind.Allow);
 
     public string? RetypeText { get; init; }
+
+    /// <summary>
+    /// 확인을 묻지 않고 진행했다(개발 접속, D-065). 정책 관문이 실행 결과의 <c>Policy</c> 에 싣는 판단에만 켠다.
+    /// 화면은 이 값으로 「개발 접속이라 확인 생략」 을 실행 로그에 남긴다.
+    /// </summary>
+    public bool ConfirmationSkipped { get; init; }
 }

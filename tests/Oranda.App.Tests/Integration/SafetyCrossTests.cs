@@ -1012,13 +1012,20 @@ public sealed class SafetyCrossTests : IClassFixture<SafetyAppDbFixture>, IAsync
             return;
         }
 
-        // PURGE 는 되돌릴 수 없는 위험 명령이라 개발 접속에서도 묻는다. FLASHBACK 은 운영 라벨에서만 묻는다.
-        var expected = mode == AppSafeMode.Prod ? 2 : 1;
-        Assert.Equal(expected, _rig.Dialogs.Confirms.Count);
-        Assert.Equal(mode == AppSafeMode.Prod ? PolicyRule.ProductionChange : PolicyRule.DangerousCommand, _rig.Dialogs.Confirms[0].Decision.Rule);
+        if (mode == AppSafeMode.Dev)
+        {
+            // 개발 접속은 되돌릴 수 없는 PURGE 도 묻지 않고 실행한다(D-065). 되살리기도 묻지 않는다.
+            Assert.Empty(_rig.Dialogs.Confirms);
+            Assert.Equal("0", await _db.ScalarAsync(bin(T + "_B1")));
+            Assert.Equal("1", await _db.ScalarAsync($"SELECT COUNT(*) FROM user_tables WHERE table_name = '{T}_B2'"));
+            return;
+        }
+
+        // 운영 라벨: PURGE(위험 명령)·FLASHBACK 모두 묻는다. 거절하면 둘 다 안 일어난다.
+        Assert.Equal(2, _rig.Dialogs.Confirms.Count);
+        Assert.Equal(PolicyRule.ProductionChange, _rig.Dialogs.Confirms[0].Decision.Rule);
         Assert.Equal("1", await _db.ScalarAsync(bin(T + "_B1"))); // 거절한 Purge 는 안 일어났다
-        var flashed = mode == AppSafeMode.Prod ? "0" : "1"; // 개발 접속의 되살리기는 묻지 않고 실행된다
-        Assert.Equal(flashed, await _db.ScalarAsync($"SELECT COUNT(*) FROM user_tables WHERE table_name = '{T}_B2'"));
+        Assert.Equal("0", await _db.ScalarAsync($"SELECT COUNT(*) FROM user_tables WHERE table_name = '{T}_B2'"));
 
         _rig.Dialogs.ConfirmAnswer = true;
         await vm.PurgeAsync(purgeItem);

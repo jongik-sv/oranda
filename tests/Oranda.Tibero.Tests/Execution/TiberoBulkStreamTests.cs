@@ -70,7 +70,7 @@ public sealed class TiberoBulkStreamTests : IDisposable
     public async Task A_policy_deny_is_bulk_denied_and_a_declined_confirmation_is_a_cancellation()
     {
         Serve(_ => new DataTable());
-        await using var session = NewSession();
+        await using var session = NewSession(environment: ConnectionEnvironment.Test); // 개발 접속은 확인을 묻지 않는다(D-065)
         var deny = NewService(new FakePolicy(new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.ProductionChange, "no")));
         var confirm = NewService(new FakePolicy(new PolicyDecision(PolicyDecisionKind.Confirm, PolicyRule.ProductionChange, "sure?")),
             new FakeInteraction(confirm: false));
@@ -427,12 +427,12 @@ public sealed class TiberoBulkStreamTests : IDisposable
     private TiberoBulkExecutionService NewService(FakePolicy? policy = null, FakeInteraction? interaction = null) =>
         new(policy ?? new FakePolicy(PolicyDecision.Allowed), interaction ?? new FakeInteraction(confirm: true), _bus);
 
-    private TiberoSession NewSession(bool readOnly = false)
+    private TiberoSession NewSession(bool readOnly = false, ConnectionEnvironment environment = ConnectionEnvironment.Development)
     {
         var driver = FakeDriverHost.Driver;
         var connection = driver.CreateConnection("Data Source=x");
         connection.Open();
-        var profile = new ConnectionProfile("t", "u", "h:1/d", Dbms: Dbms.Tibero, ReadOnly: readOnly);
+        var profile = new ConnectionProfile("t", "u", "h:1/d", Dbms: Dbms.Tibero, ReadOnly: readOnly, Environment: environment);
         return new TiberoSession(Guid.NewGuid(), profile, Server, SessionPurpose.Work, "D/-/U", connection, null, _bus, driver: driver);
     }
 

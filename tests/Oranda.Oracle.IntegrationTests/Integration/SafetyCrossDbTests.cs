@@ -708,11 +708,11 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         }
     }
 
-    // ---- 개발 접속: 같은 문장이 물음 없이 돌아야 한다(위험 명령만 이름 재입력) ---------------------
+    // ---- 개발 접속: 같은 문장이 물음 없이 돌아야 한다(위험 명령도 묻지 않는다, D-065) -------------------
 
     [SafetyDbTheory]
     [MemberData(nameof(CaseNames))]
-    public async Task Development_profile_runs_without_asking_except_dangerous_commands(string name)
+    public async Task Development_profile_runs_without_asking_even_dangerous_commands(string name)
     {
         if (!_db.Enabled)
         {
@@ -727,14 +727,11 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         await session.CommitAsync(default);
 
         Assert.All(results, r => Assert.NotEqual(ExecutionStatus.Denied, r.Status));
+        Assert.Empty(_rig.Ui.Confirms);
         if (c.Danger)
         {
-            Assert.All(_rig.Ui.Confirms, q => Assert.Equal(PolicyRule.DangerousCommand, q.Decision.Rule));
-            Assert.NotEmpty(_rig.Ui.Confirms);
-        }
-        else
-        {
-            Assert.Empty(_rig.Ui.Confirms);
+            // 판단은 그대로 위험 명령 확인이고, 개발 접속이라 묻지 않고 진행했다.
+            Assert.Contains(results, r => r.Policy is { Rule: PolicyRule.DangerousCommand, ConfirmationSkipped: true });
         }
 
         var after = await _db.ScalarAsync(c.Snapshot);
@@ -1410,7 +1407,8 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
 
             await new OracleMonitorService(_rig.Exec).KillAsync(monitor, key, false, default);
 
-            Assert.Single(_rig.Ui.Confirms); // 개발 접속에서도 위험 명령이라 한 번 묻는다.
+            // 운영은 한 번 묻는다. 개발 접속은 위험 명령도 묻지 않는다(D-065).
+            Assert.Equal(mode == SafeMode.Prod ? 1 : 0, _rig.Ui.Confirms.Count);
             Assert.NotEqual("INACTIVE", await VictimStatusAsync(key));
         }
     }
