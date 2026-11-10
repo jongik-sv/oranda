@@ -59,6 +59,9 @@ internal sealed class FakeGate : IAgentGate
 
     public TaskCompletionSource? Block { get; set; }
 
+    /// <summary><see cref="Block"/> 에서 기다리기 시작하면 끝난다(도구 실행 자리를 잡았다는 신호).</summary>
+    public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public event EventHandler<AgentToolActivityEventArgs>? ToolCompleted;
 
     public void Raise(AgentToolActivityEventArgs e) => ToolCompleted?.Invoke(this, e);
@@ -72,6 +75,7 @@ internal sealed class FakeGate : IAgentGate
     {
         if (Block is { } block)
         {
+            Entered.TrySetResult();
             await block.Task.WaitAsync(ct);
         }
 

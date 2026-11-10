@@ -8,4 +8,14 @@
     <!-- 성능 단정 시험(Category=Perf)은 기본 실행·CI 에서 뺀다(docs/idea.md, 2026-10-20 결정). 돌릴 때는 dotnet test 의 filter 옵션에 Category=Perf. -->
     <VSTestTestCaseFilter Condition="'$(VSTestTestCaseFilter)' == ''">Category!=Perf</VSTestTestCaseFilter>
   </PropertyGroup>
+
+  <!--
+    xUnit 실행 설정(시험 프로젝트 모두 같은 파일). parallelAlgorithm=conservative(2.8 이후 기본값이지만 의도를 남긴다):
+    동시에 도는 시험 묶음을 maxParallelThreads(코어 수)로 묶고 동기화 문맥을 깔지 않는다. 옛 방식(aggressive, 2.5.3 의 유일한 방식)은
+    어셈블리 전체 시험의 await 연속을 코어 수만큼의 스레드 큐 하나(MaxConcurrencySyncContext)로 돌려, CI 시작 직후처럼 큐가 밀리면
+    연속 하나가 수 초씩 밀려 실제 시간 시한 시험이 간헐로 떨어졌다(ci-flaky, 2026-11-10).
+  -->
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

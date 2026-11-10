@@ -15,19 +15,19 @@ Windows 줄은 2026-10-25 로컬 `vpk pack --channel win` 결과다. macOS 줄�
 
 ## 태그 푸시로 내기
 
-같은 커밋을 여러 ref 에 push 하면 ref 마다 `ci` 가 처음부터 돈다(concurrency 그룹이 ref 별). 그래서 릴리스 때는 **main 과 태그만** push 한다. 작업 브랜치(`dev-*`)는 릴리스 때 push 하지 않고, 다음 작업을 push 할 때 함께 따라가게 둔다.
+`ci` 는 `v*` 태그 push 와 수동 실행(`workflow_dispatch`)에서만 돈다. main·작업 브랜치(`dev-*`) push 와 PR 은 CI 를 돌리지 않는다. 태그 실행이 시험·패키지·게시를 한 번에 한다.
 
-1. 릴리스 노트(`docs/release-notes/<버전>.md`)를 커밋하고 main 에 push 한다. 이 main 실행이 단위·UI·통합 시험을 모두 돈다.
-2. 같은 커밋에 태그를 만들어 바로 push 한다. main 실행이 끝나기를 기다릴 필요는 없다. 태그 이름이 패키지 버전이 된다(`vX.Y.Z` → `X.Y.Z`, 시험판은 `vX.Y.Z-beta.1` 형식).
+1. 릴리스 노트(`docs/release-notes/<버전>.md`)를 커밋하고 main 에 push 한다(CI 는 돌지 않는다).
+2. 같은 커밋에 태그를 만들어 push 한다. 태그 이름이 패키지 버전이 된다(`vX.Y.Z` → `X.Y.Z`, 시험판은 `vX.Y.Z-beta.1` 형식).
    ```
    git push origin main
    git tag v0.2.0
    git push origin v0.2.0
    ```
-3. 태그 실행은 시험을 다시 돌리지 않는다. `verify-main` 작업이 같은 커밋의 main 실행을 찾아 끝날 때까지(최대 60분) 기다리고, 통과했을 때만 `release` 작업이 올린다. 그동안 `windows`·`macos` 작업은 빌드 시험 없이 바로 게시·패키지를 만든다.
-   - main 실행이 없으면(main 을 push 하지 않고 태그만 올림) `verify-main` 이 실패한다. main 을 push 한 뒤 태그 실행을 다시 돌린다.
-   - main 실행이 간헐 실패로 떨어지면 main 실행의 실패한 작업을 다시 돌려 통과시킨 뒤, 태그 실행의 실패한 작업(`verify-main`·`release`)을 다시 돌린다.
-   - 수동 실행(`workflow_dispatch`)은 이 확인 없이 예전처럼 시험까지 돌고 올린다.
+3. 태그 실행이 `windows`·`macos`(빌드·단위·UI 시험·시작 성능)와 `integration`(Testcontainers 통합 시험)을 돌리고, 셋 다 통과했을 때만 `release` 작업이 올린다.
+   - 시험이 흔들려 떨어지면 태그 실행의 실패한 작업만 다시 돌린다(`release` 는 그 뒤에 이어 돈다).
+   - 코드를 고쳐야 하면 새 커밋을 main 에 push 하고 새 커밋에 태그를 붙인다(같은 버전을 다시 쓰려면 원격 태그를 지우고 다시 붙인다).
+   - 수동 실행(`workflow_dispatch`)은 시험·패키지까지만 돌고 올리지 않는다(아래 「수동 실행」).
 4. `windows`·`macos` 작업이 각자 패키지를 만든다(아래 「서명 상태별 동작」). 두 작업이 같은 규칙으로 버전을 정하고, `release` 작업이 두 버전이 같은지 확인한 뒤 `vpk upload github --channel win` → `--channel osx` 순서로 GitHub Release `Oranda 0.2.0` 에 올린다(`--publish --merge`: 두 번째 채널은 같은 릴리스에 더해진다). 이전 릴리스가 있으면 각 작업이 먼저 받아 델타 패키지도 만든다.
 5. 설치본은 시작 20초 뒤(24시간마다) 또는 도움말 > 업데이트 확인에서 새 버전을 찾아 내려받고, 종료할 때 적용한다.
 
@@ -48,8 +48,8 @@ Windows 줄은 2026-10-25 로컬 `vpk pack --channel win` 결과다. macOS 줄�
 | 조건 | 동작 |
 |---|---|
 | 비밀값 `SIGNPATH_API_TOKEN`·`SIGNPATH_ORGANIZATION_ID` 없음 (지금, 승인 전) | 서명 없이 패키지. `Signature report` 단계가 무서명 개수를 경고로 남긴다. 받는 사람은 SmartScreen 에서 「추가 정보 → 실행」(docs/user/install.md) |
-| 비밀값 있음 + 보통 push·PR | 서명하지 않는다(서명 요청은 사람이 승인해야 하므로 릴리스에만 쓴다). 포크 PR 에는 비밀값이 전달되지 않는다 |
-| 비밀값 있음 + 태그 push 또는 수동 실행 | ① 게시 폴더의 `Oranda.*`(Oranda 자신의 exe·dll)만 산출물로 올려 SignPath 에 서명 요청(artifact configuration `app-files`) → 승인되면 서명본을 게시 폴더에 덮어씀 → ② `vpk pack`(서명 매개변수 없음) → ③ `Oranda-win-Setup.exe` 를 다시 서명 요청(artifact configuration `installer`) → 서명본으로 바꿈. 승인을 최대 1시간 기다린다 |
+| 비밀값 있음 + 수동 실행 | 서명하지 않는다(서명 요청은 사람이 승인해야 하므로 태그 릴리스에만 쓴다) |
+| 비밀값 있음 + 태그 push | ① 게시 폴더의 `Oranda.*`(Oranda 자신의 exe·dll)만 산출물로 올려 SignPath 에 서명 요청(artifact configuration `app-files`) → 승인되면 서명본을 게시 폴더에 덮어씀 → ② `vpk pack`(서명 매개변수 없음) → ③ `Oranda-win-Setup.exe` 를 다시 서명 요청(artifact configuration `installer`) → 서명본으로 바꿈. 승인을 최대 1시간 기다린다 |
 
 - 액션: `signpath/github-action-submit-signing-request@v3.0`(2026-09-10 태그).
 - 저장소 설정: Secrets `SIGNPATH_API_TOKEN`(SignPath CI 사용자 토큰), `SIGNPATH_ORGANIZATION_ID`. Variables(선택) `SIGNPATH_PROJECT_SLUG`(기본 `oranda`), `SIGNPATH_SIGNING_POLICY_SLUG`(기본 `release-signing`).
@@ -61,16 +61,16 @@ Windows 줄은 2026-10-25 로컬 `vpk pack --channel win` 결과다. macOS 줄�
 
 | 조건 | 동작 |
 |---|---|
-| Apple 비밀값(`APPLE_CERTIFICATE_P12_BASE64` 등) 있음 | 서명·공증한 `.pkg`, Gatekeeper 검사 |
-| 없음 | 서명 없이 패키지. 받는 사람은 「우클릭 → 열기」 또는 격리 해제(docs/user/install.md) |
+| Apple 비밀값(`APPLE_CERTIFICATE_P12_BASE64` 등) 있음 + 태그 push | 서명·공증한 `.pkg`, Gatekeeper 검사 |
+| 없음, 또는 수동 실행 | 서명 없이 패키지. 받는 사람은 「우클릭 → 열기」 또는 격리 해제(docs/user/install.md) |
 
 ## 수동 실행
 
-Actions > ci > Run workflow(`workflow_dispatch`). 태그가 아니므로 버전은 `0.1.<실행 번호>`, 태그는 `v0.1.<실행 번호>` 로 올라간다.
+Actions > ci > Run workflow(`workflow_dispatch`). 확인용이다: 시험·패키지까지 돌고 산출물(`release-windows-x64`·`release-macos-arm64`)만 남기며 GitHub Release 는 올리지 않는다. 태그가 아니므로 패키지 버전은 `0.1.<실행 번호>` 다. 서명 비밀값이 있어도 서명·공증하지 않는다(사람 승인 대기를 확인용에 쓰지 않는다). 이전 릴리스를 받아 델타를 만들지도 않는다.
 
 ## 올리지 않는 경우
 
-보통의 push·PR 은 산출물(`release-windows-x64`·`release-macos-arm64`)만 남기고 GitHub Release 는 만들지 않는다. `release` 작업만 `contents: write` 권한을 가지며 토큰은 `GITHUB_TOKEN` 뿐이다.
+태그가 아닌 실행(수동 실행)은 산출물(`release-windows-x64`·`release-macos-arm64`)만 남기고 GitHub Release 는 만들지 않는다(보통의 push·PR 은 CI 가 돌지 않는다). `release` 작업만 `contents: write` 권한을 가지며 토큰은 `GITHUB_TOKEN` 뿐이다.
 
 ## 첫 릴리스 전 확인
 

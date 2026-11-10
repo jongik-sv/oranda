@@ -1,12 +1,10 @@
 name: ci
 
 on:
+  # v* 태그 푸시 = 릴리스. 태그 실행이 단위·UI·perf·통합 시험을 직접 돌리고, 모두 통과하면 release 작업이 GitHub Release 를 만든다.
+  # main·작업 브랜치 push 와 PR 은 CI 를 돌리지 않는다(docs/release.md). 수동 실행(workflow_dispatch)은 시험·패키지·산출물까지만 하는 확인용이다(Release 는 올리지 않는다).
   push:
-    branches: [main, 'dev-*']
-    # v* 태그 푸시 = 릴리스(아래 release 작업이 GitHub Release 를 만든다). 보통 푸시·PR 은 산출물만 남긴다.
     tags: ['v*']
-  pull_request:
-    branches: [main, 'dev-*']
   workflow_dispatch:
 
 concurrency:
@@ -25,9 +23,8 @@ jobs:
     name: windows-x64 (build, unit, ui, perf, package)
     runs-on: windows-latest
     env:
-      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-      # 태그 실행은 시험을 다시 돌리지 않는다. 같은 커밋이 main 에서 통과했는지는 verify-main 작업이 보고, release 작업이 그 결과를 기다린다.
-      SKIP_TESTS: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      # 릴리스 = v* 태그 실행뿐. 수동 실행(확인용)은 서명·델타 없이 산출물만 만든다.
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
       # SignPath Foundation 오픈 소스 서명(D-014). 비밀값이 없으면(승인 전·포크 PR) 서명 없이 패키지한다.
       # 서명 요청은 사람이 SignPath 에서 승인해야 끝나므로 릴리스 때만 보낸다.
       HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_ORGANIZATION_ID != '' }}
@@ -58,19 +55,16 @@ jobs:
             echo "::warning::$NOTES 가 없어 릴리스 노트 없이 묶는다"
           fi
       - name: Build
-        if: env.SKIP_TESTS != 'true'
         run: dotnet build Oranda.sln -c Release
       - name: Unit and UI tests
-        if: env.SKIP_TESTS != 'true'
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
       - name: Publish app
         run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=${{ steps.ver.outputs.version }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/win-x64
       - name: Startup perf (5 runs)
-        if: env.SKIP_TESTS != 'true'
         # 예산 초과 시 실패시키려면 --enforce 를 붙인다(예산 확정 전까지 보고만).
         run: dotnet run --project tests/Oranda.Perf -c Release -- --exe artifacts/publish/win-x64/Oranda.App.exe --runs 5 --out artifacts/perf
       - uses: actions/upload-artifact@v4
-        if: always() && env.SKIP_TESTS != 'true'
+        if: always()
         with:
           name: perf-windows-x64
           path: artifacts/perf/
@@ -167,9 +161,10 @@ jobs:
     name: macos-arm64 (build, unit, ui, package)
     runs-on: macos-15
     env:
-      HAS_APPLE_SECRETS: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
-      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-      SKIP_TESTS: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      # 서명·공증은 태그 실행에서만(비밀값이 있어도 수동 실행은 서명 없이 묶는다).
+      HAS_APPLE_SECRETS: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' && startsWith(github.ref, 'refs/tags/v') }}
+      # 릴리스 = v* 태그 실행뿐. 수동 실행(확인용)은 서명·델타 없이 산출물만 만든다.
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
@@ -196,10 +191,8 @@ jobs:
             echo "::warning::$NOTES 가 없어 릴리스 노트 없이 묶는다"
           fi
       - name: Build
-        if: env.SKIP_TESTS != 'true'
         run: dotnet build Oranda.sln -c Release
       - name: Unit and UI tests
-        if: env.SKIP_TESTS != 'true'
         run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
       - name: Publish app
         run: dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true -p:Version=${{ steps.ver.outputs.version }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/osx-arm64
@@ -272,46 +265,15 @@ jobs:
           path: artifacts/release/
           if-no-files-found: warn
 
-  # 태그 실행 전용: 태그가 가리키는 커밋이 main push 의 ci 실행에서 통과했는지 확인한다(태그 실행은 시험을 다시 돌리지 않으므로 이 확인이 시험을 대신한다).
-  # main 실행이 아직 돌고 있으면 끝날 때까지 기다린다. 없거나 실패·취소면 실패하고, release 작업은 올리지 않는다.
-  # main 실행을 다시 돌려 통과시킨 뒤에는 이 태그 실행의 실패한 작업을 다시 돌리면 된다(docs/release.md).
-  verify-main:
-    name: verify main passed this commit
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 70
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - name: Wait for the main ci run of this commit
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for _ in $(seq 1 120); do
-            RUN=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&branch=main&event=push&per_page=20" \
-              --jq '.workflow_runs | sort_by(.run_number) | last | if . == null then "none" else "\(.status) \(.conclusion) \(.html_url)" end')
-            echo "$(date -u +%H:%M:%S) main run: $RUN"
-            case "$RUN" in
-              none) echo "::error::main 에 $GITHUB_SHA 를 push 한 ci 실행이 없다. main 을 먼저 push 한다(docs/release.md)"; exit 1 ;;
-              "completed success "*) exit 0 ;;
-              completed*) echo "::error::main 의 ci 실행이 통과하지 않았다: $RUN"; exit 1 ;;
-            esac
-            sleep 30
-          done
-          echo "::error::main 의 ci 실행이 60분 안에 끝나지 않았다"; exit 1
-
-  # GitHub Release 올리기: v* 태그 푸시 또는 수동 실행 때만. 쓰기 권한은 이 작업에만 준다(토큰은 GITHUB_TOKEN 뿐).
+  # GitHub Release 올리기: v* 태그 푸시 때만(수동 실행은 올리지 않는다). 쓰기 권한은 이 작업에만 준다(토큰은 GITHUB_TOKEN 뿐).
   # Windows(win)·macOS(osx) 두 채널을 한 릴리스에 올린다. 러너가 Linux 라 vpk 기본 채널(linux)이 되지 않도록 채널을 꼭 적는다.
   release:
     name: publish GitHub Release
-    needs: [verify-main, windows, macos]
-    # 태그 실행은 verify-main 통과가 필요하다. 수동 실행은 verify-main 이 건너뛰어지고 windows·macos 가 시험까지 돈다.
+    needs: [windows, macos, integration]
+    # 같은 실행의 windows·macos(단위·UI·perf)와 integration 이 모두 통과해야 올린다. 흔들려 떨어지면 그 작업만 다시 돌린다(docs/release.md).
     if: >-
-      always() &&
-      needs.windows.result == 'success' && needs.macos.result == 'success' &&
-      ((startsWith(github.ref, 'refs/tags/v') && needs.verify-main.result == 'success') ||
-       (github.event_name == 'workflow_dispatch' && needs.verify-main.result == 'skipped'))
+      needs.windows.result == 'success' && needs.macos.result == 'success' && needs.integration.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -361,8 +323,6 @@ jobs:
 
   integration:
     name: integration (ubuntu, Testcontainers)
-    # 태그 실행은 main 실행의 통합 시험 결과를 쓴다(verify-main).
-    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

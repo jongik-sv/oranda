@@ -26,11 +26,13 @@ public sealed class DiagnosticsTests
         return (window, view, vm);
     }
 
-    private static async Task WaitUntil(Func<bool> done, int timeoutMs = 20000)
+    private static async Task WaitUntil(Func<bool> done, Func<string>? state = null, int timeoutMs = 20000)
     {
         var sw = Stopwatch.StartNew();
-        while (!done() && sw.ElapsedMilliseconds < timeoutMs)
+        while (!done())
         {
+            // 시간이 지나도 조용히 넘어가면 뒤 단정이 엉뚱한 값으로 깨져 원인이 안 보인다.
+            Assert.True(sw.ElapsedMilliseconds < timeoutMs, $"조건이 {timeoutMs} ms 안에 참이 되지 않았다. {DiagnosticsLatencyTests.PoolState()} {state?.Invoke()}");
             Dispatcher.UIThread.RunJobs();
             await Task.Delay(10);
         }
@@ -41,8 +43,7 @@ public sealed class DiagnosticsTests
     [Fact]
     public Task Syntax_error_is_underlined_after_typing_stops() => Ui.Run(async () =>
     {
-        var (window, view, vm) = Show("SELECT 1 FROM dual");
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, view, vm, diagnostics) = DiagnosticsEditor.Show("SELECT 1 FROM dual", () => Language);
         await WaitUntil(() => diagnostics.AppliedAnalyses >= 1);
         Assert.Empty(diagnostics.Current);
 
@@ -61,8 +62,7 @@ public sealed class DiagnosticsTests
     [Fact]
     public Task Underline_follows_edits_and_is_cleared_when_fixed() => Ui.Run(async () =>
     {
-        var (window, view, vm) = Show("SELECT * FROM WHERE x = 1");
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, _, vm, diagnostics) = DiagnosticsEditor.Show("SELECT * FROM WHERE x = 1", () => Language);
         await diagnostics.AnalyzeNowAsync();
         int at = Assert.Single(diagnostics.Current).Range.Start;
 
@@ -78,13 +78,12 @@ public sealed class DiagnosticsTests
     [Fact]
     public Task Stale_result_is_discarded_when_text_changed_during_analysis() => Ui.Run(async () =>
     {
-        var (window, view, vm) = Show("SELECT * FROM WHERE x = 1");
         var gate = new TaskCompletionSource();
         var slow = new GatedLanguage(Language, gate.Task);
-        var diagnostics = EditorDiagnostics.Attach(view, () => slow);
+        var (window, _, vm, diagnostics) = DiagnosticsEditor.Show("SELECT * FROM WHERE x = 1", () => slow);
 
         var analysis = diagnostics.AnalyzeNowAsync();
-        await WaitUntil(() => slow.Calls >= 1);
+        await WaitUntil(() => slow.Calls >= 1, () => $"분석 호출 {slow.Calls}회, 적용 {diagnostics.AppliedAnalyses}회, 대기 중 {diagnostics.IsPending}");
         vm.Document.Insert(0, " ");
         gate.SetResult();
         await analysis;
@@ -99,8 +98,7 @@ public sealed class DiagnosticsTests
     [Fact]
     public Task Server_compile_errors_share_the_underline_and_survive_reanalysis() => Ui.Run(async () =>
     {
-        var (window, view, vm) = Show("BEGIN\n  x := 1;\nEND;");
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, _, vm, diagnostics) = DiagnosticsEditor.Show("BEGIN\n  x := 1;\nEND;", () => Language);
         var server = new Diagnostic(new TextRange(vm.Text.IndexOf('x'), 1), DiagnosticSeverity.Error, "PLS-00201") { Code = "Server" };
 
         diagnostics.SetServerDiagnostics([server]);
@@ -115,12 +113,28 @@ public sealed class DiagnosticsTests
     [Fact]
     public Task Unsupported_23ai_statement_is_kept_as_info_not_error() => Ui.Run(async () =>
     {
-        var (window, view, _) = Show("CREATE TABLE IF NOT EXISTS emb (id NUMBER, v VECTOR(3, FLOAT32))");
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, _, _, diagnostics) = DiagnosticsEditor.Show("CREATE TABLE IF NOT EXISTS emb (id NUMBER, v VECTOR(3, FLOAT32))", () => Language);
 
         await diagnostics.AnalyzeNowAsync();
 
         Assert.DoesNotContain(diagnostics.Current, d => d.Severity == DiagnosticSeverity.Error);
+        window.Close();
+    });
+
+    [Fact]
+    public Task Test_language_is_used_even_after_the_startup_task_installed_its_loaded_handler() => Ui.Run(async () =>
+    {
+        // Install 은 프로세스에 남는 Loaded 처리기를 단다(아래 시험이 부른다). 그 뒤에도 시험 편집기는 시험의 언어 서비스로 분석해야 한다(ci-flaky F9).
+        EditorDiagnosticsStartup.Install();
+        var gate = new TaskCompletionSource();
+        gate.SetResult();
+        var probe = new GatedLanguage(Language, gate.Task);
+        var (window, _, _, diagnostics) = DiagnosticsEditor.Show("SELECT * FROM WHERE x = 1", () => probe);
+
+        await diagnostics.AnalyzeNowAsync();
+
+        Assert.True(probe.Calls >= 1, $"분석 호출 {probe.Calls}회");
+        Assert.Single(diagnostics.Current);
         window.Close();
     });
 

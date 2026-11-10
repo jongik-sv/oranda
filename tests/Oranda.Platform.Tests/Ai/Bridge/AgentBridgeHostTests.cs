@@ -7,6 +7,7 @@ using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Protocol;
 using Oranda.Core.Connection;
 using Oranda.Platform.Ai.Bridge;
+using Oranda.Testing;
 using static Oranda.Core.Ai.Protocol.AgentRpc;
 
 namespace Oranda.Platform.Tests.Ai.Bridge;
@@ -17,6 +18,7 @@ public sealed class AgentBridgeHostTests : IAsyncDisposable
 
     private readonly FakeRunTokens _tokens = new();
     private readonly FakeGate _gate = new();
+    private readonly ManualTimeProvider _time = new();
     private readonly AgentBridgeHost _host;
     private readonly string _pipeName;
 
@@ -26,10 +28,11 @@ public sealed class AgentBridgeHostTests : IAsyncDisposable
         var unique = Guid.NewGuid().ToString("N")[..12];
         _host = new AgentBridgeHost(_gate, _tokens, (_, instance) => $"oranda-bridge-test-{unique}" + (instance is null ? string.Empty : "-" + instance))
         {
-            // hello 시한이 짧으면 바쁜 CI 에서 연결하고 hello 를 보내기 전에 서버가 연결을 닫아 다른 시험이 「Broken pipe」 로 깨진다.
-            // 시한 시험(Connection_without_hello_…)이 기다리는 시간과 견줘 넉넉한 값.
+            // hello·대기열 시한은 손으로 돌리는 시계로 잰다. 실제 시간이면 바쁜 CI 에서 시험 쪽 클라이언트가 hello 를 늦게 써
+            // 서버가 시한대로 연결을 닫아 「Broken pipe」 로 깨졌다(ci-flaky). 시한 시험만 시계를 돌린다.
             HelloTimeout = TimeSpan.FromSeconds(3),
             CallQueueTimeout = TimeSpan.FromMilliseconds(700),
+            Time = _time,
         };
         _pipeName = _host.Start();
     }
@@ -208,10 +211,16 @@ public sealed class AgentBridgeHostTests : IAsyncDisposable
         await other.HelloAsync(_tokens.Issue(NewSession("run-other")));
 
         var slowCall = slow.CallAsync(Methods.CallTool, new JsonObject { ["name"] = "describe_object" });
-        await Task.Delay(200);
+        await _gate.Entered.Task.WaitAsync(Timeout); // 느린 조회가 실행 자리를 잡았다
 
         Assert.Null((await other.CallAsync(Methods.ListTools, null)).Error);
-        var queued = await other.CallAsync(Methods.CallTool, new JsonObject { ["name"] = "describe_object" });
+
+        // hello 가 끝난 연결은 시한 타이머가 없다: 다음에 걸리는 타이머 하나가 대기열 시한이다.
+        Assert.Equal(0, _time.PendingTimers);
+        var queuedCall = other.CallAsync(Methods.CallTool, new JsonObject { ["name"] = "describe_object" });
+        await WaitForTimersAsync(1);
+        _time.Advance(TimeSpan.FromMilliseconds(700));
+        var queued = await queuedCall;
         Assert.Contains("busy", queued.Result!["text"]!.GetValue<string>(), StringComparison.Ordinal);
 
         _gate.Block.SetResult();
@@ -227,7 +236,25 @@ public sealed class AgentBridgeHostTests : IAsyncDisposable
         // 두 번째 연결은 첫 연결이 붙들고 있어도 바로 처리된다.
         Assert.Null((await other.HelloAsync(_tokens.Issue(NewSession("run-1")))).Error);
 
+        // 시한 전에는 닫지 않는다: hello 를 마친 연결의 타이머는 버려지고 hello 없는 연결의 타이머 하나만 남는다.
+        await WaitForTimersAsync(1);
+        _time.Advance(TimeSpan.FromSeconds(3) - TimeSpan.FromMilliseconds(1));
+        Assert.Equal(1, _time.PendingTimers);
+
+        _time.Advance(TimeSpan.FromMilliseconds(1));
         Assert.Null(await idle.ReadAsync());
+    }
+
+    /// <summary>서버(스레드 풀)가 시한 타이머를 걸 때까지 기다린다. 걸리기 전에 시계를 돌리면 그 타이머는 돌린 뒤 시각부터 잰다.</summary>
+    private async Task WaitForTimersAsync(int count)
+    {
+        var until = DateTime.UtcNow + Timeout;
+        while (_time.PendingTimers < count && DateTime.UtcNow < until)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.Equal(count, _time.PendingTimers);
     }
 
     [Fact]
