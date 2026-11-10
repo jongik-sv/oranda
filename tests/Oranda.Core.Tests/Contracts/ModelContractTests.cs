@@ -28,7 +28,7 @@ public class ModelContractTests
         Assert.Equal(
             ["Name", "User", "DataSource", "Auth", "TnsAdmin", "WalletLocation", "ConnectTimeoutSeconds",
              "Id", "Environment", "ReadOnly", "LicensePack", "KeepAliveSeconds", "Nls", "CredentialRef",
-             "ProxyUser", "Color", "Group", "LastConnectedAt", "Comment", "AiAccess", "AllowExplainPlan", "Dbms"],
+             "ProxyUser", "Color", "Group", "LastConnectedAt", "Comment", "AiAccess", "AllowExplainPlan", "Dbms", "SortIndex"],
             ctor.GetParameters().Select(p => p.Name));
     }
 
