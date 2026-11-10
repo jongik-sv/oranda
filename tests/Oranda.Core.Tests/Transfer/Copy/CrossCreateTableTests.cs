@@ -467,15 +467,15 @@ public sealed class CrossCreateTableTests
 
     // ---- Tibero → Tibero 같은 DB 다른 계정 (xdb-copy XC8b) ----
 
-    /// <summary>실제 사용 모양: FILM_USER 의 PK 없는 표를 같은 Tibero DB 의 FILM_CMN_USER 로, 직접 조건·비우고 넣기·없으면 만들기.</summary>
+    /// <summary>실제 사용 모양: SRC_USER 의 PK 없는 표를 같은 Tibero DB 의 CMN_USER 로, 직접 조건·비우고 넣기·없으면 만들기.</summary>
     private static Fixture FilmFixture(bool create, bool targetHasTable = false) => new(
-        Dbms.Tibero, Dbms.Tibero, WipStock("FILM_USER"), create: create, targetHasTable: targetHasTable,
+        Dbms.Tibero, Dbms.Tibero, WipStock("SRC_USER"), create: create, targetHasTable: targetHasTable,
         rule: new TableRule("TB_MCM_WIP_STOCK", RuleKind.Custom, TargetAction.DeleteAllInsert)
         {
             CustomWhere = "STK_DD BETWEEN :FROM_DT AND :TO_DT",
             CreateIfMissing = create,
         },
-        sourceOwner: "FILM_USER", targetOwner: "FILM_CMN_USER", sameDatabase: "TIBDB",
+        sourceOwner: "SRC_USER", targetOwner: "CMN_USER", sameDatabase: "TIBDB",
         options: new CopyOptions { BatchSize = 5000, Commit = CommitMode.PerTable, DisableTriggersByDefault = false, MaxFailedRows = 100 });
 
     private static TableInfo WipStock(string owner) =>
@@ -505,21 +505,21 @@ public sealed class CrossCreateTableTests
         Assert.All(report.Items, i => Assert.Contains(i.Code, new[] { "NoPrimaryKey", CopyCheckCodes.CreateTable, "ReadConsistency" }));
 
         Assert.Contains(report.Preview, p => p.Side == PreviewSide.Source
-                                             && p.Sql.Contains("FROM \"FILM_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal)
+                                             && p.Sql.Contains("FROM \"SRC_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal)
                                              && p.Sql.Contains("BETWEEN :FROM_DT AND :TO_DT", StringComparison.Ordinal));
         var create = Assert.Single(report.Preview, p => p.Sql.StartsWith("CREATE TABLE", StringComparison.Ordinal));
         Assert.Equal(PreviewSide.Target, create.Side);
-        Assert.Contains("CREATE TABLE \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\"", create.Sql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE \"CMN_USER\".\"TB_MCM_WIP_STOCK\"", create.Sql, StringComparison.Ordinal);
         Assert.Contains("\"WIP_QTY\" NUMBER(15,3) DEFAULT 0 NOT NULL", create.Sql, StringComparison.Ordinal);
         Assert.Contains("\"STK_DD\" VARCHAR2(8 CHAR)", create.Sql, StringComparison.Ordinal);
-        Assert.Contains(report.Preview, p => p.Sql == "CREATE INDEX \"FILM_CMN_USER\".\"IX_WIP_STOCK_DD\" ON \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\" (\"STK_DD\")");
-        Assert.Contains(report.Preview, p => p.Sql == "DROP TABLE \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\" PURGE"); // 적재 실패 때 지우는 문장도 미리 보인다
+        Assert.Contains(report.Preview, p => p.Sql == "CREATE INDEX \"CMN_USER\".\"IX_WIP_STOCK_DD\" ON \"CMN_USER\".\"TB_MCM_WIP_STOCK\" (\"STK_DD\")");
+        Assert.Contains(report.Preview, p => p.Sql == "DROP TABLE \"CMN_USER\".\"TB_MCM_WIP_STOCK\" PURGE"); // 적재 실패 때 지우는 문장도 미리 보인다
 
         // 새 표라 대상을 지우지 않는다. 같은 규칙으로 대상 표가 이미 있으면 비우는 DELETE 가 미리 보기에 있다(대조).
         Assert.DoesNotContain(report.Preview, p => p.Sql.StartsWith("DELETE FROM", StringComparison.Ordinal));
         var existing = await FilmFixture(create: true, targetHasTable: true).PrecheckAsync();
         Assert.DoesNotContain(existing.Items, i => i.Code == CopyCheckCodes.CreateTable);
-        Assert.Contains(existing.Preview, p => p.Sql.StartsWith("DELETE FROM \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal));
+        Assert.Contains(existing.Preview, p => p.Sql.StartsWith("DELETE FROM \"CMN_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -532,7 +532,7 @@ public sealed class CrossCreateTableTests
         var result = await f.RunAsync(report);
 
         var texts = f.Execution.Calls.Select(c => c.Statement.Text).ToList();
-        Assert.Contains(texts, t => t.StartsWith("CREATE TABLE \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal));
+        Assert.Contains(texts, t => t.StartsWith("CREATE TABLE \"CMN_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal));
         Assert.DoesNotContain(texts, t => t.StartsWith("DELETE FROM", StringComparison.Ordinal)); // 새 표: AppendOnly 처럼 지우지 않는다
         Assert.NotEqual(CopyOutcome.Failed, result.Outcome);
     }

@@ -73,7 +73,7 @@ public sealed partial class TiberoCopyPrecheckDialectTests
     [Fact]
     public void Tibero_catalog_shaped_table_is_created_in_another_account_with_char_lengths_and_without_server_named_constraints()
     {
-        var table = new TableInfo(new DbObjectRef("FILM_USER", "ORT_T", "TABLE"),
+        var table = new TableInfo(new DbObjectRef("SRC_USER", "ORT_T", "TABLE"),
         [
             new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false },
             new ColumnInfo("NM", 2, "VARCHAR") { Length = 20, DefaultValue = "'x'" },
@@ -87,33 +87,33 @@ public sealed partial class TiberoCopyPrecheckDialectTests
             Comment = "테이블 주석",
             Constraints =
             [
-                new ConstraintInfo("FILM_USER_CON123", ConstraintKind.PrimaryKey, ["ID"]),
-                new ConstraintInfo("FILM_USER_CON124", ConstraintKind.Check, ["AMT"]) { Condition = "AMT > 0" },
+                new ConstraintInfo("SRC_USER_CON123", ConstraintKind.PrimaryKey, ["ID"]),
+                new ConstraintInfo("SRC_USER_CON124", ConstraintKind.Check, ["AMT"]) { Condition = "AMT > 0" },
                 new ConstraintInfo("CK_NM", ConstraintKind.Check, ["NM"]) { Condition = "LENGTH(NM) > 0" },
             ],
             Indexes =
             [
-                new IndexInfo("FILM_USER_CON123", true, ["ID"]) { IndexType = "NORMAL" },
+                new IndexInfo("SRC_USER_CON123", true, ["ID"]) { IndexType = "NORMAL" },
                 new IndexInfo("IX_NM", false, ["NM"]) { IndexType = "NORMAL" },
                 new IndexInfo("IX_FN", false, ["SYS_NC0001$"]) { IndexType = "FUNCTION-BASED NORMAL" },
             ],
         };
 
-        var built = CrossTableMap.Build(Dbms.Tibero, Dbms.Tibero, table, "FILM_CMN_USER", new HashSet<string>(StringComparer.Ordinal),
-            name => Dialect.IsServerName(name, "FILM_USER"));
+        var built = CrossTableMap.Build(Dbms.Tibero, Dbms.Tibero, table, "CMN_USER", new HashSet<string>(StringComparer.Ordinal),
+            name => Dialect.IsServerName(name, "SRC_USER"));
 
         Assert.Equal(
         [
-            "CREATE TABLE \"FILM_CMN_USER\".\"ORT_T\" (\"ID\" NUMBER(10) NOT NULL, \"NM\" VARCHAR2(20 CHAR) DEFAULT 'x', \"CD\" CHAR(5 CHAR), \"NN\" NVARCHAR2(10),"
+            "CREATE TABLE \"CMN_USER\".\"ORT_T\" (\"ID\" NUMBER(10) NOT NULL, \"NM\" VARCHAR2(20 CHAR) DEFAULT 'x', \"CD\" CHAR(5 CHAR), \"NN\" NVARCHAR2(10),"
             + " \"AMT\" NUMBER(12,2), \"TS\" TIMESTAMP(6), \"DOC\" CLOB, PRIMARY KEY (\"ID\"), CHECK (AMT > 0), CONSTRAINT \"CK_NM\" CHECK (LENGTH(NM) > 0))",
-            "CREATE INDEX \"FILM_CMN_USER\".\"IX_NM\" ON \"FILM_CMN_USER\".\"ORT_T\" (\"NM\")",
-            "COMMENT ON TABLE \"FILM_CMN_USER\".\"ORT_T\" IS '테이블 주석'",
+            "CREATE INDEX \"CMN_USER\".\"IX_NM\" ON \"CMN_USER\".\"ORT_T\" (\"NM\")",
+            "COMMENT ON TABLE \"CMN_USER\".\"ORT_T\" IS '테이블 주석'",
         ], built.Statements);
         Assert.Empty(built.Notes); // 같은 DBMS: 달라지는 것 없음
         Assert.Empty(built.OmittedConstraints);
 
         // 사전 점검의 이름 겹침 검사가 보는 이름도 같은 판정이다: 서버 이름은 빠진다.
-        var (constraints, indexes) = CreateTableDdl.NamedObjects(table, name => Dialect.IsServerName(name, "FILM_USER"));
+        var (constraints, indexes) = CreateTableDdl.NamedObjects(table, name => Dialect.IsServerName(name, "SRC_USER"));
         Assert.Equal(["CK_NM"], constraints);
         Assert.Equal(["IX_NM"], indexes);
     }
