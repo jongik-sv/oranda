@@ -63,7 +63,7 @@ public partial class CopyRunner
             return await FallBackAsync(run, plan, table, "대상 접속 정보(비밀번호)를 다시 받지 못했습니다", ct);
         }
 
-        if (!run.Job.ConsistentRead && !await BeginTableReadAsync(run, table, ct))
+        if (ReadsPerTable(run) && !await BeginTableReadAsync(run, table, ct))
         {
             return ExternalEnd.Failed;
         }
@@ -75,7 +75,7 @@ public partial class CopyRunner
             LoaderWorkspace.DeleteStale(external.WorkRoot, TimeSpan.FromDays(1));
         }
 
-        var select = run.Builder.SourceSelect(table.Name, shape.CopyColumns);
+        var select = run.Builder.SourceSelect(table.Name, shape.CopyColumns, run.ReadPoint);
         run.LogStatement(run.Source, select.Sql, select.Binds);
         var streaming = Streams(external, tool);
         var chunkRows = !streaming && external.ChunkRows > 0 ? external.ChunkRows : long.MaxValue;
@@ -156,6 +156,12 @@ public partial class CopyRunner
             catch (Exception ex) when (!ct.IsCancellationRequested && (CopyErrors.IsServer(_errors, ex) || ex is IOException or UnauthorizedAccessException))
             {
                 await pipe.DrainAsync();
+                if (ReadPointFailure(run, table, ex) is { } failure)
+                {
+                    table.Fail(failure); // 같은 시점 읽기(PF2b): 그 시점으로 못 읽었다 — 지금 데이터로 바꿔 읽지 않는다
+                    return ExternalEnd.Failed;
+                }
+
                 table.Fail((ex is IOException or UnauthorizedAccessException ? "외부 도구용 데이터 파일을 쓰지 못했습니다: " : "원본을 읽지 못했습니다: ") + SafeError(ex.Message));
                 return ExternalEnd.Failed;
             }

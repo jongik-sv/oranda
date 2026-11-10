@@ -474,4 +474,50 @@ public class CopySqlBuilderTests
         Assert.Equal("DELETE FROM \"TGT\".\"ITEM\" WHERE \"H_ID\" IN (SELECT \"ID\" FROM \"TGT\".\"HEAD\")", b.TargetDelete("ITEM")!.Sql);
         Assert.Equal("SELECT \"ID\" FROM \"SRC\".\"ITEM\" WHERE \"H_ID\" IN (SELECT \"ID\" FROM \"SRC\".\"HEAD\")", b.SourceSelect("ITEM", ["ID"]).Sql);
     }
+
+    // ---- 같은 시점 읽기 + 동시 복사(PF2b): AS OF 절 ----
+
+    private static readonly CopyReadPointSupport OraclePoint = new("SCN", "AS OF SCN :{0}", [], "FLASHBACK", "FLASHBACK ANY TABLE");
+
+    [Fact]
+    public void Read_point_puts_the_as_of_clause_after_the_source_table_and_binds_the_scn()
+    {
+        var b = B([new TableRule("ORDERS", RuleKind.Period, TargetAction.DeleteRangeInsert) { PeriodColumns = [new PeriodColumn("ORDER_DT")] }],
+                  null, ("ORDERS", Cols(("ORDER_DT", "DATE"))));
+
+        var s = b.SourceSelect("ORDERS", ["ORDER_DT"], new CopyReadPoint(123456789012, OraclePoint));
+
+        Assert.Equal("SELECT \"ORDER_DT\" FROM \"SRC\".\"ORDERS\" AS OF SCN :ORANDA_SCN WHERE \"ORDER_DT\" >= :B1_FROM AND \"ORDER_DT\" < :B1_TO", s.Sql);
+        Assert.Equal(new BindValue(BindDataType.Number, 123456789012m), s.Binds[CopyReadPoint.BindName]);
+        Assert.Equal(["B1_FROM", "B1_TO", "ORANDA_SCN"], s.Binds.Keys.Order(StringComparer.Ordinal));
+        // 시점이 없으면 예전 글 그대로, 대상 쪽 문장(DELETE·COUNT)에는 붙지 않는다.
+        Assert.Equal("SELECT \"ORDER_DT\" FROM \"SRC\".\"ORDERS\" WHERE \"ORDER_DT\" >= :B1_FROM AND \"ORDER_DT\" < :B1_TO", b.SourceSelect("ORDERS", ["ORDER_DT"]).Sql);
+        Assert.DoesNotContain("AS OF", b.TargetDelete("ORDERS")!.Sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Read_point_reads_source_parents_of_parent_key_rules_as_of_the_same_scn_but_not_target_parents()
+    {
+        var b = B(Chain(), null, ("ORDERS", Cols(("ID", "NUMBER"), ("ORDER_DT", "DATE"))), ("ITEM", Cols(("ID", "NUMBER"), ("ORDER_ID", "NUMBER"))),
+                  ("OPT", Cols(("ITEM_ID", "NUMBER"))));
+
+        var s = b.SourceSelect("OPT", ["ITEM_ID"], CopyReadPoint.Preview(OraclePoint));
+
+        Assert.Equal(
+            "SELECT \"ITEM_ID\" FROM \"SRC\".\"OPT\" AS OF SCN :ORANDA_SCN WHERE \"ITEM_ID\" IN (SELECT \"ID\" FROM \"SRC\".\"ITEM\" AS OF SCN :ORANDA_SCN WHERE \"ORDER_ID\" IN " +
+            "(SELECT \"ID\" FROM \"SRC\".\"ORDERS\" AS OF SCN :ORANDA_SCN WHERE \"ORDER_DT\" >= :B1_FROM AND \"ORDER_DT\" < :B1_TO))",
+            s.Sql);
+        Assert.Equal(["B1_FROM", "B1_TO", "ORANDA_SCN"], s.Binds.Keys.Order(StringComparer.Ordinal)); // 같은 이름 바인드는 한 번
+        Assert.Equal(0m, s.Binds[CopyReadPoint.BindName].Value); // 미리 보기 = 번호 0, 글은 실행과 같다
+        Assert.DoesNotContain("AS OF", b.TargetDelete("OPT")!.Sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Read_point_text_and_clause()
+    {
+        var point = new CopyReadPoint(42, OraclePoint);
+
+        Assert.Equal("SCN 42", point.Text);
+        Assert.Equal("AS OF SCN :ORANDA_SCN", point.Clause);
+    }
 }

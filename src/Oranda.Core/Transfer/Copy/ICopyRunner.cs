@@ -108,6 +108,12 @@ public sealed record CopyRunResult(CopyOutcome Outcome, IReadOnlyList<TableRunRe
     /// <summary>대상 명령이 취소에도 돌아오지 않아 실행기가 대상 세션을 버렸다(커밋·롤백을 보내지 않았다). 앱은 세션 쌍을 닫는다(닫으면 커밋하지 않은 변경은 되돌아간다).</summary>
     public bool TargetAbandoned { get; init; }
 
+    /// <summary>
+    /// 같은 시점 읽기로 동시에 복사했을 때(PF2b) 모든 테이블을 읽은 원본 시점(「SCN 1234」, <see cref="CopyReadPoint.Text"/>). 아니면 null
+    /// (한 테이블씩이면 읽기 전용 트랜잭션 하나가 시점을 맞추고 <see cref="ReadStartedAt"/> 만 보인다).
+    /// </summary>
+    public string? ReadPoint { get; init; }
+
     /// <summary>버린 세션이 있다(<see cref="SourceAbandoned"/> 또는 <see cref="TargetAbandoned"/>).</summary>
     public bool SessionsAbandoned => SourceAbandoned || TargetAbandoned;
 }

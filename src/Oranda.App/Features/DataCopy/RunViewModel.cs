@@ -151,6 +151,9 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
     [ObservableProperty]
     private DateTimeOffset? _readStartedAt;
 
+    /// <summary>끝난 실행이 읽은 원본 시점(<see cref="CopyRunResult.ReadPoint"/>, 「SCN 1234」). 없으면 null.</summary>
+    private string? _readPoint;
+
     /// <summary>아래 칸의 탭: 0 = 작업 로그, 1 = 실패한 행. 실행이 끝나 실패 행이 있으면 실패한 행 탭으로 옮긴다.</summary>
     [ObservableProperty]
     private int _detailTab;
@@ -181,8 +184,12 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
     /// <summary>끝난 실행에 실패 행이 있고, 세션·점검 결과가 남아 있을 때만.</summary>
     public bool CanRetry => !IsRunning && FailedRows.Count > 0 && _sessions is not null;
 
-    /// <summary>화면에 보이는 「읽기를 시작한 시각」 글자. 같은 시점 기준으로 읽었을 때 그 시점이다(SCN 은 보이지 않는다).</summary>
-    public string ReadStartedText => ReadStartedAt is { } at ? at.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) : string.Empty;
+    /// <summary>
+    /// 화면에 보이는 「읽기를 시작한 시각」 글자. 같은 시점 기준으로 읽었을 때 그 시점이다. 같은 시점 읽기로 동시에 복사했으면(PF2b) 읽은 원본 시점(「· SCN 1234」)을 붙인다.
+    /// </summary>
+    public string ReadStartedText => ReadStartedAt is { } at
+        ? at.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + (_readPoint is { } point ? " · " + point : string.Empty)
+        : string.Empty;
 
     /// <summary>복사를 실행한다. 끝나면(또는 중지되면) 결과를 화면에 채우고 작업의 마지막 실행 정보를 저장한다.</summary>
     public async Task StartAsync(CopySessions sessions, CopyJob job, PrecheckReport report, CopyDecisions decisions, ResolvedPeriod period, CancellationToken ct = default)
@@ -213,6 +220,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         DetailTab = 0;
         Outcome = null;
         ReadStartedAt = null;
+        _readPoint = null;
         // 진행·결과·건수 어림의 표 이름은 규칙 키다(같은 이름 표가 두 계정에 있어도 섞이지 않게). 그리드에는 계정.표를 보인다.
         foreach (var plan in report.Order.Where(p => p.Rule.Kind != RuleKind.Exclude))
         {
@@ -310,14 +318,13 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
     public LastRunInfo? LastRun { get; private set; }
 
     /// <summary>
-    /// 동시 테이블 복사(PF2)의 레인 세션 쌍을 연다: 작업 설정·점검 결과의 판정(<see cref="CopyConcurrency.Effective"/>)이 2 이상이고 점검 결과에 동시 복사 확인 항목이
-    /// 있을 때만(없으면 실행기가 한 테이블씩 돌므로 열지 않는다). 적게 열렸으면 작업 로그에 남긴다. 여는 데 실패하면 로그에 남기고 레인 없이(한 테이블씩) 돈다.
+    /// 동시 테이블 복사(PF2)의 레인 세션 쌍을 연다: 실행기와 같은 판정(<see cref="CopyConcurrency.ForRun"/> — 작업 설정·점검 결과로 2 이상, 점검 결과에 동시 복사 확인 항목,
+    /// 같은 시점 읽기면 시점 읽기 점검 항목)일 때만(아니면 실행기가 한 테이블씩 돌므로 열지 않는다). 적게 열렸으면 작업 로그에 남긴다. 여는 데 실패하면 로그에 남기고 레인 없이(한 테이블씩) 돈다.
     /// </summary>
     private async Task<IReadOnlyList<CopySessions>> OpenWorkersAsync(CopySessions sessions, CopyJob job, PrecheckReport report, CancellationToken ct)
     {
-        var decision = CopyConcurrency.Effective(job, report, sessions.Source.Profile.Dbms);
-        if (decision.Tables <= 1
-            || !report.Items.Any(i => i.Code == CopyCheckCodes.ConcurrentCopy && i.Level == CheckLevel.Confirm))
+        var decision = CopyConcurrency.ForRun(job, report, sessions.Source.Profile.Dbms);
+        if (decision.Tables <= 1)
         {
             return [];
         }
@@ -447,6 +454,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         }
 
         ReadStartedAt = result.ReadStartedAt;
+        _readPoint = result.ReadPoint;
         OnPropertyChanged(nameof(ReadStartedText));
         if (FailedRows.Count > 0)
         {
@@ -509,6 +517,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         DetailTab = 0;
         Outcome = null;
         ReadStartedAt = null;
+        _readPoint = null;
         StatusText = string.Empty;
         LastRun = null;
         SessionsAbandoned = false;

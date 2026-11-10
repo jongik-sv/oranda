@@ -26,6 +26,7 @@ public class OracleErrorClassifierTests
     [InlineData(2291, DbErrorKind.ConstraintViolation)]
     [InlineData(2292, DbErrorKind.ConstraintViolation)]
     [InlineData(1555, DbErrorKind.SnapshotTooOld)]
+    [InlineData(8180, DbErrorKind.SnapshotTooOld)] // 그 시점의 스냅샷을 찾을 수 없음(PF2b 시점 읽기)
     [InlineData(942, DbErrorKind.ObjectNotFound)]
     [InlineData(4043, DbErrorKind.ObjectNotFound)]
     [InlineData(1031, DbErrorKind.InsufficientPrivileges)]

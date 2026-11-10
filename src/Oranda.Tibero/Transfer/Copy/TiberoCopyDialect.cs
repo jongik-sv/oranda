@@ -78,6 +78,13 @@ internal sealed class TiberoCopyDialect : ICopyDialect
     public SqlStatement SetTransactionReadOnly() =>
         new(TiberoExecutionService.ReadOnlyBlock, default, StatementKind.TransactionControl) { Verb = "SET TRANSACTION" };
 
+    /// <summary>
+    /// 시점 지정 읽기(PF2b)는 아직 쓰지 않는다(null): Tibero 에도 <c>AS OF SCN</c>(서버 로그에는 TSN)·<c>V$DATABASE.CURRENT_TSN</c> 이 있다는 자료는 있지만
+    /// 실측하지 않았고, 이전 시점 데이터를 잃었을 때의 오류 번호도 모른다(<see cref="SnapshotTooOldErrorName"/>). 그래서 Tibero 원본은 같은 시점 읽기를 켜면
+    /// 예전처럼 한 테이블씩 복사한다(<see cref="CopyReadPointDbms.Supports"/>). 켜기 전 실측: <c>TiberoCopyDialectIt.Flashback_query_probe_reads_the_current_tsn_and_as_of_scn_returns_the_old_rows</c>.
+    /// </summary>
+    public CopyReadPointSupport? ReadPoint => null;
+
     public string BindPlaceholder(string bindName, string serverType) => TiberoBulkValueCodec.BindExpression(bindName, serverType);
 
     /// <summary>

@@ -51,7 +51,7 @@ public sealed class ConcurrentTablesTests
         ((INotifyPropertyChanged)editor).PropertyChanged += (_, e) => changed.Add(e.PropertyName);
         editor.ConcurrentTables = 2;
         Assert.Contains(nameof(RuleEditorViewModel.ConcurrencyReason), changed);
-        Assert.Equal("같은 시점 읽기를 끄면 동시 복사가 켜집니다.", editor.ConcurrencyReason);
+        Assert.Equal(CopyConcurrency.ReadPointNote, editor.ConcurrencyReason); // PF2b: Oracle 원본은 같은 시점 읽기를 켠 채 동시(시작 SCN 으로 읽기)
         Assert.True(editor.HasConcurrencyReason);
 
         changed.Clear();
@@ -66,6 +66,24 @@ public sealed class ConcurrentTablesTests
 
         editor.ConcurrentTables = 1;
         Assert.Equal(string.Empty, editor.ConcurrencyReason);
+    }
+
+    [Fact]
+    public void Tibero_source_keeps_the_point_in_time_read_reason_and_switching_the_source_updates_it()
+    {
+        // PF2b: Tibero 원본은 시점 지정 읽기를 아직 쓰지 않는다 — 같은 시점 읽기를 켜면 예전처럼 한 테이블씩(이유 글).
+        var h = new DataCopyHarness();
+        var tibero = TestJobs.Profile("TBSRC", ConnectionEnvironment.Development, 9) with { Dbms = Dbms.Tibero };
+        var editor = new RuleEditorViewModel(h.Services());
+        editor.SetConnections([h.Source, tibero, h.Target]);
+        editor.Load(TestJobs.Job("티베로", source: "TBSRC") with { Options = new CopyOptions { ConcurrentTables = 2 } }, tibero, h.Target);
+        Assert.Equal(CopyConcurrency.ConsistentReadReason, editor.ConcurrencyReason);
+
+        var changed = new List<string?>();
+        ((INotifyPropertyChanged)editor).PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        editor.Source = editor.SourceOptions.Single(o => o.Profile.Name == "SRC"); // Oracle 원본으로 바꾸면 시작 SCN 안내
+        Assert.Contains(nameof(RuleEditorViewModel.ConcurrencyReason), changed);
+        Assert.Equal(CopyConcurrency.ReadPointNote, editor.ConcurrencyReason);
     }
 
     [Fact]
@@ -177,8 +195,9 @@ public sealed class ConcurrentTablesTests
     });
 
     [Fact]
-    public Task Point_in_time_read_opens_no_worker_session() => HeadlessHost.Run(async () =>
+    public Task Point_in_time_read_without_the_read_point_check_opens_no_worker_session() => HeadlessHost.Run(async () =>
     {
+        // 점검 결과에 시점 읽기 점검(FLASHBACK 권한을 본 것)이 없다: 실행기가 한 테이블씩 돌므로(CopyConcurrency.ForRun) 레인 세션을 열지 않는다.
         var h = new DataCopyHarness();
         var runner = new SessionsRunner();
         var vm = new RunViewModel(Services(h, runner));
@@ -188,6 +207,46 @@ public sealed class ConcurrentTablesTests
 
         Assert.Empty(h.Opened);
         Assert.Empty(Assert.IsType<CopySessions>(runner.Sessions).Workers);
+    });
+
+    [Fact]
+    public Task Point_in_time_read_with_the_read_point_check_opens_workers_and_shows_the_scn() => HeadlessHost.Run(async () =>
+    {
+        // PF2b: Oracle 원본은 같은 시점 읽기를 켠 채 동시에 복사한다(시작 SCN). 실행 결과의 SCN 이 「읽기 시작」 옆에 보인다.
+        var h = new DataCopyHarness();
+        var runner = new SessionsRunner { Behavior = () => Task.FromResult(TestJobs.Result() with { ReadPoint = "SCN 4242" }) };
+        var vm = new RunViewModel(Services(h, runner));
+        var job = TestJobs.Job("같은 시점") with { Options = new CopyOptions { ConcurrentTables = 2 } };
+        var report = ConcurrentReport() with
+        {
+            Items = [.. ConcurrentReport().Items, new CheckItem(null, CopyCheckCodes.ReadPoint, CheckLevel.Pass, "시작 SCN 으로 읽습니다.")],
+        };
+
+        await vm.StartAsync(new CopySessions(new FakeSession(h.Source with { ReadOnly = true }), new FakeSession(h.Target)), job, report, NoDecisions,
+            new ResolvedPeriod(null, null));
+
+        Assert.Single(Assert.IsType<CopySessions>(runner.Sessions).Workers);
+        Assert.EndsWith(" · SCN 4242", vm.ReadStartedText, StringComparison.Ordinal);
+    });
+
+    [Fact]
+    public Task Tibero_source_with_point_in_time_read_opens_no_worker_session() => HeadlessHost.Run(async () =>
+    {
+        var h = new DataCopyHarness();
+        var runner = new SessionsRunner();
+        var vm = new RunViewModel(Services(h, runner));
+        var tibero = h.Source with { Dbms = Dbms.Tibero };
+        var job = TestJobs.Job("티베로") with { Options = new CopyOptions { ConcurrentTables = 2 } };
+        var report = ConcurrentReport() with
+        {
+            Items = [.. ConcurrentReport().Items, new CheckItem(null, CopyCheckCodes.ReadPoint, CheckLevel.Pass, "시작 SCN 으로 읽습니다.")],
+        };
+
+        await vm.StartAsync(new CopySessions(new FakeSession(tibero), new FakeSession(h.Target)), job, report, NoDecisions, new ResolvedPeriod(null, null));
+
+        Assert.Empty(h.Opened);
+        Assert.Empty(Assert.IsType<CopySessions>(runner.Sessions).Workers);
+        Assert.DoesNotContain("SCN", vm.ReadStartedText, StringComparison.Ordinal);
     });
 
     [Fact]

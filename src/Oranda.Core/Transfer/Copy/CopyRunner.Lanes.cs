@@ -81,6 +81,80 @@ public partial class CopyRunner
         }
     }
 
+    // ---- 같은 시점 읽기 + 동시 복사(PF2b) ----
+
+    /// <summary>
+    /// 같은 시점 읽기를 켠 채 레인 둘 이상으로 복사한다: 원본 세션이 여럿이라 읽기 전용 트랜잭션 하나로는 시점을 맞출 수 없어, 시작할 때 원본 시점 하나를 잡아
+    /// 모든 테이블을 그 시점으로 읽는다(<see cref="CaptureReadPointAsync"/>). 판정(<see cref="CopyConcurrency.ForRun"/>)이 시점 지정 읽기를 쓰는 원본에서만 2 이상을 준다.
+    /// 레인 세션이 모자라 한 레인으로 줄면 예전처럼 읽기 전용 트랜잭션 하나로 맞춘다(시점을 잡지 않는다).
+    /// </summary>
+    private static bool UsesReadPoint(RunState run) => run.LaneCount > 1 && run.Job.ConsistentRead;
+
+    /// <summary>
+    /// 원본 시점(Oracle SCN)을 잡는다(원본 방언 <see cref="ICopyDialect.ReadPoint"/> 의 조회를 차례로, 서버 오류면 다음 방법). 끄기·정리보다 먼저 부른다:
+    /// 어느 방법으로도 못 잡으면 대상에 아무것도 하지 않고 실행 전체를 멈춘다 — 시점 없이(지금 데이터로) 읽지 않는다.
+    /// </summary>
+    private async Task CaptureReadPointAsync(RunState run, CancellationToken ct)
+    {
+        if (_sourceDialect.ReadPoint is not { } support)
+        {
+            run.Abort($"원본 DBMS({_sourceDbms})는 시점 지정 읽기를 쓰지 않아 같은 시점 읽기로 동시에 복사할 수 없습니다. 동시 테이블 수를 1로 하세요.");
+            return;
+        }
+
+        var tried = new List<string>();
+        foreach (var query in support.Queries)
+        {
+            run.LogStatement(run.Source, query.Sql);
+            try
+            {
+                long? number = null;
+                await foreach (var row in _bulk.StreamRowsAsync(run.Source, CopyCommonStatements.Query(query.Sql), NoBinds, run.BulkOptions, ct))
+                {
+                    number ??= row.Length > 0 ? _sourceCodec.ToInt64(row[0]) : null;
+                }
+
+                if (number is > 0)
+                {
+                    run.ReadPoint = new CopyReadPoint(number.Value, support);
+                    run.Log($"→ 원본 {run.ReadPoint.Text} · 모든 테이블을 이 시점으로 읽습니다({support.Clause}, {query.Method})");
+                    return;
+                }
+
+                tried.Add(query.Method + ": 값 없음");
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested && (ex is BulkDeniedException || CopyErrors.IsServer(_errors, ex)))
+            {
+                tried.Add(query.Method + ": " + SafeError(ex.Message));
+                run.Log($"→ 읽지 못했습니다: {SafeError(ex.Message)}", CopyLogKind.Warning);
+            }
+        }
+
+        run.Abort($"원본의 지금 {support.Name} 을(를) 읽지 못해 복사를 시작하지 않았습니다({string.Join(" / ", tried)}). {CopyReadPointErrors.NoFallback}"
+                  + " 동시 테이블 수를 1로 하면 읽기 전용 트랜잭션 하나로 같은 시점을 맞춥니다.");
+    }
+
+    /// <summary>
+    /// 원본 읽기 실패가 시점 지정 읽기 때문이면(<see cref="CopyReadPointErrors.Describe"/>: 시점 데이터 잃음·권한 없음·정의 바뀜·잘못된 시점) 테이블 실패 글, 아니면 null.
+    /// 시점 데이터를 잃었으면(다른 테이블도 같다) 알림을 남기고 실행 전체를 멈춘다. 시점 지정 읽기가 아니면 늘 null(예전 처리).
+    /// </summary>
+    private string? ReadPointFailure(RunState run, TableState table, Exception ex)
+    {
+        if (run.ReadPoint is not { } point || CopyErrors.Server(_errors, ex) is not { } error
+            || CopyReadPointErrors.Describe(table.Name, point, error) is not { } failure)
+        {
+            return null;
+        }
+
+        if (failure.AbortRun)
+        {
+            run.Notices.Add(failure.Message);
+            run.Abort(null);
+        }
+
+        return failure.Message;
+    }
+
     // ---- 레인 적재 ----
 
     /// <summary>정리(DELETE)를 확정한 뒤 FK 단계마다 레인으로 적재한다(<see cref="LoadAllAsync"/> 대신).</summary>

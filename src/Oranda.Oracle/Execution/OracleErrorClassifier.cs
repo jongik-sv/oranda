@@ -32,7 +32,7 @@ internal sealed class OracleErrorClassifier : IDbErrorClassifier
         60 => DbErrorKind.Deadlock,
         28 or 3113 or 3114 or 3135 or 12537 or 12570 or 12571 or 12583 => DbErrorKind.Disconnected,
         1 or 1400 or 2290 or 2291 or 2292 => DbErrorKind.ConstraintViolation,
-        1555 => DbErrorKind.SnapshotTooOld,
+        1555 or 8180 => DbErrorKind.SnapshotTooOld,
         942 or 4043 => DbErrorKind.ObjectNotFound,
         1031 or 1039 => DbErrorKind.InsufficientPrivileges,
         54 or 30006 => DbErrorKind.ResourceBusy,

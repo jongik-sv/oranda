@@ -88,7 +88,26 @@ public sealed class CopyConcurrencyTests
     [InlineData(CommitMode.PerBatch, false, 3, null)]
     [InlineData(CommitMode.AtEnd, true, 1, CopyConcurrency.ConsistentReadAndAtEndReason)]
     [InlineData(CommitMode.AtEnd, false, 1, CopyConcurrency.AtEndReason)]
-    public void Effective_turns_concurrency_off_for_consistent_read_and_commit_at_end(CommitMode commit, bool consistent, int expected, string? reason)
+    public void Tibero_source_turns_concurrency_off_for_consistent_read_and_commit_at_end(CommitMode commit, bool consistent, int expected, string? reason)
+    {
+        // Tibero 원본은 시점 지정 읽기를 아직 쓰지 않는다(PF2b 미실측): 같은 시점 읽기 = 한 테이블씩(결정 72 그대로).
+        var job = Job(3, commit, consistent);
+
+        var decision = CopyConcurrency.Effective(job, Report(["A", "B", "C"]), Dbms.Tibero);
+
+        Assert.Equal(expected, decision.Tables);
+        Assert.Equal(reason, decision.Reason);
+        Assert.False(decision.ReadsAtPoint);
+    }
+
+    [Theory]
+    [InlineData(CommitMode.PerTable, true, 3, null, true)]
+    [InlineData(CommitMode.PerTable, false, 3, null, false)]
+    [InlineData(CommitMode.PerBatch, true, 3, null, true)]
+    [InlineData(CommitMode.PerBatch, false, 3, null, false)]
+    [InlineData(CommitMode.AtEnd, true, 1, CopyConcurrency.AtEndReason, false)] // 같은 시점 읽기는 막지 않는다: 이유는 「모두 끝난 뒤 한 번」만
+    [InlineData(CommitMode.AtEnd, false, 1, CopyConcurrency.AtEndReason, false)]
+    public void Oracle_source_copies_concurrently_with_consistent_read_by_reading_as_of_one_scn(CommitMode commit, bool consistent, int expected, string? reason, bool atPoint)
     {
         var job = Job(3, commit, consistent);
 
@@ -96,6 +115,39 @@ public sealed class CopyConcurrencyTests
 
         Assert.Equal(expected, decision.Tables);
         Assert.Equal(reason, decision.Reason);
+        Assert.Equal(atPoint, decision.ReadsAtPoint);
+    }
+
+    [Fact]
+    public void Read_point_follows_the_source_dbms_table_and_needs_two_tables_at_once()
+    {
+        Assert.True(CopyReadPointDbms.Supports(Dbms.Oracle));
+        Assert.False(CopyReadPointDbms.Supports(Dbms.Tibero));
+
+        var job = Job(3, CommitMode.PerTable, consistent: true);
+        Assert.True(CopyConcurrency.Effective(job, report: null, Dbms.Oracle).ReadsAtPoint); // 화면(점검 전)
+        Assert.False(CopyConcurrency.Effective(job, Report(["A"], ["B"]), Dbms.Oracle).ReadsAtPoint); // 단계마다 한 테이블 = 한 레인 = 읽기 전용 트랜잭션 하나
+        Assert.False(CopyConcurrency.Effective(Job(null, CommitMode.PerTable, consistent: true), Report(["A", "B"]), Dbms.Oracle).ReadsAtPoint);
+        Assert.True(CopyConcurrency.Planned(job, [["A", "B"]], Dbms.Oracle).ReadsAtPoint);
+        Assert.False(CopyConcurrency.Planned(job, [["A"], ["B"]], Dbms.Oracle).ReadsAtPoint);
+    }
+
+    [Fact]
+    public void Run_needs_the_read_point_check_before_reading_concurrently_at_one_scn()
+    {
+        // 점검 뒤 같은 시점 읽기를 켰다(시점 읽기 점검 항목 = FLASHBACK 권한을 본 것이 없다): 한 테이블씩(읽기 전용 트랜잭션 하나).
+        var job = Job(3, CommitMode.PerTable, consistent: true);
+        var stages = new[] { new[] { "A", "B" } };
+        var confirmed = Report(stages) with { Items = [CopyConcurrency.Notice(job, Report(stages).Stages!, Dbms.Oracle)!] };
+        var checkedReport = confirmed with { Items = [.. confirmed.Items, new CheckItem(null, CopyCheckCodes.ReadPoint, CheckLevel.Pass, "시작 SCN")] };
+
+        Assert.Equal(new CopyConcurrencyDecision(1, CopyConcurrency.ReadPointUncheckedReason), CopyConcurrency.ForRun(job, confirmed, Dbms.Oracle));
+        var run = CopyConcurrency.ForRun(job, checkedReport, Dbms.Oracle);
+        Assert.Equal(2, run.Tables);
+        Assert.True(run.ReadsAtPoint);
+
+        // 같은 시점 읽기를 끈 동시 복사는 시점 읽기 점검이 없어도 된다(예전 PF2 그대로).
+        Assert.Equal(2, CopyConcurrency.ForRun(Job(3, CommitMode.PerTable, consistent: false), confirmed, Dbms.Oracle).Tables);
     }
 
     [Theory]
@@ -161,12 +213,28 @@ public sealed class CopyConcurrencyTests
         Assert.DoesNotContain("표", item.Message, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData(CommitMode.PerTable, true, CopyConcurrency.ConsistentReadReason)]
-    [InlineData(CommitMode.AtEnd, false, CopyConcurrency.AtEndReason)]
-    public void Precheck_tells_why_it_runs_one_table_at_a_time(CommitMode commit, bool consistent, string reason)
+    [Fact]
+    public void Precheck_says_an_oracle_source_reads_every_table_as_of_one_start_scn()
     {
-        var item = CopyConcurrency.Notice(Job(2, commit, consistent), [["A", "B"]], Dbms.Oracle);
+        var item = CopyConcurrency.Notice(Job(3, CommitMode.PerTable, consistent: true), [["A", "B"], ["C"]], Dbms.Oracle);
+
+        Assert.NotNull(item);
+        Assert.Equal(CheckLevel.Confirm, item!.Level);
+        Assert.Contains(CopyConcurrency.DeleteCommitWarning, item.Message, StringComparison.Ordinal);
+        Assert.Contains(CopyConcurrency.ReadPointNote, item.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("표", item.Message, StringComparison.Ordinal);
+
+        // 같은 시점 읽기를 끄면 시점 안내는 없다.
+        Assert.DoesNotContain("AS OF", CopyConcurrency.Notice(Job(3, CommitMode.PerTable, consistent: false), [["A", "B"]], Dbms.Oracle)!.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(CommitMode.PerTable, true, CopyConcurrency.ConsistentReadReason, Dbms.Tibero)]
+    [InlineData(CommitMode.AtEnd, false, CopyConcurrency.AtEndReason, Dbms.Oracle)]
+    [InlineData(CommitMode.AtEnd, true, CopyConcurrency.AtEndReason, Dbms.Oracle)]
+    public void Precheck_tells_why_it_runs_one_table_at_a_time(CommitMode commit, bool consistent, string reason, Dbms source)
+    {
+        var item = CopyConcurrency.Notice(Job(2, commit, consistent), [["A", "B"]], source);
 
         Assert.NotNull(item);
         Assert.Equal(CheckLevel.Pass, item!.Level);

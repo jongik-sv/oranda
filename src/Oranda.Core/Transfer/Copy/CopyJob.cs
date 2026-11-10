@@ -227,7 +227,7 @@ public sealed record CopyOptions
 
     /// <summary>
     /// 동시 테이블 수(PF2, 조정 결정 71·72). null(기본) = 1 = 한 테이블씩(예전 동작). 2~4 면 FK 단계마다 테이블을 그 수까지 동시에 복사한다
-    /// (테이블마다 원본·대상 세션 한 쌍). 실제로 동시에 도는지는 <see cref="CopyConcurrency.Effective"/> 가 정한다(같은 시점 읽기·「모두 끝난 뒤 한 번 커밋」이면 끈다).
+    /// (테이블마다 원본·대상 세션 한 쌍). 실제로 동시에 도는지는 <see cref="CopyConcurrency.Effective"/> 가 정한다(「모두 끝난 뒤 한 번 커밋」이면 끈다. 같은 시점 읽기면 Oracle 원본은 시작 SCN 으로 읽으며 동시, Tibero 원본은 끈다 — PF2b).
     /// null 이면 파일에 쓰지 않는다(스키마 버전은 올리지 않는다, <see cref="CopyJobSchema"/>).
     /// </summary>
     public int? ConcurrentTables { get; init; }

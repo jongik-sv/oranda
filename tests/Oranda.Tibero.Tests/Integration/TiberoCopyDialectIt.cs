@@ -35,6 +35,7 @@ public class TiberoCopyDialectIt(ITestOutputHelper output)
     private static readonly string SnapshotTable = TiberoItSessions.ObjectName("CPD_RO");
     private static readonly string Sequence = TiberoItSessions.ObjectName("CPD_SEQ");
     private static readonly string BinTable = TiberoItSessions.ObjectName("CPD_BIN");
+    private static readonly string PointTable = TiberoItSessions.ObjectName("CPD_ASOF");
 
     [TiberoWriteFact]
     public Task Foreign_key_disable_enable_novalidate_drop_readd_and_referenced_parent_drop() =>
@@ -59,6 +60,14 @@ public class TiberoCopyDialectIt(ITestOutputHelper output)
     [TiberoWriteFact]
     public Task Drop_table_without_purge_goes_to_the_recycle_bin_when_it_is_on() =>
         WriteAsync([BinTable], [], true, RecycleBinAsync);
+
+    /// <summary>
+    /// PF2b 실측(Tibero 원본은 아직 시점 지정 읽기를 쓰지 않는다 — <c>TiberoCopyDialect.ReadPoint</c> = null): 지금 시점 번호(TSN)를 읽는 방법과
+    /// <c>AS OF SCN</c> 이 그 시점의 행을 돌려주는지 본다. 방법마다 되는지·오류 번호를 출력한다(이 결과로 Tibero 원본의 같은 시점 읽기 + 동시 복사를 켤지 정한다).
+    /// </summary>
+    [TiberoWriteFact]
+    public Task Flashback_query_probe_reads_the_current_tsn_and_as_of_scn_returns_the_old_rows() =>
+        WriteAsync([PointTable], [], false, FlashbackProbeAsync);
 
     private static async Task FkAsync(TiberoSession session, string owner)
     {
@@ -189,6 +198,62 @@ public class TiberoCopyDialectIt(ITestOutputHelper output)
         var inBin = await CountAsync(session, $"SELECT COUNT(*) FROM user_recyclebin WHERE original_name = '{BinTable}'");
         Assert.True(inBin == 1, "DropTable with the recycle bin on: expected 1 recycle bin row for the table, found " + inBin);
         output.WriteLine("recycle bin row found for the dropped table (user_recyclebin.original_name)");
+    }
+
+    private async Task FlashbackProbeAsync(TiberoSession session, string owner)
+    {
+        await ExecQuietAsync(session, "create table", $"CREATE TABLE {PointTable} (ID NUMBER)");
+        await ExecQuietAsync(session, "insert first row", $"INSERT INTO {PointTable} (ID) VALUES (1)");
+        await ExecQuietAsync(session, "commit first row", "COMMIT");
+        await Task.Delay(TimeSpan.FromSeconds(8)); // 표를 만든 직후의 시점으로는 읽지 못할 수 있다(Oracle ORA-01466 과 같은 규칙인지 모름)
+
+        long? point = null;
+        foreach (var (sql, method) in new[]
+                 {
+                     ("SELECT CURRENT_TSN FROM V$DATABASE", "V$DATABASE.CURRENT_TSN"),
+                     ("SELECT TIMESTAMP_TO_TSN(SYSTIMESTAMP) FROM DUAL", "TIMESTAMP_TO_TSN(SYSTIMESTAMP)"),
+                     ("SELECT DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER FROM DUAL", "DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER"),
+                 })
+        {
+            try
+            {
+                var value = TiberoSessionQuery.Long(await TiberoSessionQuery.ScalarAsync(session, sql));
+                output.WriteLine($"{method}: {(value is { } v ? "ok " + v.ToString(System.Globalization.CultureInfo.InvariantCulture) : "no value")}");
+                point ??= value;
+            }
+#pragma warning disable CA1031 // 실측: 방법마다 되는지만 남긴다(형식 이름·오류 번호만).
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                output.WriteLine($"{method}: failed {Describe(ex)}");
+            }
+        }
+
+        Assert.True(point is > 0, "no way to read the current TSN worked (see output)");
+        await ExecQuietAsync(session, "insert late row", $"INSERT INTO {PointTable} (ID) VALUES (2)");
+        await ExecQuietAsync(session, "commit late row", "COMMIT");
+
+        var text = point!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var clause in new[] { "AS OF TSN " + text, "AS OF SCN " + text })
+        {
+            var label = string.Join(' ', clause.Split(' ').Take(3));
+            try
+            {
+                var seen = TiberoSessionQuery.Long(await TiberoSessionQuery.ScalarAsync(session, $"SELECT COUNT(*) FROM {Qualified(owner, PointTable)} {clause}"));
+                output.WriteLine($"{label}: ok, rows {seen?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}");
+            }
+#pragma warning disable CA1031 // 실측: 글마다 되는지만 남긴다(형식 이름·오류 번호만).
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                output.WriteLine($"{label}: failed {Describe(ex)}");
+            }
+        }
+
+        // 복사가 쓸 글(Oracle 과 같은 AS OF SCN): 늦게 넣은 행이 보이지 않아야 한다.
+        var asOf = await CountAsync(session, $"SELECT COUNT(*) FROM {Qualified(owner, PointTable)} AS OF SCN {text}");
+        Assert.True(asOf == 1, "AS OF SCN <current TSN before the late row> should see 1 row, saw " + asOf);
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM {Qualified(owner, PointTable)}") == 2, "the late row should be visible now");
     }
 
     /// <summary>쓰기 시험 틀: 남은 제 객체를 지우고 본문을 돌린 뒤 다시 지운다. 본문 실패는 정리 뒤 그대로 다시 던진다.</summary>

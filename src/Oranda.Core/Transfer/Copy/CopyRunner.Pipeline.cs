@@ -423,6 +423,14 @@ public partial class CopyRunner
     /// <summary>원본 읽기가 서버 오류로 실패: 스냅샷이 너무 오래됐으면 실행 전체를 멈추고, 이 표의 적재분을 되돌린 뒤 실패로 둔다.</summary>
     private async Task ReadFailedAsync(RunState run, TableState table, Exception ex, DbError error, CancellationToken ct)
     {
+        if (ReadPointFailure(run, table, ex) is { } failure)
+        {
+            // 같은 시점 읽기 + 동시 복사(PF2b): 그 시점으로 못 읽었다. 지금 데이터로 바꿔 읽지 않고 이 테이블을 실패로(시점 데이터를 잃었으면 전체 중단).
+            await RollbackTableAsync(run, table, ct);
+            table.Fail(failure);
+            return;
+        }
+
         if (error.Kind == DbErrorKind.SnapshotTooOld)
         {
             run.Notices.Add($"{table.Name}: 원본 읽기가 오래 걸려 이전 시점 데이터를 읽지 못했습니다{ErrorNameNote(_sourceDialect.SnapshotTooOldErrorName)}. 기간을 줄이거나 나눠 실행하세요.");

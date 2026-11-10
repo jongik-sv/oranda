@@ -89,6 +89,15 @@ public static class CopyCheckCodes
     public const string ConcurrentCopy = "ConcurrentCopy";
 
     /// <summary>
+    /// 같은 시점 읽기를 켠 채 동시 복사(PF2b, 작업 전체 한 항목): 실행을 시작할 때 원본 SCN 하나를 잡아 모든 테이블을 그 시점(<c>AS OF SCN</c>)으로 읽는다.
+    /// 예상 읽기 시간이 원본 UNDO 보존 시간보다 길면 확인 필요, 아니면 통과. 실행기는 이 항목이 있어야 시점 읽기로 동시에 돈다(<see cref="CopyConcurrency.ForRun"/>).
+    /// </summary>
+    public const string ReadPoint = "ReadPoint";
+
+    /// <summary>오류(PF2b, 원본 테이블마다): 같은 시점 읽기로 동시에 복사하는데 다른 계정의 원본 테이블(부모 키 규칙의 부모 포함)에 FLASHBACK 권한이 없다.</summary>
+    public const string FlashbackNoPrivilege = "FlashbackNoPrivilege";
+
+    /// <summary>
     /// 확인 필요(표를 만들 때, 표마다 한 항목): 원본 테이블에 연결된 시퀀스(열 DEFAULT·그 테이블 트리거가 쓰는 시퀀스)가 대상 스키마에 없어 테이블보다 먼저 원본 속성으로 만든다
     /// (START WITH = 원본 다음 값, 적재 뒤 키 최댓값 위로 맞춤). 만드는 문장은 미리 보기에 있다(조정 결정 76).
     /// </summary>

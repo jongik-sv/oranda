@@ -21,7 +21,7 @@ public enum DbErrorKind
     /// <summary>제약 위반: 유일·참조·검사·NOT NULL(ORA-00001·02290·02291·02292·01400).</summary>
     ConstraintViolation,
 
-    /// <summary>스냅샷이 너무 오래됨(ORA-01555).</summary>
+    /// <summary>스냅샷이 너무 오래됨(ORA-01555), 그 시점의 스냅샷을 찾을 수 없음(ORA-08180).</summary>
     SnapshotTooOld,
 
     /// <summary>표·뷰·객체가 없거나 볼 수 없음(ORA-00942·04043).</summary>

@@ -419,4 +419,52 @@ public sealed class OracleCopyDialectTests
             + "Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=1))(CONNECT_DATA=(SID=X)))");
         return await Assert.ThrowsAsync<OracleException>(() => conn.OpenAsync());
     }
+
+    // ---- 같은 시점 읽기 + 동시 복사(PF2b) ----
+
+    [Fact]
+    public void Read_point_is_as_of_scn_with_the_exact_scn_first_and_the_privilege_free_function_next()
+    {
+        ICopyDialect dialect = OracleCopyDialect.Instance;
+
+        var point = Assert.IsType<CopyReadPointSupport>(dialect.ReadPoint);
+        Assert.Equal("SCN", point.Name);
+        Assert.Equal("AS OF SCN :ORANDA_SCN", point.Clause);
+        Assert.Equal(
+            ["SELECT DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER FROM DUAL", "SELECT TIMESTAMP_TO_SCN(SYSTIMESTAMP) FROM DUAL"],
+            point.Queries.Select(q => q.Sql));
+        Assert.All(point.Queries, q => Assert.StartsWith("SELECT ", q.Sql, StringComparison.Ordinal)); // 대량 읽기는 첫 낱말을 본다
+        Assert.Equal("FLASHBACK", point.ObjectPrivilege);
+        Assert.Equal("FLASHBACK ANY TABLE", point.SystemPrivilege);
+        Assert.Equal("ORA-01555·ORA-08180", point.SnapshotTooOldErrors);
+        Assert.Equal([1466], point.DefinitionChangedNumbers);
+        Assert.Equal([8181], point.InvalidPointNumbers);
+        Assert.True(CopyReadPointDbms.Supports(Oranda.Core.Connection.Dbms.Oracle)); // 판정 표와 방언이 같다
+    }
+
+    [Theory]
+    [InlineData(1555)]
+    [InlineData(8180)]
+    public void Snapshot_numbers_of_point_reads_are_snapshot_too_old(int number)
+    {
+        Assert.Equal(DbErrorKind.SnapshotTooOld, OracleErrorClassifier.ClassifyNumber(number));
+    }
+
+    [Fact]
+    public void Oracle_read_point_failures_map_to_korean_messages_per_table()
+    {
+        var point = new CopyReadPoint(1234, OracleCopyDialect.Point);
+        DbError Error(int number) => new("ORA-" + number.ToString("D5", System.Globalization.CultureInfo.InvariantCulture), "x")
+        {
+            Number = number,
+            Kind = OracleErrorClassifier.ClassifyNumber(number),
+        };
+
+        Assert.True(CopyReadPointErrors.Describe("A", point, Error(1555))!.Value.AbortRun);
+        Assert.True(CopyReadPointErrors.Describe("A", point, Error(8180))!.Value.AbortRun);
+        Assert.Contains("FLASHBACK", CopyReadPointErrors.Describe("A", point, Error(1031))!.Value.Message, StringComparison.Ordinal);
+        Assert.Contains("(ORA-01466)", CopyReadPointErrors.Describe("A", point, Error(1466))!.Value.Message, StringComparison.Ordinal);
+        Assert.Contains("(ORA-08181)", CopyReadPointErrors.Describe("A", point, Error(8181))!.Value.Message, StringComparison.Ordinal);
+        Assert.Null(CopyReadPointErrors.Describe("A", point, Error(942)));
+    }
 }

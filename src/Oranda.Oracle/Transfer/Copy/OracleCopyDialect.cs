@@ -27,6 +27,30 @@ internal sealed class OracleCopyDialect : ICopyDialect
 
     public SqlStatement SetTransactionReadOnly() => CopyStatements.SetTransactionReadOnly();
 
+    /// <summary>
+    /// 같은 시점 읽기 + 동시 복사(PF2b): <c>AS OF SCN :ORANDA_SCN</c>. 지금 SCN 은 먼저 <c>DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER</c>(정확한 지금 SCN, 그 패키지의
+    /// EXECUTE 권한이 있을 때), 안 되면 <c>TIMESTAMP_TO_SCN(SYSTIMESTAMP)</c>(권한이 필요 없는 SQL 함수, SCN-시각 대응 간격만큼 — 몇 초 — 앞 SCN 일 수 있다).
+    /// <c>V$DATABASE.CURRENT_SCN</c> 은 V$ 조회 권한이 필요해 쓰지 않는다. 어느 쪽이든 모든 테이블이 같은 SCN 으로 읽으므로 테이블 사이는 맞는다.
+    /// 다른 계정의 표는 FLASHBACK 객체 권한이나 FLASHBACK ANY TABLE 이 있어야 한다(없으면 ORA-01031 — 사전 점검이 먼저 본다).
+    /// </summary>
+    public CopyReadPointSupport ReadPoint => Point;
+
+    /// <summary><see cref="ReadPoint"/> 의 값(한 번만 만든다).</summary>
+    internal static readonly CopyReadPointSupport Point = new(
+        "SCN",
+        "AS OF SCN :{0}",
+        [
+            new CopyReadPointQuery("SELECT DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER FROM DUAL", "DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER"),
+            new CopyReadPointQuery("SELECT TIMESTAMP_TO_SCN(SYSTIMESTAMP) FROM DUAL", "TIMESTAMP_TO_SCN(SYSTIMESTAMP)"),
+        ],
+        "FLASHBACK",
+        "FLASHBACK ANY TABLE")
+    {
+        SnapshotTooOldErrors = "ORA-01555·ORA-08180",
+        DefinitionChangedNumbers = [1466], // ORA-01466: unable to read data - table definition has changed
+        InvalidPointNumbers = [8181], // ORA-08181: specified number is not a valid system change number
+    };
+
     public SqlStatement Savepoint(string name) => CopyStatements.Savepoint(name);
 
     public SqlStatement RollbackToSavepoint(string name) => CopyStatements.RollbackTo(name);

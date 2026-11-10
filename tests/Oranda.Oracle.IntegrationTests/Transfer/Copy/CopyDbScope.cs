@@ -205,11 +205,14 @@ internal sealed class CopyDbScope : IAsyncDisposable
         => ExecTargetAsync($"GRANT {string.Join(", ", privileges.Length == 0 ? AllTablePrivileges : privileges)} ON {table} TO {WriterUser}");
 
     /// <summary>한 소유자의 표 건수(앱 경로를 거치지 않는 정답 확인).</summary>
-    public async Task<long> CountAsync(string owner, string table)
+    public Task<long> CountAsync(string owner, string table) => CountAsync(owner, table, where: null);
+
+    /// <summary>한 소유자의 표에서 조건(<paramref name="where"/>, 시험이 쓴 글)에 맞는 건수. null 이면 전체.</summary>
+    public async Task<long> CountAsync(string owner, string table, string? where)
     {
         await using var conn = await OpenAdminAsync();
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {owner}.{table}";
+        cmd.CommandText = $"SELECT COUNT(*) FROM {owner}.{table}" + (where is null ? string.Empty : " WHERE " + where);
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
     }
 

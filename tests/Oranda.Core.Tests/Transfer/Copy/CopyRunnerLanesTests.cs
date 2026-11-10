@@ -298,17 +298,187 @@ public sealed class CopyRunnerLanesTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => f.RunAsync());
     }
 
-    [Fact]
-    public async Task Consistent_read_keeps_one_table_at_a_time_even_with_lane_sessions_and_logs_why()
+    // ---- 같은 시점 읽기 + 동시(PF2b) ----
+
+    private static readonly CopyReadPointSupport TestPoint = new(
+        "SCN", "AS OF SCN :{0}",
+        [new CopyReadPointQuery("SELECT EXACT_SCN FROM DUAL", "정확"), new CopyReadPointQuery("SELECT TIME_SCN FROM DUAL", "시각")],
+        "FLASHBACK", "FLASHBACK ANY TABLE")
     {
+        SnapshotTooOldErrors = "ORA-01555·ORA-08180",
+        DefinitionChangedNumbers = [1466],
+    };
+
+    [Fact]
+    public async Task Consistent_read_with_lanes_takes_one_scn_before_any_change_and_every_lane_reads_as_of_it()
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 2), ("B", 2), ("C", 2), ("D", 2))
+        {
+            ConsistentRead = true,
+            ReadPointSupport = TestPoint,
+        };
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Equal("SCN 4242", result.ReadPoint);
+        Assert.Equal(["T1", "T2"], f.Bulk.DmlSessions().Distinct().Order(StringComparer.Ordinal)); // 같은 시점 읽기인데도 동시에 돈다
+        var events = f.Bulk.Events.ToList();
+        var point = events.IndexOf("point S1 SELECT EXACT_SCN FROM DUAL");
+        Assert.True(point >= 0, "시점을 잡지 않았다");
+        Assert.True(point < events.FindIndex(e => e.StartsWith("exec T1 DELETE", StringComparison.Ordinal)), "정리(DELETE) 뒤에 시점을 잡았다");
+        Assert.DoesNotContain(events, e => e.Contains("TIME_SCN", StringComparison.Ordinal)); // 첫 방법이 되면 다음 방법은 보내지 않는다
+
+        // 모든 원본 SELECT 가 같은 SCN 으로 읽는다(레인 원본 세션도). 레인 원본 세션에도 읽기 전용 트랜잭션을 연다.
+        var reads = f.Bulk.SourceQueries.ToList();
+        Assert.Equal(4, reads.Count);
+        Assert.All(reads, r =>
+        {
+            Assert.Contains(" AS OF SCN :ORANDA_SCN", r.Sql, StringComparison.Ordinal);
+            Assert.Equal(4242m, r.Binds[CopyReadPoint.BindName].Value);
+        });
+        Assert.Contains(reads, r => r.Session == "S2");
+        Assert.Contains("ctl S2 SET TRANSACTION READ ONLY", events);
+        Assert.Contains(f.Progress.Logs, l => l.Text.StartsWith("→ 원본 SCN 4242 · 모든 테이블을 이 시점으로 읽습니다(AS OF SCN :ORANDA_SCN, 정확)", StringComparison.Ordinal));
+        Assert.Contains(f.Progress.Logs, l => l.Text == "원본: SET TRANSACTION READ ONLY  — 읽기 전용(시점은 아래에서 잡는 원본 SCN)");
+        Assert.Contains(f.Progress.Logs, l => l.Text == "동시 복사 전에 정리(DELETE) 확정" || l.Text.EndsWith("— 동시 복사 전에 정리(DELETE) 확정", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task When_the_first_scn_method_fails_the_next_one_is_used()
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 2), ("B", 2)) { ConsistentRead = true, ReadPointSupport = TestPoint };
+        f.Bulk.PointAnswer = sql => sql.Contains("EXACT", StringComparison.Ordinal)
+            ? new FakeDbException("ORA-00904: invalid identifier", DbErrorKind.Other, 904)
+            : 77L;
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Equal("SCN 77", result.ReadPoint);
+        Assert.All(f.Bulk.SourceQueries, r => Assert.Equal(77m, r.Binds[CopyReadPoint.BindName].Value));
+        Assert.Contains(f.Progress.Logs, l => l.Kind == CopyLogKind.Warning && l.Text.Contains("ORA-00904", StringComparison.Ordinal));
+        Assert.Contains(f.Progress.Logs, l => l.Text.Contains("(AS OF SCN :ORANDA_SCN, 시각)", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task When_no_scn_can_be_read_nothing_is_deleted_and_nothing_is_read_as_current_data()
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 2), ("B", 2)) { ConsistentRead = true, ReadPointSupport = TestPoint };
+        f.Bulk.PointAnswer = _ => new FakeDbException("ORA-00904: invalid identifier", DbErrorKind.Other, 904);
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Failed, result.Outcome);
+        Assert.Null(result.ReadPoint);
+        Assert.DoesNotContain(f.Bulk.Events, e => e.StartsWith("exec ", StringComparison.Ordinal)); // 정리(DELETE)도 하지 않았다
+        Assert.Empty(f.Bulk.SourceQueries);
+        Assert.Contains(result.Notices, n => n.Contains("원본의 지금 SCN 을(를) 읽지 못해 복사를 시작하지 않았습니다", StringComparison.Ordinal)
+                                             && n.Contains(CopyReadPointErrors.NoFallback, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_source_dialect_without_point_reads_never_falls_back_to_current_data()
+    {
+        // 판정(Oracle = 시점 읽기)과 방언이 어긋나도(방언에 시점 읽기가 없음) 지금 데이터로 읽지 않고 멈춘다.
         var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 2), ("B", 2)) { ConsistentRead = true };
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Failed, result.Outcome);
+        Assert.Empty(f.Bulk.SourceQueries);
+        Assert.Contains(result.Notices, n => n.Contains("시점 지정 읽기를 쓰지 않아", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Snapshot_too_old_at_the_scn_fails_the_table_with_a_clear_message_and_stops_the_run()
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 6), ("B", 2)) { ConsistentRead = true, ReadPointSupport = TestPoint };
+        f.Bulk.BeforeRow = (table, index, _) => table == "A" && index == 3
+            ? throw new FakeDbException("ORA-01555: snapshot too old", DbErrorKind.SnapshotTooOld)
+            : ValueTask.CompletedTask;
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Failed, result.Outcome);
+        var a = result.Tables.Single(t => t.Table == "A");
+        Assert.Equal(CopyOutcome.Failed, a.Outcome);
+        Assert.Contains("원본 SCN 4242 시점의 데이터가 원본 UNDO 에 남아 있지 않아 읽지 못했습니다(ORA-01555·ORA-08180)", a.Message, StringComparison.Ordinal);
+        Assert.Contains(CopyReadPointErrors.NoFallback, a.Message, StringComparison.Ordinal);
+        Assert.Contains(result.Notices, n => n.Contains("UNDO_RETENTION", StringComparison.Ordinal));
+        Assert.All(f.Bulk.SourceQueries, r => Assert.Contains(" AS OF SCN ", r.Sql, StringComparison.Ordinal)); // A 를 지금 데이터로 다시 읽지 않았다
+        Assert.Single(f.Bulk.SourceQueries, r => r.Sql.Contains("\"A\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Missing_flashback_privilege_fails_only_that_table_and_never_reads_it_as_current_data()
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 2), ("B", 2)) { ConsistentRead = true, ReadPointSupport = TestPoint };
+        f.Bulk.BeforeRow = (table, index, _) => table == "A" && index == 0
+            ? throw new FakeDbException("ORA-01031: insufficient privileges", DbErrorKind.InsufficientPrivileges, 1031)
+            : ValueTask.CompletedTask;
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.PartiallyFailed, result.Outcome);
+        var a = result.Tables.Single(t => t.Table == "A");
+        Assert.Equal(CopyOutcome.Failed, a.Outcome);
+        Assert.Contains("SCN 4242 시점으로 읽을 권한(FLASHBACK 또는 FLASHBACK ANY TABLE)이 없습니다(ORA-01031)", a.Message, StringComparison.Ordinal);
+        Assert.Equal(CopyOutcome.Succeeded, result.Tables.Single(t => t.Table == "B").Outcome);
+        Assert.Single(f.Bulk.SourceQueries, r => r.Sql.Contains("\"A\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Table_definition_changed_after_the_scn_fails_that_table_only()
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 2), ("B", 2)) { ConsistentRead = true, ReadPointSupport = TestPoint };
+        f.Bulk.BeforeRow = (table, index, _) => table == "B" && index == 0
+            ? throw new FakeDbException("ORA-01466: unable to read data - table definition has changed", DbErrorKind.Other, 1466)
+            : ValueTask.CompletedTask;
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        var b = result.Tables.Single(t => t.Table == "B");
+        Assert.Equal(CopyOutcome.Failed, b.Outcome);
+        Assert.Contains("원본 테이블 정의가 SCN 4242 뒤에 바뀌어(DDL) 그 시점으로 읽을 수 없습니다(ORA-01466)", b.Message, StringComparison.Ordinal);
+        Assert.Equal(CopyOutcome.Succeeded, result.Tables.Single(t => t.Table == "A").Outcome);
+    }
+
+    [Fact]
+    public async Task Tibero_source_keeps_one_table_at_a_time_with_consistent_read_and_logs_why()
+    {
+        var f = new Fixture(Dbms.Tibero, new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, concurrent: 2, ("A", 2), ("B", 2)) { ConsistentRead = true };
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Null(result.ReadPoint);
+        Assert.Equal(["T1"], f.Bulk.DmlSessions().Distinct());
+        Assert.Contains(f.Progress.Logs, l => l.Text == "한 테이블씩 복사합니다: " + CopyConcurrency.ConsistentReadReason);
+        Assert.DoesNotContain(f.Progress.Logs, l => l.Text.Contains("동시 복사 전에 정리", StringComparison.Ordinal));
+        Assert.DoesNotContain(f.Bulk.Events, e => e.StartsWith("point ", StringComparison.Ordinal));
+        Assert.All(f.Bulk.SourceQueries, r => Assert.DoesNotContain(" AS OF ", r.Sql, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Consistent_read_turned_on_after_the_precheck_runs_one_table_at_a_time_in_one_read_only_transaction()
+    {
+        // 점검 결과에 시점 읽기 점검(FLASHBACK 권한)이 없다: 확인하지 않은 동작(시점 지정 읽기)을 하지 않고 예전처럼 한 트랜잭션으로 읽는다.
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 2), ("B", 2))
+        {
+            ConsistentRead = true,
+            ReadPointSupport = TestPoint,
+            ReadPointChecked = false,
+        };
 
         var result = await f.RunAsync().WaitAsync(Quick);
 
         Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
         Assert.Equal(["T1"], f.Bulk.DmlSessions().Distinct());
-        Assert.Contains(f.Progress.Logs, l => l.Text == "한 테이블씩 복사합니다: " + CopyConcurrency.ConsistentReadReason);
-        Assert.DoesNotContain(f.Progress.Logs, l => l.Text.Contains("동시 복사 전에 정리", StringComparison.Ordinal));
+        Assert.Contains(f.Progress.Logs, l => l.Text == "한 테이블씩 복사합니다: " + CopyConcurrency.ReadPointUncheckedReason);
+        Assert.DoesNotContain(f.Bulk.Events, e => e.StartsWith("point ", StringComparison.Ordinal));
+        Assert.All(f.Bulk.SourceQueries, r => Assert.DoesNotContain(" AS OF ", r.Sql, StringComparison.Ordinal));
+        Assert.Single(f.Bulk.Events, e => e == "ctl S1 SET TRANSACTION READ ONLY"); // 테이블마다 새로 열지 않는다(한 트랜잭션 = 같은 시점)
     }
 
     // ---- N=1 골든 ----
@@ -394,21 +564,28 @@ public sealed class CopyRunnerLanesTests
         }
 
         public Fixture(CopyOptions options, int lanes, IReadOnlyList<IReadOnlyList<string>>? stages, int? concurrent, params (string Table, int Rows)[] tables)
+            : this(Dbms.Oracle, options, lanes, stages, concurrent, tables)
         {
+        }
+
+        /// <summary>원본·대상 DBMS 를 고른다(세션 프로필·부품 벌의 DBMS). PF2b 의 Tibero 판정 시험이 쓴다.</summary>
+        public Fixture(Dbms dbms, CopyOptions options, int lanes, IReadOnlyList<IReadOnlyList<string>>? stages, int? concurrent, params (string Table, int Rows)[] tables)
+        {
+            Dbms = dbms;
             Options = options;
             Tables = tables;
             _lanes = lanes;
             _concurrent = concurrent;
             _stages = stages;
-            Source = new FakeSession(TestData.Profile(readOnly: true), TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" };
-            Target = new FakeSession(TestData.Profile() with { Name = "dev" }, TestData.Server()) { DbKey = "DSTDB/PDB1/DST" };
+            Source = new FakeSession(TestData.Profile(readOnly: true) with { Dbms = dbms }, TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" };
+            Target = new FakeSession(TestData.Profile() with { Name = "dev", Dbms = dbms }, TestData.Server()) { DbKey = "DSTDB/PDB1/DST" };
             Labels[Source] = "S1";
             Labels[Target] = "T1";
             for (var i = 2; i <= lanes; i++)
             {
                 var pair = new CopySessions(
-                    new FakeSession(TestData.Profile(readOnly: true), TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" },
-                    new FakeSession(TestData.Profile() with { Name = "dev" }, TestData.Server()) { DbKey = "DSTDB/PDB1/DST" });
+                    new FakeSession(TestData.Profile(readOnly: true) with { Dbms = dbms }, TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" },
+                    new FakeSession(TestData.Profile() with { Name = "dev", Dbms = dbms }, TestData.Server()) { DbKey = "DSTDB/PDB1/DST" });
                 Workers.Add(pair);
                 Labels[pair.Source] = "S" + i;
                 Labels[pair.Target] = "T" + i;
@@ -417,12 +594,20 @@ public sealed class CopyRunnerLanesTests
             Bulk = new ScriptedBulk(this);
         }
 
+        public Dbms Dbms { get; }
+
         public CopyOptions Options { get; }
 
         public IReadOnlyList<(string Table, int Rows)> Tables { get; }
 
-        /// <summary>「같은 시점 기준 읽기」. 동시 복사 시험은 끈다(켜면 동시 복사를 하지 않는다).</summary>
+        /// <summary>「같은 시점 기준 읽기」. PF2 동시 복사 시험은 끈다(켜면 Oracle 원본은 시작 SCN 으로 읽는다 — PF2b 시험).</summary>
         public bool ConsistentRead { get; init; }
+
+        /// <summary>원본 방언의 시점 지정 읽기(PF2b, <see cref="ICopyDialect.ReadPoint"/>). 기본 null = 쓰지 않음.</summary>
+        public CopyReadPointSupport? ReadPointSupport { get; init; }
+
+        /// <summary>점검 결과에 시점 읽기 점검 항목(<see cref="CopyCheckCodes.ReadPoint"/>)을 넣는다(판정이 시점 읽기일 때만). 끄면 점검 뒤 같은 시점 읽기를 켠 것과 같다.</summary>
+        public bool ReadPointChecked { get; init; } = true;
 
         public IReadOnlyList<string> LobTables { get; init; } = [];
 
@@ -464,9 +649,15 @@ public sealed class CopyRunnerLanesTests
             var preview = plans.Select(p => builder.TargetDelete(p.Rule.Table)).OfType<SqlWithBinds>()
                 .Select(d => new PreviewStatement(d.Sql, PreviewSide.Target, PolicyDecisionKind.Allow, null, null)).ToList();
             var stages = _stages ?? [[.. Tables.Select(t => t.Table)]];
-            var items = CopyConcurrency.Notice(job, stages, Dbms.Oracle) is { } notice ? new List<CheckItem> { notice } : [];
+            var items = CopyConcurrency.Notice(job, stages, Dbms) is { } notice ? new List<CheckItem> { notice } : [];
+            if (ReadPointChecked && CopyConcurrency.Planned(job, stages, Dbms).ReadsAtPoint)
+            {
+                items.Add(new CheckItem(null, CopyCheckCodes.ReadPoint, CheckLevel.Pass, "시작 SCN 으로 읽습니다.")); // 사전 점검이 FLASHBACK 권한을 본 것
+            }
+
             var report = new PrecheckReport(items, plans, preview, new Dictionary<string, long>()) { Stages = stages };
-            var parts = new CopyDbmsParts(Dbms.Oracle, new NoCatalog(), new FakeClassifier(), new FakeDialect(), new FakePrecheckDialect(), new SimpleCodec(), new FakeRecreateStep());
+            var parts = new CopyDbmsParts(Dbms, new NoCatalog(), new FakeClassifier(), new FakeDialect { ReadPoint = ReadPointSupport }, new FakePrecheckDialect(), new SimpleCodec(),
+                new FakeRecreateStep());
             var runner = new CopyRunner(Bulk, new ScriptedExecution(this), new FakeRunLog(Record), parts, parts);
             var decisions = new CopyDecisions(new HashSet<string>(), (disable ?? []).Select(ForeignKeyRef.Of).ToHashSet(), new HashSet<string>(), false);
             var sessions = new CopySessions(Source, Target) { Workers = [.. Workers.Take(_lanes - 1)] };
@@ -511,6 +702,12 @@ public sealed class CopyRunnerLanesTests
 
         public ConcurrentQueue<string> Events { get; } = new();
 
+        /// <summary>원본 시점 조회(<c>… FROM DUAL</c>, PF2b)의 답: 값(숫자) 또는 던질 예외. null 이면 4242.</summary>
+        public Func<string, object>? PointAnswer { get; set; }
+
+        /// <summary>원본 테이블 SELECT(세션 라벨·글·바인드).</summary>
+        public ConcurrentQueue<(string Session, string Sql, IReadOnlyDictionary<string, BindValue> Binds)> SourceQueries { get; } = new();
+
         public bool SessionOverlap { get; private set; }
 
         public int MaxActive
@@ -541,7 +738,26 @@ public sealed class CopyRunnerLanesTests
         public async IAsyncEnumerable<object?[]> StreamRowsAsync(ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds,
                                                                  ExecutionOptions options, [EnumeratorCancellation] CancellationToken ct)
         {
+            if (query.Text.EndsWith(" FROM DUAL", StringComparison.Ordinal))
+            {
+                // 원본 시점 조회(PF2b): 답은 PointAnswer(없으면 4242). 예외면 던진다.
+                Events.Enqueue($"point {fixture.Label(s)} {query.Text}");
+                var answer = PointAnswer is { } point ? point(query.Text) : 4242L;
+                if (answer is Exception error)
+                {
+                    throw error;
+                }
+
+                yield return [answer];
+                yield break;
+            }
+
             var table = fixture.TableOf(query.Text);
+            if (fixture.IsSource(s))
+            {
+                SourceQueries.Enqueue((fixture.Label(s), query.Text, binds));
+            }
+
             if (!fixture.IsSource(s))
             {
                 Events.Enqueue("count " + table);
@@ -714,9 +930,11 @@ public sealed class CopyRunnerLanesTests
         public Task MarkRecoveredAsync(string runFile, CancellationToken ct) => Task.CompletedTask;
     }
 
-    private sealed class FakeDbException(string message, DbErrorKind kind) : DbException(message)
+    private sealed class FakeDbException(string message, DbErrorKind kind, int number = 1555) : DbException(message)
     {
         public DbErrorKind Kind { get; } = kind;
+
+        public int Number { get; } = number;
     }
 
     private sealed class FakeCrashException() : Exception("예상하지 못한 오류(시험)");
@@ -728,7 +946,9 @@ public sealed class CopyRunnerLanesTests
         public DbErrorKind Classify(int number) => DbErrorKind.Other;
 
         public DbError? FromException(Exception exception) =>
-            exception is FakeDbException e ? new DbError("ORA-01555", e.Message) { Number = 1555, Kind = e.Kind } : null;
+            exception is FakeDbException e
+                ? new DbError("ORA-" + e.Number.ToString("D5", System.Globalization.CultureInfo.InvariantCulture), e.Message) { Number = e.Number, Kind = e.Kind }
+                : null;
     }
 
     private sealed class SimpleCodec : IBulkValueCodec
@@ -813,6 +1033,8 @@ public sealed class CopyRunnerLanesTests
         public SqlStatement NextValues(string owner, string sequence) => throw new NotSupportedException();
 
         public SqlStatement SetTransactionReadOnly() => new("SET TRANSACTION READ ONLY", default, StatementKind.TransactionControl);
+
+        public CopyReadPointSupport? ReadPoint { get; init; }
 
         public SqlStatement Savepoint(string name) => new("SAVEPOINT " + name, default, StatementKind.TransactionControl);
 

@@ -43,7 +43,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     private string _name = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(UnsupportedPairNotice), nameof(HasUnsupportedPairNotice))]
+    [NotifyPropertyChangedFor(nameof(UnsupportedPairNotice), nameof(HasUnsupportedPairNotice), nameof(ConcurrencyReason), nameof(HasConcurrencyReason))]
     private ConnectionOption? _source;
 
     [ObservableProperty]
@@ -433,7 +433,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
     /// <summary>
     /// 동시 테이블 수를 2 이상 골랐는데 지금 설정으로는 한 테이블씩 도는 이유(<see cref="CopyConcurrency.Effective"/>, 점검 전이라 작업 설정만 본다).
-    /// 1 을 골랐거나 동시로 돌면 빈 글자.
+    /// 1 을 골랐거나 동시로 돌면 빈 글자. 같은 시점 읽기를 켠 채 동시로 돌면(PF2b) 시작 SCN 으로 읽는다는 안내.
     /// </summary>
     public string ConcurrencyReason
     {
@@ -457,6 +457,11 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
                 Options = new CopyOptions { Commit = Commit, ConcurrentTables = Math.Min(ConcurrentTables, CopyConcurrency.Max) },
             };
             var decision = CopyConcurrency.Effective(probe, report: null, Source?.Profile.Dbms ?? Dbms.Oracle);
+            if (decision.ReadsAtPoint)
+            {
+                return DataCopyText.L(CopyConcurrency.ReadPointNote); // PF2b: 같은 시점 읽기를 켠 채 동시(Oracle 원본은 시작 SCN 으로 읽는다)
+            }
+
             return decision.Tables > 1 || decision.Reason is null ? string.Empty : DataCopyText.L(decision.Reason);
         }
     }

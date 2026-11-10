@@ -269,7 +269,7 @@
                     <TextBox Grid.Row="2" Grid.Column="1" Classes="compact" Text="{Binding SourceOwner, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="원본 기본 계정"
                              ToolTip.Tip="테이블 이름만 적어 더할 때 먼저 찾는 원본 계정입니다. 바꾸면 이 계정이던 규칙도 따라 바뀝니다. 다른 계정의 테이블은 계정.테이블로 적거나 시노님으로 더합니다." />
                     <CheckBox Grid.Row="3" Grid.ColumnSpan="2" Classes="compact" Content="같은 시점으로 읽기" IsChecked="{Binding ConsistentRead}"
-                              ToolTip.Tip="원본 세션을 읽기 전용 트랜잭션 하나로 열어 모든 테이블을 같은 시점으로 읽습니다. 끄면 테이블마다 따로 읽습니다." />
+                              ToolTip.Tip="원본 세션을 읽기 전용 트랜잭션 하나로 열어 모든 테이블을 같은 시점으로 읽습니다. 동시 복사면 Oracle 원본은 시작 SCN 하나로 모든 테이블을 읽습니다(AS OF SCN). 끄면 테이블마다 따로 읽습니다." />
                   </Grid>
                 </Border>
                 <!-- 대상 -->
@@ -363,7 +363,7 @@
                     <TextBlock Grid.Row="10" Classes="field" Text="동시 테이블" />
                     <NumericUpDown Grid.Row="10" Grid.Column="1" Minimum="1" Maximum="4" Increment="1" FormatString="0" Value="{Binding ConcurrentTables}"
                                    AutomationProperties.Name="동시 테이블 수"
-                                   ToolTip.Tip="FK 순서상 함께 복사할 수 있는 테이블을 이 수까지 동시에 복사합니다. 같은 시점 읽기를 끄고 커밋이 테이블마다·배치마다일 때만 동시로 돕니다. 동시 복사는 지우기를 먼저 확정합니다" />
+                                   ToolTip.Tip="FK 순서상 함께 복사할 수 있는 테이블을 이 수까지 동시에 복사합니다. 커밋이 테이블마다·배치마다일 때만 동시로 돕니다. 같은 시점 읽기를 켜면 Oracle 원본은 시작 SCN 하나로 모든 테이블을 읽고(AS OF SCN), Tibero 원본은 한 테이블씩 복사합니다. 동시 복사는 지우기를 먼저 확정합니다" />
                     <TextBlock Grid.Row="10" Grid.Column="2" Text="개" VerticalAlignment="Center" Classes="dim" />
                     <!-- 2 이상을 골랐는데 한 테이블씩 도는 이유(같은 시점 읽기·「모두 끝난 뒤 한 번 커밋」). 없으면 숨긴다. -->
                     <TextBlock Grid.Row="11" Grid.ColumnSpan="3" Classes="dim" Text="{Binding ConcurrencyReason}" TextWrapping="Wrap"

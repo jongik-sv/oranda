@@ -28,11 +28,22 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
     private static readonly Regex ToDtRegex = new(@":TO_DT\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <param name="key">규칙 키.</param>
-    public SqlWithBinds SourceSelect(string key, IReadOnlyList<string> columns)
+    /// <param name="columns">읽을 열.</param>
+    /// <param name="point">
+    /// 같은 시점 읽기로 동시에 복사할 때의 원본 시점(PF2b). 있으면 원본 표와 원본 쪽 부모 표(부모 키 규칙) 뒤에 <see cref="CopyReadPoint.Clause"/>
+    /// (<c>"SRC"."T" AS OF SCN :ORANDA_SCN</c>)를 붙이고 바인드 <see cref="CopyReadPoint.BindName"/> 에 시점 번호를 넣는다. 사용자 조건 안의 하위 질의에는 붙이지 않는다.
+    /// </param>
+    public SqlWithBinds SourceSelect(string key, IReadOnlyList<string> columns, CopyReadPoint? point = null)
     {
         var binds = new Dictionary<string, BindValue>(StringComparer.Ordinal);
-        var sql = $"SELECT {string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways))} FROM {SourceTable(key)}"
-                  + Where(key, isTarget: false, binds);
+        var asOf = point?.Clause;
+        var sql = $"SELECT {string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways))} FROM {SourceTable(key)}" + (asOf is null ? "" : " " + asOf)
+                  + Where(key, isTarget: false, binds, asOf);
+        if (point is not null)
+        {
+            binds[CopyReadPoint.BindName] = point.Bind;
+        }
+
         return new SqlWithBinds(sql, binds);
     }
 
@@ -104,14 +115,14 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
         return new SqlWithBinds($"SELECT COUNT(*) FROM {from}{Where(key, isTarget, binds)}", binds);
     }
 
-    private string Where(string table, bool isTarget, Dictionary<string, BindValue> binds)
+    private string Where(string table, bool isTarget, Dictionary<string, BindValue> binds, string? asOf = null)
     {
         var counter = 0;
-        var predicate = Predicate(table, isTarget, binds, ref counter);
+        var predicate = Predicate(table, isTarget, binds, ref counter, asOf: asOf);
         return predicate is null ? "" : " WHERE " + predicate;
     }
 
-    private string? Predicate(string table, bool isTarget, Dictionary<string, BindValue> binds, ref int counter, HashSet<string>? visiting = null)
+    private string? Predicate(string table, bool isTarget, Dictionary<string, BindValue> binds, ref int counter, HashSet<string>? visiting = null, string? asOf = null)
     {
         var rule = RuleOf(table);
         switch (rule.Kind)
@@ -142,9 +153,11 @@ public sealed class CopySqlBuilder(CopyJob job, ResolvedPeriod period,
                 var child = ColumnList(link.ChildColumns);
                 var parentCols = Quoted(link.ParentColumns);
                 var parentWhere = CopyOwners.Find(job, parentKey) is not null
-                    ? Predicate(parentKey, isTarget, binds, ref counter, visiting)
+                    ? Predicate(parentKey, isTarget, binds, ref counter, visiting, asOf)
                     : null;
-                var sub = $"SELECT {parentCols} FROM {Qualified(owner, link.ParentTable)}" + (parentWhere is null ? "" : " WHERE " + parentWhere);
+                // 원본 쪽 부모 읽기도 같은 시점으로 읽는다(PF2b: 부모 표 뒤에 AS OF 절). 대상 쪽(DELETE·COUNT)에는 붙이지 않는다.
+                var parentTable = Qualified(owner, link.ParentTable) + (isTarget || asOf is null ? "" : " " + asOf);
+                var sub = $"SELECT {parentCols} FROM {parentTable}" + (parentWhere is null ? "" : " WHERE " + parentWhere);
                 visiting.Remove(parentKey);
                 return $"{child} IN ({sub})";
             }

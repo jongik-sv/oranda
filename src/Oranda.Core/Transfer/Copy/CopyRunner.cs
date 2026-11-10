@@ -161,6 +161,12 @@ public partial class CopyRunner : ICopyRunner
         try
         {
             await OpenSourceAsync(run, ct);
+            if (!run.Aborted && UsesReadPoint(run))
+            {
+                // 같은 시점 읽기 + 동시 복사(PF2b): 끄기·정리보다 먼저 원본 시점을 잡는다(못 잡으면 아무것도 바꾸지 않고 멈춘다).
+                await CaptureReadPointAsync(run, ct);
+            }
+
             if (!run.Aborted)
             {
                 await DisableAsync(run, decisions, ct);
@@ -530,8 +536,10 @@ public partial class CopyRunner : ICopyRunner
 
         // 「같은 시점 기준 읽기」를 꺼도 원본에는 DB 수준 READ ONLY 를 건다(그때는 표마다 새로 연다, BeginTableReadAsync).
         run.ReadStartedAt = DateTimeOffset.Now;
+        // 같은 시점 읽기 + 동시 복사(PF2b)면 시점은 이 트랜잭션이 아니라 곧 잡을 원본 SCN 이다(CaptureReadPointAsync).
         var set = await ControlLoggedAsync(run, run.Source, _sourceDialect.SetTransactionReadOnly(), ct,
-            run.Job.ConsistentRead ? "모든 테이블을 이 시점 기준으로 읽기" : "읽기 전용(테이블마다 새로 엽니다)");
+            UsesReadPoint(run) ? "읽기 전용(시점은 아래에서 잡는 원본 SCN)"
+            : run.Job.ConsistentRead ? "모든 테이블을 이 시점 기준으로 읽기" : "읽기 전용(테이블마다 새로 엽니다)");
         if (set.Status != ExecutionStatus.Succeeded)
         {
             run.Abort("원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다: " + Describe(set));
@@ -716,12 +724,12 @@ public partial class CopyRunner : ICopyRunner
             }
 
             table.SavepointSet = true;
-            if (!run.Job.ConsistentRead && !await BeginTableReadAsync(run, table, ct))
+            if (ReadsPerTable(run) && !await BeginTableReadAsync(run, table, ct))
             {
                 return;
             }
 
-            var select = run.Builder.SourceSelect(table.Name, shape.CopyColumns);
+            var select = run.Builder.SourceSelect(table.Name, shape.CopyColumns, run.ReadPoint);
             LogLoadStatements(run, plan, shape, select, dml);
             // 읽기·쓰기(겹치기 또는 옛 동작 번갈아)·멈춤 감시·대기 한도는 PumpTableAsync(CopyRunner.Pipeline.cs).
             table.Pumped = true;
@@ -1128,8 +1136,14 @@ public partial class CopyRunner : ICopyRunner
     }
 
     /// <summary>
+    /// 표를 읽기 전마다 원본 읽기 전용 트랜잭션을 새로 여는가(<see cref="BeginTableReadAsync"/>): 「같은 시점 기준 읽기」를 껐거나,
+    /// 같은 시점은 원본 SCN(<see cref="RunState.ReadPoint"/>)이 맞추는 동시 복사(PF2b — 레인 원본 세션에도 DB 수준 READ ONLY 를 건다)일 때.
+    /// </summary>
+    private static bool ReadsPerTable(RunState run) => !run.Job.ConsistentRead || run.ReadPoint is not null;
+
+    /// <summary>
     /// 「같은 시점 기준 읽기」를 끈 경우: 표를 읽기 전마다 원본 트랜잭션을 닫고 읽기 전용 트랜잭션을 새로 연다
-    /// (표마다 따로 읽되, 원본에는 언제나 DB 수준 READ ONLY 가 걸려 있게 한다).
+    /// (표마다 따로 읽되, 원본에는 언제나 DB 수준 READ ONLY 가 걸려 있게 한다). 같은 시점 읽기 + 동시 복사(PF2b)도 같다 — 시점은 SELECT 의 AS OF 절이 정한다.
     /// </summary>
     private async Task<bool> BeginTableReadAsync(RunState run, TableState table, CancellationToken ct)
     {
@@ -1139,7 +1153,8 @@ public partial class CopyRunner : ICopyRunner
             return false;
         }
 
-        var set = await ControlLoggedAsync(run, run.Source, _sourceDialect.SetTransactionReadOnly(), ct, "이 테이블을 읽을 시점");
+        var set = await ControlLoggedAsync(run, run.Source, _sourceDialect.SetTransactionReadOnly(), ct,
+            run.ReadPoint is { } point ? $"읽기 전용(시점은 원본 {point.Text})" : "이 테이블을 읽을 시점");
         return RunState.Accept(set, table, "원본에서 읽기 전용 트랜잭션을 시작하지 못했습니다", ct);
     }
 
@@ -2578,6 +2593,9 @@ public partial class CopyRunner : ICopyRunner
 
         public DateTimeOffset ReadStartedAt { get; set; } = DateTimeOffset.Now;
 
+        /// <summary>같은 시점 읽기로 동시에 복사할 때(PF2b) 모든 테이블을 읽는 원본 시점(<see cref="CopyRunner.CaptureReadPointAsync"/>). 아니면 null.</summary>
+        public CopyReadPoint? ReadPoint { get; set; }
+
         public Dictionary<string, TableState> Tables { get; } = new(StringComparer.Ordinal);
 
         public List<DisabledObject> Disabled { get; } = [];
@@ -2844,6 +2862,7 @@ public partial class CopyRunner : ICopyRunner
                 // 버린 세션은 앱이 닫고 새로 연다(리뷰 PF1-3).
                 SourceAbandoned = SourceAbandoned,
                 TargetAbandoned = TargetAbandoned,
+                ReadPoint = ReadPoint?.Text,
             };
     }
 }

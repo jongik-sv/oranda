@@ -162,4 +162,22 @@ public sealed class TiberoCopyDialectTests
         Assert.Contains("있을 수 있습니다", note, StringComparison.Ordinal); // 휴지통의 FK 는 미실측
         Assert.DoesNotContain("ORA-", note, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Read_point_is_not_used_yet_so_consistent_read_keeps_tibero_to_one_table_at_a_time()
+    {
+        // PF2b: Tibero 의 AS OF SCN(TSN)·CURRENT_TSN 은 실측 전이라 쓰지 않는다. 판정 표(CopyReadPointDbms)와 방언이 같아야 한다.
+        ICopyDialect dialect = Dialect;
+        Assert.Null(dialect.ReadPoint);
+        Assert.False(CopyReadPointDbms.Supports(Oranda.Core.Connection.Dbms.Tibero));
+
+        var job = new CopyJob
+        {
+            Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
+            SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==", ConsistentRead = true,
+            Options = new CopyOptions { ConcurrentTables = 3 },
+        };
+        var decision = CopyConcurrency.Effective(job, report: null, Oranda.Core.Connection.Dbms.Tibero);
+        Assert.Equal(new CopyConcurrencyDecision(1, CopyConcurrency.ConsistentReadReason), decision);
+    }
 }
