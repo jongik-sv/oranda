@@ -45,6 +45,33 @@ public interface IBulkValueCodec
     /// (<see cref="ToInt64"/> 처럼 끝값으로 자르지 않는다: 시퀀스 보정이 「값이 너무 큼」으로 건너뛴다). 숫자가 아니면 <see cref="InvalidCastException"/>.
     /// </summary>
     long ToInt64Exact(object? value);
+
+    // ---- 교차 복사(Oracle↔Tibero) 이식 값. 같은 DBMS 복사는 이 멤버를 부르지 않는다(값 변환을 아예 거치지 않음). ----
+
+    /// <summary>
+    /// 이 DBMS 에서 <b>읽어서</b> 이식 값으로 낼 수 있는 형식인가(교차 복사의 원본 쪽 판정). 기본 = <see cref="IsSupported"/>.
+    /// 쓰기는 꺼져 있어도 읽기만 되는 형식(Tibero BINARY_*·TIMESTAMP WITH TIME ZONE)이 있어 따로 둔다.
+    /// </summary>
+    bool IsReadable(string serverType) => IsSupported(serverType);
+
+    /// <summary>
+    /// 이 DBMS 의 대량 읽기 값(<paramref name="serverType"/> 열의 값) → 중립 이식 값(<c>Core/Transfer/Copy/CrossDbms/PortableValues</c>).
+    /// 매핑: 문자 = string, RAW·BLOB = byte[], CLOB·NCLOB = string, DATE = <see cref="DateTime"/>, NUMBER·FLOAT = <c>PortableNumber</c>,
+    /// BINARY_FLOAT·DOUBLE = <c>PortableBinaryFloat</c>·<c>PortableBinaryDouble</c>, TIMESTAMP = <c>PortableTimestamp</c>,
+    /// TIMESTAMP WITH TIME ZONE = <c>PortableTimestampTz</c>, INTERVAL = <c>PortableIntervalYm</c>·<c>PortableIntervalDs</c>. NULL 은 null.
+    /// 값을 만들 수 없으면(예: NaN 을 NUMBER 로) <c>PortableConversionException</c>(그 행 실패). 읽을 수 없는 형식이면 <see cref="NotSupportedException"/>.
+    /// 기본 구현 = <see cref="NotSupportedException"/>(교차 복사를 지원하지 않는 DBMS).
+    /// </summary>
+    object? ToPortable(object? value, string serverType)
+        => throw new NotSupportedException("이 DBMS 는 교차 복사 이식 값을 지원하지 않습니다.");
+
+    /// <summary>
+    /// 이식 값 → 이 DBMS 의 대량 쓰기 값(<paramref name="bindType"/> = <c>CrossTypeMap</c> 이 정한 바인드 형식 이름, 예 <c>NUMBER</c>·<c>CLOB</c>).
+    /// 값 하나를 못 바꾸면(기원전 날짜·모르는 시간대 지역·범위 밖 숫자) <c>PortableConversionException</c>(그 행 실패). 쓸 수 없는 형식이면 <see cref="NotSupportedException"/>.
+    /// 기본 구현 = <see cref="NotSupportedException"/>.
+    /// </summary>
+    object? FromPortable(object? portable, string bindType)
+        => throw new NotSupportedException("이 DBMS 는 교차 복사 이식 값을 지원하지 않습니다.");
 }
 
 /// <summary>대량 값의 갈래(<see cref="IBulkValueCodec.KindOf"/>). 문자 열만 마스킹 함수를 걸 수 있고, LOB 는 고정값을 따로 바꾼다.</summary>
