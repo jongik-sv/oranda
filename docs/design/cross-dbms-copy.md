@@ -56,7 +56,7 @@
 | RAW ≤ 2000 | RAW | Exact | RAW |
 | RAW > 2000 (EXTENDED) | BLOB | Converted `RawToBlob` | BLOB |
 | DATE·TIMESTAMP(n) | 같음 | Exact | 같음 |
-| TIMESTAMP WITH TIME ZONE | 같음 | Converted `TimeZoneRegionToOffset`* (지역 → 그 시각 오프셋, 지역 잃음 안내, D7). XC5 실측에서 Tibero TZ 쓰기가 안 되면 Dropped | TIMESTAMP WITH TIME ZONE |
+| TIMESTAMP WITH TIME ZONE | 같음 | Converted `TimeZoneRegionToOffset`* (지역 → 그 시각 오프셋, 지역 잃음 안내, D7). XC5 실측(win144 #128)으로 확정: Tibero TZ 쓰기 됨. 시 0 인 음수 오프셋(`-00:30`)은 같은 시각을 `+00:00` 으로 옮김 | TIMESTAMP WITH TIME ZONE |
 | INTERVAL YM·DS | 같음 | Exact | 같음 |
 | IDENTITY 열 | 일반 열 | Converted `IdentityToPlain` (표 만들기 전용 — 형식 판정이 Exact 일 때만 이유로 나옴) | 형식 그대로 |
 | TIMESTAMP WITH LOCAL TIME ZONE | — | Dropped `LocalTimeZone` (D8) | |
@@ -88,7 +88,7 @@
 표 만들기 DDL(XC8)이 쓰는 열: 이름·위치·널 허용·기본값·길이·정밀도·`DataType` 의 괄호(`TIMESTAMP(9)`)는 원본 그대로, IDENTITY·도메인(Oracle 23ai)은 지운다.
 형식을 바꾼 열(LOB 로의 변환)은 `DataType` 을 바꾸고 길이·정밀도를 버린다. 가상 열·함수 기반 인덱스·COLLATE 처리는 XC8 몫이다.
 
-## 4. 실측이 필요한 가정(XC5)
+## 4. 실측이 필요한 가정(XC5) — 결과는 `tibero-driver-transfer.md` §5
 
 1. Tibero TZ 쓰기: 지역 이름·음수 분 오프셋 → D7.
 2. LTZ 뜻(세션·DB 시간대 기준) → D8.
@@ -99,3 +99,12 @@
 ## 5. 후속 후보
 
 - BOOLEAN(23ai) → NUMBER(1), LTZ(양방향, 뜻 확정 후), Oracle LONG 읽기.
+
+## 6. XC5 실측 결과 요약 (win144 #128, Tibero 6.2.15)
+
+- D7 확정: TZ 쓰기 `TO_TIMESTAMP_TZ(:C1, '… FF9 TZH:TZM')` 됨(배열=스칼라). 교차 쓰기는 `IBulkValueCodec.IsCrossWritable`(Tibero: IsSupported + TZ)로 켜고 같은 DBMS `IsSupported` 는 그대로. `-00:MM` 은 +00:00 으로 옮김. 대량 읽기는 오프셋만 준다(지역 잃음).
+- D8 유지: LTZ 양방향 Dropped. 뜻은 확인됨(절대 시각 저장, 세션 시간대 표시) → 후속 후보.
+- D6 확정: BINARY_* 는 NUMBER 글자 `:C1` 그대로 바인드(값 보존).
+- D13: 시험 DB 는 UTF-8 이라 손실 없음 → 인코딩 검사 없이 안내만(`CrossCharset`).
+- D19: 만들기 DDL(CHAR 길이·DEFAULT·CHECK·인덱스·COMMENT) 모두 됨 → 실패 완화 불필요. 정리 = `DROP TABLE … PURGE`. CREATE TABLE 은 앞 트랜잭션을 묵시 커밋한다.
+

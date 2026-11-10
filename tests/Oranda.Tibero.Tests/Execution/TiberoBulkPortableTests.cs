@@ -126,6 +126,37 @@ public class TiberoBulkPortableTests
     }
 
     [Fact]
+    public void Cross_write_turns_on_time_zone_only_and_leaves_same_dbms_support_unchanged()
+    {
+        Assert.True(Codec.IsCrossWritable("TIMESTAMP WITH TIME ZONE"));
+        Assert.False(Codec.IsSupported("TIMESTAMP WITH TIME ZONE"));
+        Assert.True(Codec.IsCrossWritable("NUMBER"));
+        Assert.False(Codec.IsCrossWritable("TIMESTAMP WITH LOCAL TIME ZONE"));
+        Assert.False(Codec.IsCrossWritable("BINARY_DOUBLE"));
+    }
+
+    [Theory]
+    [InlineData("-00:30", "2026-11-10 09:30:00.500000000 +00:00")]
+    [InlineData("-00:01", "2026-11-10 09:01:00.500000000 +00:00")]
+    public void A_negative_offset_with_zero_hours_is_moved_to_the_same_instant_at_plus_zero(string offset, string expected)
+    {
+        // XC5 실측: 서버가 시 0 인 음수 오프셋의 부호를 잃는다 → 같은 시각을 +00:00 으로 옮겨 쓴다.
+        var portable = new PortableTimestampTz(new PortableTimestamp(new DateTime(2026, 11, 10, 9, 0, 0), 500_000_000), offset, null);
+        var tz = Assert.IsType<TiberoBulkTimestampTz>(Codec.FromPortable(portable, "TIMESTAMP WITH TIME ZONE"));
+        Assert.Equal(expected, TiberoBulkValueCodec.CrossBindText(tz, "TIMESTAMP WITH TIME ZONE"));
+    }
+
+    [Theory]
+    [InlineData("-01:00")]
+    [InlineData("-03:30")]
+    public void A_negative_offset_with_hours_keeps_its_offset(string offset)
+    {
+        var portable = new PortableTimestampTz(new PortableTimestamp(new DateTime(2026, 11, 10, 9, 0, 0), 0), offset, null);
+        var tz = Assert.IsType<TiberoBulkTimestampTz>(Codec.FromPortable(portable, "TIMESTAMP WITH TIME ZONE"));
+        Assert.Equal("2026-11-10 09:00:00.000000000 " + offset, TiberoBulkValueCodec.CrossBindText(tz, "TIMESTAMP WITH TIME ZONE"));
+    }
+
+    [Fact]
     public void Binary_bind_type_is_written_as_number_text()
     {
         Assert.Equal("1.5", TiberoBulkValueCodec.CrossBindText(1.5f, "BINARY_FLOAT"));

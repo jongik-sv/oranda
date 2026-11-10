@@ -411,6 +411,12 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
     };
 
     /// <summary>
+    /// 쓸 수 있는 모양인가: 지원 형식 + TIMESTAMP WITH TIME ZONE(교차 복사가 보낸다, XC5 실측으로 확인. 같은 DBMS 복사는 사전 점검이 이 형식을
+    /// <see cref="TiberoBulkShape.IsSupported"/> 거짓으로 걸러 이 서비스에 보내지 않는다 — 동작 불변).
+    /// </summary>
+    private static bool WritableHere(TiberoBulkShape shape) => shape.IsSupported || shape.Type == TiberoBulkType.TimestampTz;
+
+    /// <summary>
     /// 열마다 모양을 보고 값을 바인드 배열로 바꾼다. 지원 밖 형식, 감싸야 하는 값 자리(<see cref="TiberoBulkShape.IsWrapped"/>)가 글에 없는 열,
     /// 바꿀 수 없는 값이면 false 와 이유(열·행 번호).
     /// </summary>
@@ -429,9 +435,9 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
             try
             {
                 shape = TiberoBulkTypes.ShapeOf(column.ServerType);
-                if (shape.IsSupported && shape.ParamKind is not null && shape.IsWrapped)
+                if (WritableHere(shape) && shape.ParamKind is not null && shape.IsWrapped)
                 {
-                    expected = TiberoBulkValueCodec.BindExpression(column.BindName, column.ServerType);
+                    expected = TiberoBulkValueCodec.CrossBindExpression(column.BindName, column.ServerType);
                 }
             }
             catch (Exception ex) when (ex is ArgumentException or NotSupportedException or InvalidOperationException or FormatException
@@ -441,7 +447,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
                 return false;
             }
 
-            if (!shape.IsSupported || shape.ParamKind is not { } paramKind)
+            if (!WritableHere(shape) || shape.ParamKind is not { } paramKind)
             {
                 refusal = $"데이터 복사가 지원하지 않는 형식입니다: {column.BindName} ({column.ServerType})";
                 return false;
@@ -463,7 +469,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
                 {
                     values.SetValue(blob
                         ? TiberoBulkValueCodec.ToBindBytes(rows[r][c], column.ServerType)
-                        : TiberoBulkValueCodec.ToBindText(rows[r][c], column.ServerType), r);
+                        : TiberoBulkValueCodec.CrossBindText(rows[r][c], column.ServerType), r);
                 }
                 catch (Exception ex) when (ex is InvalidCastException or NotSupportedException or InvalidOperationException or FormatException
                                                or OverflowException or ArgumentException)

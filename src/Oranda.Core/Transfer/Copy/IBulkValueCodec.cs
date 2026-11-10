@@ -55,6 +55,12 @@ public interface IBulkValueCodec
     bool IsReadable(string serverType) => IsSupported(serverType);
 
     /// <summary>
+    /// 교차 복사에서 이 DBMS 가 <b>대상</b>일 때 쓸 수 있는 바인드 형식인가(<c>CrossColumnMapping.BindType</c> 기준). 기본 = <see cref="IsSupported"/>.
+    /// 같은 DBMS 복사의 <see cref="IsSupported"/> 는 바꾸지 않으면서 교차 쓰기만 켜는 형식(Tibero TIMESTAMP WITH TIME ZONE)이 있어 따로 둔다.
+    /// </summary>
+    bool IsCrossWritable(string bindType) => IsSupported(bindType);
+
+    /// <summary>
     /// 이 DBMS 의 대량 읽기 값(<paramref name="serverType"/> 열의 값) → 중립 이식 값(<c>Core/Transfer/Copy/CrossDbms/PortableValues</c>).
     /// 매핑: 문자 = string, RAW·BLOB = byte[], CLOB·NCLOB = string, DATE = <see cref="DateTime"/>, NUMBER·FLOAT = <c>PortableNumber</c>,
     /// BINARY_FLOAT·DOUBLE = <c>PortableBinaryFloat</c>·<c>PortableBinaryDouble</c>, TIMESTAMP = <c>PortableTimestamp</c>,

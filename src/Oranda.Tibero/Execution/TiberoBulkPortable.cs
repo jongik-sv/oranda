@@ -7,9 +7,18 @@ namespace Oranda.Tibero.Execution;
 // 같은 DBMS 복사는 이 멤버를 부르지 않고 IsSupported·ToBindText 가 그대로다. 꺼진 형식(BINARY_*·TZ·LONG·LONG RAW)은 TiberoBulkShape.IsSupported 가
 // 계속 거짓이고, 교차 쓰기만 CrossBindText·CrossBindExpression 우회로 TZ 와 BINARY_* 를 보낸다.
 // TZ 쓰기 서식(TiberoBulkTypes.TimestampTzShape 의 TO_TIMESTAMP_TZ(:C1, 'YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM'))은 후보다 — XC5(실측 IT)가 검증하고,
-// 실측이 녹색이면 그때 TiberoBulkShape.IsSupported 를 켠다(같은 DBMS 복사·사전 점검 동작이 바뀌는 것은 그때다).
+// XC5 실측으로 TZ 쓰기가 확인됐다. 같은 DBMS 복사·사전 점검 동작을 바꾸지 않으려고 IsSupported 는 거짓 그대로 두고, 교차 쓰기 판정은 IsCrossWritable 로 켠다.
 internal sealed partial class TiberoBulkValueCodec
 {
+    /// <summary>
+    /// 교차 쓰기가 받는 바인드 형식인가(<see cref="IsSupported"/> + TIMESTAMP WITH TIME ZONE). 같은 DBMS 복사의 <see cref="IsSupported"/> 는 바뀌지 않는다.
+    /// </summary>
+    public bool IsCrossWritable(string bindType)
+    {
+        var shape = TiberoBulkTypes.ShapeOf(bindType);
+        return shape.IsSupported || shape.Type == TiberoBulkType.TimestampTz;
+    }
+
     /// <summary>
     /// 이 DBMS 에서 읽어 이식 값으로 낼 수 있는 형식인가. <see cref="IsSupported"/>(쓰기)와 별개다 — BINARY_*·TIMESTAMP WITH TIME ZONE·LONG·LONG RAW 는
     /// 읽기만 된다. LOCAL TIME ZONE(결정 D8)과 모르는 형식은 거짓.
@@ -178,7 +187,7 @@ internal sealed partial class TiberoBulkValueCodec
 
     private static PortableTimestampTz ToPortableTz(TiberoBulkTimestampTz tz)
     {
-        // 지역 이름은 서버가 오프셋만 남긴다(지역 보존 여부는 XC5 실측 전) → 오프셋만 든다.
+        // 서버는 지역으로 쓴 값의 지역을 보존하지만 대량 읽기는 오프셋만 준다(XC5 실측) → 오프셋만 든다.
         var local = LocalOf(tz);
         return new PortableTimestampTz(
             new PortableTimestamp(local, tz.Nanosecond),
@@ -222,6 +231,12 @@ internal sealed partial class TiberoBulkValueCodec
 
         try
         {
+            if (offset < TimeSpan.Zero && offset > TimeSpan.FromHours(-1))
+            {
+                // XC5 실측: 시가 0 인 음수 오프셋(-00:30)은 서버가 부호를 잃어 +00:30 으로 저장한다(UTC 도 틀림). 같은 시각을 +00:00 으로 옮겨 쓴다(오프셋은 잃음).
+                return new TiberoBulkTimestampTz(local - offset, tz.Local.Nanos, TimeSpan.Zero);
+            }
+
             return new TiberoBulkTimestampTz(local - offset, tz.Local.Nanos, offset);
         }
         catch (ArgumentOutOfRangeException ex)

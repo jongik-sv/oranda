@@ -430,7 +430,6 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
     [Theory]
     [InlineData("XMLTYPE")]
     [InlineData("BINARY_DOUBLE")]
-    [InlineData("TIMESTAMP(6) WITH TIME ZONE")]
     public async Task A_column_of_an_unsupported_type_is_refused_without_a_driver_call(string serverType)
     {
         const string text = "INSERT INTO \"T\" (\"A\") VALUES (:C1)";
@@ -443,6 +442,41 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
         Assert.Equal(ExecutionStatus.Failed, result.Status);
         Assert.Equal("ORANDA-EXEC", result.Error?.Code);
         Assert.Contains(serverType, result.Error!.Message, StringComparison.Ordinal);
+        Assert.Empty(_sent);
+    }
+
+    [Fact]
+    public async Task A_time_zone_column_goes_as_offset_text_wrapped_in_to_timestamp_tz_for_cross_copy()
+    {
+        var text = "INSERT INTO \"T\" (\"A\") VALUES (" + TiberoBulkValueCodec.CrossBindExpression("C1", "TIMESTAMP WITH TIME ZONE") + ")";
+        Serve(cmd => cmd.CommandText == text ? 2 : null);
+        var service = NewService();
+        await using var session = NewSession();
+        var rows = new List<object?[]>
+        {
+            new object?[] { new TiberoBulkTimestampTz(new DateTime(2026, 11, 10, 0, 0, 0), 123_456_789, TimeSpan.FromHours(9)) },
+            new object?[] { null },
+        };
+
+        var result = await service.ExecuteArrayAsync(session, Dml(text), [new("C1", "TIMESTAMP WITH TIME ZONE")], rows, ExecutionOptions.Default, CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        var sent = _sent[0];
+        Assert.Equal("Varchar2", sent.Parameters[0].Kind);
+        Assert.Equal(["2026-11-10 09:00:00.123456789 +09:00", null], (string?[])sent.Parameters[0].Value!);
+    }
+
+    [Fact]
+    public async Task A_time_zone_column_whose_value_slot_is_not_wrapped_is_refused()
+    {
+        const string text = "INSERT INTO \"T\" (\"A\") VALUES (:C1)";
+        Serve(_ => 1);
+        var service = NewService();
+        await using var session = NewSession();
+
+        var result = await service.ExecuteArrayAsync(session, Dml(text), [new("C1", "TIMESTAMP WITH TIME ZONE")], [[null]], ExecutionOptions.Default, CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Failed, result.Status);
         Assert.Empty(_sent);
     }
 
