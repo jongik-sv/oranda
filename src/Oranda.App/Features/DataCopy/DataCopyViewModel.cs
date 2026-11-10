@@ -1022,7 +1022,8 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
                 return null;
             }
 
-            _sessions = opened;
+            // 대기 원인 감시(WH1): 실행기가 30초 넘게 기다리는 대상 명령의 원인을 보려고 짧은 세션을 같은 접속으로 연다(비밀번호를 다시 묻지 않는다).
+            _sessions = opened with { OpenMonitor = (session, token) => _services.OpenMonitorAsync(session.Profile, token) };
             OnPropertyChanged(nameof(HasSessions));
             return _sessions;
         }
@@ -1466,5 +1467,6 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     {
         _disposed = true;
         await CloseSessionsAsync().ConfigureAwait(true);
+        _services.ForgetSecrets();
     }
 }

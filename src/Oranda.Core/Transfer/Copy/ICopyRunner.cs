@@ -75,6 +75,12 @@ public sealed record CopyWait(CopyWaitSide Side, int? Batch, TimeSpan Waited)
 
     /// <summary>기다리는 명령의 종류(기본 = 적재).</summary>
     public CopyWaitStep Step { get; init; }
+
+    /// <summary>
+    /// 대기 원인(WH1, <see cref="CopyWaitCause.Describe"/>): 30초 넘게 기다린 대상 명령을 감시 세션으로 본 글(「행 잠금(enq: TX) · 막는 세션 123 (APPUSER@was01)」).
+    /// 감시하지 않거나 아직 모르면 null.
+    /// </summary>
+    public string? Cause { get; init; }
 }
 
 public sealed record CopyRunResult(CopyOutcome Outcome, IReadOnlyList<TableRunResult> Tables,

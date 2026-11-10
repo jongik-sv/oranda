@@ -1,8 +1,13 @@
+using System.Collections.Concurrent;
+using System.Text;
+using Oranda.App.Features.ConnectionManager;
+using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Metadata;
+using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Core.Storage;
 using Oranda.Core.Transfer.Copy;
@@ -16,6 +21,11 @@ namespace Oranda.App.Features.DataCopy;
 public sealed class DataCopyServices
 {
     private readonly IServiceProvider? _provider;
+
+    /// <summary>
+    /// 이 창이 세션을 열 때 받은 비밀번호(접속 Id 별). 대기 원인 감시 세션(WH1)이 다시 묻지 않고 쓴다. 창을 닫으면 지운다(<see cref="ForgetSecrets"/>).
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, SecureCredential> _secrets = new();
 
     public DataCopyServices(IServiceProvider? provider = null) => _provider = provider;
 
@@ -40,6 +50,9 @@ public sealed class DataCopyServices
 
     /// <summary>전용 세션 열기를 바꿔 쓴다(시험). 없으면 앱의 전용 세션 경로(비밀번호 안전 저장소·입력창)를 쓴다.</summary>
     public Func<ConnectionProfile, CancellationToken, Task<ISession?>>? SessionOpener { get; init; }
+
+    /// <summary>대기 원인 감시 세션 열기를 바꿔 쓴다(시험). 없으면 이 창이 받은 비밀번호로 <see cref="SessionPurpose.Monitor"/> 세션을 연다.</summary>
+    public Func<ConnectionProfile, CancellationToken, Task<ISession?>>? MonitorOpener { get; init; }
 
     /// <summary>세션에서 문장 하나를 실행하고 실패 이유(성공이면 null)를 돌려준다. 없으면 <see cref="Execution"/> 으로 실행한다.</summary>
     public Func<ISession, string, CancellationToken, Task<string?>>? StatementRunner { get; init; }
@@ -99,9 +112,117 @@ public sealed class DataCopyServices
             return await opener(profile, ct).ConfigureAwait(true);
         }
 
-        return _provider is ServiceContainer container
-            ? await DedicatedSession.DedicatedSessionCommands.OpenDedicatedAsync(container, profile, ct).ConfigureAwait(true)
-            : null;
+        if (_provider is not ServiceContainer container)
+        {
+            return null;
+        }
+
+        // 앱의 전용 세션 경로(DedicatedSessionCommands.OpenDedicatedAsync)와 같다: 안전 저장소에서 꺼내고 없으면 묻는다.
+        // 다른 점은 받은 비밀번호를 이 창이 닫힐 때까지 들고 있는 것뿐이다(대기 원인 감시 세션이 다시 묻지 않게, WH1).
+        var secret = await StoredSecretAsync(container, profile).ConfigureAwait(true);
+        if (string.IsNullOrEmpty(secret) && container.GetService<ShellController>()?.MainWindow is { } owner)
+        {
+            secret = await ConnectionDialogs.PromptPasswordAsync(owner, profile).ConfigureAwait(true);
+        }
+
+        if (string.IsNullOrEmpty(secret))
+        {
+            return null;
+        }
+
+        using var credential = new SecureCredential(secret);
+        var session = await container.GetRequiredService<ISessionManager>()
+            .OpenAsync(profile, credential, SessionPurpose.Dedicated, ct).ConfigureAwait(true);
+        Remember(profile, secret);
+        return session;
+    }
+
+    /// <summary>
+    /// 대기 원인 감시용 짧은 세션(WH1, <see cref="CopySessions.OpenMonitor"/>)을 <paramref name="profile"/> 로 연다. 비밀번호는 이 창이 세션을 열 때 받은 것,
+    /// 없으면 안전 저장소의 것이다. 새로 묻지 않는다: 둘 다 없으면 null(감시 없이 대기 시간만 보인다).
+    /// </summary>
+    public async Task<ISession?> OpenMonitorAsync(ConnectionProfile profile, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (MonitorOpener is { } opener)
+        {
+            return await opener(profile, ct).ConfigureAwait(true);
+        }
+
+        if (_provider is not ServiceContainer container)
+        {
+            return null;
+        }
+
+        // 들고 있는 비밀번호는 글(string)로 꺼내지 않고 버퍼째 새 그릇으로 옮긴다(쓰고 나면 지운다).
+        SecureCredential? credential = null;
+        if (_secrets.TryGetValue(profile.Id, out var kept))
+        {
+            try
+            {
+                credential = new SecureCredential(kept.Secret);
+            }
+            catch (ObjectDisposedException)
+            {
+                // 창이 닫히는 중이다.
+            }
+        }
+
+        if (credential is null && await StoredSecretAsync(container, profile).ConfigureAwait(true) is { Length: > 0 } stored)
+        {
+            credential = new SecureCredential(stored);
+        }
+
+        if (credential is null)
+        {
+            return null;
+        }
+
+        using (credential)
+        {
+            return await container.GetRequiredService<ISessionManager>()
+                .OpenAsync(profile, credential, SessionPurpose.Monitor, ct).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>들고 있던 비밀번호를 지운다(창을 닫을 때).</summary>
+    public void ForgetSecrets()
+    {
+        foreach (var id in _secrets.Keys)
+        {
+            if (_secrets.TryRemove(id, out var credential))
+            {
+                credential.Dispose();
+            }
+        }
+    }
+
+    private void Remember(ConnectionProfile profile, string secret)
+    {
+        var credential = new SecureCredential(secret);
+        _secrets.AddOrUpdate(profile.Id, credential, (_, old) =>
+        {
+            old.Dispose();
+            return credential;
+        });
+    }
+
+    private static async Task<string?> StoredSecretAsync(ServiceContainer container, ConnectionProfile profile)
+    {
+        if (profile.CredentialRef is not { } reference || container.GetService<ICredentialStore>() is not { } store
+            || await store.LoadAsync(reference).ConfigureAwait(true) is not { } bytes)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Encoding.UTF8.GetString(bytes);
+        }
+        finally
+        {
+            Array.Clear(bytes);
+        }
     }
 
     public async Task<string?> RunStatementAsync(ISession session, string sql, CancellationToken ct)

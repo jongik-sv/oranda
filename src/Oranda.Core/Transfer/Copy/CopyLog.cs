@@ -79,7 +79,7 @@ public static partial class CopyLogText
     {
         ArgumentNullException.ThrowIfNull(wait);
         var minute = wait.Minute.ToString(CultureInfo.InvariantCulture);
-        return wait.Step switch
+        var text = wait.Step switch
         {
             CopyWaitStep.Delete => $"대상 정리(DELETE) 중 · {minute}분째 대기",
             CopyWaitStep.Commit => $"테이블 커밋 중 · {minute}분째 대기",
@@ -87,6 +87,14 @@ public static partial class CopyLogText
                 ? $"원본 읽는 중 · {minute}분째"
                 : $"배치 {(wait.Batch ?? 0).ToString(CultureInfo.InvariantCulture)} 쓰는 중 · {minute}분째 대기",
         };
+        return WithCause(text, wait);
+    }
+
+    /// <summary>대기 글 뒤에 대기 원인(WH1, <see cref="CopyWait.Cause"/>)을 덧붙인다: <c>… · 3분째 대기 · 행 잠금(enq: TX) · 막는 세션 123 (APPUSER@was01)</c>. 없으면 그대로.</summary>
+    public static string WithCause(string text, CopyWait wait)
+    {
+        ArgumentNullException.ThrowIfNull(wait);
+        return string.IsNullOrWhiteSpace(wait.Cause) ? text : text + " · " + wait.Cause;
     }
 
     /// <summary>

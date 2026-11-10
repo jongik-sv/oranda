@@ -20,14 +20,15 @@ internal static class DataCopyText
         }
 
         var minute = wait.Minute.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return wait.Step switch
+        // 대기 원인(WH1)은 실행기가 만든 글 그대로 덧붙인다(DB 이벤트 이름·세션 정보가 대부분이다).
+        return Oranda.Core.Transfer.Copy.CopyLogText.WithCause(wait.Step switch
         {
             Oranda.Core.Transfer.Copy.CopyWaitStep.Delete => $"Deleting target rows (DELETE) · waiting, minute {minute}",
             Oranda.Core.Transfer.Copy.CopyWaitStep.Commit => $"Committing table · waiting, minute {minute}",
             _ => wait.Side == Oranda.Core.Transfer.Copy.CopyWaitSide.Source
                 ? $"Reading source · minute {minute}"
                 : $"Writing batch {(wait.Batch ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)} · waiting, minute {minute}",
-        };
+        }, wait);
     }
 
     /// <summary>

@@ -114,6 +114,9 @@ internal sealed class FakeRunner : ICopyRunner
 
     public CancellationToken Token { get; private set; }
 
+    /// <summary>마지막 실행이 받은 세션 쌍(대기 원인 감시 세션 여는 길 포함, WH1).</summary>
+    public CopySessions? Sessions { get; private set; }
+
     public Func<CancellationToken, Task<CopyRunResult>> Behavior { get; set; } = _ => Task.FromResult(TestJobs.Result());
 
     public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -132,6 +135,7 @@ internal sealed class FakeRunner : ICopyRunner
 
         Decisions = decisions;
         Token = ct;
+        Sessions = sessions;
         Started.TrySetResult();
         return Behavior(ct);
     }
@@ -235,6 +239,11 @@ internal sealed class DataCopyHarness
 
     public List<FakeSession> OpenedSessions { get; } = [];
 
+    /// <summary>대기 원인 감시 세션(WH1)을 연 접속(<see cref="DataCopyServices.MonitorOpener"/>). 연 감시 세션은 <see cref="OpenedMonitors"/>.</summary>
+    public List<ConnectionProfile> MonitorOpened { get; } = [];
+
+    public List<FakeSession> OpenedMonitors { get; } = [];
+
     /// <summary>참이면 그 접속은 열지 않는다(비밀번호 입력 취소·접속 실패처럼 null). 연 시도는 <see cref="Opened"/> 에 남는다.</summary>
     public Func<ConnectionProfile, bool>? RefuseOpen { get; set; }
 
@@ -264,6 +273,13 @@ internal sealed class DataCopyHarness
             var session = new FakeSession(profile);
             OpenedSessions.Add(session);
             return Task.FromResult<ISession?>(session);
+        },
+        MonitorOpener = (profile, _) =>
+        {
+            MonitorOpened.Add(profile);
+            var monitor = new FakeSession(profile, purpose: SessionPurpose.Monitor);
+            OpenedMonitors.Add(monitor);
+            return Task.FromResult<ISession?>(monitor);
         },
         StatementRunner = (_, sql, _) =>
         {

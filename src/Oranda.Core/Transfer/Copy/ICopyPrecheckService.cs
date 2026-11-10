@@ -11,7 +11,14 @@ public interface ICopyPrecheckService
                                   IProgress<string>? progress, CancellationToken ct);
 }
 
-public sealed record CopySessions(ISession Source, ISession Target);
+public sealed record CopySessions(ISession Source, ISession Target)
+{
+    /// <summary>
+    /// 대기 원인 감시(WH1, <see cref="CopyWaitProbe"/>)용 짧은 세션을 받은 세션과 같은 접속으로 연다(실행 때 받은 비밀번호를 다시 쓴다, 새로 묻지 않음 — 못 열면 null).
+    /// null = 감시하지 않음(대기 시간만 보인다). 실행기는 대상 쪽 대기만 감시하고 실행당 감시 세션은 하나다.
+    /// </summary>
+    public Func<ISession, CancellationToken, Task<ISession?>>? OpenMonitor { get; init; }
+}
 
 public enum CheckLevel { Pass, Confirm, Error }
 

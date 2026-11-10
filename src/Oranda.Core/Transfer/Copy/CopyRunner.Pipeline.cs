@@ -129,6 +129,7 @@ public partial class CopyRunner
                 run.ReportWaits(load.Table.Name, load.Table.SourceRows, load.Estimated, load.Table.Loaded, []);
             }
 
+            EndProbe(run, watch.Target);
             DisposeWhenDone(watch, abandoned);
         }
     }
@@ -195,6 +196,7 @@ public partial class CopyRunner
                 run.ReportWaits(table.Name, table.SourceRows, estimated, table.Loaded, [], side.Phase);
             }
 
+            EndProbe(run, side);
             DisposeWhenDone(watch, abandoned);
         }
     }
@@ -591,6 +593,7 @@ public partial class CopyRunner
                     changed = true;
                 }
 
+                EndProbe(run, side); // 대기가 끝났다: 대기 원인을 지우고 감시 세션을 닫게 한다(WH1)
                 continue;
             }
 
@@ -606,12 +609,22 @@ public partial class CopyRunner
                 continue;
             }
 
+            // 대기 원인(WH1): 대상 명령이 30초 넘게 기다리면 감시 세션으로 읽는다. 읽기는 감시 흐름과 따로 돌려(감시 조회도 막힐 수 있다)
+            // 대기 한도 판정을 늦추지 않는다. 결과는 다음 감시 차례에 대기 줄에 붙는다.
+            if (side.Side == CopyWaitSide.Target && run.WaitProbe is { IsOff: false } probe && waited > probe.StartAfter
+                && side.Probing is not { IsCompleted: false })
+            {
+                side.Probed = true;
+                side.Probing = ProbeWaitAsync(run, probe, side, side.WaitStamp, waited, table.Name, phase);
+            }
+
             if (waited >= timing.StallAfter)
             {
                 var wait = side.Wait(waited);
-                if (wait.Minute != side.ShownMinute)
+                if (wait.Minute != side.ShownMinute || !string.Equals(wait.Cause, side.ShownCause, StringComparison.Ordinal))
                 {
                     side.ShownMinute = wait.Minute;
+                    side.ShownCause = wait.Cause;
                     changed = true;
                     var text = CopyLogText.Wait(wait);
                     run.Log(text, CopyLogKind.Warning, table.Name, phase);
@@ -642,6 +655,56 @@ public partial class CopyRunner
             }
 
             run.ReportWaits(table.Name, table.SourceRows, scope.Estimated, table.Loaded, waits, phase);
+        }
+    }
+
+    /// <summary>
+    /// 대기 원인을 한 번 읽어 그 쪽 감시에 둔다(WH1). 읽는 사이 그 대기가 끝났으면(다음 배치·한 행 진행 포함, <paramref name="stamp"/> 가 다르면) 버린다.
+    /// 볼 권한이 없어 그만둔 안내는 실행 끝에 한 번 남긴다(<see cref="NoteWaitProbe"/>: 안내 목록은 실행 흐름에서만 바꾼다).
+    /// 감시는 복사를 막지 않는다: 예외는 작업 로그 경고로만 남긴다.
+    /// </summary>
+    private static async Task ProbeWaitAsync(RunState run, CopyWaitProbe probe, SideWatch side, long stamp, TimeSpan waited, string table, string phase)
+    {
+        try
+        {
+            var cause = await Task.Run(() => probe.DescribeAsync(run.Target, waited, CancellationToken.None));
+            if (side.WaitStamp == stamp)
+            {
+                side.Cause = cause;
+            }
+        }
+#pragma warning disable CA1031 // 대기 원인 감시는 복사를 막지 않는다.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            run.Log("대기 원인을 읽지 못했습니다: " + SafeError(ex.Message), CopyLogKind.Warning, table, phase);
+        }
+    }
+
+    /// <summary>그 쪽 대기가 끝났다: 대기 원인을 지우고, 감시 세션을 썼으면 기다리는 세션이 더 없을 때 닫게 한다(기다리지 않는다).</summary>
+    private static void EndProbe(RunState run, SideWatch side)
+    {
+        side.Cause = null;
+        side.ShownCause = null;
+        if (!side.Probed || run.WaitProbe is not { } probe)
+        {
+            return;
+        }
+
+        side.Probed = false;
+
+        // 읽던 원인이 있으면 그 조회가 끝난 뒤 닫는다(먼저 닫으면 늦게 온 조회가 감시 세션을 다시 연다).
+        var probing = side.Probing ?? Task.CompletedTask;
+        side.Probing = null;
+        _ = probing.ContinueWith(_ => probe.EndWaitAsync(run.Target), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+    }
+
+    /// <summary>실행 끝: 볼 권한이 없어 대기 원인 감시를 그만두었으면 안내를 한 번 남긴다(WH1).</summary>
+    private static void NoteWaitProbe(RunState run)
+    {
+        if (run.WaitProbe?.TakeNotice() is { } notice)
+        {
+            run.Notices.Add(notice);
         }
     }
 
@@ -737,6 +800,7 @@ public partial class CopyRunner
         private int _batch;
         private volatile bool _limitHit;
         private volatile bool _stopRequested;
+        private string? _cause;
 
         public SideWatch(CopyWaitSide side, CopyWaitStep step, CancellationToken run)
         {
@@ -775,6 +839,25 @@ public partial class CopyRunner
 
         /// <summary>감시만 쓴다: 취소를 처음 본 시각(Stopwatch).</summary>
         public long? CancelledAt { get; set; }
+
+        /// <summary>대기 원인(WH1, 대상만). 감시가 읽어 둔다. 대기가 끝나면 지운다.</summary>
+        public string? Cause
+        {
+            get => Volatile.Read(ref _cause);
+            set => Volatile.Write(ref _cause, value);
+        }
+
+        /// <summary>감시만 쓴다: 지금 보이는 대기 원인.</summary>
+        public string? ShownCause { get; set; }
+
+        /// <summary>감시만 쓴다: 이번 대기에 감시 세션을 썼다(대기가 끝나면 닫게 한다).</summary>
+        public bool Probed { get; set; }
+
+        /// <summary>감시만 쓴다: 읽고 있는 대기 원인(한 번에 하나).</summary>
+        public Task? Probing { get; set; }
+
+        /// <summary>지금 대기의 시작 시각(Stopwatch, 0 = 쉬는 중). 대기 원인을 읽는 사이 같은 대기인지 가린다(WH1).</summary>
+        public long WaitStamp => Volatile.Read(ref _since);
 
         /// <summary>지금 명령을 기다린 시간. 쉬는 중이면 null.</summary>
         public TimeSpan? Waiting
@@ -829,7 +912,7 @@ public partial class CopyRunner
         });
 
         public CopyWait Wait(TimeSpan waited) =>
-            new(Side, Side == CopyWaitSide.Target && Step == CopyWaitStep.Load ? Batch : null, waited) { Step = Step };
+            new(Side, Side == CopyWaitSide.Target && Step == CopyWaitStep.Load ? Batch : null, waited) { Step = Step, Cause = Cause };
 
         /// <summary>단계 글: 「원본 읽는 중」·「배치 n 쓰는 중」·「대상 정리(DELETE) 중」·「테이블 커밋 중」.</summary>
         public string Describe() => Step switch
@@ -849,5 +932,8 @@ public partial class CopyRunner
 /// </summary>
 internal sealed record CopyWatchTiming(TimeSpan StallAfter, TimeSpan Tick, TimeSpan CancelGrace, TimeSpan LimitUnit)
 {
+    /// <summary>대기 원인을 읽기 시작하는 대기(WH1, 기본 <see cref="CopyWaitProbe.Threshold"/> 30초). 시험이 줄인다.</summary>
+    public TimeSpan ProbeAfter { get; init; } = CopyWaitProbe.Threshold;
+
     public static readonly CopyWatchTiming Default = new(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1));
 }

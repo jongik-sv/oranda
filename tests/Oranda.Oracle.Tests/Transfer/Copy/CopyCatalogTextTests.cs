@@ -116,6 +116,15 @@ public sealed partial class CopyCatalogTextTests
             ["OWN", "TBL"]),
         ["copy.recreate_recycle_bin"] = (
             "SELECT object_name FROM user_recyclebin WHERE original_name = :TBL AND type = 'TABLE' AND operation = 'DROP'", ["TBL"]),
+
+        // CopyWaitProbe.cs(WH1): 옮기기 전 상수가 없는 새 조회라 파일 글을 그대로 적는다.
+        ["copy.wait_cause"] = (
+            "SELECT s.EVENT, s.WAIT_CLASS, CASE WHEN s.STATE = 'WAITING' THEN TRUNC(s.WAIT_TIME_MICRO / 1000000) ELSE 0 END AS SECONDS_IN_WAIT,"
+            + " s.BLOCKING_SESSION, b.USERNAME, b.PROGRAM, b.MACHINE"
+            + " FROM GV$SESSION s JOIN GV$INSTANCE i ON i.INST_ID = s.INST_ID"
+            + " LEFT JOIN GV$SESSION b ON b.INST_ID = s.BLOCKING_INSTANCE AND b.SID = s.BLOCKING_SESSION"
+            + " WHERE s.SID = :SID AND i.INSTANCE_NAME = NVL(:INST, SYS_CONTEXT('USERENV', 'INSTANCE_NAME'))",
+            ["SID", "INST"]),
     };
 
     private static readonly Dictionary<string, (string Sql, string[] Binds)> Previous =
@@ -143,6 +152,7 @@ public sealed partial class CopyCatalogTextTests
         "src/Oranda.Oracle/Transfer/Copy/OracleCopyPrecheckDialect.cs",
         "src/Oranda.Core/Transfer/Copy/CopyRunner.cs",
         "src/Oranda.Oracle/Transfer/Copy/RecreateStep.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyWaitProbe.cs",
     ];
 
     public static TheoryData<string> Ids()

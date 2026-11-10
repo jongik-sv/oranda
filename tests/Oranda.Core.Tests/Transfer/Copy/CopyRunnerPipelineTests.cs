@@ -18,6 +18,14 @@ public sealed class CopyRunnerPipelineTests
 {
     private static readonly TimeSpan Quick = TimeSpan.FromSeconds(10);
 
+    /// <summary>대기 원인 조회 카탈로그 id(WH1). 가짜 카탈로그가 글 = id 로 돌려준다.</summary>
+    private const string WaitCauseQuery = "copy.wait_cause";
+
+    /// <summary>대기 원인 조회 한 행: 행 잠금, 막는 세션 123(APPUSER@was01, JDBC Thin Client).</summary>
+    private static readonly object?[] RowLock = ["enq: TX - row lock contention", "Application", 42L, 123L, "APPUSER", "JDBC Thin Client", "was01"];
+
+    private const string RowLockCause = "행 잠금(enq: TX) · 막는 세션 123 (APPUSER@was01, JDBC Thin Client)";
+
     // ---- 겹치기 ----
 
     [Fact]
@@ -548,6 +556,187 @@ public sealed class CopyRunnerPipelineTests
         Assert.Equal("테이블 커밋 중 · 1분째 대기", CopyLogText.Wait(new CopyWait(CopyWaitSide.Target, null, TimeSpan.FromSeconds(10)) { Step = CopyWaitStep.Commit }));
     }
 
+    [Fact]
+    public void Wait_text_appends_the_cause_after_every_step()
+    {
+        Assert.Equal("배치 3 쓰는 중 · 1분째 대기 · " + RowLockCause,
+            CopyLogText.Wait(new CopyWait(CopyWaitSide.Target, 3, TimeSpan.FromSeconds(40)) { Cause = RowLockCause }));
+        Assert.Equal("대상 정리(DELETE) 중 · 2분째 대기 · 테이블 잠금(enq: TM)",
+            CopyLogText.Wait(new CopyWait(CopyWaitSide.Target, null, TimeSpan.FromSeconds(70)) { Step = CopyWaitStep.Delete, Cause = "테이블 잠금(enq: TM)" }));
+        Assert.Equal("테이블 커밋 중 · 1분째 대기 · 리두 로그 기록 대기(log file sync)",
+            CopyLogText.Wait(new CopyWait(CopyWaitSide.Target, null, TimeSpan.FromSeconds(31)) { Step = CopyWaitStep.Commit, Cause = "리두 로그 기록 대기(log file sync)" }));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Wait_text_without_a_cause_is_unchanged(string? cause)
+    {
+        var wait = new CopyWait(CopyWaitSide.Target, 3, TimeSpan.FromSeconds(40)) { Cause = cause };
+
+        Assert.Equal("배치 3 쓰는 중 · 1분째 대기", CopyLogText.Wait(wait));
+        Assert.Equal("아무 글", CopyLogText.WithCause("아무 글", wait));
+    }
+
+    [Fact]
+    public void With_cause_joins_the_cause_with_a_middle_dot()
+    {
+        Assert.Equal("Writing batch 3 · waiting, minute 1 · " + RowLockCause,
+            CopyLogText.WithCause("Writing batch 3 · waiting, minute 1", new CopyWait(CopyWaitSide.Target, 3, TimeSpan.FromSeconds(40)) { Cause = RowLockCause }));
+        Assert.Throws<ArgumentNullException>(() => CopyLogText.WithCause("글", null!));
+    }
+
+    // ---- 대기 원인(WH1) ----
+
+    [Fact]
+    public async Task A_blocked_target_batch_gets_its_cause_from_the_monitor_session_in_the_phase_cell_and_the_logs_and_the_monitor_closes_after()
+    {
+        // 번갈아 모드: 첫 배치를 다 쓴 뒤 셋째 행을 읽는 동안 대상은 쉰다 — 감시가 대기 끝을 보고 감시 세션을 닫을 틈이다.
+        var f = new Fixture(new CopyOptions { BatchSize = 2, SerialReadWrite = true }, ("A", 4));
+        f.UseMonitor();
+        f.Bulk.OnWaitCause = () => [RowLock];
+        var causeShown = false;
+        var closedBetween = false;
+        f.Bulk.OnDml = async (call, _) =>
+        {
+            if (call.Batch == 1)
+            {
+                // 행 잠금에 걸린 배치: 대기 원인이 단계 칸에 보일 때까지 돌아오지 않는다.
+                causeShown = await Eventually(() => f.Progress.Reports.Any(p => p.Waits is { } w && w.Any(x => x.Cause == RowLockCause)), Quick);
+            }
+
+            return null;
+        };
+        f.Bulk.BeforeRow = async (_, index, _) =>
+        {
+            if (index == 2)
+            {
+                closedBetween = await Eventually(() => f.Monitors.TryPeek(out var m) && m.DisposeCount == 1, Quick);
+            }
+        };
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Succeeded, Assert.Single(result.Tables).Outcome);
+        Assert.True(causeShown, "단계 칸 대기 표시에 대기 원인이 붙지 않았다");
+
+        // 단계 칸: 대상 배치 1 대기에 원인이 붙고(「행 잠금(enq: TX) · 막는 세션 …」), 풀리면 대기 표시째 지운다.
+        var reports = f.Progress.Reports.Where(p => p.Waits is not null).ToList();
+        var shown = reports.FindIndex(p => p.Waits!.Any(w => w.Cause is { } c && c.Contains("행 잠금(enq: TX) · 막는 세션", StringComparison.Ordinal)));
+        Assert.True(shown >= 0);
+        var wait = reports[shown].Waits!.Single(w => w.Cause is not null);
+        Assert.Equal(CopyWaitSide.Target, wait.Side);
+        Assert.Equal(1, wait.Batch);
+        Assert.Contains(reports.Skip(shown + 1), p => p.Waits!.Count == 0);
+
+        // 작업 로그·실행 기록: 원인이 붙은 대기 줄(경고).
+        var line = "배치 1 쓰는 중 · 1분째 대기 · " + RowLockCause;
+        var log = Assert.Single(f.Progress.Logs, l => l.Text == line);
+        Assert.Equal(CopyLogKind.Warning, log.Kind);
+        Assert.Equal("A", log.Table);
+        Assert.Contains(f.Record.Events, e => e is { Kind: "wait", Table: "A" } && e.Text == line);
+
+        // 감시 세션: 대상 세션의 접속으로 하나만 열고, 조회는 복사 세션이 아니라 감시 세션으로 대상 세션 SID 를 묻는다.
+        var monitor = Assert.Single(f.Monitors);
+        Assert.Same(f.Target, Assert.Single(f.MonitorOpenedFor));
+        Assert.NotEmpty(f.Bulk.WaitCauseCalls);
+        Assert.All(f.Bulk.WaitCauseCalls, c =>
+        {
+            Assert.Same(monitor, c.Session);
+            Assert.Equal(f.Target.Server.SessionId.ToString(System.Globalization.CultureInfo.InvariantCulture), c.Sid);
+        });
+
+        // 대기가 끝나자 닫았고(다음 배치 전), 실행 끝 정리가 다시 닫지 않는다.
+        Assert.True(closedBetween, "배치가 끝난 뒤 감시 세션을 닫지 않았다");
+        Assert.Equal(1, monitor.DisposeCount);
+        Assert.DoesNotContain(result.Notices, n => n.Contains(CopyWaitProbe.NoAccessNotice, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Without_a_monitor_opener_a_blocked_batch_shows_only_the_wait_and_the_cause_is_never_queried()
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, ("A", 4));
+        f.Bulk.OnWaitCause = () => [RowLock]; // 물으면 답은 있다 — 묻지 않아야 한다
+        f.Bulk.OnDml = async (call, _) =>
+        {
+            if (call.Batch == 1)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(600), CancellationToken.None);
+            }
+
+            return null;
+        };
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Succeeded, Assert.Single(result.Tables).Outcome);
+        Assert.Empty(f.Bulk.WaitCauseCalls);
+        Assert.Contains(f.Progress.Reports, p => p.Waits is { Count: > 0 });
+        Assert.All(f.Progress.Reports.Where(p => p.Waits is not null).SelectMany(p => p.Waits!), w => Assert.Null(w.Cause));
+        Assert.Single(f.Progress.Logs, l => l.Text == "배치 1 쓰는 중 · 1분째 대기");
+        Assert.DoesNotContain(f.Progress.Logs, l => l.Text.Contains("막는 세션", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task No_access_to_the_wait_view_leaves_one_notice_and_the_run_still_succeeds()
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2 }, ("A", 4));
+        f.UseMonitor();
+        f.Bulk.OnWaitCause = () => throw new NoAccessDbException();
+        f.Bulk.OnDml = async (call, _) =>
+        {
+            if (call.Batch == 1)
+            {
+                // 감시 조회가 권한 없음으로 실패한 뒤에도 조금 더 기다린다(감시가 안내를 남길 틈).
+                await Eventually(() => !f.Bulk.WaitCauseCalls.IsEmpty, Quick);
+                await Task.Delay(TimeSpan.FromMilliseconds(300), CancellationToken.None);
+            }
+            else
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(400), CancellationToken.None); // 둘째 대기: 감시는 이미 꺼졌다
+            }
+
+            return null;
+        };
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Equal(CopyOutcome.Succeeded, Assert.Single(result.Tables).Outcome);
+        var notice = Assert.Single(result.Notices, n => n.Contains(CopyWaitProbe.NoAccessNotice, StringComparison.Ordinal));
+        Assert.Equal(CopyWaitProbe.NoAccessNotice, notice); // 실행 끝에 한 번(테이블 이름 없이)
+        Assert.Single(f.Bulk.WaitCauseCalls); // 이번 실행에서는 더 묻지 않는다
+        Assert.Equal(1, Assert.Single(f.Monitors).DisposeCount);
+        Assert.All(f.Progress.Reports.Where(p => p.Waits is not null).SelectMany(p => p.Waits!), w => Assert.Null(w.Cause));
+        Assert.DoesNotContain(f.Progress.Logs, l => l.Text.StartsWith("대기 원인을 읽지 못했습니다", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_source_side_stall_is_never_probed(bool serial)
+    {
+        var f = new Fixture(new CopyOptions { BatchSize = 2, SerialReadWrite = serial }, ("A", 2));
+        f.UseMonitor();
+        f.Bulk.OnWaitCause = () => [RowLock];
+        f.Bulk.BeforeRow = async (_, index, ct) =>
+        {
+            if (index == 0)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(600), ct);
+            }
+        };
+
+        var result = await f.RunAsync().WaitAsync(Quick);
+
+        Assert.Equal(CopyOutcome.Succeeded, Assert.Single(result.Tables).Outcome);
+        Assert.Contains(f.Progress.Logs, l => l.Text == "원본 읽는 중 · 1분째" && l.Table == "A"); // 멈춤은 보였다
+        Assert.Empty(f.Bulk.WaitCauseCalls);
+        Assert.Empty(f.MonitorOpenedFor);
+        Assert.All(f.Progress.Reports.Where(p => p.Waits is not null).SelectMany(p => p.Waits!), w => Assert.Null(w.Cause));
+    }
+
     // ---- 실행 기록·시간 나눔 ----
 
     [Theory]
@@ -640,6 +829,23 @@ public sealed class CopyRunnerPipelineTests
         }
     }
 
+    /// <summary>조건이 <paramref name="within"/> 안에 참이 되면 true(10ms 마다 본다).</summary>
+    private static async Task<bool> Eventually(Func<bool> condition, TimeSpan within)
+    {
+        var deadline = DateTime.UtcNow + within;
+        while (!condition())
+        {
+            if (DateTime.UtcNow >= deadline)
+            {
+                return false;
+            }
+
+            await Task.Delay(10, CancellationToken.None);
+        }
+
+        return true;
+    }
+
     private sealed record DmlCall(string Table, int Batch, int Rows);
 
     private sealed record RecordedEvent(string Kind, string? Table, string Text);
@@ -674,8 +880,11 @@ public sealed class CopyRunnerPipelineTests
             var parts = new CopyDbmsParts(Dbms.Oracle, new NoCatalog(), new FakeClassifier(), new FakeDialect(), new FakePrecheckDialect(), new SimpleCodec(), new FakeRecreateStep());
             Runner = new CopyRunner(Bulk, Execution, new FakeRunLog(Record), parts, parts)
             {
-                // 멈춤 표시 0.2초, 감시 20ms, 취소한 명령을 0.5초 기다림, 대기 한도 1 = 0.3초.
-                WatchTiming = new CopyWatchTiming(TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(300)),
+                // 멈춤 표시 0.2초, 감시 20ms, 취소한 명령을 0.5초 기다림, 대기 한도 1 = 0.3초, 대기 원인 읽기 0.1초(감시 세션 여는 길이 있을 때만, WH1).
+                WatchTiming = new CopyWatchTiming(TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(300))
+                {
+                    ProbeAfter = TimeSpan.FromMilliseconds(100),
+                },
             };
         }
 
@@ -700,7 +909,25 @@ public sealed class CopyRunnerPipelineTests
 
         private CopyRunner Runner { get; }
 
-        public Task<CopyRunResult> RunAsync(CancellationToken ct = default) => Runner.RunAsync(new CopySessions(Source, Target), Job, Report,
+        /// <summary>대기 원인 감시 세션 여는 길(<see cref="CopySessions.OpenMonitor"/>, WH1). 기본 null = 감시하지 않음.</summary>
+        public Func<ISession, CancellationToken, Task<ISession?>>? OpenMonitor { get; set; }
+
+        /// <summary><see cref="UseMonitor"/> 가 연 감시 세션(연 차례대로).</summary>
+        public ConcurrentQueue<FakeSession> Monitors { get; } = new();
+
+        /// <summary>감시 세션을 열 때 실행기가 넘긴 세션(대상이어야 한다).</summary>
+        public ConcurrentQueue<ISession> MonitorOpenedFor { get; } = new();
+
+        /// <summary>감시 세션 여는 길을 준다: 열 때마다 새 가짜 감시 세션(<see cref="SessionPurpose.Monitor"/>).</summary>
+        public void UseMonitor() => OpenMonitor = (session, _) =>
+        {
+            MonitorOpenedFor.Enqueue(session);
+            var monitor = new FakeSession(TestData.Profile() with { Name = "dev" }, TestData.Server(), SessionPurpose.Monitor);
+            Monitors.Enqueue(monitor);
+            return Task.FromResult<ISession?>(monitor);
+        };
+
+        public Task<CopyRunResult> RunAsync(CancellationToken ct = default) => Runner.RunAsync(new CopySessions(Source, Target) { OpenMonitor = OpenMonitor }, Job, Report,
             new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false),
             new ResolvedPeriod(null, null), Progress, new CopyRunControl(), ct);
 
@@ -738,6 +965,12 @@ public sealed class CopyRunnerPipelineTests
 
         public Func<DmlCall, CancellationToken, Task<BulkResult?>>? OnDml { get; set; }
 
+        /// <summary>대기 원인 조회(<c>copy.wait_cause</c>, WH1)에 돌려줄 행. 던지면 그 예외로 실패한다. 기본 = 0행(세션을 찾지 못함).</summary>
+        public Func<object?[][]>? OnWaitCause { get; set; }
+
+        /// <summary>받은 대기 원인 조회: 보낸 세션과 SID 바인드 값.</summary>
+        public ConcurrentQueue<(ISession Session, string? Sid)> WaitCauseCalls { get; } = new();
+
         /// <summary>대상 트랜잭션 제어(세이브포인트·COMMIT 등)에 답한다(null = 성공). 글을 받는다.</summary>
         public Func<string, CancellationToken, Task<BulkResult?>>? OnTargetControl { get; set; }
 
@@ -767,6 +1000,17 @@ public sealed class CopyRunnerPipelineTests
         public async IAsyncEnumerable<object?[]> StreamRowsAsync(ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds,
                                                                  ExecutionOptions options, [EnumeratorCancellation] CancellationToken ct)
         {
+            if (query.Text == WaitCauseQuery)
+            {
+                WaitCauseCalls.Enqueue((s, binds.TryGetValue("SID", out var sid) ? sid.Value as string : null));
+                foreach (var row in OnWaitCause?.Invoke() ?? Array.Empty<object?[]>())
+                {
+                    yield return row;
+                }
+
+                yield break;
+            }
+
             var table = fixture.TableOf(query.Text);
             if (!ReferenceEquals(s, fixture.Source))
             {
@@ -970,13 +1214,21 @@ public sealed class CopyRunnerPipelineTests
 
     private sealed class FakeDbException(string message) : DbException(message);
 
+    /// <summary>볼 권한 없음 서버 오류 흉내(ORA-00942, 객체 없음).</summary>
+    private sealed class NoAccessDbException() : DbException("ORA-00942: table or view does not exist");
+
     private sealed class FakeClassifier : IDbErrorClassifier
     {
         public Dbms Dbms => Dbms.Oracle;
 
-        public DbErrorKind Classify(int number) => DbErrorKind.Other;
+        public DbErrorKind Classify(int number) => number == 942 ? DbErrorKind.ObjectNotFound : DbErrorKind.Other;
 
-        public DbError? FromException(Exception exception) => exception is FakeDbException e ? new DbError("ORA-03113", e.Message) { Number = 3113 } : null;
+        public DbError? FromException(Exception exception) => exception switch
+        {
+            NoAccessDbException e => new DbError("ORA-00942", e.Message) { Number = 942, Kind = DbErrorKind.ObjectNotFound, Dbms = Dbms.Oracle },
+            FakeDbException e => new DbError("ORA-03113", e.Message) { Number = 3113 },
+            _ => null,
+        };
     }
 
     private sealed class SimpleCodec : IBulkValueCodec
@@ -1006,9 +1258,12 @@ public sealed class CopyRunnerPipelineTests
         public object? FromPortable(object? portable, string bindType) => portable;
     }
 
+    /// <summary>카탈로그: 대기 원인 조회(<c>copy.wait_cause</c>, WH1)만 글 = id 로 답한다(가짜 대량 실행이 id 로 알아본다). 다른 조회는 쓰지 않는다.</summary>
     private sealed class NoCatalog : Oranda.Core.Catalog.ISqlCatalog
     {
-        public Oranda.Core.Catalog.CatalogQuery Get(string id, ServerInfo server) => throw new NotSupportedException("이 시험은 카탈로그 조회를 쓰지 않는다: " + id);
+        public Oranda.Core.Catalog.CatalogQuery Get(string id, ServerInfo server) => id == WaitCauseQuery
+            ? new(new Oranda.Core.Catalog.CatalogHeader(id, 11, [], Oranda.Core.Catalog.CatalogLicense.None, Oranda.Core.Catalog.CatalogRac.V, id + ".sql"), id)
+            : throw new NotSupportedException("이 시험은 카탈로그 조회를 쓰지 않는다: " + id);
     }
 
     private sealed class FakeRecreateStep : ICopyRecreateStep

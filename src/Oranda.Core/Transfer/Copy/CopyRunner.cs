@@ -136,6 +136,12 @@ public partial class CopyRunner : ICopyRunner
         EnsureCreateAllowed(sessions, job, report);
         EnsureDistinct(sessions, job);
         var run = new RunState(sessions, job, report, period, decisions.PreConfirmedSql, progress);
+
+        // 대기 원인 감시(WH1): 대상 쪽만, 실행당 감시 세션 하나. 앱이 감시 세션 여는 길을 주지 않으면 하지 않는다.
+        await using var waitProbe = sessions.OpenMonitor is { } openMonitor
+            ? new CopyWaitProbe(token => openMonitor(sessions.Target, token), _bulk, _catalog, _codec, _errors, threshold: WatchTiming.ProbeAfter)
+            : null;
+        run.WaitProbe = waitProbe;
         await using var record = await _runLog.BeginAsync(
             new CopyRunHeader(job.Id, job.Name, job.Source.Name, job.Target.Name, period, DateTimeOffset.Now), ct);
         run.Record = record;
@@ -184,6 +190,8 @@ public partial class CopyRunner : ICopyRunner
         }
         finally
         {
+            NoteWaitProbe(run);
+
             // finished 가 거짓이면 예상 못 한 예외가 올라가는 중이다: 되돌리고 다시 켠 뒤 예외를 그대로 올린다.
             await FinishAsync(run, faulted: !finished);
         }
@@ -3267,6 +3275,9 @@ public partial class CopyRunner : ICopyRunner
 
         /// <summary>대상 명령이 취소에도 돌아오지 않아 대상 세션을 더 쓰지 않는다(마무리의 커밋·롤백·다시 켜기·건수 비교를 보내지 않는다).</summary>
         public bool TargetAbandoned { get; set; }
+
+        /// <summary>대상 쪽 대기 원인 감시(WH1). 앱이 감시 세션 여는 길을 주지 않았으면 null.</summary>
+        public CopyWaitProbe? WaitProbe { get; set; }
 
         /// <summary>규칙 키.</summary>
         public string Key(CopyTablePlan plan) => CopyOwners.Key(Job, plan.Rule);

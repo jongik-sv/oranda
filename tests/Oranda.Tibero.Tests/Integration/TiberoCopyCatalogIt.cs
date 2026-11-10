@@ -42,6 +42,7 @@ public partial class TiberoCopyCatalogIt
         ("copy.other_grantor_count", 1),
         ("copy.mview_log_count", 1),
         ("copy.vpd_policy_count", 1),
+        ("copy.wait_cause", 7),
     ];
 
     [TiberoItFact]
@@ -291,6 +292,7 @@ public partial class TiberoCopyCatalogIt
         "copy.parameter_value" => [("PNAME", name)],
         "copy.constraint_owner" or "copy.index_owner" or "copy.object_exists" => [("OWN", owner), ("NAME", name)],
         "copy.table_exists" or "copy.sequence_increment" or "copy.fk_columns" => [("OWNER", owner), ("NAME", name)],
+        "copy.wait_cause" => [("SID", "-1"), ("INST", name)], // 없는 SID·없는 인스턴스 이름: 0행이어도 열 수는 나온다
         _ => [("OWN", owner), ("TBL", name)],
     };
 
