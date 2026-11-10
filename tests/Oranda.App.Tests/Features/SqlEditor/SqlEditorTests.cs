@@ -47,7 +47,7 @@ public sealed partial class SqlEditorTests : IDisposable
         var doc = FindCommandsDoc();
         var rows = File.ReadAllLines(doc)
             .Where(l => l.StartsWith("| `oranda.", StringComparison.Ordinal) && l.Contains("TSK-04-02", StringComparison.Ordinal))
-            .Select(l => l.Trim('|').Split('|').Select(c => c.Trim()).ToArray())
+            .Select(l => System.Text.RegularExpressions.Regex.Split(l.Trim('|'), @"(?<!\\)\|").Select(c => c.Trim()).ToArray()) // 칸 안의 \| 는 나누지 않는다
             .ToList();
         Assert.Equal(52, rows.Count);
 

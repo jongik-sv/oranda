@@ -73,6 +73,14 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
     public PlsqlEditorViewModel()
     {
         Editor = new SqlEditorViewModel();
+        // 고른 글·되돌리기 상태가 바뀌면 문맥 키도 따라간다(Ctrl+C·X·Z·Y 의 활성 조건, SyncKeys).
+        Editor.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(SqlEditorViewModel.HasSelection) or nameof(SqlEditorViewModel.CanUndo) or nameof(SqlEditorViewModel.CanRedo))
+            {
+                SyncKeys();
+            }
+        };
     }
 
     public PlsqlEditorViewModel(IServiceProvider services)
@@ -93,7 +101,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     /// <summary>
     /// 지금 포커스를 가진 PL/SQL 편집 탭(명령 처리기가 쓴다). 보기와 작업 공간 라우터가 설정하며, 바뀌면 그 탭의 문맥 키를 맞춘다.
-    /// null 이 되면(탭을 닫음, PL/SQL 이 아닌 문서로 옮김) <c>isPackageDoc</c>·<c>serverSourceChanged</c>·<c>plsqlRunnable</c> 을 끈다.
+    /// null 이 되면(탭을 닫음, PL/SQL 이 아닌 문서로 옮김) <c>isPackageDoc</c>·<c>serverSourceChanged</c>·<c>plsqlRunnable</c>·<c>plsqlHasSelection</c>·<c>plsqlCanUndo</c>·<c>plsqlCanRedo</c> 를 끈다.
     /// </summary>
     public static PlsqlEditorViewModel? Active
     {
@@ -797,6 +805,11 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         keys.Set("isPackageDoc", IsPackageDoc);
         keys.Set("serverSourceChanged", ServerSourceChanged);
         keys.Set("plsqlRunnable", RunTarget is not null);
+        // 편집 명령(oranda.edit.copy 등)은 포커스가 PL/SQL 편집기에 있으면 이 편집기에 대고 돈다(SqlEditorCommandHandler).
+        // hasSelection·canUndo·canRedo 는 SQL 탭 기준이라, 활성 조건이 이 편집기를 보도록 따로 둔다.
+        keys.Set("plsqlHasSelection", Editor.HasSelection);
+        keys.Set("plsqlCanUndo", Editor.CanUndo);
+        keys.Set("plsqlCanRedo", Editor.CanRedo);
     }
 
     private static void ClearKeys(ContextKeyService? keys)
@@ -804,6 +817,9 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
         keys?.Set("isPackageDoc", false);
         keys?.Set("serverSourceChanged", false);
         keys?.Set("plsqlRunnable", false);
+        keys?.Set("plsqlHasSelection", false);
+        keys?.Set("plsqlCanUndo", false);
+        keys?.Set("plsqlCanRedo", false);
     }
 
     /// <summary>

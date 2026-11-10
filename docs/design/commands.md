@@ -88,7 +88,7 @@
 | `hasExecError`, `hasLastSqlId` | 마지막 실행 결과 |
 | `gridHasResult`, `gridHasSelection`, `gridHasMoreRows`, `gridQueryResult`, `gridEditing`, `gridRowsEditable`, `gridDirty`, `gridNotEditable`, `singleTable`, `joinResult` | 그리드 상태(`gridRowsEditable` = 편집 모드이거나 편집 모드로 바로 켤 수 있는 결과(거른 결과·외래키로 연 결과 제외) — 행 삭제·행 복제, `gridQueryResult` = 질의 문장이 만든 결과, PL/SQL REF CURSOR 결과 제외 — 전체 행 수 세기·결과 거르기가 쓴다) |
 | `schemaNodeSelected`, `plsqlNodeSelected`, `recyclebinNodeSelected` | 스키마 트리 선택 |
-| `isPackageDoc`, `serverSourceChanged`, `plsqlRunnable` | PL/SQL 편집기 |
+| `isPackageDoc`, `serverSourceChanged`, `plsqlRunnable`, `plsqlHasSelection`, `plsqlCanUndo`, `plsqlCanRedo` | PL/SQL 편집기(뒤 셋은 활성 PL/SQL 편집기의 고른 글·되돌리기 상태. 포커스가 PL/SQL 편집기에 있으면 `oranda.edit.copy`·`cut`·`undo`·`redo` 가 SQL 탭 기준인 `hasSelection`·`canUndo`·`canRedo` 대신 이 키를 본다) |
 | `monitorSessionOpen`, `monitorSessionSelected`, `monitorSqlOpen`, `monitorSqlSelected` | 모니터 |
 | `lockMonitorOpen`, `lockSessionSelected`, `lockWaiterSelected`, `lockCanKillSession`, `canQueryDdlLocks` | Lock 모니터: 모니터 세션 열림 / 고른 세션 있음 / 고른 쌍에 대기자 있음 / 모니터 계정이 ALTER SYSTEM 가능 / dba_ddl_locks 읽기 가능(TSK-05-03) |
 | `tuningAssistantOpen` | 튜닝 도우미 탭이 열려 있음(TSK-06-05) |
@@ -345,10 +345,10 @@
 
 | ID | 제목 | 기본 키 | 키 범위(when) | 활성 조건 | 소유 Task |
 |---|---|---|---|---|---|
-| `oranda.edit.undo` | 실행 취소 | `Ctrl+Z` | `editorFocus` | `canUndo` | TSK-04-02 |
-| `oranda.edit.redo` | 다시 실행 | `Ctrl+Y` | `editorFocus` | `canRedo` | TSK-04-02 |
-| `oranda.edit.cut` | 잘라내기 | `Ctrl+X` | `editorFocus` | `hasSelection` | TSK-04-02 |
-| `oranda.edit.copy` | 복사 | `Ctrl+C` | `editorFocus` | `hasSelection` | TSK-04-02 |
+| `oranda.edit.undo` | 실행 취소 | `Ctrl+Z` | `editorFocus` | `(!plsqlEditorFocus && canUndo) \|\| (plsqlEditorFocus && plsqlCanUndo)` | TSK-04-02 |
+| `oranda.edit.redo` | 다시 실행 | `Ctrl+Y` | `editorFocus` | `(!plsqlEditorFocus && canRedo) \|\| (plsqlEditorFocus && plsqlCanRedo)` | TSK-04-02 |
+| `oranda.edit.cut` | 잘라내기 | `Ctrl+X` | `editorFocus` | `(!plsqlEditorFocus && hasSelection) \|\| (plsqlEditorFocus && plsqlHasSelection)` | TSK-04-02 |
+| `oranda.edit.copy` | 복사 | `Ctrl+C` | `editorFocus` | `(!plsqlEditorFocus && hasSelection) \|\| (plsqlEditorFocus && plsqlHasSelection)` | TSK-04-02 |
 | `oranda.edit.paste` | 붙여넣기 | `Ctrl+V` | `editorFocus` | 항상 | TSK-04-02 |
 | `oranda.edit.pasteMyBatisLog` | MyBatis 로그 붙여 넣기 | - | `editorFocus` | `sqlDocActive` | TSK-13-03 |
 | `oranda.edit.selectAll` | 모두 선택 | `Ctrl+A` | `editorFocus` | 항상 | TSK-04-02 |
