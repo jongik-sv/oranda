@@ -45,6 +45,24 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void Environment_color_follows_the_active_connection_and_notifies_when_only_the_color_changes()
+    {
+        var vm = Create(out var shell, out var services);
+        using (services)
+        {
+            shell.ActiveEnvironment = ConnectionEnvironment.Test;
+            Assert.Null(vm.EnvironmentColor);
+
+            var changed = new List<string?>();
+            vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+            shell.ActiveEnvironmentColor = "#2E7D32"; // 환경은 그대로, 색만 바뀜
+            Assert.Equal("#2E7D32", vm.EnvironmentColor);
+            Assert.Contains(nameof(MainViewModel.EnvironmentColor), changed);
+            Assert.Equal("env-test", vm.EnvironmentClass);
+        }
+    }
+
+    [Fact]
     public void Title_keeps_the_production_mark_while_any_production_connection_is_open()
     {
         var vm = Create(out var shell, out var services);

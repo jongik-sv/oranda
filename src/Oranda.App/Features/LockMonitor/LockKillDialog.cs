@@ -46,17 +46,11 @@ internal static class LockKillDialog
     {
         // 머리 띠: 운영 빨강·테스트 주황·개발 초록 바탕 + 접속 글자.
         var header = new Border { Padding = new Thickness(16, 10) };
-        var (bg, fg) = r.Environment switch
-        {
-            ConnectionEnvironment.Production => ("OrandaEnvProductionBrush", "OrandaEnvProductionForegroundBrush"),
-            ConnectionEnvironment.Test => ("OrandaEnvTestBrush", "OrandaEnvProductionForegroundBrush"),
-            _ => ("OrandaEnvDevelopmentBrush", "OrandaEnvProductionForegroundBrush"),
-        };
-        header.Bind(Border.BackgroundProperty, header.GetResourceObservable(bg));
+        // 사용자가 고른 색이 있으면 그 색(운영은 항상 빨강) — 접속 관리자 목록과 같은 규칙.
         var title = new TextBlock { Text = r.HeaderTitle, FontSize = 16, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
         var detail = new TextBlock { Text = r.HeaderDetail, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        title.Bind(TextBlock.ForegroundProperty, title.GetResourceObservable(fg));
-        detail.Bind(TextBlock.ForegroundProperty, detail.GetResourceObservable(fg));
+        Oranda.App.Features.ConnectionManager.EnvironmentColors.ApplyHeader(header, [title, detail], r.Environment, r.EnvironmentColor,
+            Oranda.App.Features.ConnectionManager.EnvironmentColors.BrushKeyOf(r.Environment), "OrandaEnvProductionForegroundBrush");
         header.Child = new StackPanel { Orientation = Orientation.Horizontal, Children = { title, detail } };
 
         var body = new StackPanel { Margin = new Thickness(16, 14), Spacing = 10 };

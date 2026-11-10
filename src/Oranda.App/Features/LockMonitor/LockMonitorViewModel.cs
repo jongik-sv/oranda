@@ -1980,6 +1980,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
             HeaderDetail = "· " + (session.Server.DatabaseName ?? session.Server.ServiceName ?? profile.Name)
                 + (rac ? string.Create(CultureInfo.InvariantCulture, $" (RAC 인스턴스 {key.InstanceId})") : string.Empty),
             Environment = profile.Environment,
+            EnvironmentColor = profile.Color,
             Facts = facts2,
             WaiterCount = waiters.Count,
             WaiterLine = line,

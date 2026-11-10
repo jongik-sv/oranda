@@ -129,5 +129,6 @@ public partial class ResultTabsView : UserControl
         BannerBorder.Classes.Set("env-production", env == Oranda.Core.Connection.ConnectionEnvironment.Production);
         BannerBorder.Classes.Set("env-test", env == Oranda.Core.Connection.ConnectionEnvironment.Test);
         BannerBorder.Classes.Set("env-development", env == Oranda.Core.Connection.ConnectionEnvironment.Development);
+        Oranda.App.Features.ConnectionManager.EnvironmentColors.ApplyFrame(BannerBorder, env, vm?.Profile?.Color); // 사용자가 고른 색이 우선(운영은 항상 빨강)
     }
 }

@@ -488,6 +488,9 @@ public sealed record LockKillRequest(SessionKey Target, bool Disconnect)
 
     public ConnectionEnvironment Environment { get; init; }
 
+    /// <summary>접속 프로필에 사용자가 고른 라벨 색(운영은 무시). 머리 띠 색 규칙은 <see cref="Oranda.App.Features.ConnectionManager.EnvironmentColors"/>.</summary>
+    public string? EnvironmentColor { get; init; }
+
     /// <summary>이름·값 줄(세션·사용자·트랜잭션).</summary>
     public IReadOnlyList<KeyValuePair<string, string>> Facts { get; init; } = [];
 

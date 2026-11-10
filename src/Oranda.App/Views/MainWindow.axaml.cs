@@ -577,7 +577,7 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.Environment))
+        if (e.PropertyName is nameof(MainViewModel.Environment) or nameof(MainViewModel.EnvironmentColor))
         {
             ApplyEnvironment();
         }
@@ -590,6 +590,7 @@ public partial class MainWindow : Window
         EnvironmentBorder.Classes.Set("env-test", env == ConnectionEnvironment.Test);
         EnvironmentBorder.Classes.Set("env-development", env == ConnectionEnvironment.Development);
         EnvironmentBorder.BorderThickness = env is null ? new Thickness(0) : new Thickness(3);
+        Features.ConnectionManager.EnvironmentColors.ApplyFrame(EnvironmentBorder, env, _viewModel?.EnvironmentColor); // 사용자 색이 우선(운영은 항상 빨강)
         StatusBarBorder.Classes.Set("env-production", env == ConnectionEnvironment.Production);
     }
 

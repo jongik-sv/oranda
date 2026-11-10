@@ -22,15 +22,21 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private ConnectionEnvironment? _environment;
 
+    /// <summary>활성 문서 접속의 사용자 라벨 색(창 테두리). 환경이 같아도 색이 바뀌면 <see cref="EnvironmentColor"/> 변경이 알려진다.</summary>
+    [ObservableProperty]
+    private string? _environmentColor;
+
     public MainViewModel(ShellController shell, IStatusBarRegistry statusBar, ServiceContainer services)
     {
         _shell = shell;
         Docking = shell.Docking;
         StatusItems = CreateStatusItems(statusBar, services);
         _environment = shell.ActiveEnvironment;
+        _environmentColor = shell.ActiveEnvironmentColor;
         shell.EnvironmentChanged += (_, _) =>
         {
             Environment = shell.ActiveEnvironment;
+            EnvironmentColor = shell.ActiveEnvironmentColor;
             OnPropertyChanged(nameof(Title)); // 운영 접속 열림(ProductionOpen)만 바뀌었을 수 있다
         };
         Docking.ActiveDocumentChanged += (_, _) => FollowActiveDocument();

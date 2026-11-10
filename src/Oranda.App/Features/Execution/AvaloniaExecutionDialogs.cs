@@ -4,10 +4,12 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.Localization;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Appearance;
 using Oranda.App.Shell.Controls;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 
 namespace Oranda.App.Features.Execution;
@@ -73,24 +75,12 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
     {
         var dialog = NewWindow("실행 확인");
         var header = new Border { Padding = new Thickness(16, 10) };
-        if (model.IsProduction)
-        {
-            // 운영: 머리 띠 빨강 + 접속 이름·사용자·서비스 크게(ui-shell.md 4.2).
-            header.Bind(Border.BackgroundProperty, header.GetResourceObservable("OrandaEnvProductionBrush"));
-        }
-        else
-        {
-            header.Bind(Border.BackgroundProperty, header.GetResourceObservable("OrandaEnvTestBrush"));
-        }
-
-        var fg = model.IsProduction ? "OrandaEnvProductionForegroundBrush" : null;
+        // 운영: 머리 띠 빨강 + 접속 이름·사용자·서비스 크게(ui-shell.md 4.2). 그 밖은 접속 관리자 목록과 같은 색 규칙(EnvironmentColors).
+        var env = model.Request.Profile?.Environment ?? ConnectionEnvironment.Test;
         var title = new TextBlock { Text = (model.EnvironmentText.Length > 0 ? $"[{model.EnvironmentText}] " : string.Empty) + model.HeaderTitle, FontSize = 20, FontWeight = FontWeight.Bold };
         var detail = new TextBlock { Text = model.HeaderDetail, FontSize = 14 };
-        if (fg is not null)
-        {
-            title.Bind(TextBlock.ForegroundProperty, title.GetResourceObservable(fg));
-            detail.Bind(TextBlock.ForegroundProperty, detail.GetResourceObservable(fg));
-        }
+        EnvironmentColors.ApplyHeader(header, [title, detail], env, model.Request.Profile?.Color,
+            model.IsProduction ? "OrandaEnvProductionBrush" : "OrandaEnvTestBrush", model.IsProduction ? "OrandaEnvProductionForegroundBrush" : null);
 
         header.Child = new StackPanel { Children = { title, detail } };
 

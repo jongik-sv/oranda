@@ -182,6 +182,9 @@ public sealed partial class TuningReportDialogViewModel : ObservableObject, IDis
 
     public ConnectionEnvironment Environment => _session?.Profile.Environment ?? ConnectionEnvironment.Development;
 
+    /// <summary>접속 프로필에 사용자가 고른 라벨 색(운영은 무시).</summary>
+    public string? EnvironmentColor => _session?.Profile.Color;
+
     public string EnvironmentLabel => Environment switch
     {
         ConnectionEnvironment.Production => L("운영", "Production"),

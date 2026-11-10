@@ -76,6 +76,7 @@ public sealed class ShellController : IShellUi
     private readonly List<Func<CancellationToken, Task>> _shutdownHooks = [];
     private CommandPaletteWindow? _palette;
     private ConnectionEnvironment? _activeEnvironment;
+    private string? _activeEnvironmentColor;
     private bool _productionOpen;
 
     public ShellController(
@@ -173,6 +174,23 @@ public sealed class ShellController : IShellUi
             if (_productionOpen != value)
             {
                 _productionOpen = value;
+                EnvironmentChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 활성 문서 접속의 사용자 라벨 색(<c>#RRGGBB</c>, 없으면 null). 주 창 테두리가 접속 관리자 목록과 같은 색을 쓰도록(<see cref="Features.ConnectionManager.EnvironmentColors"/>).
+    /// <see cref="ActiveEnvironment"/> 보다 먼저 정하면 한 번의 <see cref="EnvironmentChanged"/> 로 둘이 함께 알려진다.
+    /// </summary>
+    public string? ActiveEnvironmentColor
+    {
+        get => _activeEnvironmentColor;
+        set
+        {
+            if (_activeEnvironmentColor != value)
+            {
+                _activeEnvironmentColor = value;
                 EnvironmentChanged?.Invoke(this, EventArgs.Empty);
             }
         }

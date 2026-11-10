@@ -38,6 +38,9 @@ public sealed record ConnectionComboItem(int Number, ISession Session, bool Brok
     public string EnvironmentText => ConnectionStatusViewModel.EnvironmentTextOf(Session.Profile.Environment);
 
     public string? EnvironmentBrushKey => ConnectionStatusViewModel.EnvironmentBrushKeyOf(Session.Profile.Environment);
+
+    /// <summary>사용자가 고른 라벨 색(운영은 무시, 접속 관리자 목록과 같은 규칙).</summary>
+    public string? EnvironmentColor => Session.Profile.Color;
 }
 
 /// <summary>
@@ -412,9 +415,8 @@ public sealed class ConnectionComboView : UserControl
         }
 
         var chipText = new TextBlock { Text = item.EnvironmentText, FontSize = 11, FontWeight = FontWeight.SemiBold };
-        chipText.Bind(TextBlock.ForegroundProperty, chipText.GetResourceObservable("OrandaEnvChipForegroundBrush"));
         var chip = new Border { CornerRadius = new CornerRadius(3), Padding = new Thickness(5, 0), VerticalAlignment = VerticalAlignment.Center, Child = chipText };
-        chip.Bind(Border.BackgroundProperty, chip.GetResourceObservable(key));
+        EnvironmentColors.ApplyChip(chip, chipText, item.Session.Profile.Environment, item.EnvironmentColor, key);
         return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { chip, text } };
     }
 }

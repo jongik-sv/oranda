@@ -69,6 +69,11 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
     /// <summary>환경 칩 색 리소스 키(테두리 색과 같다).</summary>
     public string? EnvironmentBrushKey => EnvironmentBrushKeyOf(Current?.Profile.Environment);
 
+    /// <summary>보이는 접속의 환경(없으면 null)과 사용자가 고른 라벨 색 — 칩 색은 접속 관리자 목록과 같은 규칙(<see cref="EnvironmentColors"/>).</summary>
+    public ConnectionEnvironment? Environment => Current?.Profile.Environment;
+
+    public string? EnvironmentColor => Current?.Profile.Color;
+
     /// <summary>환경 칩 글(개발·테스트·운영). 환경이 없으면 빈 글.</summary>
     public static string EnvironmentTextOf(ConnectionEnvironment? environment) => environment switch
     {
@@ -223,6 +228,8 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         OnPropertyChanged(nameof(Text));
         OnPropertyChanged(nameof(EnvironmentText));
         OnPropertyChanged(nameof(EnvironmentBrushKey));
+        OnPropertyChanged(nameof(Environment));
+        OnPropertyChanged(nameof(EnvironmentColor));
         OnPropertyChanged(nameof(ToolTip));
         OnPropertyChanged(nameof(CanReconnect));
     }
@@ -263,7 +270,7 @@ public sealed class ConnectionStatusView : UserControl
     public ConnectionStatusView()
     {
         _chip.Child = _chipText;
-        _chipText.Bind(TextBlock.ForegroundProperty, _chipText.GetResourceObservable("OrandaEnvChipForegroundBrush")); // 색은 리소스 키로만(ui-shell 6장)
+        _chipText.Bind(TextBlock.ForegroundProperty, _chipText.GetResourceObservable("OrandaEnvChipForegroundBrush")); // 색은 리소스 키 또는 사용자 색(EnvironmentColors)
         _reconnect.Classes.Add("accent");
         Oranda.App.Shell.Icons.ButtonIcon.SetKey(_reconnect, "refresh");
         ToolTip.SetTip(_reconnect, UiText.Get("Execution.status.reconnectTip", "끊긴 세션에 다시 접속합니다. 이 탭과 작업 공간은 새 세션을 그대로 씁니다."));
@@ -325,9 +332,9 @@ public sealed class ConnectionStatusView : UserControl
         Avalonia.Automation.AutomationProperties.SetName(_reconnect, UiText.Get("Execution.status.reconnectName", "세션 새로 고침"));
         _chipText.Text = _vm?.EnvironmentText ?? string.Empty;
         _chip.IsVisible = _vm?.EnvironmentBrushKey is not null;
-        if (_vm?.EnvironmentBrushKey is { } key)
+        if (_vm is { Environment: { } env, EnvironmentBrushKey: { } key })
         {
-            _chip.Bind(Border.BackgroundProperty, _chip.GetResourceObservable(key));
+            EnvironmentColors.ApplyChip(_chip, _chipText, env, _vm.EnvironmentColor, key);
         }
     }
 }

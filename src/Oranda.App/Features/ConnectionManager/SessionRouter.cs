@@ -157,6 +157,7 @@ public sealed partial class SessionRouter
                 // 창 테두리(환경 색)는 활성 문서의 접속을, 창 제목 [운영] 은 열린 접속 모두를 따른다.
                 void Follow()
                 {
+                    shell.ActiveEnvironmentColor = router.ShownSession?.Profile.Color;
                     shell.ActiveEnvironment = router.ShownSession?.Profile.Environment;
                     shell.ProductionOpen = connections.Sessions.Any(s => s.Profile.Environment == ConnectionEnvironment.Production);
                 }

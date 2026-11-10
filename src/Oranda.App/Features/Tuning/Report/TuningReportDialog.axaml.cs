@@ -46,7 +46,15 @@ public partial class TuningReportDialog : Window
             return;
         }
 
-        EnvChip.Bind(Border.BackgroundProperty, EnvChip.GetResourceObservable(vm.EnvironmentBrushKey));
+        if (EnvChip.Child is TextBlock chipText)
+        {
+            Oranda.App.Features.ConnectionManager.EnvironmentColors.ApplyChip(EnvChip, chipText, vm.Environment, vm.EnvironmentColor, vm.EnvironmentBrushKey);
+        }
+        else
+        {
+            EnvChip.Bind(Border.BackgroundProperty, EnvChip.GetResourceObservable(vm.EnvironmentBrushKey));
+        }
+
         vm.Completed += (_, _) => Close(vm.ResultPath);
         vm.PropertyChanged += OnVmChanged;
     }
