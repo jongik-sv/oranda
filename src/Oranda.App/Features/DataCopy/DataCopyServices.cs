@@ -225,6 +225,54 @@ public sealed class DataCopyServices
         }
     }
 
+    /// <summary>
+    /// 같은 접속으로 전용 세션 여러 개 열기를 바꿔 쓴다(시험, 동시 복사 레인 PF2). 없으면 <see cref="SessionOpener"/> 를 여러 번 부르고,
+    /// 그것도 없으면 앱의 전용 세션 경로(비밀번호 한 번)를 쓴다.
+    /// </summary>
+    public Func<ConnectionProfile, int, CancellationToken, Task<DedicatedSession.DedicatedSessionBatch>>? SessionsOpener { get; init; }
+
+    /// <summary>
+    /// 같은 접속으로 전용 세션을 <paramref name="count"/>개까지 연다(<see cref="DedicatedSession.DedicatedSessionCommands.OpenDedicatedManyAsync"/>).
+    /// 여는 중 실패하면 그때까지 연 세션과 오류 글을 돌려준다. 연 세션은 부른 쪽이 닫는다.
+    /// </summary>
+    public async Task<DedicatedSession.DedicatedSessionBatch> OpenSessionsAsync(ConnectionProfile profile, int count, CancellationToken ct)
+    {
+        if (SessionsOpener is { } many)
+        {
+            return await many(profile, count, ct).ConfigureAwait(true);
+        }
+
+        if (SessionOpener is { } opener)
+        {
+            var opened = new List<ISession>();
+            for (var i = 0; i < count; i++)
+            {
+                ISession? session;
+                try
+                {
+                    session = await opener(profile, ct).ConfigureAwait(true);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    return new DedicatedSession.DedicatedSessionBatch(opened, e.Message);
+                }
+
+                if (session is null)
+                {
+                    break;
+                }
+
+                opened.Add(session);
+            }
+
+            return new DedicatedSession.DedicatedSessionBatch(opened, null);
+        }
+
+        return _provider is ServiceContainer container
+            ? await DedicatedSession.DedicatedSessionCommands.OpenDedicatedManyAsync(container, profile, count, ct).ConfigureAwait(true)
+            : new DedicatedSession.DedicatedSessionBatch([], null);
+    }
+
     public async Task<string?> RunStatementAsync(ISession session, string sql, CancellationToken ct)
     {
         if (StatementRunner is { } runner)

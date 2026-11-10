@@ -91,6 +91,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         private SessionAccess _sourceAccess = null!;
         private SessionAccess _targetAccess = null!;
         private CopySqlBuilder _builder = null!;
+        private IReadOnlyList<IReadOnlyList<string>> _stages = [];
 
         private ISession Source => sessions.Source;
 
@@ -136,10 +137,15 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
 
             var order = BuildOrder(plans);
+            if (CopyConcurrency.Notice(job, _stages, sourceParts.Dbms) is { } concurrency)
+            {
+                _items.Add(concurrency); // 동시 테이블 수(PF2)
+            }
+
             await CheckSequencesAsync(plans, ct).ConfigureAwait(false);
             await CheckReadConsistencyAsync(ct).ConfigureAwait(false);
             var preview = await BuildPreviewAsync(order, ct).ConfigureAwait(false);
-            return new PrecheckReport(_items, order, preview, _estimated);
+            return new PrecheckReport(_items, order, preview, _estimated) { Stages = _stages };
         }
 
         // ---- 표 구조 ----
@@ -1106,6 +1112,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
 
             var sorted = CopyOrder.Sort(names, edges);
+            _stages = CopyOrder.Stages(names, edges); // 동시 복사(PF2)의 FK 단계: 같은 간선
             foreach (var cycle in sorted.Cycles)
             {
                 _items.Add(new CheckItem(null, "FkCycle", CheckLevel.Confirm,

@@ -101,6 +101,7 @@ public sealed class CheckItemViewModel
         [CopyCheckCodes.CrossStringBytes] = "Oracle 바이트 한도 넘을 수 있음",
         [CopyCheckCodes.CharPadDiffers] = "CHAR 뒤 공백 달라짐",
         [CopyCheckCodes.SequenceDefaultDropped] = "없는 시퀀스 기본값 뺌",
+        [CopyCheckCodes.ConcurrentCopy] = "동시 복사 안내",
     };
 
     public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices, string? tableText = null)

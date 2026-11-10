@@ -48,12 +48,24 @@ public sealed record CopyProgress(string Table, long Rows, long? Estimated, stri
     /// </summary>
     public IReadOnlyList<CopyWait>? Waits { get; init; }
 
+    /// <summary>
+    /// 동시 복사(PF2)의 단계 알림: 이 보고는 테이블 진행이 아니라 「동시 n개 · 단계 i/k」 상태 글이다(<see cref="Table"/> 은 빈 글자).
+    /// 한 테이블씩 복사하면 보내지 않는다.
+    /// </summary>
+    public CopyStage? Stage { get; init; }
+
     public static CopyProgress ForLog(CopyLogEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
         return new CopyProgress(entry.Table ?? string.Empty, 0, null, entry.Phase) { Log = entry };
     }
 }
+
+/// <summary>
+/// 동시 복사(PF2)의 지금 단계: <paramref name="Lanes"/> = 이 단계에서 동시에 도는 테이블 수, <paramref name="Index"/> = 몇째 단계(1부터), <paramref name="Count"/> = 단계 수.
+/// 글은 <see cref="CopyLogText.Stage"/>(「동시 2개 · 단계 1/3」).
+/// </summary>
+public sealed record CopyStage(int Lanes, int Index, int Count);
 
 /// <summary>멈춤 표시의 쪽: 원본 읽기 또는 대상 쓰기.</summary>
 public enum CopyWaitSide { Source, Target }

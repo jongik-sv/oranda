@@ -135,6 +135,7 @@ public partial class CopyRunner : ICopyRunner
         EnsureRecreateAllowed(sessions, job);
         EnsureCreateAllowed(sessions, job, report);
         EnsureDistinct(sessions, job);
+        EnsureWorkers(sessions);
         var run = new RunState(sessions, job, report, period, decisions.PreConfirmedSql, progress);
 
         // 대기 원인 감시(WH1): 대상 쪽만, 실행당 감시 세션 하나. 앱이 감시 세션 여는 길을 주지 않으면 하지 않는다.
@@ -142,10 +143,12 @@ public partial class CopyRunner : ICopyRunner
             ? new CopyWaitProbe(token => openMonitor(sessions.Target, token), _bulk, _catalog, _codec, _errors, threshold: WatchTiming.ProbeAfter)
             : null;
         run.WaitProbe = waitProbe;
+        var lanes = PrepareLanes(run, sessions); // 동시 테이블 수(PF2). 1 이면 아래 흐름이 예전 그대로다.
         await using var record = await _runLog.BeginAsync(
             new CopyRunHeader(job.Id, job.Name, job.Source.Name, job.Target.Name, period, DateTimeOffset.Now), ct);
         run.Record = record;
         LogStart(run, "복사 시작", period);
+        LogLanes(run, lanes);
 
         var finished = false;
         try
@@ -173,7 +176,14 @@ public partial class CopyRunner : ICopyRunner
             if (!run.Aborted)
             {
                 await DeleteTargetsAsync(run, ct);
-                await LoadAllAsync(run, control, ct);
+                if (run.LaneCount > 1)
+                {
+                    await LoadInLanesAsync(run, control, ct); // 동시 복사(PF2, CopyRunner.Lanes.cs): 정리 확정 → FK 단계마다 레인
+                }
+                else
+                {
+                    await LoadAllAsync(run, control, ct);
+                }
             }
 
             if (!run.Aborted)
@@ -191,6 +201,9 @@ public partial class CopyRunner : ICopyRunner
         finally
         {
             NoteWaitProbe(run);
+
+            // 레인(둘째부터)의 트랜잭션을 먼저 끝낸다: 남은 레인의 잠금이 다시 켜기(DDL)를 막고, 켜기는 모든 레인이 끝난 뒤여야 한다(PF2).
+            await FinishLanesAsync(run, faulted: !finished);
 
             // finished 가 거짓이면 예상 못 한 예외가 올라가는 중이다: 되돌리고 다시 켠 뒤 예외를 그대로 올린다.
             await FinishAsync(run, faulted: !finished);
@@ -267,7 +280,9 @@ public partial class CopyRunner : ICopyRunner
                 + (job.ConsistentRead ? " · 같은 시점 기준 읽기" : " · 테이블마다 따로 읽기")
                 // 기본값(읽기·쓰기 겹치기, 대기 한도 없음)이면 덧붙이지 않는다(예전 첫 줄 그대로).
                 + (options.SerialReadWrite ? " · 읽기·쓰기 번갈아(겹치지 않음)" : string.Empty)
-                + (options.WaitLimitMinutes > 0 ? $" · 테이블당 대기 한도 {options.WaitLimitMinutes.ToString(CultureInfo.InvariantCulture)}분" : string.Empty));
+                + (options.WaitLimitMinutes > 0 ? $" · 테이블당 대기 한도 {options.WaitLimitMinutes.ToString(CultureInfo.InvariantCulture)}분" : string.Empty)
+                // 동시 복사(PF2)일 때만(한 테이블씩이면 예전 첫 줄 그대로).
+                + (run.LaneCount > 1 ? $" · 동시 테이블 {run.LaneCount.ToString(CultureInfo.InvariantCulture)}개" : string.Empty));
         if (period is { } p && (p.TimeFrom is not null || p.TimeTo is not null))
         {
             static string At(DateTime? d) => d?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? "(열림)";
@@ -1614,6 +1629,11 @@ public partial class CopyRunner : ICopyRunner
     private async Task<bool> FlushAsync(RunState run, TableState table, RowShape shape, SqlStatement dml,
                                         List<object?[]> batch, CopyRunControl control, SideWatch writer, CancellationToken ct)
     {
+        if (StopForOtherLaneAbort(run, table))
+        {
+            return false; // 동시 복사(PF2): 다른 레인이 실행 전체를 멈췄다 — 이 배치를 보내지 않고 표를 멈춘다(늦어도 배치 하나)
+        }
+
         await control.WaitIfPausedAsync(ct);
         writer.Begin(table.Batches + 1);
         var started = Stopwatch.GetTimestamp();
@@ -1831,7 +1851,10 @@ public partial class CopyRunner : ICopyRunner
         var rows = table.PendingFailed.ToList();
         table.PendingFailed.Clear();
         table.Confirmed = true;
-        run.FailedRows.AddRange(rows);
+        lock (run.FailedRows)
+        {
+            run.FailedRows.AddRange(rows); // 동시 복사(PF2)면 레인 여럿이 더한다
+        }
         if (run.Record is not { } record || rows.Count == 0)
         {
             return;
@@ -2151,7 +2174,8 @@ public partial class CopyRunner : ICopyRunner
         var ended = false;
         try
         {
-            ended = await EndTargetTransactionAsync(run, faulted);
+            // 끝내지 못한 레인(PF2)이 있으면 그 트랜잭션이 남아 다시 켜기(DDL)를 막는다: 끝내지 못한 것으로 둔다.
+            ended = await EndTargetTransactionAsync(run, faulted) && !run.LaneLeftOpen;
         }
         catch (Exception ex) when (IsCleanupFailure(ex))
         {
@@ -3168,7 +3192,12 @@ public partial class CopyRunner : ICopyRunner
 
         public void Add(string notice)
         {
-            _items.Add(notice);
+            // 동시 복사(PF2)면 레인 여럿이 더한다. 읽기(결과 만들기)는 레인이 모두 끝난 뒤다.
+            lock (_items)
+            {
+                _items.Add(notice);
+            }
+
             added(notice);
         }
 
@@ -3184,11 +3213,22 @@ public partial class CopyRunner : ICopyRunner
         private readonly Dictionary<string, TableInfo> _sourceTables;
         private readonly Dictionary<string, TableInfo> _targetTables;
 
+        // 동시 복사(PF2): 레인(세션 쌍)마다 따로인 것(세션·지금 표·단계·버린 세션)은 지금 흐름의 레인(_lane)에 두고, 없으면(첫 레인·한 테이블씩) 주 값을 쓴다.
+        // 레인 흐름은 시작할 때 UseLane 으로 자기 레인을 건다(AsyncLocal: 그 흐름과 그 흐름이 띄운 읽기·감시 작업에만 보인다). 나머지는 모두 공유다.
+        private readonly AsyncLocal<RunLane?> _lane = new();
+        private readonly ISession _source;
+        private readonly ISession _target;
+        private string _phase = PhaseStart;
+        private string? _table;
+        private volatile bool _aborted;
+        private bool _sourceAbandoned;
+        private bool _targetAbandoned;
+
         public RunState(CopySessions sessions, CopyJob job, PrecheckReport report, ResolvedPeriod period,
                         IReadOnlySet<string> preConfirmed, IProgress<CopyProgress>? progress)
         {
-            Source = sessions.Source;
-            Target = sessions.Target;
+            _source = sessions.Source;
+            _target = sessions.Target;
             Job = job;
             Report = report;
             _progress = progress;
@@ -3200,9 +3240,29 @@ public partial class CopyRunner : ICopyRunner
             Notices = new NoticeList(text => Log(text, CopyLogKind.Warning));
         }
 
-        public ISession Source { get; }
+        /// <summary>원본 세션(지금 흐름이 레인이면 그 레인의 원본).</summary>
+        public ISession Source => _lane.Value?.Source ?? _source;
 
-        public ISession Target { get; }
+        /// <summary>대상 세션(지금 흐름이 레인이면 그 레인의 대상).</summary>
+        public ISession Target => _lane.Value?.Target ?? _target;
+
+        /// <summary>지금 흐름의 레인(첫 레인·레인 밖이면 null).</summary>
+        public RunLane? CurrentLane => _lane.Value;
+
+        /// <summary>둘째 레인부터(<see cref="CopySessions.Workers"/>로 연 쌍). 첫 레인은 주 쌍이라 여기 없다. 한 테이블씩이면 비었다.</summary>
+        public List<RunLane> Workers { get; } = [];
+
+        /// <summary>동시 테이블 수(레인 수). 1 이면 예전처럼 한 테이블씩.</summary>
+        public int LaneCount { get; set; } = 1;
+
+        /// <summary>레인이 도는 중(<see cref="CopyRunner.LoadInLanesAsync"/>). 이때만 다른 레인의 전체 중단을 배치마다 본다.</summary>
+        public bool InLanes { get; set; }
+
+        /// <summary>둘째 레인부터 가운데 대상 트랜잭션을 끝내지 못한 것이 있다(<see cref="CopyRunner.FinishLanesAsync"/>). 마무리가 다시 켜기·되살리기를 하지 않는다.</summary>
+        public bool LaneLeftOpen { get; set; }
+
+        /// <summary>이 흐름(과 그 흐름이 띄우는 작업)을 <paramref name="lane"/> 의 세션으로 돌린다. 부른 비동기 메서드가 끝나면 원래대로 돌아간다.</summary>
+        public void UseLane(RunLane lane) => _lane.Value = lane;
 
         public CopyJob Job { get; }
 
@@ -3232,17 +3292,45 @@ public partial class CopyRunner : ICopyRunner
         /// <summary>알림. 더할 때마다 작업 로그에도 한 줄 남긴다.</summary>
         public NoticeList Notices { get; }
 
-        /// <summary>지금 단계(마지막 진행 보고의 단계). 작업 로그 줄의 단계 칸.</summary>
-        public string CurrentPhase { get; private set; } = PhaseStart;
+        /// <summary>지금 단계(마지막 진행 보고의 단계). 작업 로그 줄의 단계 칸. 레인이면 그 레인의 것.</summary>
+        public string CurrentPhase
+        {
+            get => _lane.Value is { } lane ? lane.Phase : _phase;
+            private set
+            {
+                if (_lane.Value is { } lane)
+                {
+                    lane.Phase = value;
+                }
+                else
+                {
+                    _phase = value;
+                }
+            }
+        }
 
-        /// <summary>지금 표(마지막 진행 보고의 규칙 키). 작업 로그 줄의 표 칸.</summary>
-        public string? CurrentTable { get; private set; }
+        /// <summary>지금 표(마지막 진행 보고의 규칙 키). 작업 로그 줄의 표 칸. 레인이면 그 레인의 것.</summary>
+        public string? CurrentTable
+        {
+            get => _lane.Value is { } lane ? lane.Table : _table;
+            private set
+            {
+                if (_lane.Value is { } lane)
+                {
+                    lane.Table = value;
+                }
+                else
+                {
+                    _table = value;
+                }
+            }
+        }
 
         /// <summary>실행 전체에 걸린 시간.</summary>
         public Stopwatch Clock { get; } = Stopwatch.StartNew();
 
         /// <summary>전체를 멈춤(끄기 실패·ORA-01555·원본 준비 실패). 중지(<see cref="Stopped"/>)와 달리 결과는 실패다.</summary>
-        public bool Aborted { get; private set; }
+        public bool Aborted => _aborted;
 
         public bool Stopped { get; set; }
 
@@ -3271,10 +3359,42 @@ public partial class CopyRunner : ICopyRunner
         /// <summary>
         /// 원본 명령이 취소에도 돌아오지 않아 원본 세션을 더 쓰지 않는다(<see cref="CopyRunner.AbandonStuckAsync"/>). Core 는 세션을 새로 열 수 없어 실행을 멈춘다.
         /// </summary>
-        public bool SourceAbandoned { get; set; }
+        public bool SourceAbandoned
+        {
+            // 레인이면 그 레인의 원본이다.
+            get => _lane.Value is { } lane ? lane.SourceAbandoned : _sourceAbandoned;
+            set
+            {
+                if (_lane.Value is { } lane)
+                {
+                    lane.SourceAbandoned = value;
+                }
+                else
+                {
+                    _sourceAbandoned = value;
+                }
+            }
+        }
 
-        /// <summary>대상 명령이 취소에도 돌아오지 않아 대상 세션을 더 쓰지 않는다(마무리의 커밋·롤백·다시 켜기·건수 비교를 보내지 않는다).</summary>
-        public bool TargetAbandoned { get; set; }
+        /// <summary>
+        /// 대상 명령이 취소에도 돌아오지 않아 대상 세션을 더 쓰지 않는다(마무리의 커밋·롤백·다시 켜기·건수 비교를 보내지 않는다). 레인이면 그 레인의 대상이다
+        /// (레인 마무리가 그 레인을 끝내지 못하면 주 값도 켠다: 남은 트랜잭션이 다시 켜기를 막는다).
+        /// </summary>
+        public bool TargetAbandoned
+        {
+            get => _lane.Value is { } lane ? lane.TargetAbandoned : _targetAbandoned;
+            set
+            {
+                if (_lane.Value is { } lane)
+                {
+                    lane.TargetAbandoned = value;
+                }
+                else
+                {
+                    _targetAbandoned = value;
+                }
+            }
+        }
 
         /// <summary>대상 쪽 대기 원인 감시(WH1). 앱이 감시 세션 여는 길을 주지 않았으면 null.</summary>
         public CopyWaitProbe? WaitProbe { get; set; }
@@ -3304,7 +3424,7 @@ public partial class CopyRunner : ICopyRunner
 
         public void Abort(string? notice)
         {
-            Aborted = true;
+            _aborted = true;
             if (notice is not null)
             {
                 Notices.Add(notice);
@@ -3363,7 +3483,12 @@ public partial class CopyRunner : ICopyRunner
         public void LogStatement(ISession session, string sql, IReadOnlyDictionary<string, BindValue>? binds = null) =>
             Log(CopyLogText.Statement(SideOf(session), sql, binds), CopyLogKind.Statement);
 
-        public string SideOf(ISession session) => ReferenceEquals(session, Source) ? "원본" : "대상";
+        /// <summary>문장 줄의 쪽 글. 원본 세션 집합(주 원본·레인 원본) 가운데 하나면 「원본」, 아니면 「대상」.</summary>
+        public string SideOf(ISession session) =>
+            ReferenceEquals(session, _source) || ReferenceEquals(session, Source) || Workers.Exists(w => ReferenceEquals(w.Source, session)) ? "원본" : "대상";
+
+        /// <summary>동시 복사 단계 알림(<see cref="CopyProgress.Stage"/>): 화면 상태 글.</summary>
+        public void ReportStage(CopyStage stage) => Send(new CopyProgress(string.Empty, 0, null, PhaseLoad) { Stage = stage });
 
         /// <summary>
         /// 대상 문장 결과를 받는다. 성공이면 true. 중지로 취소됐으면 중지 예외를 올리고, 정책 거부·확인 거절·실패면 표를 실패로 둔다(예외로 던지지 않는다).

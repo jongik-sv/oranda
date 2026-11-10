@@ -18,6 +18,12 @@ public sealed record CopySessions(ISession Source, ISession Target)
     /// null = 감시하지 않음(대기 시간만 보인다). 실행기는 대상 쪽 대기만 감시하고 실행당 감시 세션은 하나다.
     /// </summary>
     public Func<ISession, CancellationToken, Task<ISession?>>? OpenMonitor { get; init; }
+
+    /// <summary>
+    /// 동시 테이블 복사(PF2)의 추가 레인 세션 쌍(원본 읽기 전용·대상, 전용 세션). 주 쌍(<see cref="Source"/>·<see cref="Target"/>)이 첫 레인이고 이것들이 둘째 레인부터다.
+    /// 비면(기본) 한 테이블씩 복사한다. 여닫기는 부른 쪽(앱)이 한다: 실행기는 열지도 닫지도 않는다. 사전 점검은 쓰지 않는다.
+    /// </summary>
+    public IReadOnlyList<CopySessions> Workers { get; init; } = [];
 }
 
 public enum CheckLevel { Pass, Confirm, Error }
@@ -69,6 +75,12 @@ public static class CopyCheckCodes
 
     /// <summary>확인 필요(교차 복사로 표를 만들 때, 열마다 한 항목): 기본값이 가리키는 시퀀스가 대상에 없어 그 열의 DEFAULT 를 빼고 만든다.</summary>
     public const string SequenceDefaultDropped = "SequenceDefaultDropped";
+
+    /// <summary>
+    /// 동시 테이블 복사(PF2, 작업 전체 한 항목). 실제로 동시에 돌면 확인 필요(지우기를 먼저 확정해 중지해도 지운 행이 돌아오지 않는다),
+    /// 동시 수를 2 이상 골랐지만 한 테이블씩 돌면 통과 안내(그 이유, <see cref="CopyConcurrency.Effective"/>).
+    /// </summary>
+    public const string ConcurrentCopy = "ConcurrentCopy";
 }
 
 public enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }
@@ -108,4 +120,10 @@ public sealed record PrecheckReport(IReadOnlyList<CheckItem> Items, IReadOnlyLis
                                     IReadOnlyDictionary<string, long> EstimatedRows)
 {
     public bool HasErrors => Items.Any(i => i.Level == CheckLevel.Error);
+
+    /// <summary>
+    /// 동시 복사(PF2)의 FK 단계(규칙 키, <see cref="CopyOrder.Stages"/>). 한 단계의 테이블은 함께 적재해도 되고, 단계는 앞 단계가 모두 끝난 뒤 시작한다.
+    /// null 이면(이 칸이 없던 점검 결과) 동시에 복사하지 않는다.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<string>>? Stages { get; init; }
 }

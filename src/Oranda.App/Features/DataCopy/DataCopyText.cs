@@ -36,6 +36,19 @@ internal static class DataCopyText
     /// </summary>
     public const string SessionsAbandoned = "취소한 명령이 돌아오지 않아 복사 세션을 닫았습니다. 다시 실행하려면 사전 점검을 다시 하세요(새 세션을 엽니다).";
 
+    /// <summary>동시 복사 단계 글(PF2). 한국어는 실행기와 같은 글(<see cref="Oranda.Core.Transfer.Copy.CopyLogText.Stage"/>: 「동시 2개 · 단계 1/3」), 영어 화면이면 영어.</summary>
+    public static string StageText(Oranda.Core.Transfer.Copy.CopyStage stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        if (!Localization.LiteralTranslator.IsEnglish)
+        {
+            return Oranda.Core.Transfer.Copy.CopyLogText.Stage(stage);
+        }
+
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        return $"Concurrent {stage.Lanes.ToString(c)} · stage {stage.Index.ToString(c)}/{stage.Count.ToString(c)}";
+    }
+
     /// <summary>시간 나눔 글(결정 74). 한국어는 실행기와 같은 글(<see cref="Oranda.Core.Transfer.Copy.CopyLogText.Times"/>), 영어 화면이면 영어.</summary>
     public static string TimesText(Oranda.Core.Transfer.Copy.CopyTableTimes times)
     {

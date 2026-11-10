@@ -148,6 +148,67 @@ public static class DedicatedSessionCommands
     {
         ArgumentNullException.ThrowIfNull(container);
         ArgumentNullException.ThrowIfNull(profile);
+        var secret = await LoadSecretAsync(container, profile).ConfigureAwait(true);
+        if (string.IsNullOrEmpty(secret))
+        {
+            return null;
+        }
+
+        using var credential = new SecureCredential(secret);
+        return await container.GetRequiredService<ISessionManager>()
+            .OpenAsync(profile, credential, SessionPurpose.Dedicated, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 같은 접속으로 전용 세션(<see cref="SessionPurpose.Dedicated"/>)을 <paramref name="count"/>개까지 연다(데이터 복사의 동시 레인, PF2).
+    /// 비밀번호는 <see cref="OpenDedicatedAsync"/> 와 같은 순서로 한 번만 꺼내거나 묻는다. 하나를 여는 데 실패하면(예: Oracle SESSIONS_PER_USER·PROCESSES)
+    /// 거기서 멈추고 그때까지 연 세션과 그 오류 글을 돌려준다. 비밀번호 입력을 취소하면 빈 목록(오류 없음). 취소 토큰이 울리면 연 세션을 닫고 취소를 다시 던진다.
+    /// </summary>
+    public static async Task<DedicatedSessionBatch> OpenDedicatedManyAsync(ServiceContainer container, ConnectionProfile profile, int count, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+        ArgumentNullException.ThrowIfNull(profile);
+        if (count <= 0)
+        {
+            return new DedicatedSessionBatch([], null);
+        }
+
+        var secret = await LoadSecretAsync(container, profile).ConfigureAwait(true);
+        if (string.IsNullOrEmpty(secret))
+        {
+            return new DedicatedSessionBatch([], null);
+        }
+
+        var manager = container.GetRequiredService<ISessionManager>();
+        var opened = new List<ISession>();
+        for (var i = 0; i < count; i++)
+        {
+            try
+            {
+                using var credential = new SecureCredential(secret);
+                opened.Add(await manager.OpenAsync(profile, credential, SessionPurpose.Dedicated, ct).ConfigureAwait(true));
+            }
+            catch (OperationCanceledException)
+            {
+                foreach (var session in opened)
+                {
+                    await ConnectionService.CloseAsync(session).ConfigureAwait(true); // 취소하면 연 세션을 남기지 않는다
+                }
+
+                throw;
+            }
+            catch (Exception e)
+            {
+                return new DedicatedSessionBatch(opened, e.Message); // 세션 수 한도 등: 연 만큼만 쓴다
+            }
+        }
+
+        return new DedicatedSessionBatch(opened, null);
+    }
+
+    // 안전 저장소의 비밀번호, 없으면 주 창에서 묻는다. 둘 다 없거나 취소하면 null.
+    private static async Task<string?> LoadSecretAsync(ServiceContainer container, ConnectionProfile profile)
+    {
         string? secret = null;
         if (profile.CredentialRef is { } reference && container.GetService<ICredentialStore>() is { } store
             && await store.LoadAsync(reference).ConfigureAwait(true) is { } bytes)
@@ -161,14 +222,7 @@ public static class DedicatedSessionCommands
             secret = await ConnectionDialogs.PromptPasswordAsync(owner, profile).ConfigureAwait(true);
         }
 
-        if (string.IsNullOrEmpty(secret))
-        {
-            return null;
-        }
-
-        using var credential = new SecureCredential(secret);
-        return await container.GetRequiredService<ISessionManager>()
-            .OpenAsync(profile, credential, SessionPurpose.Dedicated, ct).ConfigureAwait(true);
+        return secret;
     }
 
     /// <summary>
@@ -240,6 +294,12 @@ public sealed class DedicatedSessionCommandHandler(ServiceContainer container) :
         }
     }
 }
+
+/// <summary>
+/// 전용 세션 여러 개를 연 결과(<see cref="DedicatedSessionCommands.OpenDedicatedManyAsync"/>). <paramref name="Sessions"/> = 연 세션(부른 쪽이 닫는다),
+/// <paramref name="Error"/> = 고른 수보다 적게 연 까닭(여는 중 오류). 다 열었거나 비밀번호 입력을 취소했으면 null.
+/// </summary>
+public sealed record DedicatedSessionBatch(IReadOnlyList<ISession> Sessions, string? Error);
 
 /// <summary>앱 종료 확인의 결과(<see cref="DedicatedSessionCommands.ConfirmExitAsync"/>).</summary>
 public enum ExitConfirmResult

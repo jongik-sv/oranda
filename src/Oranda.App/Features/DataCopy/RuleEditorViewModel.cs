@@ -415,6 +415,53 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     [ObservableProperty]
     private int _waitLimitMinutes;
 
+    /// <summary>동시 테이블 수(PF2, 1~<see cref="CopyConcurrency.Max"/>). 1 = 한 테이블씩(작업 파일에 쓰지 않는다).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConcurrencyReason), nameof(HasConcurrencyReason))]
+    private int _concurrentTables = 1;
+
+    /// <summary>
+    /// 동시 테이블 수를 2 이상 골랐는데 지금 설정으로는 한 테이블씩 도는 이유(<see cref="CopyConcurrency.Effective"/>, 점검 전이라 작업 설정만 본다).
+    /// 1 을 골랐거나 동시로 돌면 빈 글자.
+    /// </summary>
+    public string ConcurrencyReason
+    {
+        get
+        {
+            if (ConcurrentTables <= 1)
+            {
+                return string.Empty;
+            }
+
+            var probe = new CopyJob
+            {
+                Id = string.Empty,
+                Name = string.Empty,
+                Source = new ConnectionRef(string.Empty, string.Empty),
+                Target = new ConnectionRef(string.Empty, string.Empty),
+                SourceOwner = string.Empty,
+                TargetOwner = string.Empty,
+                MaskSalt = string.Empty,
+                ConsistentRead = ConsistentRead,
+                Options = new CopyOptions { Commit = Commit, ConcurrentTables = Math.Min(ConcurrentTables, CopyConcurrency.Max) },
+            };
+            var decision = CopyConcurrency.Effective(probe, report: null, Source?.Profile.Dbms ?? Dbms.Oracle);
+            return decision.Tables > 1 || decision.Reason is null ? string.Empty : DataCopyText.L(decision.Reason);
+        }
+    }
+
+    public bool HasConcurrencyReason => ConcurrencyReason.Length > 0;
+
+    partial void OnConsistentReadChanged(bool value) => NotifyConcurrency();
+
+    partial void OnCommitChanged(CommitMode value) => NotifyConcurrency();
+
+    private void NotifyConcurrency()
+    {
+        OnPropertyChanged(nameof(ConcurrencyReason));
+        OnPropertyChanged(nameof(HasConcurrencyReason));
+    }
+
     [ObservableProperty]
     private TableRuleViewModel? _selectedRule;
 
@@ -554,6 +601,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         SequenceGapConfirm = job.Options.SequenceGapConfirm;
         OverlapReadWrite = !job.Options.SerialReadWrite;
         WaitLimitMinutes = Math.Max(0, job.Options.WaitLimitMinutes);
+        ConcurrentTables = CopyConcurrency.Requested(job.Options);
         Rules.Clear();
         // 규칙마다 실제 계정을 풀어 둔다(비어 있던 계정 = 작업 기본 계정). 저장할 때는 늘 계정을 적어 저장한다.
         // 「기본을 따름」: 원본 계정이 비었거나 작업 기본 원본 계정이면 따르고, 대상 계정이 비었거나 그 규칙의 기본 대상(MapTarget)이면 따른다.
@@ -693,6 +741,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
                 SequenceGapConfirm = SequenceGapConfirm,
                 SerialReadWrite = !OverlapReadWrite,
                 WaitLimitMinutes = Math.Max(0, WaitLimitMinutes),
+                ConcurrentTables = ConcurrentTables <= 1 ? null : Math.Min(ConcurrentTables, CopyConcurrency.Max), // 1 이면 파일에 쓰지 않는다
             },
             ConsistentRead = ConsistentRead,
         };

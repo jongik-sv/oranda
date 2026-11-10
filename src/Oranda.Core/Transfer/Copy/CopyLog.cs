@@ -97,6 +97,13 @@ public static partial class CopyLogText
         return string.IsNullOrWhiteSpace(wait.Cause) ? text : text + " · " + wait.Cause;
     }
 
+    /// <summary>동시 복사 단계 글(PF2): <c>동시 2개 · 단계 1/3</c>.</summary>
+    public static string Stage(CopyStage stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        return $"동시 {stage.Lanes.ToString(CultureInfo.InvariantCulture)}개 · 단계 {stage.Index.ToString(CultureInfo.InvariantCulture)}/{stage.Count.ToString(CultureInfo.InvariantCulture)}";
+    }
+
     /// <summary>
     /// 시간 나눔 글(결정 74): <c>읽기 1.20초 · 변환 0.05초 · 쓰기 3.40초 · 1,234행/초</c>. 적재 구간·테이블 전체를 알면(원격 #155) 기준을 함께 적는다:
     /// <c>적재 구간 4.49초 · 읽기 1.20초(첫 행까지 0.30초) · 변환 0.05초 · 쓰기 3.40초 · 66,811행/초 · 테이블 전체 10.70초 · 기타 6.21초</c>

@@ -14,7 +14,8 @@ namespace Oranda.Core.Transfer.Copy;
 /// 버전을 올리는 까닭: 예전 앱이 두 칸을 버린 채 다시 저장하면 따로 바꾼 표시가 사라져 전체 값 변경이 저장된 값을 덮어쓸 수 있다(읽기 전용으로 열게).
 /// <para>
 /// 버전을 올리지 않은 칸: 실행 옵션 <see cref="CopyOptions.SerialReadWrite"/>(읽기·쓰기 번갈아)·<see cref="CopyOptions.WaitLimitMinutes"/>(테이블당 대기 한도, PF1)·
-/// <see cref="CopyOptions.NoLobPrefetch"/>(LOB 미리 받기 끔, PF3). 기본값이면 파일에 쓰지 않고, 예전 앱이 버려도 무엇을 읽고 지우는지는 바뀌지 않는다(속도·멈춤 대응만 기본으로 돌아간다).
+/// <see cref="CopyOptions.NoLobPrefetch"/>(LOB 미리 받기 끔, PF3)·<see cref="CopyOptions.ConcurrentTables"/>(동시 테이블 수, PF2).
+/// 기본값이면 파일에 쓰지 않고, 예전 앱이 버려도 무엇을 읽고 지우는지는 바뀌지 않는다(속도·멈춤 대응·동시 수만 기본으로 돌아간다 — 동시 수가 기본(1)이면 예전처럼 한 테이블씩 복사한다).
 /// 버전을 올리면 새 앱이 저장한 모든 작업이 예전 앱에서 읽기 전용이 되므로 그 비용을 치르지 않는다.
 /// 남는 위험(받아들임): 예전 앱이 이 작업을 열었다가 저장하면 두 칸(<c>serialReadWrite</c>·<c>waitLimitMinutes</c>)이 알림 없이 사라진다 —
 /// 새 앱에서 다시 열면 읽기·쓰기 겹치기 켬·대기 한도 없음(기본)으로 돌아가 있으니 필요하면 다시 고른다.
@@ -201,6 +202,13 @@ public sealed record CopyOptions
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool NoLobPrefetch { get; init; }
+
+    /// <summary>
+    /// 동시 테이블 수(PF2, 조정 결정 71·72). null(기본) = 1 = 한 테이블씩(예전 동작). 2~4 면 FK 단계마다 테이블을 그 수까지 동시에 복사한다
+    /// (테이블마다 원본·대상 세션 한 쌍). 실제로 동시에 도는지는 <see cref="CopyConcurrency.Effective"/> 가 정한다(같은 시점 읽기·「모두 끝난 뒤 한 번 커밋」이면 끈다).
+    /// null 이면 파일에 쓰지 않는다(스키마 버전은 올리지 않는다, <see cref="CopyJobSchema"/>).
+    /// </summary>
+    public int? ConcurrentTables { get; init; }
 }
 
 /// <summary>

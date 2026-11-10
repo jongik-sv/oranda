@@ -201,10 +201,14 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         StatusText = "복사하는 중…";
         CopyRunResult? result = null;
         var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Completion = running.Task;
+        Completion = running.Task; // 레인 세션을 여는 동안 창을 닫아도 이 작업이 끝나기(레인 세션을 닫기)를 기다린다
+        IReadOnlyList<CopySessions> workers = [];
         try
         {
-            result = await runner.RunAsync(sessions, job, report, decisions, period, new UiProgress<CopyProgress>(OnProgress), control, cts.Token).ConfigureAwait(true);
+            // 동시 테이블 복사(PF2): 레인 세션 쌍은 이번 실행에만 열고 끝나면 닫는다. _sessions 는 주 쌍 그대로다(다시 넣기는 한 테이블씩).
+            workers = await OpenWorkersAsync(sessions, job, report, cts.Token).ConfigureAwait(true);
+            var run = workers.Count > 0 ? sessions with { Workers = workers } : sessions;
+            result = await runner.RunAsync(run, job, report, decisions, period, new UiProgress<CopyProgress>(OnProgress), control, cts.Token).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -219,6 +223,7 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
         }
         finally
         {
+            await DataCopySessions.CloseWorkersAsync(workers).ConfigureAwait(true); // 실행기가 레인 트랜잭션을 이미 끝냈다(되돌렸다)
             control.Resume();
             cts.Dispose();
             if (ReferenceEquals(_cts, cts))
@@ -272,11 +277,51 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
     /// <summary>방금 끝난 실행의 요약. 열린 작업에 합쳐 다음 저장이 옛 값으로 덮어쓰지 않게 한다.</summary>
     public LastRunInfo? LastRun { get; private set; }
 
+    /// <summary>
+    /// 동시 테이블 복사(PF2)의 레인 세션 쌍을 연다: 작업 설정·점검 결과의 판정(<see cref="CopyConcurrency.Effective"/>)이 2 이상이고 점검 결과에 동시 복사 확인 항목이
+    /// 있을 때만(없으면 실행기가 한 테이블씩 돌므로 열지 않는다). 적게 열렸으면 작업 로그에 남긴다. 여는 데 실패하면 로그에 남기고 레인 없이(한 테이블씩) 돈다.
+    /// </summary>
+    private async Task<IReadOnlyList<CopySessions>> OpenWorkersAsync(CopySessions sessions, CopyJob job, PrecheckReport report, CancellationToken ct)
+    {
+        var decision = CopyConcurrency.Effective(job, report, sessions.Source.Profile.Dbms);
+        if (decision.Tables <= 1
+            || !report.Items.Any(i => i.Code == CopyCheckCodes.ConcurrentCopy && i.Level == CheckLevel.Confirm))
+        {
+            return [];
+        }
+
+        try
+        {
+            var opened = await DataCopySessions.OpenWorkersAsync(services, sessions.Source.Profile, sessions.Target.Profile, decision.Tables - 1, ct)
+                .ConfigureAwait(true);
+            if (opened.Note is { } note)
+            {
+                Log.Append("시작", note, CopyLogKind.Warning);
+            }
+
+            return opened.Pairs;
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Log.Append("시작", DataCopyText.L(WorkersFailed) + e.Message, CopyLogKind.Warning);
+            return [];
+        }
+    }
+
+    /// <summary>레인 세션을 열다 실패했을 때의 작업 로그 앞부분(뒤에 오류 글).</summary>
+    internal const string WorkersFailed = "레인 세션을 열지 못해 한 테이블씩 복사합니다: ";
+
     private void OnProgress(CopyProgress p)
     {
         if (p.Log is { } entry)
         {
             Log.Append(entry); // 로그 줄은 진행 값을 바꾸지 않는다
+            return;
+        }
+
+        if (p.Stage is { } stage)
+        {
+            StatusText = DataCopyText.StageText(stage); // 「동시 2개 · 단계 1/3」: 테이블 진행이 아니다
             return;
         }
 
