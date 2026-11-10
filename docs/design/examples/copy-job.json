@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "id": "0123456789abcdef0123456789abcdef",
   "name": "월간 주문 복사",
   "source": {

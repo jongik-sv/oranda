@@ -172,6 +172,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         _kind = rule.Kind;
         _action = rule.Action;
         _createIfMissing = rule.CreateIfMissing && rule.Action != TargetAction.Recreate;
+        Overrides = rule.Overrides;
         _customWhere = rule.CustomWhere;
         _extraWhere = rule.ExtraWhere;
         _parent = rule.Parent;
@@ -310,11 +311,79 @@ public sealed partial class TableRuleViewModel : ViewModelBase
 
     partial void OnActionChanged(TargetAction value)
     {
+        MarkOverride(RuleOverrides.Action);
         if (value == TargetAction.Recreate)
         {
-            CreateIfMissing = false;
+            _applyingDefaults = true; // 다시 만들기를 고르면 「없으면 만들기」가 꺼지는 것은 사용자가 따로 바꾼 값이 아니다
+            try
+            {
+                CreateIfMissing = false;
+            }
+            finally
+            {
+                _applyingDefaults = false;
+            }
         }
     }
+
+    partial void OnCreateIfMissingChanged(bool value) => MarkOverride(RuleOverrides.CreateIfMissing);
+
+    // ---- 전체 기본값(규칙·대상 처리·없으면 만들기)과 테이블별로 따로 바꾼 항목 ----
+
+    /// <summary>전체 기본값을 따르지 않고 이 테이블에서 따로 바꾼 항목(표별 값이 전체 값보다 우선한다).</summary>
+    public RuleOverrides Overrides { get; private set; }
+
+    private bool _applyingDefaults;
+
+    private void MarkOverride(RuleOverrides flag)
+    {
+        if (!_applyingDefaults)
+        {
+            Overrides |= flag;
+        }
+    }
+
+    /// <summary>저장된 파일을 올릴 때: 따로 바꾼 항목을 그대로 되살린다(옛 파일은 모두 따로 바꾼 것으로 본다).</summary>
+    public void RestoreOverrides(RuleOverrides overrides) => Overrides = overrides;
+
+    /// <summary>마지막 사전 점검에서 「없으면 만들기」로도 만들 수 없는 테이블로 나왔다(전체 값이 이 테이블의 「없으면 만들기」를 켜지 않는다).</summary>
+    public bool CreateBlocked { get; set; }
+
+    /// <summary>마지막 사전 점검에서 대상에 이미 있는 테이블로 나왔다(전체 값이 이 테이블의 「없으면 만들기」를 켜지 않는다).</summary>
+    public bool TargetExists { get; set; }
+
+    /// <summary>
+    /// 전체 기본값을 따르는 항목에만 전체 값을 적용한다. <paramref name="kind"/> 는 이 테이블에 풀어 준 규칙(null = 그대로), <paramref name="action"/> 이 null 이면
+    /// 규칙 종류별 기본 대상 처리. 「없으면 만들기」는 다시 만들기·만들 수 없는 테이블·이미 있는 테이블에는 켜지 않는다.
+    /// </summary>
+    public void ApplyDefaults(RuleKind? kind, TargetAction? action, bool createIfMissing)
+    {
+        _applyingDefaults = true;
+        try
+        {
+            if (!Overrides.HasFlag(RuleOverrides.Kind) && kind is { } k && k != Kind)
+            {
+                ApplyKind(k);
+            }
+
+            if (!Overrides.HasFlag(RuleOverrides.Action))
+            {
+                Action = action ?? TargetActions.DefaultFor(Kind, HasPrimaryKey);
+            }
+
+            if (!Overrides.HasFlag(RuleOverrides.CreateIfMissing))
+            {
+                CreateIfMissing = createIfMissing && CanCreateIfMissing && !CreateBlocked && !TargetExists;
+            }
+        }
+        finally
+        {
+            _applyingDefaults = false;
+        }
+    }
+
+    /// <summary>「전체 값으로」: 따로 바꾼 표시를 모두 지운다. 값은 호출한 쪽이 <see cref="ApplyDefaults"/> 로 전체 값에 맞춘다.</summary>
+    public void ClearOverrides() => Overrides = RuleOverrides.None;
 
     public bool IsPeriod => Kind == RuleKind.Period;
 
@@ -579,8 +648,22 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     /// <summary>규칙 종류를 바꿀 때 대상 처리도 그 종류의 기본값으로 맞춘다(설계 6.2).</summary>
     public void ChangeKind(RuleKind kind)
     {
+        Overrides |= RuleOverrides.Kind | RuleOverrides.Action; // 사용자가 고른 규칙: 전체 값이 아니라 이 테이블 값을 따른다(대상 처리도 규칙에 맞춰 함께 바뀐다)
+        ApplyKind(kind);
+        _applyingDefaults = true;
+        try
+        {
+            Action = TargetActions.DefaultFor(kind, HasPrimaryKey);
+        }
+        finally
+        {
+            _applyingDefaults = false;
+        }
+    }
+
+    private void ApplyKind(RuleKind kind)
+    {
         Kind = kind;
-        Action = TargetActions.DefaultFor(kind, HasPrimaryKey);
         if (kind == RuleKind.Period && FirstColumn is null)
         {
             FirstColumn = PeriodColumnOptions.FirstOrDefault();
@@ -623,6 +706,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
             Masks = masks,
             SkipColumns = skips,
             CreateIfMissing = CreateIfMissing && CanCreateIfMissing,
+            Overrides = Overrides,
         };
     }
 

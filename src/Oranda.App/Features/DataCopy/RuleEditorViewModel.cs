@@ -72,9 +72,158 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         foreach (var rule in Rules)
         {
             rule.SessionUser = TargetSessionUser;
+            rule.CreateBlocked = false; // 다른 대상이면 점검에서 알게 된 「이미 있음·만들 수 없음」은 더 맞지 않는다
+            rule.TargetExists = false;
         }
 
         OnPropertyChanged(nameof(TargetSessionUser));
+    }
+
+    // ---- 전체 기본값(규칙·대상 처리·없으면 만들기): 테이블을 더할 때 채우고, 바꾸면 따로 바꾸지 않은 테이블에만 반영한다 ----
+
+    /// <summary>전체 기본값 「규칙」 선택지(자동 = 기간이 있고 기간 열이 있는 테이블은 기간, 아니면 모든 행).</summary>
+    public IReadOnlyList<ChoiceItem<DefaultKindChoice>> DefaultKindOptions { get; } =
+    [
+        new(DefaultKindChoice.Auto, "자동"),
+        new(DefaultKindChoice.All, "모든 행"),
+        new(DefaultKindChoice.Period, "기간"),
+        new(DefaultKindChoice.Exclude, "제외"),
+    ];
+
+    /// <summary>전체 기본값 「대상 처리」 선택지(자동 = 규칙 종류별 기본값). 다시 만들기는 테이블마다 정한다.</summary>
+    public IReadOnlyList<ChoiceItem<DefaultActionChoice>> DefaultActionOptions { get; } =
+    [
+        new(DefaultActionChoice.Auto, "자동"),
+        new(DefaultActionChoice.DeleteAllInsert, "비우고 넣기"),
+        new(DefaultActionChoice.DeleteRangeInsert, "같은 범위 지우고 넣기"),
+        new(DefaultActionChoice.AppendOnly, "추가만"),
+        new(DefaultActionChoice.MergeByPk, "PK 기준 MERGE"),
+    ];
+
+    [ObservableProperty]
+    private DefaultKindChoice _defaultKind = DefaultKindChoice.Auto;
+
+    [ObservableProperty]
+    private DefaultActionChoice _defaultAction = DefaultActionChoice.Auto;
+
+    /// <summary>전체 기본값 「대상에 테이블이 없으면 만들기」. 모든 환경에서 켠 채 시작한다. 이미 있는 테이블·만들 수 없는 테이블에는 켜지 않는다.</summary>
+    [ObservableProperty]
+    private bool _defaultCreateIfMissing = true;
+
+    private bool _applyingTableDefaults;
+
+    private static readonly TableDefaults InitialTableDefaults = new(null, null, true);
+
+    // 불러온 작업에 전체 기본값이 없었다(옛 파일).
+    private bool _legacyTableDefaults;
+
+    partial void OnDefaultKindChanged(DefaultKindChoice value) => ApplyDefaultsToFollowers();
+
+    partial void OnDefaultActionChanged(DefaultActionChoice value) => ApplyDefaultsToFollowers();
+
+    partial void OnDefaultCreateIfMissingChanged(bool value) => ApplyDefaultsToFollowers();
+
+    /// <summary>저장할 전체 기본값.</summary>
+    public TableDefaults CurrentTableDefaults => new(
+        DefaultKind switch
+        {
+            DefaultKindChoice.All => RuleKind.All,
+            DefaultKindChoice.Period => RuleKind.Period,
+            DefaultKindChoice.Exclude => RuleKind.Exclude,
+            _ => null,
+        },
+        DefaultAction switch
+        {
+            DefaultActionChoice.DeleteAllInsert => TargetAction.DeleteAllInsert,
+            DefaultActionChoice.DeleteRangeInsert => TargetAction.DeleteRangeInsert,
+            DefaultActionChoice.AppendOnly => TargetAction.AppendOnly,
+            DefaultActionChoice.MergeByPk => TargetAction.MergeByPk,
+            _ => null,
+        },
+        DefaultCreateIfMissing);
+
+    private void SetTableDefaults(TableDefaults defaults)
+    {
+        _applyingTableDefaults = true; // 불러오기: 규칙에 되돌려 적용하지 않는다(저장된 값 그대로)
+        try
+        {
+            DefaultKind = defaults.Kind switch
+            {
+                RuleKind.All => DefaultKindChoice.All,
+                RuleKind.Period => DefaultKindChoice.Period,
+                RuleKind.Exclude => DefaultKindChoice.Exclude,
+                _ => DefaultKindChoice.Auto,
+            };
+            DefaultAction = defaults.Action switch
+            {
+                TargetAction.DeleteAllInsert => DefaultActionChoice.DeleteAllInsert,
+                TargetAction.DeleteRangeInsert => DefaultActionChoice.DeleteRangeInsert,
+                TargetAction.AppendOnly => DefaultActionChoice.AppendOnly,
+                TargetAction.MergeByPk => DefaultActionChoice.MergeByPk,
+                _ => DefaultActionChoice.Auto,
+            };
+            DefaultCreateIfMissing = defaults.CreateIfMissing;
+        }
+        finally
+        {
+            _applyingTableDefaults = false;
+        }
+    }
+
+    private void ApplyDefaultsToFollowers()
+    {
+        if (_applyingTableDefaults)
+        {
+            return;
+        }
+
+        foreach (var rule in Rules)
+        {
+            ApplyDefaultsTo(rule);
+        }
+    }
+
+    /// <summary>이 테이블에 전체 기본값을 적용한다(따로 바꾼 항목은 건드리지 않는다).</summary>
+    private void ApplyDefaultsTo(TableRuleViewModel rule)
+    {
+        var d = CurrentTableDefaults;
+        var kind = d.Kind switch
+        {
+            null => PeriodChoice.Kind != PeriodKind.None && rule.PeriodColumnOptions.Count > 0 ? RuleKind.Period : RuleKind.All,
+            RuleKind.Period => rule.PeriodColumnOptions.Count > 0 ? RuleKind.Period : RuleKind.All, // 기간 열이 없는 테이블은 모든 행
+            var k => k,
+        };
+        rule.ApplyDefaults(kind, d.Action, d.CreateIfMissing);
+    }
+
+    /// <summary>「전체 값으로」: 이 테이블의 따로 바꾼 항목을 모두 풀고 전체 기본값으로 되돌린다.</summary>
+    public void ResetRuleToDefaults(TableRuleViewModel rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        rule.ClearOverrides();
+        ApplyDefaultsTo(rule);
+    }
+
+    /// <summary>
+    /// 사전 점검 결과로 테이블마다 「대상에 이미 있음」·「만들 수 없음」을 적어 둔다. 이미 정한 값은 바꾸지 않고(점검 결과가 흔들리지 않게),
+    /// 다음에 전체 값을 적용할 때부터 그 테이블의 「없으면 만들기」를 켜지 않는다.
+    /// </summary>
+    public void ApplyPrecheckHints(CopyJob job, PrecheckReport report)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(report);
+        foreach (var rule in job.Tables.Where(t => t.Kind != RuleKind.Exclude))
+        {
+            var key = CopyOwners.Key(job, rule);
+            var codes = report.Items.Where(i => string.Equals(i.Table, key, StringComparison.Ordinal)).Select(i => i.Code).ToHashSet(StringComparer.Ordinal);
+            if (Rules.FirstOrDefault(r => ReferenceEquals(r.LastBuilt, rule)) is not { } vm)
+            {
+                continue;
+            }
+
+            vm.CreateBlocked = codes.Contains(CopyCheckCodes.CreateBlocked) || codes.Contains(CopyCheckCodes.CreateNoPrivilege);
+            vm.TargetExists = !vm.CreateBlocked && !codes.Contains("TargetMissing") && !codes.Contains(CopyCheckCodes.CreateTable);
+        }
     }
 
     /// <summary>
@@ -410,8 +559,12 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
                 FollowsDefaultTarget = string.IsNullOrEmpty(rule.TargetOwner) || string.Equals(rule.TargetOwner, CopyOwners.MapTarget(job, ruleSource), StringComparison.Ordinal),
             };
             vm.DefaultTarget = DefaultTargetFor(vm); // 대상 계정은 저장된 글자 그대로 둔다
+            vm.RestoreOverrides(job.TableDefaults is null ? RuleOverrides.All : rule.Overrides); // 옛 파일: 모든 테이블을 따로 바꾼 것으로 연다(저장된 값이 그대로)
             Rules.Add(vm);
         }
+
+        _legacyTableDefaults = job.TableDefaults is null;
+        SetTableDefaults(job.TableDefaults ?? InitialTableDefaults);
 
         SelectedRule = Rules.FirstOrDefault();
         Variables.Clear();
@@ -467,6 +620,9 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         var targetOwner = string.IsNullOrWhiteSpace(TargetOwner) ? SourceOwner : TargetOwner;
         var defaults = baseJob with { SourceOwner = sourceOwner, TargetOwner = targetOwner };
 
+        // 전체 기본값이 없던 옛 작업은 전체 값도 테이블별 표시도 건드리지 않은 동안 옛 형식 그대로 둔다(모든 테이블이 따로 바꾼 것이라 값이 같다).
+        var legacy = _legacyTableDefaults && CurrentTableDefaults == InitialTableDefaults && Rules.All(r => r.Overrides == RuleOverrides.All);
+
         // 규칙마다 계정을 적어 저장한다(묶음 B 설계 1장): 비었으면 기본 원본 계정, 대상이 비었으면 그 규칙의 기본 대상(화면에 흐린 글자로 보인 계정).
         TableRule Explicit(TableRuleViewModel vm)
         {
@@ -474,6 +630,11 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             var source = rule.SourceOwner ?? sourceOwner;
             var target = rule.TargetOwner ?? (vm.DefaultTarget.Length > 0 ? vm.DefaultTarget : CopyOwners.MapTarget(defaults, source));
             var built = rule with { SourceOwner = source, TargetOwner = target };
+            if (legacy)
+            {
+                built = built with { Overrides = RuleOverrides.None }; // 옛 형식 그대로 다시 쓴다(열기만 한 작업이 바뀐 것으로 보이지 않게)
+            }
+
             vm.LastBuilt = built;
             return built;
         }
@@ -511,6 +672,7 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             Tables = tables,
             Sequences = sequences,
             Variables = [.. Variables.Select(v => v.ToVariable())],
+            TableDefaults = legacy ? null : CurrentTableDefaults,
             Options = new CopyOptions
             {
                 BatchSize = BatchSize,
@@ -663,9 +825,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         SelectedRule = rule;
         await LoadColumnsAsync(rule, new DbObjectRef(table.Owner, table.Table, "TABLE"), sourceSession, ct).ConfigureAwait(true);
 
-        // 기간이 정해진 작업에 업무 날짜 열이 있는 표를 더하면 기간 규칙으로 시작한다. 없으면 모든 행.
-        var kind = PeriodChoice.Kind != PeriodKind.None && rule.PeriodColumnOptions.Count > 0 ? RuleKind.Period : RuleKind.All;
-        rule.ChangeKind(kind);
+        // 전체 기본값으로 채운다(규칙·대상 처리·없으면 만들기). 자동 규칙은 기간이 정해진 작업에 업무 날짜 열이 있는 테이블이면 기간, 아니면 모든 행.
+        ApplyDefaultsTo(rule);
         return rule;
     }
 
@@ -727,4 +888,23 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             SelectedRule = Rules.FirstOrDefault();
         }
     }
+}
+
+/// <summary>전체 기본값 「규칙」: 자동 = 기간이 있고 기간 열이 있는 테이블은 기간, 아니면 모든 행.</summary>
+public enum DefaultKindChoice
+{
+    Auto,
+    All,
+    Period,
+    Exclude,
+}
+
+/// <summary>전체 기본값 「대상 처리」: 자동 = 규칙 종류별 기본값(<see cref="TargetActions.DefaultFor"/>).</summary>
+public enum DefaultActionChoice
+{
+    Auto,
+    DeleteAllInsert,
+    DeleteRangeInsert,
+    AppendOnly,
+    MergeByPk,
 }

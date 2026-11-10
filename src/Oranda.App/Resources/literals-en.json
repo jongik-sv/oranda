@@ -1730,5 +1730,13 @@
   "복사를 실행하면 보낸 문장이 여기에 차례로 보입니다.": "When the copy runs, the statements it sends appear here in order.",
   "작업 로그": "Work log",
   "Tibero 는 읽기 전용 트랜잭션에서도 서버가 쓰기를 막지 않아, 행을 잠그는 SELECT … FOR UPDATE 는 읽기 전용 접속에서 실행하지 않습니다.": "The Tibero server does not block writes even in a read-only transaction, so SELECT … FOR UPDATE, which locks rows, is not run on a read-only connection.",
-  "끌어 놓은 파일은 열 수 없는 형식입니다(SQL·텍스트·작업 공간 파일만 열 수 있습니다)": "The dropped files are in a format that cannot be opened (only SQL, text and workspace files can be opened)"
+  "끌어 놓은 파일은 열 수 없는 형식입니다(SQL·텍스트·작업 공간 파일만 열 수 있습니다)": "The dropped files are in a format that cannot be opened (only SQL, text and workspace files can be opened)",
+  "전체 기본값": "Defaults for all tables",
+  "전체 기본 규칙": "Default rule for all tables",
+  "전체 기본 대상 처리": "Default target handling for all tables",
+  "전체 기본 없으면 만들기": "Default create-if-missing for all tables",
+  "없으면 만들기": "Create if missing",
+  "전체 값으로": "Reset to the defaults",
+  "테이블을 추가할 때 이 값으로 채웁니다. 값을 바꾸면 따로 바꾸지 않은 테이블에만 반영됩니다.": "Filled in when a table is added. Changing a value applies only to tables you have not changed individually.",
+  "대상에 같은 이름의 테이블이 없으면 원본 구조로 만든 뒤 넣습니다. 대상에 이미 있는 테이블과 만들 수 없는 테이블에는 켜지 않습니다.": "If the target has no table of the same name, create it from the source structure and then load it. Not turned on for tables that already exist in the target or cannot be created."
 }

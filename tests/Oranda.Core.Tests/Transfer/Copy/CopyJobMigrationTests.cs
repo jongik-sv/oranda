@@ -83,11 +83,32 @@ public class CopyJobMigrationTests
         Assert.Equal(before, migration.Apply(JsonNode.Parse(before)!).ToJsonString());
 
         var upgraded = CopyJobMigrations.Upgrade(JsonNode.Parse(before)!, 3);
-        Assert.Equal(4, CopyJobSchema.Current);
+        Assert.Equal(5, CopyJobSchema.Current);
         Assert.Equal(CopyJobSchema.Current, (int)upgraded["schemaVersion"]!);
         var job = upgraded.Deserialize(CopyJobJsonContext.Default.CopyJob)!;
         Assert.False(job.Tables[0].CreateIfMissing); // 버전 3 파일에는 이 칸이 없다 = 꺼짐
         Assert.Contains(CopyJobMigrations.All, m => m.FromVersion == 3);
+    }
+
+    [Fact]
+    public void V4_migration_leaves_the_document_alone_and_an_old_file_has_no_table_defaults_or_overrides()
+    {
+        var node = JsonNode.Parse("""
+            {"schemaVersion":4,"id":"1","name":"n","source":{"name":"s","user":"S"},"target":{"name":"t","user":"T"},"maskSalt":"AA==",
+             "sourceOwner":"S","targetOwner":"T",
+             "tables":[{"table":"A","kind":"All","action":"DeleteAllInsert","sourceOwner":"S","targetOwner":"T","createIfMissing":true}]}
+            """)!;
+        var before = node.ToJsonString();
+
+        var migration = new CopyJobMigrationV4();
+        Assert.Equal(4, migration.FromVersion);
+        Assert.Equal(before, migration.Apply(JsonNode.Parse(before)!).ToJsonString());
+
+        var job = CopyJobMigrations.Upgrade(JsonNode.Parse(before)!, 4).Deserialize(CopyJobJsonContext.Default.CopyJob)!;
+        Assert.Null(job.TableDefaults); // 옛 파일 = 전체 기본값 없음(화면이 모든 테이블을 따로 바꾼 것으로 연다)
+        Assert.Equal(RuleOverrides.None, job.Tables[0].Overrides);
+        Assert.True(job.Tables[0].CreateIfMissing);
+        Assert.Contains(CopyJobMigrations.All, m => m.FromVersion == 4);
     }
 
     private static void AssertSame(JsonNode expected, JsonNode actual, string path)

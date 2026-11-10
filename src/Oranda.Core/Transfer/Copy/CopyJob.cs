@@ -9,10 +9,13 @@ namespace Oranda.Core.Transfer.Copy;
 /// 조건의 <c>:이름</c> 을 실행하지 않게(읽기 전용으로 열게) 한다.
 /// 4 = 표 규칙의 「대상에 표가 없으면 만들기」(<see cref="TableRule.CreateIfMissing"/>). 3 → 4 는 바꿀 것이 없다(<see cref="CopyJobMigrationV3"/>, 옛 파일 = 꺼짐).
 /// 버전을 올리는 까닭: 예전 앱이 이 칸을 버린 채 다시 저장해 선택이 사라지지 않게(읽기 전용으로 열게) 한다.
+/// 5 = 테이블 규칙의 전체 기본값(<see cref="CopyJob.TableDefaults"/>)과 테이블별로 따로 바꾼 항목(<see cref="TableRule.Overrides"/>). 4 → 5 는 바꿀 것이 없다(<see cref="CopyJobMigrationV4"/>):
+/// 옛 파일은 <c>tableDefaults</c> 가 없고, 그러면 화면이 모든 테이블을 「따로 바꾼 것」으로 열어 전체 기본값을 바꿔도 저장된 값이 그대로다.
+/// 버전을 올리는 까닭: 예전 앱이 두 칸을 버린 채 다시 저장하면 따로 바꾼 표시가 사라져 전체 값 변경이 저장된 값을 덮어쓸 수 있다(읽기 전용으로 열게).
 /// </summary>
 public static class CopyJobSchema
 {
-    public const int Current = 4;
+    public const int Current = 5;
 }
 
 /// <summary>접속 간 데이터 복사 작업 한 건. 비밀번호는 담지 않는다(설계 6.1).</summary>
@@ -32,6 +35,13 @@ public sealed record CopyJob
 
     /// <summary>조건(직접 조건·추가 조건)에서 <c>:이름</c> 으로 쓰는 작업 변수(<see cref="CopyVariables"/>).</summary>
     public IReadOnlyList<CopyVariable> Variables { get; init; } = [];
+
+    /// <summary>
+    /// 복사 창 위쪽의 전체 기본값(규칙·대상 처리·없으면 만들기). 테이블을 더할 때 채우고, 바꾸면 따로 바꾸지 않은 테이블에만 반영한다.
+    /// 없으면(옛 파일) 모든 테이블을 따로 바꾼 것으로 본다.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TableDefaults? TableDefaults { get; init; }
 
     /// <summary>설계 8.1 「같은 시점 기준으로 읽기」.</summary>
     public bool ConsistentRead { get; init; } = true;
@@ -82,6 +92,23 @@ public sealed record ResolvedPeriod(DateTime? From, DateTime? To)
 
 public enum RuleKind { All, Period, ParentKey, Custom, Exclude }
 
+/// <summary>
+/// 테이블 규칙의 전체 기본값. <paramref name="Kind"/> 가 null 이면 「자동」(기간이 있고 기간 열이 있는 테이블은 기간, 아니면 모든 행),
+/// <paramref name="Action"/> 이 null 이면 「자동」(규칙 종류별 기본 대상 처리, <see cref="TargetActions.DefaultFor"/>).
+/// </summary>
+public sealed record TableDefaults(RuleKind? Kind, TargetAction? Action, bool CreateIfMissing);
+
+/// <summary>테이블이 전체 기본값을 따르지 않고 따로 바꾼 항목.</summary>
+[Flags]
+public enum RuleOverrides
+{
+    None = 0,
+    Kind = 1,
+    Action = 2,
+    CreateIfMissing = 4,
+    All = Kind | Action | CreateIfMissing,
+}
+
 public enum TargetAction { DeleteAllInsert, DeleteRangeInsert, AppendOnly, MergeByPk, Recreate }
 
 /// <summary><paramref name="StringFormat"/> 이 null 이면 DATE·TIMESTAMP 열이다.</summary>
@@ -131,6 +158,10 @@ public sealed record TableRule(string Table, RuleKind Kind, TargetAction Action)
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool CreateIfMissing { get; init; }
+
+    /// <summary>전체 기본값(<see cref="CopyJob.TableDefaults"/>)을 따르지 않고 이 테이블에서 따로 바꾼 항목. 없음이면 파일에 쓰지 않는다.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public RuleOverrides Overrides { get; init; }
 }
 
 public enum CommitMode { PerTable, PerBatch, AtEnd }

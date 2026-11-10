@@ -9,7 +9,7 @@ public static class CopyJobMigrations
     /// <summary>변환기 선택용 파일 종류.</summary>
     public const string FileKind = "copy-job";
 
-    public static IReadOnlyList<ISettingsMigration> All { get; } = [new CopyJobMigrationV1(), new CopyJobMigrationV2(), new CopyJobMigrationV3()];
+    public static IReadOnlyList<ISettingsMigration> All { get; } = [new CopyJobMigrationV1(), new CopyJobMigrationV2(), new CopyJobMigrationV3(), new CopyJobMigrationV4()];
 
     /// <summary>
     /// <paramref name="version"/>(0 이면 1 로 본다)에서 <see cref="CopyJobSchema.Current"/> 까지 한 단계씩 변환한다. 미래 버전은 부른 쪽이 먼저 거른다.
@@ -28,6 +28,20 @@ public static class CopyJobMigrations
         }
 
         return work;
+    }
+}
+
+/// <summary>복사 작업 4 → 5: 전체 기본값(<c>tableDefaults</c>)과 테이블별 <c>overrides</c> 가 생겼다. 버전 4 파일에는 없으므로 바꿀 것이 없다(옛 파일 = 모든 테이블을 따로 바꾼 것으로 연다). 순수 함수다.</summary>
+public sealed class CopyJobMigrationV4 : ISettingsMigration
+{
+    public string FileKind => CopyJobMigrations.FileKind;
+
+    public int FromVersion => 4;
+
+    public JsonNode Apply(JsonNode document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return document;
     }
 }
 

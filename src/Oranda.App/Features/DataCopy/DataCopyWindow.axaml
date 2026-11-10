@@ -451,6 +451,19 @@
                             ToolTip.Tip="선택한 테이블의 열 정보를 원본에서 읽기" IsEnabled="{Binding SelectedRule, Converter={x:Static ObjectConverters.IsNotNull}}" />
                   </StackPanel>
                 </DockPanel>
+                <!-- 전체 기본값: 테이블을 더할 때 채우고, 바꾸면 따로 바꾸지 않은 테이블에만 반영한다. 테이블마다 따로 바꾸면 그 값이 우선(행 메뉴 「전체 값으로」로 되돌림). -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,3">
+                  <TextBlock Text="전체 기본값" Classes="dim" VerticalAlignment="Center"
+                             ToolTip.Tip="테이블을 추가할 때 이 값으로 채웁니다. 값을 바꾸면 따로 바꾸지 않은 테이블에만 반영됩니다." />
+                  <TextBlock Text="규칙" VerticalAlignment="Center" />
+                  <ComboBox x:Name="DefaultKindBox" Classes="compact" MinWidth="96" ItemsSource="{Binding DefaultKindOptions}" SelectedValueBinding="{ReflectionBinding Value}"
+                            SelectedValue="{Binding DefaultKind}" AutomationProperties.Name="전체 기본 규칙" />
+                  <TextBlock Text="대상 처리" VerticalAlignment="Center" />
+                  <ComboBox x:Name="DefaultActionBox" Classes="compact" MinWidth="130" ItemsSource="{Binding DefaultActionOptions}" SelectedValueBinding="{ReflectionBinding Value}"
+                            SelectedValue="{Binding DefaultAction}" AutomationProperties.Name="전체 기본 대상 처리" />
+                  <CheckBox x:Name="DefaultCreateBox" Classes="compact" IsChecked="{Binding DefaultCreateIfMissing}" Content="없으면 만들기" AutomationProperties.Name="전체 기본 없으면 만들기"
+                            ToolTip.Tip="대상에 같은 이름의 테이블이 없으면 원본 구조로 만든 뒤 넣습니다. 대상에 이미 있는 테이블과 만들 수 없는 테이블에는 켜지 않습니다." />
+                </StackPanel>
                 <Border Classes="grid-frame">
                   <!-- 조회 결과와 같은 그리드(MonitorGrid). 행은 코드(MonitorGridBinder)가 Rules 에서 채운다. -->
                   <sm:MonitorGrid x:Name="RuleGrid" AutomationProperties.Name="테이블 규칙" />

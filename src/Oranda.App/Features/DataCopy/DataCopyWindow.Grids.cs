@@ -198,6 +198,7 @@ public partial class DataCopyWindow
             Item("위로", "up", index > 0 && !RuleGridSorted, () => MoveSelectedRule(-1)),
             Item("아래로", "down", index >= 0 && index < (editor?.Rules.Count ?? 0) - 1 && !RuleGridSorted, () => MoveSelectedRule(1)),
             new Separator(),
+            Item("전체 값으로", "refresh", picked is not null && picked.Overrides != RuleOverrides.None, () => editor!.ResetRuleToDefaults(picked!)),
             Item("열 정보 읽기", "columns", picked is not null, () => _ = LoadSelectedColumnsAsync()),
         ];
     }

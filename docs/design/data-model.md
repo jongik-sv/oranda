@@ -318,13 +318,13 @@ select * from emp where empno = :empno;
 
 ### 2.7 `copy-jobs/{작업 이름}.json` — `CopyJob`
 
-접속 간 데이터 복사(PRD EXP-04, 설계 `docs/superpowers/specs/2026-11-06-cross-connection-data-copy-design.md`)의 작업 파일이다. 직렬화는 1.3 의 공통 규칙을 따르며 문맥은 Core 의 `CopyJobJsonContext` 다. 현재 버전 상수는 `CopyJobSchema.Current` = **4** 이다(`SchemaVersions` 에 넣지 않고 복사 쪽에 둔다). 버전 2 는 규칙마다 원본·대상 계정을 둔다: 예전 앱이 새 파일을 읽으면 표마다의 계정을 버리고 작업 대상 계정의 같은 이름 표를 지우게 되므로(의미 변경) 버전을 올렸다. 버전 3 은 작업 변수(`variables`), 버전 4 는 규칙의 「대상에 표가 없으면 만들기」(`tables[].createIfMissing`)이며 둘 다 예전 앱이 칸을 버린 채 다시 저장하지 않게(읽기 전용으로 열게) 올렸다.
+접속 간 데이터 복사(PRD EXP-04, 설계 `docs/superpowers/specs/2026-11-06-cross-connection-data-copy-design.md`)의 작업 파일이다. 직렬화는 1.3 의 공통 규칙을 따르며 문맥은 Core 의 `CopyJobJsonContext` 다. 현재 버전 상수는 `CopyJobSchema.Current` = **5** 이다(`SchemaVersions` 에 넣지 않고 복사 쪽에 둔다). 버전 2 는 규칙마다 원본·대상 계정을 둔다: 예전 앱이 새 파일을 읽으면 표마다의 계정을 버리고 작업 대상 계정의 같은 이름 표를 지우게 되므로(의미 변경) 버전을 올렸다. 버전 3 은 작업 변수(`variables`), 버전 4 는 규칙의 「대상에 표가 없으면 만들기」(`tables[].createIfMissing`)이며 둘 다 예전 앱이 칸을 버린 채 다시 저장하지 않게(읽기 전용으로 열게) 올렸다. 버전 5 는 복사 창 위쪽 전체 기본값(`tableDefaults`: `kind`·`action`·`createIfMissing`, `kind`·`action` 이 null 이면 자동)과 테이블별로 따로 바꾼 항목(`tables[].overrides`: Kind=1·Action=2·CreateIfMissing=4 의 합, 0 이면 쓰지 않는다)이다. 예전 앱이 두 칸을 버리면 따로 바꾼 표시가 사라져 전체 값 변경이 저장된 값을 덮어쓸 수 있어 올렸다.
 
 - 파일 이름은 작업 이름에서 만든다(파일 이름에 못 쓰는 글자와 제어 문자는 `_` 로 바꾸고, UTF-8 80바이트까지). 겹치면 `{이름} (2).json` 처럼 번호를 붙인다. 작업은 파일 이름이 아니라 `id` 로 찾는다.
 - 비밀번호 필드는 모델에 없다. 해시 마스킹의 비밀 값(`maskSalt`)은 들어 있으며, 작업을 내보내고 가져와도 같은 값을 써서 서로 복사한 데이터끼리 조인이 맞게 한다.
 - `schemaVersion` 이 현재보다 크면 읽기 전용으로 연다(4.1 의 미래 버전 규칙). 저장·이름 바꾸기·복제·내보내기는 하지 않고 삭제만 한다.
 - 1 → 2 변환기 `CopyJobMigrationV1`(파일 종류 `copy-job`): 규칙마다 `sourceOwner`·`targetOwner` 를 작업의 값으로, `parent.parentOwner` 를 작업 `sourceOwner` 로, `sequences[].owner` 를 작업 `targetOwner` 로 채운다(이미 있으면 둔다). 읽기(백업 후 다시 쓰기)와 가져오기가 같은 변환기를 쓴다. 예제: `examples/v1/copy-job.json` → `examples/copy-job.json`.
-- 2 → 3(`CopyJobMigrationV2`), 3 → 4(`CopyJobMigrationV3`) 변환기는 바꿀 것이 없다(새 칸이 없으면 기본값 = 꺼짐). 버전만 올려 다시 쓴다. 예제 `examples/copy-job.json` 의 마지막 규칙이 `createIfMissing: true` 를 보인다.
+- 2 → 3(`CopyJobMigrationV2`), 3 → 4(`CopyJobMigrationV3`), 4 → 5(`CopyJobMigrationV4`) 변환기는 바꿀 것이 없다(새 칸이 없으면 기본값 = 꺼짐). 4 → 5: `tableDefaults` 가 없는 옛 파일은 화면이 모든 테이블을 「따로 바꾼 것」으로 열어 전체 기본값을 바꿔도 저장된 값이 그대로이고, 열기만 한 작업은 옛 형식 그대로 다시 쓴다. 버전만 올려 다시 쓴다. 예제 `examples/copy-job.json` 의 마지막 규칙이 `createIfMissing: true` 를 보인다.
 - 가져오기는 기존 작업을 덮어쓰지 않는다. `id` 나 이름이 겹치면 새 `id` 와 ` (2)` 를 붙인 이름으로 저장한다. 가져오기와 복제는 `lastRun` 을 비운다. `schemaVersion` 이 현재보다 큰 파일은 열기는 읽기 전용이지만 가져오기는 거부한다(`InvalidDataException`).
 
 | 필드 | 형식 | 필수 | 기본값 | 설명 |

@@ -906,6 +906,11 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             _checkedSource = Editor.Source!.Profile;
             _checkedTarget = Editor.Target!.Profile;
             await Precheck.RunAsync(sessions, job, _checkedPeriod, ct).ConfigureAwait(true);
+            if (Precheck.Report is { } report)
+            {
+                Editor.ApplyPrecheckHints(job, report); // 대상에 이미 있는 테이블·만들 수 없는 테이블은 다음 전체 값 적용부터 「없으면 만들기」를 켜지 않는다
+            }
+
             Say(Precheck.Notice.Length > 0 ? Precheck.Notice : Precheck.ProgressText, Precheck.HasErrors || Precheck.Notice.Length > 0);
         }
         finally
