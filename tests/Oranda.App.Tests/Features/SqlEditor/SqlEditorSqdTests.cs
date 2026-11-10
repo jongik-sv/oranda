@@ -186,3 +186,102 @@ public sealed partial class SqlEditorTests
         Assert.Equal("저장본 (md)", plain.DisplayTitle);
     });
 }
+
+// DD1: 탐색기·Finder 에서 끌어 놓은 SQL 파일 열기.
+public sealed partial class SqlEditorTests
+{
+    private async Task<string> WriteDropFileAsync(string name, string text = "select 1 from dual")
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Combine(_root, name);
+        await File.WriteAllTextAsync(path, text);
+        return path;
+    }
+
+    [Fact]
+    public async Task Dropped_paths_are_classified_in_drop_order_into_workspace_sql_and_ignored()
+    {
+        var sqd = WriteSqd("w.sqd", "COUNT=1", "NAME=x", "STMT=1", "select 1 from dual", "VAR=0");
+        var sql = await WriteDropFileAsync("a.SQL");
+        var pkb = await WriteDropFileAsync("b.pkb");
+        var png = await WriteDropFileAsync("c.png");
+        var plainXml = await WriteDropFileAsync("d.xml", "<pom/>");
+
+        var (files, ignored) = DroppedWorkspaceFiles.Classify([sql, null, png, Path.Combine(_root, "없음.sql"), sqd, pkb, sql, plainXml], includeMyBatis: false);
+
+        Assert.Equal(
+            [
+                (Path.GetFullPath(sql), DroppedWorkspaceFiles.DropKind.Sql),
+                (Path.GetFullPath(sqd), DroppedWorkspaceFiles.DropKind.Workspace),
+                (Path.GetFullPath(pkb), DroppedWorkspaceFiles.DropKind.Sql),
+            ],
+            files);
+        Assert.Equal(2, ignored); // png, 매퍼가 아닌 xml
+    }
+
+    [Fact]
+    public Task Dropping_several_sql_files_opens_each_through_the_open_command_path_in_order() => Ui.Run(async () =>
+    {
+        var a = await WriteDropFileAsync("a.sql", "select 1 from dual");
+        var b = await WriteDropFileAsync("b.txt", "select 2 from dual");
+        var sqd = WriteSqd("w.sqd", "COUNT=1", "NAME=x", "STMT=1", "select 3 from dual", "VAR=0");
+        var host = new SqlEditorHost();
+        var opened = new List<string>();
+        var notices = 0;
+
+        var handled = await DroppedWorkspaceFiles.OpenDroppedAsync(
+            host,
+            [a, sqd, b],
+            async path =>
+            {
+                opened.Add(path);
+                await host.OpenFileAsync(path, default);
+            },
+            () => notices++,
+            default);
+
+        Assert.True(handled);
+        Assert.Equal([Path.GetFullPath(a), Path.GetFullPath(b)], opened);
+        Assert.Equal(0, notices);
+        Assert.Equal(["a.sql", "b.txt"], host.Tabs.Where(t => t.FilePath is not null).Select(t => t.Title));
+        Assert.Contains(host.Workspaces, w => w.SourcePath == Path.GetFullPath(sqd));
+    });
+
+    [Fact]
+    public Task Dropping_an_already_open_file_activates_its_tab_instead_of_opening_a_duplicate() => Ui.Run(async () =>
+    {
+        var a = await WriteDropFileAsync("a.sql");
+        var b = await WriteDropFileAsync("b.sql");
+        var host = new SqlEditorHost();
+        var first = await host.OpenFileAsync(a, default);
+        await host.OpenFileAsync(b, default);
+        var count = host.Tabs.Count;
+        Assert.NotSame(first, host.Active);
+
+        await DroppedWorkspaceFiles.OpenDroppedAsync(host, [a], p => host.OpenFileAsync(p, default), () => { }, default);
+
+        Assert.Equal(count, host.Tabs.Count);
+        Assert.Same(first, host.Active);
+    });
+
+    [Fact]
+    public async Task Dropping_only_unsupported_files_raises_one_notice_and_opens_nothing()
+    {
+        var png = await WriteDropFileAsync("c.png");
+        var zip = await WriteDropFileAsync("d.zip");
+        var host = new SqlEditorHost();
+        var opened = 0;
+        var notices = 0;
+
+        Assert.True(await DroppedWorkspaceFiles.OpenDroppedAsync(host, [png, zip], _ => { opened++; return Task.CompletedTask; }, () => notices++, default));
+        Assert.Equal(0, opened);
+        Assert.Equal(1, notices);
+
+        // 파일이 아닌 것(없는 경로·빈 값)만이면 처리할 것도 알릴 것도 없다.
+        Assert.False(await DroppedWorkspaceFiles.OpenDroppedAsync(host, [null, Path.Combine(_root, "없음.sql")], _ => Task.CompletedTask, () => notices++, default));
+        Assert.Equal(1, notices);
+
+        // 영어 화면 글이 literals-en.json 에 있다.
+        Assert.True(Oranda.App.Features.Localization.LiteralTranslator.Table.ContainsKey(DroppedWorkspaceFiles.UnsupportedNotice));
+    }
+}

@@ -81,10 +81,16 @@ public partial class MainWindow : Window
     private static IEnumerable<string?> DroppedPaths(DragEventArgs e) =>
         e.DataTransfer.TryGetFiles()?.Select(f => f.TryGetLocalPath()) ?? [];
 
-    /// <summary>Orange 작업 공간(.sqd)을 끌어 오면 놓을 수 있게 한다.</summary>
+    /// <summary>파일(작업 공간 .sqd·매퍼 .xml·SQL 파일, 그 밖의 형식은 안내만)을 끌어 오면 놓을 수 있게 한다.</summary>
     private void OnWorkspaceDragOver(object? sender, DragEventArgs e)
     {
-        if (DroppedWorkspaceFiles.Pick(DroppedPaths(e)).Count > 0)
+        if (HandledElsewhere(e))
+        {
+            return;
+        }
+
+        var (files, ignored) = DroppedWorkspaceFiles.Classify(DroppedPaths(e), SqlEditorHost.Current.MyBatisHooks.OpenHandler is not null);
+        if (files.Count > 0 || ignored > 0)
         {
             e.DragEffects = DragDropEffects.Copy;
         }
@@ -92,14 +98,49 @@ public partial class MainWindow : Window
 
     private async void OnWorkspaceDrop(object? sender, DragEventArgs e)
     {
-        var paths = DroppedPaths(e).ToList();
-        if (DroppedWorkspaceFiles.Pick(paths).Count == 0)
+        if (HandledElsewhere(e))
         {
             return;
         }
 
+        var paths = DroppedPaths(e).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+        if (paths.Count == 0)
+        {
+            return; // 파일이 아닌 끌어 놓기(글자 등)는 건드리지 않는다
+        }
+
         e.Handled = true;
-        await DroppedWorkspaceFiles.OpenAsync(SqlEditorHost.Current, paths, default);
+        await DroppedWorkspaceFiles.OpenDroppedAsync(SqlEditorHost.Current, paths, OpenDroppedSqlFileAsync, DroppedWorkspaceFiles.ShowUnsupportedNotice, default);
+    }
+
+    /// <summary>
+    /// 다른 화면이 이미 처리한 끌어 놓기인가(AI 대화 창의 파일 첨부 등). 편집기 글자 영역(AvaloniaEdit TextArea)이 처리한 것만 창이 이어 받는다 —
+    /// 편집기 위에 놓은 파일도 열기 위해 handledEventsToo 로 받기 때문이다.
+    /// </summary>
+    private static bool HandledElsewhere(DragEventArgs e) =>
+        e.Handled
+        && (e.Source is not Visual source
+            || Avalonia.VisualTree.VisualExtensions.FindAncestorOfType<AvaloniaEdit.Editing.TextArea>(source, includeSelf: true) is null);
+
+    /// <summary>끌어 놓은 SQL 파일을 「파일 열기」 명령(<c>oranda.file.open</c>)과 같은 길로 연다(인코딩·최근 파일·이미 열린 탭 활성화 포함).</summary>
+    private async Task OpenDroppedSqlFileAsync(string path)
+    {
+        try
+        {
+            if (_registry is not null && _keys is not null)
+            {
+                await _registry.ExecuteAsync("oranda.file.open", _keys, path);
+            }
+            else
+            {
+                await SqlEditorHost.Current.OpenFileAsync(path, default);
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError("끌어 놓은 파일 '{0}' 열기 실패: {1}", path, ex);
+            await SqlEditorHost.Current.Dialogs.ShowMessageAsync("파일 열기", "파일을 열지 못했다: " + ex.Message, default);
+        }
     }
 
     /// <summary>앱 조립이 끝난 뒤 창을 셸에 묶는다(메뉴·툴바·키 처리·배치 복원·종료 저장).</summary>
@@ -152,8 +193,9 @@ public partial class MainWindow : Window
         }
 
         DragDrop.SetAllowDrop(this, true);
-        AddHandler(DragDrop.DragOverEvent, OnWorkspaceDragOver);
-        AddHandler(DragDrop.DropEvent, OnWorkspaceDrop);
+        // 편집기(AvaloniaEdit)가 끌어 놓기를 먼저 처리해 Handled 로 만들어도 파일은 여기서 열도록 handledEventsToo 로 받는다.
+        AddHandler(DragDrop.DragOverEvent, OnWorkspaceDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddHandler(DragDrop.DropEvent, OnWorkspaceDrop, RoutingStrategies.Bubble, handledEventsToo: true);
 
         // 포커스가 옮겨지면 그 화면의 포커스 자리를 문맥 키로(commands.md 2.2). 자리가 없는 곳(툴바·메뉴)은 직전 자리를 둔다.
         ContextKeyService.Shared = _keys;

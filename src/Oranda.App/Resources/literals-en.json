@@ -1726,5 +1726,6 @@
   "실제로 보낸 문장과 결과(바인드 값은 기간만, 나머지는 개수만)": "Statements actually sent and their results (bind values: period only, others as counts)",
   "복사를 실행하면 보낸 문장이 여기에 차례로 보입니다.": "When the copy runs, the statements it sends appear here in order.",
   "작업 로그": "Work log",
-  "Tibero 는 읽기 전용 트랜잭션에서도 서버가 쓰기를 막지 않아, 행을 잠그는 SELECT … FOR UPDATE 는 읽기 전용 접속에서 실행하지 않습니다.": "The Tibero server does not block writes even in a read-only transaction, so SELECT … FOR UPDATE, which locks rows, is not run on a read-only connection."
+  "Tibero 는 읽기 전용 트랜잭션에서도 서버가 쓰기를 막지 않아, 행을 잠그는 SELECT … FOR UPDATE 는 읽기 전용 접속에서 실행하지 않습니다.": "The Tibero server does not block writes even in a read-only transaction, so SELECT … FOR UPDATE, which locks rows, is not run on a read-only connection.",
+  "끌어 놓은 파일은 열 수 없는 형식입니다(SQL·텍스트·작업 공간 파일만 열 수 있습니다)": "The dropped files are in a format that cannot be opened (only SQL, text and workspace files can be opened)"
 }
