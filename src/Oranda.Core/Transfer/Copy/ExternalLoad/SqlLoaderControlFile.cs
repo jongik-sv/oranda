@@ -45,6 +45,12 @@ public static class SqlLoaderControlFile
     /// <summary>기존 경로의 바인드 배열·읽기 버퍼 크기(바이트, 20MB).</summary>
     public const int BindSize = 20 * 1024 * 1024;
 
+    /// <summary>direct path 열 배열 한 번의 행 수(<c>COLUMNARRAYROWS</c>, 도구 기본 5,000).</summary>
+    public const int DirectColumnArrayRows = 10_000;
+
+    /// <summary>direct path 서버로 보내는 스트림 버퍼(<c>STREAMSIZE</c>, 바이트, 도구 기본 256,000).</summary>
+    public const int DirectStreamSize = 4 * 1024 * 1024;
+
     public static Encoding FileEncoding { get; } = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>제어 파일 줄바꿈(Windows 는 CRLF).</summary>
@@ -75,6 +81,11 @@ public static class SqlLoaderControlFile
         {
             // 기본 BINDSIZE(1MB)면 ROWS 를 크게 해도 바인드 배열이 1MB 에서 잘린다(로그 「Bind array … maximum of 1048576 bytes」): 함께 키운다.
             b.Append(CultureInfo.InvariantCulture, $", ROWS={rows}, BINDSIZE={BindSize}, READSIZE={BindSize}");
+        }
+        else if (spec.Direct)
+        {
+            // direct path 는 BINDSIZE·ROWS 가 아니라 열 배열 행 수·스트림 크기·읽기 버퍼가 속도를 정한다(#184 로그: Read buffer 1MB 기본값). 결정 97.
+            b.Append(CultureInfo.InvariantCulture, $", COLUMNARRAYROWS={DirectColumnArrayRows}, STREAMSIZE={DirectStreamSize}, READSIZE={BindSize}, MULTITHREADING=TRUE");
         }
 
         b.Append(')').Append(nl);

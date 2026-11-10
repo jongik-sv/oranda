@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Pipes;
+using System.Runtime.Versioning;
 using Oranda.Core.Execution;
 using Oranda.Core.Text;
 using Oranda.Core.Transfer.Copy.ExternalLoad;
@@ -73,27 +75,47 @@ public partial class CopyRunner
             LoaderWorkspace.DeleteStale(external.WorkRoot, TimeSpan.FromDays(1));
         }
 
-        using var workspace = LoaderWorkspace.Create(external.WorkRoot, run.RunId, table.Name);
         var select = run.Builder.SourceSelect(table.Name, shape.CopyColumns);
         run.LogStatement(run.Source, select.Sql, select.Binds);
-        run.Log($"{name} 로 넣습니다({(direct ? "direct path" : "일반 경로")}{(direct && !fresh ? ", 이미 있는 테이블" : string.Empty)}) · 임시 폴더 {workspace.Directory}");
+        var streaming = Streams(external, tool);
+        var chunkRows = !streaming && external.ChunkRows > 0 ? external.ChunkRows : long.MaxValue;
+        var feed = streaming ? "파이프로 흘려 넣음(도구 한 번)"
+            : chunkRows < long.MaxValue ? $"조각 {chunkRows.ToString("N0", CultureInfo.InvariantCulture)}행씩(쓰기와 적재를 겹침)" : "데이터 파일 하나";
+        run.Log($"{name} 로 넣습니다({(direct ? "direct path" : "일반 경로")}{(direct && !fresh ? ", 이미 있는 테이블" : string.Empty)}) · {feed}");
 
-        // 2. 원본 → 데이터 파일
-        var written = Stopwatch.GetTimestamp();
+        // 이미 있는 테이블의 direct path: 도구가 FK·CHECK 를 끄고 넣은 뒤 다시 켠다(REENABLE). 다시 켜지 못한 제약을 찾으려고 전에 꺼진 것을 적어 둔다.
+        var disabledBefore = direct && !fresh ? await DisabledConstraintsAsync(run, plan, ct) : null;
+
+        // 2. 원본 → 조각 데이터 파일 → 도구(결정 97). 조각 k 를 도구가 넣는 동안 조각 k+1 을 쓴다. 도구 실행은 한 번에 하나(같은 테이블 direct path 는 겹칠 수 없다).
+        var started = Stopwatch.GetTimestamp();
         var maxFailed = run.Job.Options.MaxFailedRows;
         var lobFix = new LobFix();
-        HashSet<string>? disabledBefore = null;
-        using (var writer = new LoaderDataWriter(workspace.Directory, columns, ExternalLoadControl.FileFormat(tool.Kind)))
+        var pipe = new ChunkPipe(run, plan, table, shape, columns, tool, login, direct, streaming, maxFailed, estimated, ct);
+        string? problem = null;
+        try
         {
             var size = Math.Max(1, run.Job.Options.BatchSize);
+            ExternalChunk? current = null;
             try
             {
                 await foreach (var row in _bulk.StreamRowsAsync(run.Source, CopyCommonStatements.Query(select), select.Binds, SourceReadOptions(run), ct))
                 {
                     var masked = shape.Apply(row);
                     table.SourceRows++;
+                    if (current is null)
+                    {
+                        var (opened, openProblem) = await pipe.NewChunkAsync();
+                        if (opened is null)
+                        {
+                            problem = openProblem ?? $"{name} 실행을 준비하지 못했습니다";
+                            break; // 파이프: 도구가 파이프를 열기 전에 끝났다
+                        }
+
+                        current = opened;
+                    }
+
                     if (shape.TryToPortable(masked, out var portable, out var error)
-                        && writer.TryWrite(portable, KeyTexts(shape, masked), out error))
+                        && current.Writer.TryWrite(portable, KeyTexts(shape, masked), out error))
                     {
                         lobFix.Note(columns, portable, shape, masked);
                     }
@@ -102,6 +124,7 @@ public partial class CopyRunner
                         table.PendingFailed.Add(new FailedRow(table.Name, shape.KeyOf(masked), error!));
                         if (table.PendingFailed.Count > maxFailed)
                         {
+                            await pipe.DrainAsync();
                             table.Fail($"외부 도구용 데이터 파일을 쓰다 실패 행이 상한({maxFailed.ToString("N0", CultureInfo.InvariantCulture)})을 넘었습니다.");
                             table.PendingFailed.Clear();
                             return ExternalEnd.Failed;
@@ -112,100 +135,66 @@ public partial class CopyRunner
                     {
                         run.Progress(table.Name, table.SourceRows, estimated, PhaseLoad);
                     }
+
+                    if (current.Writer.Records >= chunkRows)
+                    {
+                        problem = await pipe.HandAsync(current);
+                        current = null;
+                        if (problem is not null)
+                        {
+                            break; // 원본 읽기를 멈춘다(열거를 끝내면 질의도 닫힌다)
+                        }
+                    }
                 }
+            }
+            catch (IOException ex) when (!ct.IsCancellationRequested && streaming && current is not null)
+            {
+                // 파이프에 쓰다 끊겼다: 도구가 먼저 끝났다(치명 오류·실패 행 상한 등). 도구의 결과로 판정한다.
+                problem = await pipe.BrokenAsync(current, ex);
+                current = null;
             }
             catch (Exception ex) when (!ct.IsCancellationRequested && (CopyErrors.IsServer(_errors, ex) || ex is IOException or UnauthorizedAccessException))
             {
+                await pipe.DrainAsync();
                 table.Fail((ex is IOException or UnauthorizedAccessException ? "외부 도구용 데이터 파일을 쓰지 못했습니다: " : "원본을 읽지 못했습니다: ") + SafeError(ex.Message));
                 return ExternalEnd.Failed;
             }
 
-            writer.Complete();
-            table.Times.AddRead(written);
-            run.Log($"데이터 파일 {writer.Records.ToString("N0", CultureInfo.InvariantCulture)}행 씀 · {CopyLogText.Elapsed(Stopwatch.GetElapsedTime(written))}");
-
-            // 3. 도구 실행(남은 실패 행 한도 안에서). 취소하면 실행기가 프로세스 트리를 끝내고 OperationCanceledException 을 올린다.
-            var errors = Math.Max(0, maxFailed - table.PendingFailed.Count);
-            PreparedLoad prepared;
-            try
+            if (problem is null && current is not null)
             {
-                prepared = ExternalLoadControl.Prepare(tool.Kind, workspace, tool.Path!, TargetOwnerOf(plan), plan.Rule.Table, columns, writer.DataFile,
-                                                       errors, direct, login, external.PasswordVia);
-            }
-            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
-            {
-                return await FallBackAsync(run, plan, table, $"{name} 실행을 준비하지 못했습니다: {SafeError(ex.Message)}", ct);
+                problem = await pipe.HandAsync(current);
             }
 
-            // 이미 있는 테이블의 direct path: 도구가 FK·CHECK 를 끄고 넣은 뒤 다시 켠다(REENABLE). 다시 켜지 못한 제약을 찾으려고 전에 꺼진 것을 적어 둔다.
-            disabledBefore = direct && !fresh ? await DisabledConstraintsAsync(run, plan, ct) : null;
-            run.Log($"{name} 실행: {prepared.Description}", CopyLogKind.Statement);
-            run.Progress(table.Name, table.SourceRows, estimated, PhaseExternal);
-            var toolStarted = Stopwatch.GetTimestamp();
-            ExternalProcessResult result;
-            try
-            {
-                prepared.Begin(); // 비밀 parfile(조정 결정 89 차선)이면 여기서 쓴다
-                result = await external.Runner.RunAsync(prepared.Start, ct);
-            }
-            catch (Exception ex) when (ex is ExternalProcessException or IOException or UnauthorizedAccessException)
-            {
-                return await FallBackAsync(run, plan, table, $"{name} 을(를) 실행하지 못했습니다: {SafeError(ex.Message)}", ct);
-            }
-            finally
-            {
-                if (!prepared.End())
-                {
-                    run.Notices.Add($"{table.Name}: {name} 의 임시 parfile 을 바로 지우지 못했습니다(작업 폴더 정리가 다시 지웁니다).");
-                }
-
-                table.Times.AddWrite(toolStarted);
-                table.Times.AddLoad(written); // 적재 구간 = 데이터 파일 쓰기(읽기) + 도구(쓰기). 결과의 Times 로 나간다(#182)
-                table.Pumped = true;
-            }
-
-            // 로그 파일을 만들기 전에 멈췄으면(접속 실패 등) 표준 출력을 같은 규칙으로 읽는다.
-            var logText = workspace.ReadText(prepared.LogFile);
-            var log = ExternalLoadControl.ParseLog(tool.Kind, logText ?? result.StandardOutput);
-            run.Log($"{name} 끝 · 종료 코드 {result.ExitCode.ToString(CultureInfo.InvariantCulture)} · 넣음 {(log.Loaded is { } n ? n.ToString("N0", CultureInfo.InvariantCulture) : "모름")}"
-                    + $" · 거부 {log.Rejected.ToString("N0", CultureInfo.InvariantCulture)} · {CopyLogText.Elapsed(Stopwatch.GetElapsedTime(toolStarted))}");
-            if (ToolSummary(logText) is { Length: > 0 } summary)
-            {
-                run.Log($"{name} 로그 요약: {summary}"); // Path used·Bind array·Elapsed time 등(속도 확인용)
-            }
-            foreach (var fatal in log.Fatal.Take(5))
-            {
-                run.Log($"{name}: {SafeError(fatal)}", CopyLogKind.Warning);
-            }
-
-            // 4. 결과 판정
-            var problem = ExternalProblem(tool.Kind, result, log, table.PendingFailed.Count, maxFailed);
-            if (problem is not null)
-            {
-                // 원인을 볼 수 있게 도구의 표준 출력·오류와 로그 파일을 작업 로그에 남긴다(비밀번호는 가린다, 길면 자른다).
-                run.Log($"{name} 출력(실패 원인 확인용):\n" + ToolOutput(result, logText, login.Password), CopyLogKind.Warning);
-                if (log.Loaded is not 0 && plan.Rule.Action == TargetAction.AppendOnly && !fresh)
-                {
-                    var left = log.Loaded is { } l ? l.ToString("N0", CultureInfo.InvariantCulture) + "행" : "행(수를 모름)";
-                    table.Fail($"{name} 적재가 실패했습니다({problem}). 추가만 하기라 도구가 넣은 {left}이 남아 있을 수 있어 기본 방식으로 다시 넣지 않았습니다.");
-                    table.Loaded = log.Loaded ?? 0;
-                    table.PendingFailed.Clear();
-                    return ExternalEnd.Failed;
-                }
-
-                return await FallBackAsync(run, plan, table, $"{name} 적재가 실패했습니다({problem})", ct);
-            }
-
-            var keys = writer.ReadKeys(log.Rejects.Select(r => r.Record).ToHashSet());
-            foreach (var reject in log.Rejects)
-            {
-                var key = keys.TryGetValue(reject.Record, out var texts) ? KeyOf(shape, texts) : new Dictionary<string, string?>(StringComparer.Ordinal);
-                table.PendingFailed.Add(new FailedRow(table.Name, key, SafeError(reject.Error)));
-            }
-
-            table.Loaded = log.Loaded!.Value;
+            problem ??= await pipe.FinishAsync();
+        }
+        finally
+        {
+            await pipe.DrainAsync(); // 취소·예외로 나가도 도는 도구를 기다리고 조각 폴더를 지운다
+            table.Times.AddReadTicks(pipe.WriteTicks);
+            table.Times.AddWriteTicks(pipe.ToolTicks);
+            table.Times.AddLoad(started); // 적재 구간 = 조각 쓰기 + 도구(겹침). 결과의 Times 로 나간다(#182)
+            table.Pumped = true;
         }
 
+        run.Log($"데이터 파일 {pipe.Records.ToString("N0", CultureInfo.InvariantCulture)}행 · 조각 {pipe.Chunks.ToString(CultureInfo.InvariantCulture)}개{(streaming ? "(파이프)" : string.Empty)}"
+                + $" · 쓰기 {CopyLogText.Elapsed(Stopwatch.GetElapsedTime(0, pipe.WriteTicks))} · 도구 {CopyLogText.Elapsed(Stopwatch.GetElapsedTime(0, pipe.ToolTicks))}"
+                + $" · 전체 {CopyLogText.Elapsed(Stopwatch.GetElapsedTime(started))}");
+
+        // 3. 결과 판정
+        if (problem is not null)
+        {
+            if (pipe.Loaded > 0 && plan.Rule.Action == TargetAction.AppendOnly && !fresh)
+            {
+                table.Fail($"{name} 적재가 실패했습니다({problem}). 추가만 하기라 도구가 넣은 {pipe.Loaded.ToString("N0", CultureInfo.InvariantCulture)}행이 남아 있어 기본 방식으로 다시 넣지 않았습니다.");
+                table.Loaded = pipe.Loaded;
+                table.PendingFailed.Clear();
+                return ExternalEnd.Failed;
+            }
+
+            return await FallBackAsync(run, plan, table, $"{name} 적재가 실패했습니다({problem})", ct);
+        }
+
+        table.Loaded = pipe.Loaded;
         await FixLobNullsAsync(run, plan, table, shape, lobFix, ct);
         if (direct && !fresh)
         {
@@ -223,6 +212,353 @@ public partial class CopyRunner
         table.Note($"외부 도구({name})로 넣었습니다.");
         table.LoadCompleted = table.Outcome != CopyOutcome.Failed;
         return ExternalEnd.Loaded;
+    }
+
+    /// <summary>파이프로 흘려 넣는가(결정 98): 설정이 파이프이고 SQL*Loader·Windows 일 때만.</summary>
+    private static bool Streams(CopyExternalLoad external, ExternalToolInfo tool) =>
+        external.Feed == LoaderFeed.Pipe && tool.Kind == ExternalLoaderKind.SqlLoader && OperatingSystem.IsWindows();
+
+    /// <summary>
+    /// 조각 하나: 작업 폴더와 그 데이터 파일 쓰기(레코드 번호는 조각 안에서 1부터 — 거절 행 키는 그 조각의 키 파일에서 찾는다).
+    /// <see cref="Pipe"/> 가 있으면 데이터는 파일이 아니라 그 파이프로 간다(결정 98).
+    /// </summary>
+    private sealed class ExternalChunk(int index, LoaderWorkspace workspace, LoaderDataWriter writer, NamedPipeServerStream? pipe = null) : IDisposable
+    {
+        public int Index { get; } = index;
+
+        public LoaderWorkspace Workspace { get; } = workspace;
+
+        public LoaderDataWriter Writer { get; } = writer;
+
+        public NamedPipeServerStream? Pipe { get; } = pipe;
+
+        public void Dispose()
+        {
+            if (Pipe is null)
+            {
+                Writer.Dispose();
+            }
+            else
+            {
+                // 파이프: 도구가 먼저 끝났거나 연결 전이면 비우기가 실패한다(남은 데이터는 버린다).
+                try
+                {
+                    Writer.Dispose();
+                }
+                catch (Exception ex) when (ex is IOException or InvalidOperationException or ObjectDisposedException)
+                {
+                }
+
+                Pipe.Dispose();
+            }
+
+            Workspace.Dispose();
+        }
+    }
+
+    /// <summary>조각 하나의 도구 실행 결과.</summary>
+    private sealed record ChunkRun(ExternalProcessResult Result, LoaderLogResult Log, string? LogText);
+
+    /// <summary>
+    /// 조각 파일 쓰기와 도구 실행 겹치기(결정 97). <see cref="HandAsync"/> = 다 쓴 조각을 넘긴다: 앞 조각의 도구가 끝나기를 기다려 판정한 뒤 이 조각의 도구를 띄우고 바로 돌아온다
+    /// (부른 쪽은 다음 조각을 쓴다). <see cref="FinishAsync"/> = 마지막 도구를 기다려 판정. 실패 이유(문자열)를 돌려주면 부른 쪽이 멈춘다. <see cref="DrainAsync"/> = 정리(예외·취소 포함).
+    /// <para>
+    /// 파이프(<paramref name="streaming"/>, 결정 98): 조각은 하나뿐이다. <see cref="NewChunkAsync"/> 가 파이프를 만들고 도구를 띄운 뒤 도구가 파이프를 열 때까지 기다린다.
+    /// 부른 쪽이 행을 쓰는 동안 도구가 읽고, <see cref="HandAsync"/> 가 도구가 다 읽기를 기다려 파이프를 닫고(도구는 파일 끝으로 본다) 도구 결과를 판정한다.
+    /// 중간에 멈추면(<see cref="DrainAsync"/>) 도구를 먼저 끝낸다 — 파이프를 닫으면 도구가 받은 데까지 넣고 확정하기 때문이다.
+    /// </para>
+    /// </summary>
+    private sealed class ChunkPipe(RunState run, CopyTablePlan plan, TableState table, RowShape shape, IReadOnlyList<LoaderColumn> columns,
+                                   ExternalToolInfo tool, ExternalLoadLogin login, bool direct, bool streaming, int maxFailed, long? estimated, CancellationToken ct)
+    {
+        /// <summary>파이프 쓰기 버퍼(바이트).</summary>
+        private const int PipeBufferBytes = 1 << 20;
+
+        private readonly List<ExternalChunk> _open = [];
+        private ExternalChunk? _pendingChunk;
+        private Task<ChunkRun>? _pending;
+        private CancellationTokenSource? _toolCts;
+        private long _chunkStarted;
+
+        public long Loaded { get; private set; }
+
+        public long Records { get; private set; }
+
+        public int Chunks { get; private set; }
+
+        /// <summary>조각을 쓰는 데(원본 읽기 포함) 쓴 시간: 조각의 첫 행부터 다 쓸 때까지. 도구를 기다린 시간은 들지 않는다(파이프는 도구가 읽기를 기다린 시간이 든다).</summary>
+        public long WriteTicks { get; private set; }
+
+        /// <summary>도구가 돈 시간(조각 합).</summary>
+        public long ToolTicks { get; private set; }
+
+        private string Name => CopyLoad.ToolName(tool.Kind);
+
+        /// <summary>새 조각. 파이프면 도구를 띄우고 파이프를 열 때까지 기다린다 — 그 전에 도구가 끝나면 (null, 실패 이유).</summary>
+        public async Task<(ExternalChunk? Chunk, string? Problem)> NewChunkAsync()
+        {
+            Chunks++;
+            var workspace = LoaderWorkspace.Create(run.External!.WorkRoot, run.RunId, table.Name);
+            var format = ExternalLoadControl.FileFormat(tool.Kind);
+            if (!streaming)
+            {
+                var chunk = new ExternalChunk(Chunks, workspace, new LoaderDataWriter(workspace.Directory, columns, format));
+                _open.Add(chunk);
+                _chunkStarted = Stopwatch.GetTimestamp();
+                return (chunk, null);
+            }
+
+            ExternalChunk piped;
+            NamedPipeServerStream? server = null;
+            try
+            {
+                // 현재 사용자만 열 수 있는 파이프(다른 사용자가 먼저 붙어 데이터를 읽지 못하게). 이름은 실행마다 새로.
+                var pipeName = $"oranda-load-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}-{Guid.NewGuid():N}";
+                server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+                                                   PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 0, PipeBufferBytes);
+                piped = new ExternalChunk(Chunks, workspace, new LoaderDataWriter(workspace.Directory, columns, format, server, PipePath(pipeName)), server);
+            }
+            catch
+            {
+                server?.Dispose();
+                workspace.Dispose();
+                throw;
+            }
+
+            _open.Add(piped);
+            _chunkStarted = Stopwatch.GetTimestamp();
+            if (Start(piped) is { } problem)
+            {
+                return (null, problem);
+            }
+
+            using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var connect = piped.Pipe!.WaitForConnectionAsync(stop.Token);
+            if (await Task.WhenAny(connect, _pending!) != connect)
+            {
+                await stop.CancelAsync();
+                try
+                {
+                    await connect;
+                }
+                catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+                {
+                }
+
+                ct.ThrowIfCancellationRequested();
+                return (null, await JudgePendingAsync() ?? $"{Name} 이(가) 데이터 파이프를 열지 않고 끝났습니다");
+            }
+
+            await connect;
+            return (piped, null);
+        }
+
+        public async Task<string?> HandAsync(ExternalChunk chunk)
+        {
+            if (streaming)
+            {
+                // 도구가 다 읽기를 기다려 파이프를 닫는다(도구는 파일 끝으로 본다). 그 뒤 도구가 끝나기를 기다려 판정.
+                string? broken = null;
+                try
+                {
+                    chunk.Writer.Flush();
+                    if (OperatingSystem.IsWindows())
+                    {
+                        WaitForDrain(chunk.Pipe!);
+                    }
+
+                    chunk.Writer.Complete();
+                }
+                catch (IOException ex)
+                {
+                    broken = SafeError(ex.Message);
+                }
+
+                WriteTicks += Stopwatch.GetTimestamp() - _chunkStarted;
+                Records += chunk.Writer.Records;
+                return await JudgePendingAsync() ?? (broken is null ? null : $"{Name} 이(가) 데이터를 다 읽기 전에 파이프를 닫았습니다: {broken}");
+            }
+
+            chunk.Writer.Complete();
+            WriteTicks += Stopwatch.GetTimestamp() - _chunkStarted;
+            Records += chunk.Writer.Records;
+            if (await JudgePendingAsync() is { } problem)
+            {
+                return problem;
+            }
+
+            return Start(chunk);
+        }
+
+        /// <summary>파이프에 쓰다 끊겼다(도구가 먼저 닫았다): 쓰기를 접고 도구 결과로 판정한다.</summary>
+        public async Task<string> BrokenAsync(ExternalChunk chunk, IOException ex)
+        {
+            try
+            {
+                chunk.Writer.Complete();
+            }
+            catch (Exception e) when (e is IOException or InvalidOperationException or ObjectDisposedException)
+            {
+            }
+
+            WriteTicks += Stopwatch.GetTimestamp() - _chunkStarted;
+            Records += chunk.Writer.Records;
+            return await JudgePendingAsync() ?? $"{Name} 이(가) 데이터를 다 읽기 전에 파이프를 닫았습니다: {SafeError(ex.Message)}";
+        }
+
+        public Task<string?> FinishAsync() => JudgePendingAsync();
+
+        /// <summary>도는 도구를 기다리고(결과는 버린다) 남은 조각 폴더를 지운다. 파이프면 도구를 먼저 끝낸다(받은 데까지 확정하지 않게). 여러 번 불러도 된다.</summary>
+        public async Task DrainAsync()
+        {
+            if (_pending is { } pending)
+            {
+                _pending = null;
+                if (streaming && _toolCts is { } toolCts)
+                {
+                    await toolCts.CancelAsync(); // 실행기가 프로세스 트리를 끝낸다
+                }
+
+                try
+                {
+                    await pending;
+                }
+                catch (Exception ex) when (ex is OperationCanceledException or ExternalProcessException or IOException or UnauthorizedAccessException)
+                {
+                    // 이미 실패·취소로 나가는 길이다.
+                }
+            }
+
+            foreach (var chunk in _open)
+            {
+                chunk.Dispose();
+                if (chunk.Workspace.CleanupFailure is { } failure)
+                {
+                    run.Notices.Add($"{table.Name}: 외부 도구 임시 폴더를 지우지 못했습니다({failure}).");
+                }
+            }
+
+            _open.Clear();
+            _toolCts?.Dispose();
+            _toolCts = null;
+        }
+
+        /// <summary>이름 있는 파이프의 Win32 경로.</summary>
+        internal static string PipePath(string pipeName) => @"\\.\pipe\" + pipeName;
+
+        [SupportedOSPlatform("windows")]
+        private static void WaitForDrain(NamedPipeServerStream pipe) => pipe.WaitForPipeDrain();
+
+        /// <summary>이 조각의 도구를 띄운다(기다리지 않음). 준비하지 못하면 실패 이유.</summary>
+        private string? Start(ExternalChunk chunk)
+        {
+            // 남은 실패 행 한도 안에서 이 조각을 넘긴다.
+            var errors = Math.Max(0, maxFailed - table.PendingFailed.Count);
+            PreparedLoad prepared;
+            try
+            {
+                prepared = ExternalLoadControl.Prepare(tool.Kind, chunk.Workspace, tool.Path!, TargetOwnerOf(plan), plan.Rule.Table, columns, chunk.Writer.DataFile,
+                                                       errors, direct, login, run.External!.PasswordVia);
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                return $"{Name} 실행을 준비하지 못했습니다: {SafeError(ex.Message)}";
+            }
+
+            if (chunk.Index == 1)
+            {
+                run.Log($"{Name} 실행: {prepared.Description}", CopyLogKind.Statement);
+            }
+
+            if (!streaming)
+            {
+                run.Progress(table.Name, table.SourceRows, estimated, PhaseExternal);
+            }
+
+            _toolCts?.Dispose();
+            _toolCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _pendingChunk = chunk;
+            _pending = RunToolAsync(chunk, prepared, _toolCts.Token);
+            return null;
+        }
+
+        private async Task<ChunkRun> RunToolAsync(ExternalChunk chunk, PreparedLoad prepared, CancellationToken token)
+        {
+            var toolStarted = Stopwatch.GetTimestamp();
+            ExternalProcessResult result;
+            try
+            {
+                prepared.Begin(); // 비밀 parfile(조정 결정 89 차선)이면 여기서 쓴다
+                result = await run.External!.Runner.RunAsync(prepared.Start, token);
+            }
+            finally
+            {
+                if (!prepared.End())
+                {
+                    run.Notices.Add($"{table.Name}: {Name} 의 임시 parfile 을 바로 지우지 못했습니다(작업 폴더 정리가 다시 지웁니다).");
+                }
+
+                ToolTicks += Stopwatch.GetTimestamp() - toolStarted;
+            }
+
+            // 로그 파일을 만들기 전에 멈췄으면(접속 실패 등) 표준 출력을 같은 규칙으로 읽는다.
+            var logText = chunk.Workspace.ReadText(prepared.LogFile);
+            return new ChunkRun(result, ExternalLoadControl.ParseLog(tool.Kind, logText ?? result.StandardOutput), logText);
+        }
+
+        /// <summary>앞 조각의 도구를 기다려 판정한다: 실패 이유 또는 null(넣은 수·거절 행을 반영하고 그 조각 폴더를 지운다).</summary>
+        private async Task<string?> JudgePendingAsync()
+        {
+            if (_pending is not { } pending || _pendingChunk is not { } chunk)
+            {
+                return null;
+            }
+
+            ChunkRun done;
+            try
+            {
+                done = await pending;
+            }
+            catch (Exception ex) when (ex is ExternalProcessException or IOException or UnauthorizedAccessException)
+            {
+                _pending = null;
+                return $"{Name} 을(를) 실행하지 못했습니다: {SafeError(ex.Message)}";
+            }
+            _pending = null;
+            _pendingChunk = null;
+            var (result, log, logText) = done;
+            run.Log($"{Name} 끝(조각 {chunk.Index.ToString(CultureInfo.InvariantCulture)}) · 종료 코드 {result.ExitCode.ToString(CultureInfo.InvariantCulture)}"
+                    + $" · 넣음 {(log.Loaded is { } n ? n.ToString("N0", CultureInfo.InvariantCulture) : "모름")} · 거부 {log.Rejected.ToString("N0", CultureInfo.InvariantCulture)}");
+            if (ToolSummary(logText) is { Length: > 0 } summary)
+            {
+                run.Log($"{Name} 로그 요약: {summary}"); // Path used·Bind array·Elapsed time 등(속도 확인용)
+            }
+
+            foreach (var fatal in log.Fatal.Take(5))
+            {
+                run.Log($"{Name}: {SafeError(fatal)}", CopyLogKind.Warning);
+            }
+
+            Loaded += log.Loaded ?? 0;
+            var problem = ExternalProblem(tool.Kind, result, log, table.PendingFailed.Count, maxFailed);
+            if (problem is not null)
+            {
+                // 원인을 볼 수 있게 도구의 표준 출력·오류와 로그 파일을 작업 로그에 남긴다(비밀번호는 가린다, 길면 자른다).
+                run.Log($"{Name} 출력(실패 원인 확인용):\n" + ToolOutput(result, logText, login.Password), CopyLogKind.Warning);
+                return problem;
+            }
+
+            var keys = chunk.Writer.ReadKeys(log.Rejects.Select(r => r.Record).ToHashSet());
+            foreach (var reject in log.Rejects)
+            {
+                var key = keys.TryGetValue(reject.Record, out var texts) ? KeyOf(shape, texts) : new Dictionary<string, string?>(StringComparer.Ordinal);
+                table.PendingFailed.Add(new FailedRow(table.Name, key, SafeError(reject.Error)));
+            }
+
+            chunk.Dispose();
+            _open.Remove(chunk);
+            return null;
+        }
     }
 
     /// <summary>도구 로그에서 속도를 보는 줄(경로·바인드 배열·읽기 버퍼·걸린 시간)만 한 줄로.</summary>

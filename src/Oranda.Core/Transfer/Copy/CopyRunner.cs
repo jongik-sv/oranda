@@ -2420,6 +2420,12 @@ public partial class CopyRunner : ICopyRunner
             Interlocked.CompareExchange(ref _firstRow, spent, -1);
         }
 
+        /// <summary>읽기 시간을 Stopwatch 틱으로 더한다(외부 도구: 조각 데이터 파일 쓰기, 결정 97).</summary>
+        public void AddReadTicks(long ticks) => Interlocked.Add(ref _read, Math.Max(0, ticks));
+
+        /// <summary>쓰기 시간을 Stopwatch 틱으로 더한다(외부 도구: 도구가 돈 시간의 합).</summary>
+        public void AddWriteTicks(long ticks) => Interlocked.Add(ref _write, Math.Max(0, ticks));
+
         /// <summary>적재 구간(원본 질의 시작 → 마지막 배치 쓰기 끝) 경과. 행/초의 기준이다.</summary>
         public void AddLoad(long started) => Interlocked.Add(ref _load, Stopwatch.GetTimestamp() - started);
 

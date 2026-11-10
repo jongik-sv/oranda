@@ -198,6 +198,159 @@ public sealed class CopyExternalLoadRunnerTests : IDisposable
         Assert.All(result.Notices, n => Assert.DoesNotContain(Password, n, StringComparison.Ordinal));
     }
 
+    // ---- 조각(결정 97): 조각 k 를 도구가 넣는 동안 조각 k+1 을 쓴다 ----
+
+    [Fact]
+    public async Task Chunks_run_the_tool_once_per_chunk_in_order_and_add_up_the_loaded_rows()
+    {
+        var f = new Fixture(_root, TargetAction.DeleteAllInsert, chunkRows: 2);
+        f.Tool.OnRun = (start, dir) =>
+        {
+            var records = f.Tool.Runs[^1].Records;
+            File.WriteAllText(Path.Combine(dir, "load.log"), Log(records));
+            return new ExternalProcessResult(0, string.Empty, string.Empty);
+        };
+        f.TargetCount = 3;
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Equal([2, 1], f.Tool.Runs.Select(r => r.Records).ToArray());
+        Assert.NotEqual(f.Tool.Runs[0].Directory, f.Tool.Runs[1].Directory); // 조각마다 작업 폴더
+        Assert.All(f.Tool.Runs, r => Assert.False(Directory.Exists(r.Directory)));
+        Assert.Contains(f.Logs, l => l.StartsWith("데이터 파일 3행 · 조각 2개", StringComparison.Ordinal));
+        Assert.Contains(f.Logs, l => l.StartsWith("끝: 성공", StringComparison.Ordinal) && l.Contains("· 3행 넣음", StringComparison.Ordinal));
+        Assert.Single(f.Logs, l => l.StartsWith("SQL*Loader 실행:", StringComparison.Ordinal)); // 명령은 첫 조각만 적는다
+        Assert.DoesNotContain(f.All, x => x.StartsWith("BULK ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_rejected_record_in_a_later_chunk_takes_the_key_of_that_chunk()
+    {
+        var f = new Fixture(_root, TargetAction.DeleteAllInsert, maxFailedRows: 10, chunkRows: 2);
+        f.Tool.OnRun = (start, dir) =>
+        {
+            const string rejections = """
+                Record 1: Rejected - Error on table "DST"."ORDERS".
+                ORA-00001: unique constraint (DST.PK_ORDERS) violated
+
+                """;
+            var second = f.Tool.Runs.Count == 2;
+            File.WriteAllText(Path.Combine(dir, "load.log"), second ? Log(0, 1, rejections) : Log(2));
+            return new ExternalProcessResult(second ? 2 : 0, string.Empty, string.Empty);
+        };
+        f.TargetCount = 2;
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(CopyOutcome.PartiallyFailed, result.Outcome);
+        var failed = Assert.Single(result.FailedRows);
+        Assert.Equal("3", failed.Key["ID"]); // 두 번째 조각의 첫 레코드 = 원본 세 번째 행
+        Assert.Contains("ORA-00001", failed.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_failed_later_chunk_stops_and_reloads_the_whole_table_the_standard_way()
+    {
+        var f = new Fixture(_root, TargetAction.DeleteAllInsert, chunkRows: 2);
+        f.Tool.OnRun = (start, dir) =>
+        {
+            if (f.Tool.Runs.Count == 1)
+            {
+                File.WriteAllText(Path.Combine(dir, "load.log"), Log(2));
+                return new ExternalProcessResult(0, string.Empty, string.Empty);
+            }
+
+            File.WriteAllText(Path.Combine(dir, "load.log"), "SQL*Loader-350: Syntax error at line 3.\n");
+            return new ExternalProcessResult(1, string.Empty, string.Empty);
+        };
+        f.TargetCount = 3;
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        Assert.Equal(2, f.Tool.Runs.Count);
+        var insert = Assert.Single(f.Bulk.Dml); // 기본 방식으로 전부 다시
+        Assert.Equal(3, insert.Rows);
+        Assert.Contains("기본 방식으로 다시 넣었습니다", Assert.Single(result.Tables).Message, StringComparison.Ordinal);
+        Assert.All(f.Tool.Runs, r => Assert.False(Directory.Exists(r.Directory)));
+    }
+
+    // ---- 기본 = 데이터 파일 하나, 파이프(결정 98) ----
+
+    [Fact]
+    public async Task Default_feed_writes_one_data_file_and_runs_the_tool_once()
+    {
+        var f = new Fixture(_root, TargetAction.DeleteAllInsert);
+        f.Tool.OnRun = (start, dir) =>
+        {
+            File.WriteAllText(Path.Combine(dir, "load.log"), Log(f.Tool.Runs[^1].Records));
+            return new ExternalProcessResult(0, string.Empty, string.Empty);
+        };
+        f.TargetCount = 3;
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        var run = Assert.Single(f.Tool.Runs);
+        Assert.True(run.DataExisted);
+        Assert.Equal(3, run.Records);
+        Assert.Contains(f.Logs, l => l.StartsWith("SQL*Loader 로 넣습니다", StringComparison.Ordinal) && l.EndsWith("데이터 파일 하나", StringComparison.Ordinal));
+        Assert.Contains(f.Logs, l => l.StartsWith("데이터 파일 3행 · 조각 1개 ·", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Pipe_feed_starts_the_tool_once_and_streams_every_row_through_the_pipe()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return; // 이름 있는 파이프 적재는 Windows 만
+        }
+
+        var f = new Fixture(_root, TargetAction.DeleteAllInsert, feed: LoaderFeed.Pipe);
+        f.Tool.OnRun = (start, dir) =>
+        {
+            File.WriteAllText(Path.Combine(dir, "load.log"), Log(f.Tool.Runs[^1].Records));
+            return new ExternalProcessResult(0, string.Empty, string.Empty);
+        };
+        f.TargetCount = 3;
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
+        var run = Assert.Single(f.Tool.Runs);
+        Assert.Equal(3, run.Records); // 세 행 모두 파이프로 갔다
+        Assert.False(run.DataExisted); // 데이터 파일은 만들지 않는다
+        Assert.Contains(@"INFILE '\\.\pipe\oranda-load-", run.Control, StringComparison.Ordinal);
+        Assert.Contains(f.Logs, l => l.StartsWith("SQL*Loader 로 넣습니다", StringComparison.Ordinal) && l.Contains("파이프로 흘려 넣음", StringComparison.Ordinal));
+        Assert.Contains(f.Logs, l => l.StartsWith("데이터 파일 3행 · 조각 1개(파이프)", StringComparison.Ordinal));
+        Assert.Contains(f.Logs, l => l.StartsWith("끝: 성공", StringComparison.Ordinal) && l.Contains("· 3행 넣음", StringComparison.Ordinal));
+        Assert.DoesNotContain(f.All, x => x.StartsWith("BULK ", StringComparison.Ordinal));
+        Assert.False(Directory.Exists(run.Directory));
+    }
+
+    [Fact]
+    public async Task Pipe_tool_that_ends_without_opening_the_pipe_cleans_the_table_and_loads_it_the_standard_way()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var f = new Fixture(_root, TargetAction.DeleteAllInsert, feed: LoaderFeed.Pipe);
+        f.Tool.ReadPipe = false;
+        f.Tool.OnRun = (start, dir) =>
+        {
+            File.WriteAllText(Path.Combine(dir, "load.log"), "SQL*Loader-500: Unable to open file (\\\\.\\pipe\\x)\n");
+            return new ExternalProcessResult(1, string.Empty, string.Empty);
+        };
+        f.TargetCount = 3;
+
+        var result = await f.RunAsync();
+
+        AssertFellBack(f, result);
+    }
+
     private static void AssertFellBack(Fixture f, CopyRunResult result)
     {
         Assert.Equal(CopyOutcome.Succeeded, result.Outcome);
@@ -298,7 +451,8 @@ public sealed class CopyExternalLoadRunnerTests : IDisposable
 
     private sealed class Fixture
     {
-        public Fixture(string root, TargetAction action, int maxFailedRows = 100, LoadMethod load = LoadMethod.ExternalTool, bool toolInReport = true)
+        public Fixture(string root, TargetAction action, int maxFailedRows = 100, LoadMethod load = LoadMethod.ExternalTool, bool toolInReport = true,
+                       int chunkRows = CopyExternalLoad.DefaultChunkRows, LoaderFeed feed = LoaderFeed.File)
         {
             Rule = new TableRule("ORDERS", RuleKind.All, action) { Load = LoadMethod.ExternalTool };
             Job = new CopyJob
@@ -334,6 +488,8 @@ public sealed class CopyExternalLoadRunnerTests : IDisposable
             })
             {
                 WorkRoot = root,
+                ChunkRows = chunkRows,
+                Feed = feed,
             };
             var parts = new CopyDbmsParts(Dbms.Oracle, new NoCatalog(), new FakeClassifier(), new FakeDialect(), new FakePrecheckDialect(), new PortableCodec(), new FakeRecreateStep());
             Runner = new CopyRunner(Bulk, Execution, new FakeRunLog(RunRecord), parts, parts);
@@ -400,6 +556,12 @@ public sealed class CopyExternalLoadRunnerTests : IDisposable
 
         public List<ToolRun> Runs { get; } = [];
 
+        /// <summary>제어 파일의 INFILE 이 이름 있는 파이프일 때 파이프를 열어 끝까지 읽는가(false = 열지 않고 바로 <see cref="OnRun"/>).</summary>
+        public bool ReadPipe { get; set; } = true;
+
+        /// <summary>파이프에서 읽은 글(파이프 적재일 때).</summary>
+        public string? PipeText { get; private set; }
+
         public Task<ExternalProcessResult> RunAsync(ExternalProcessStart start, CancellationToken ct)
         {
             fixture.All.Add("TOOL");
@@ -407,9 +569,34 @@ public sealed class CopyExternalLoadRunnerTests : IDisposable
             var data = Path.Combine(dir, LoaderDataWriter.DataFileName);
             var control = Path.Combine(dir, SqlLoaderControlFile.FileName);
             var par = Path.Combine(dir, SqlLoaderCommand.ParFileName);
-            var records = File.Exists(data) ? CountOf(File.ReadAllText(data, Encoding.UTF8), LoaderDataWriter.RecordTerminator) : -1;
-            Runs.Add(new ToolRun(start, dir, File.Exists(data), File.Exists(control), records,
-                File.Exists(control) ? File.ReadAllText(control) : null, File.Exists(par) ? File.ReadAllText(par) : null));
+            var controlText = File.Exists(control) ? File.ReadAllText(control) : null;
+            var parText = File.Exists(par) ? File.ReadAllText(par) : null;
+            const string pipePrefix = @"INFILE '\\.\pipe\";
+            var at = controlText?.IndexOf(pipePrefix, StringComparison.Ordinal) ?? -1;
+            if (at >= 0 && controlText is not null)
+            {
+                // 파이프 적재(결정 98): 도구는 행을 쓰기 전에 뜬다 — 파이프를 열어 앱이 닫을 때까지 읽는다.
+                var from = at + pipePrefix.Length;
+                var pipeName = controlText[from..controlText.IndexOf('\'', from)];
+                return Task.Run(async () =>
+                {
+                    var records = -1;
+                    if (ReadPipe)
+                    {
+                        await using var client = new System.IO.Pipes.NamedPipeClientStream(".", pipeName, System.IO.Pipes.PipeDirection.In);
+                        await client.ConnectAsync(10_000, ct);
+                        using var reader = new StreamReader(client, Encoding.UTF8);
+                        PipeText = await reader.ReadToEndAsync(ct);
+                        records = CountOf(PipeText, LoaderDataWriter.RecordTerminator);
+                    }
+
+                    Runs.Add(new ToolRun(start, dir, false, controlText is not null, records, controlText, parText));
+                    return OnRun(start, dir);
+                }, ct);
+            }
+
+            var count = File.Exists(data) ? CountOf(File.ReadAllText(data, Encoding.UTF8), LoaderDataWriter.RecordTerminator) : -1;
+            Runs.Add(new ToolRun(start, dir, File.Exists(data), controlText is not null, count, controlText, parText));
             return Task.FromResult(OnRun(start, dir));
         }
 

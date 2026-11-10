@@ -89,6 +89,20 @@ public sealed class LoaderDataWriter : IDisposable
 
     /// <summary><paramref name="format"/> 형식으로 쓴다(tbLoader = <see cref="LoaderFileFormat.TbLoader"/>).</summary>
     public LoaderDataWriter(string directory, IReadOnlyList<LoaderColumn> columns, LoaderFileFormat format)
+        : this(format, directory, columns, null, null)
+    {
+    }
+
+    /// <summary>
+    /// 레코드를 파일이 아닌 <paramref name="data"/>(예 이름 있는 파이프, 결정 98)에 쓴다. <paramref name="dataFile"/> = 도구에 줄 그 이름(<see cref="DataFile"/>).
+    /// LOB 파일·키 곁 파일은 <paramref name="directory"/> 에 쓴다. 스트림은 이 객체가 닫는다.
+    /// </summary>
+    public LoaderDataWriter(string directory, IReadOnlyList<LoaderColumn> columns, LoaderFileFormat format, Stream data, string dataFile)
+        : this(format, directory, columns, data ?? throw new ArgumentNullException(nameof(data)), dataFile ?? throw new ArgumentNullException(nameof(dataFile)))
+    {
+    }
+
+    private LoaderDataWriter(LoaderFileFormat format, string directory, IReadOnlyList<LoaderColumn> columns, Stream? data, string? dataFile)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentNullException.ThrowIfNull(columns);
@@ -119,9 +133,9 @@ public sealed class LoaderDataWriter : IDisposable
         _lobFolderMade = new bool[columns.Count];
         Directory = Path.GetFullPath(directory);
         System.IO.Directory.CreateDirectory(Directory);
-        DataFile = Path.Combine(Directory, DataFileName);
+        DataFile = dataFile ?? Path.Combine(Directory, DataFileName);
         KeysFile = Path.Combine(Directory, KeysFileName);
-        _data = Open(DataFile);
+        _data = data is null ? Open(DataFile) : new StreamWriter(data, Utf8, 1 << 16) { NewLine = "\n" };
         try
         {
             _keys = Open(KeysFile);
@@ -256,6 +270,14 @@ public sealed class LoaderDataWriter : IDisposable
         Records = record;
         error = null;
         return true;
+    }
+
+    /// <summary>쓴 레코드를 데이터 스트림으로 내보낸다(닫지 않음). 파이프로 쓸 때 닫기 전에 도구가 다 읽기를 기다리려고 쓴다.</summary>
+    public void Flush()
+    {
+        ObjectDisposedException.ThrowIf(_completed, this);
+        _data.Flush();
+        _keys.Flush();
     }
 
     /// <summary>파일을 비우고 닫는다(도구를 띄우기 전에 부른다). 여러 번 불러도 된다.</summary>

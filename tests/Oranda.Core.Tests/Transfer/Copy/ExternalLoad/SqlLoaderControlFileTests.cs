@@ -33,7 +33,7 @@ public class SqlLoaderControlFileTests
     {
         var lines = Lines(SqlLoaderControlFile.Build(Spec(direct: true)));
 
-        Assert.Equal("OPTIONS (DIRECT=TRUE, ERRORS=50)", lines[0]);
+        Assert.Equal("OPTIONS (DIRECT=TRUE, ERRORS=50, COLUMNARRAYROWS=10000, STREAMSIZE=4194304, READSIZE=20971520, MULTITHREADING=TRUE)", lines[0]);
         Assert.Equal("LOAD DATA", lines[1]);
         Assert.Equal("CHARACTERSET AL32UTF8", lines[2]);
         Assert.Equal(@"INFILE 'C:\t\oranda-load\r1\1-EMP\data.dat' ""str X'1E0A'""", lines[3]);

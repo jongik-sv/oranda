@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Pipes;
 using System.Text;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Connection;
@@ -92,8 +93,11 @@ public sealed class ExternalLoadTests
         Assert.Empty(LeftoverFolders(scope));
     }
 
-    [Fact]
-    public async Task New_table_goes_direct_path_and_gets_its_key_after_the_load()
+    [Theory]
+    [InlineData(LoaderFeed.File, 2000, "조각 3개 ·")] // 조각 3개(결정 97): direct path 를 차례로 세 번
+    [InlineData(LoaderFeed.File, 0, "조각 1개 ·")] // 기본 = 데이터 파일 하나(결정 98)
+    [InlineData(LoaderFeed.Pipe, 0, "조각 1개(파이프)")] // 이름 있는 파이프(결정 98)
+    public async Task New_table_goes_direct_path_and_gets_its_key_after_the_load(LoaderFeed feed, int chunkRows, string fileLine)
     {
         if (ToolSetting is null)
         {
@@ -107,21 +111,26 @@ public sealed class ExternalLoadTests
         await scope.ExecSourceAsync("BEGIN FOR I IN 1 .. 5000 LOOP INSERT INTO XL_NEW VALUES (I, 'n' || I); END LOOP; COMMIT; END;");
 
         var job = scope.Job(new TableRule("XL_NEW", RuleKind.All, TargetAction.DeleteAllInsert) { CreateIfMissing = true, Load = LoadMethod.ExternalTool });
-        var sessions = (await scope.OpenSessionsAsync(env: ConnectionEnvironment.Development)) with { ExternalLoad = External(scope) };
+        var sessions = (await scope.OpenSessionsAsync(env: ConnectionEnvironment.Development)) with { ExternalLoad = External(scope, chunkRows: chunkRows, feed: feed) };
         var report = await PrecheckAsync(scope, sessions, job);
         Assert.Contains(report.Preview, p => p.Sql.StartsWith("OPTIONS (DIRECT=TRUE", StringComparison.Ordinal));
 
-        var result = await RunAsync(scope, sessions, job, report);
+        var logs = new LogLines();
+        var result = await RunAsync(scope, sessions, job, report, logs);
 
         Assert.True(result.Outcome == CopyOutcome.Succeeded, Describe(result));
         Assert.Equal(5000, await CountAsync($"SELECT COUNT(*) FROM {scope.DstUser}.XL_NEW"));
+        Assert.True(logs.Matching("데이터 파일").Any(l => l.Contains(fileLine, StringComparison.Ordinal)), string.Join(" / ", logs.Matching("데이터 파일", "SQL*Loader")));
+        Assert.Contains("외부 도구(", result.Tables[0].Message ?? string.Empty, StringComparison.Ordinal); // 기본 방식으로 다시 넣지 않았다
         Assert.Equal("XL_NEW_PK:ENABLED:VALID",
             await ListAsync($"SELECT C.CONSTRAINT_NAME || ':' || C.STATUS || ':' || I.STATUS FROM DBA_CONSTRAINTS C JOIN DBA_INDEXES I"
                             + $" ON I.OWNER = C.OWNER AND I.INDEX_NAME = C.INDEX_NAME WHERE C.OWNER = '{scope.DstUser}' AND C.TABLE_NAME = 'XL_NEW' AND C.CONSTRAINT_TYPE = 'P'"));
     }
 
-    [Fact]
-    public async Task Rows_the_target_refuses_become_failed_rows_with_their_keys()
+    [Theory]
+    [InlineData(LoaderFeed.File)]
+    [InlineData(LoaderFeed.Pipe)]
+    public async Task Rows_the_target_refuses_become_failed_rows_with_their_keys(LoaderFeed feed)
     {
         if (ToolSetting is null)
         {
@@ -136,7 +145,7 @@ public sealed class ExternalLoadTests
         await scope.ExecSourceAsync(Block("INSERT INTO XL_REJ VALUES (1, 5)", "INSERT INTO XL_REJ VALUES (2, -1)", "INSERT INTO XL_REJ VALUES (3, 7)"));
 
         var job = scope.Job(new TableRule("XL_REJ", RuleKind.All, TargetAction.DeleteAllInsert) { Load = LoadMethod.ExternalTool });
-        var sessions = (await scope.OpenSessionsAsync(env: ConnectionEnvironment.Development)) with { ExternalLoad = External(scope) };
+        var sessions = (await scope.OpenSessionsAsync(env: ConnectionEnvironment.Development)) with { ExternalLoad = External(scope, feed: feed) };
         var report = await PrecheckAsync(scope, sessions, job);
         Assert.Contains(report.Preview, p => p.Sql.StartsWith("OPTIONS (DIRECT=FALSE", StringComparison.Ordinal)); // CHECK 가 있어 일반 경로(어긋난 행을 거절)
         var result = await RunAsync(scope, sessions, job, report);
@@ -167,13 +176,15 @@ public sealed class ExternalLoadTests
                                     + $" RPAD('note', 120, 'x') FROM DUAL CONNECT BY LEVEL <= {rows.ToString(CultureInfo.InvariantCulture)}");
         await scope.ExecSourceAsync("COMMIT");
 
-        // 세 갈래(결정 96): 기본 방식 · 외부 도구로 이미 있는 테이블(트리거·FK·CHECK 없음 → direct) · 외부 도구로 새 테이블(direct, 키는 적재 뒤). 두 번씩.
-        (string Label, LoadMethod Load, bool Fresh)[] rounds =
+        // 갈래(결정 96·98): 기본 방식 · 외부 도구로 이미 있는 테이블(트리거·FK·CHECK 없음 → direct) · 외부 도구로 새 테이블(direct, 키는 적재 뒤),
+        // 외부 두 갈래는 데이터 파일 하나(기본)와 이름 있는 파이프로. 두 번씩. 파이프가 실패해 기본 방식으로 다시 넣었으면 단언하지 않고 그렇게 적는다(진단).
+        (string Label, LoadMethod Load, bool Fresh, LoaderFeed Feed)[] once =
         [
-            ("기본 방식", LoadMethod.Standard, false), ("외부·기존 테이블", LoadMethod.ExternalTool, false), ("외부·새 테이블", LoadMethod.ExternalTool, true),
-            ("기본 방식", LoadMethod.Standard, false), ("외부·기존 테이블", LoadMethod.ExternalTool, false), ("외부·새 테이블", LoadMethod.ExternalTool, true),
+            ("기본 방식", LoadMethod.Standard, false, LoaderFeed.File),
+            ("외부·기존 테이블·단일 파일", LoadMethod.ExternalTool, false, LoaderFeed.File), ("외부·새 테이블·단일 파일", LoadMethod.ExternalTool, true, LoaderFeed.File),
+            ("외부·기존 테이블·파이프", LoadMethod.ExternalTool, false, LoaderFeed.Pipe), ("외부·새 테이블·파이프", LoadMethod.ExternalTool, true, LoaderFeed.Pipe),
         ];
-        foreach (var (label, load, fresh) in rounds)
+        foreach (var (label, load, fresh, feed) in once.Concat(once))
         {
             if (fresh)
             {
@@ -181,7 +192,7 @@ public sealed class ExternalLoadTests
             }
 
             var job = scope.Job(new TableRule("XL_BIG", RuleKind.All, TargetAction.DeleteAllInsert) { Load = load, CreateIfMissing = fresh });
-            var sessions = (await scope.OpenSessionsAsync(env: ConnectionEnvironment.Development)) with { ExternalLoad = External(scope) };
+            var sessions = (await scope.OpenSessionsAsync(env: ConnectionEnvironment.Development)) with { ExternalLoad = External(scope, feed: feed) };
             var report = await PrecheckAsync(scope, sessions, job);
             if (load == LoadMethod.ExternalTool)
             {
@@ -203,7 +214,19 @@ public sealed class ExternalLoadTests
                 Assert.Contains(logs.Matching("SQL*Loader 로 넣습니다"), l => l.Contains("direct path", StringComparison.Ordinal));
                 // 도구가 실패해 기본 방식으로 다시 넣었으면 측정이 아니다(#177 은 이걸 못 잡았다).
                 var message = result.Tables[0].Message ?? string.Empty;
-                Assert.True(message.Contains("외부 도구(", StringComparison.Ordinal) && !message.Contains("기본 방식으로 다시", StringComparison.Ordinal), Describe(result));
+                var byTool = message.Contains("외부 도구(", StringComparison.Ordinal) && !message.Contains("기본 방식으로 다시", StringComparison.Ordinal);
+                if (feed == LoaderFeed.Pipe && !byTool)
+                {
+                    _out.WriteLine($"{label}: 파이프 적재 실패 → 기본 방식으로 다시 넣음(측정 아님) · {Describe(result)}");
+                    foreach (var line in logs.Matching("SQL*Loader"))
+                    {
+                        _out.WriteLine("  " + (line.Length > 1500 ? line[..1500] + " …" : line));
+                    }
+
+                    continue;
+                }
+
+                Assert.True(byTool, Describe(result));
             }
 
             _out.WriteLine($"{label}: {rows.ToString("N0", CultureInfo.InvariantCulture)}행 · {sw.Elapsed.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture)}초"
@@ -216,6 +239,118 @@ public sealed class ExternalLoadTests
                 _out.WriteLine("  " + line);
             }
         }
+    }
+
+    /// <summary>
+    /// 진단(결정 98): sqlldr 가 Windows 이름 있는 파이프를 INFILE 로 읽는가. 시험이 파이프 서버를 열고(연결마다 1,000행을 쓰고 닫음, 연결 수를 셈)
+    /// 경로 두 모양(<c>\\.\pipe\…</c>·<c>//./pipe/…</c>)과 direct·일반 경로로 sqlldr 를 띄워 넣은 행 수·연결 수·도구 출력을 적는다(비밀번호는 가림).
+    /// 하나도 1,000행을 넣지 못하면 실패하고 메시지에 전부 싣는다.
+    /// </summary>
+    [Fact]
+    public async Task Sqlldr_reads_a_named_pipe_infile()
+    {
+        if (ToolSetting is null || !OperatingSystem.IsWindows())
+        {
+            _out.WriteLine("ORANDA_IT_SQLLDR 가 없거나 Windows 가 아니어서 건너뜀");
+            return;
+        }
+
+        await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
+        using var work = new FolderCleanup(WorkRoot(scope));
+        await scope.CreateTargetTableAsync("XL_PIPE", "ID NUMBER, NAME VARCHAR2(20)");
+        var runner = new TestProcessRunner();
+        var tool = new ExternalToolProbe(runner, new SystemExternalToolEnvironment()).Locate(ExternalLoaderKind.SqlLoader, ToolSetting == "auto" ? null : ToolSetting).Path;
+        Assert.NotNull(tool);
+        var dir = Path.Combine(WorkRoot(scope), "pipe-probe");
+        Directory.CreateDirectory(dir);
+        const int rowsPerConnection = 1000;
+        var payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Range(1, rowsPerConnection).Select(i => $"{i},\"n{i}\"\u001E\n")));
+        var report = new StringBuilder();
+        var ok = new List<string>();
+        (string Name, string Prefix, bool Direct)[] cases =
+        [
+            ("\\\\.\\pipe\\ · direct", @"\\.\pipe\", true),
+            ("//./pipe/ · direct", "//./pipe/", true),
+            ("\\\\.\\pipe\\ · conventional", @"\\.\pipe\", false),
+        ];
+        var n = 0;
+        foreach (var c in cases)
+        {
+            n++;
+            var pipeName = "oranda-it-" + Guid.NewGuid().ToString("N");
+            var ctl = Path.Combine(dir, $"p{n}.ctl");
+            var log = Path.Combine(dir, $"p{n}.log");
+            File.WriteAllText(ctl, $"OPTIONS (DIRECT={(c.Direct ? "TRUE" : "FALSE")}, ERRORS=0)\nLOAD DATA\nCHARACTERSET AL32UTF8\nINFILE '{c.Prefix}{pipeName}' \"str X'1E0A'\"\n"
+                                   + $"APPEND INTO TABLE \"{scope.DstUser}\".\"XL_PIPE\"\nFIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'\n(\"ID\" CHAR(40), \"NAME\" CHAR(80))\n");
+            var connections = 0;
+            var serverErrors = new List<string>();
+            using var stop = new CancellationTokenSource();
+            var serve = Task.Run(async () =>
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    await using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte,
+                                                                       PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 0, 1 << 20);
+                    try
+                    {
+                        await server.WaitForConnectionAsync(stop.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+
+                    Interlocked.Increment(ref connections);
+                    try
+                    {
+                        await server.WriteAsync(payload, stop.Token);
+                        await server.FlushAsync(stop.Token);
+                        if (OperatingSystem.IsWindows())
+                        {
+                            server.WaitForPipeDrain();
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException or OperationCanceledException)
+                    {
+                        lock (serverErrors)
+                        {
+                            serverErrors.Add(ex.GetType().Name + ": " + ex.Message);
+                        }
+                    }
+                }
+            });
+
+            var sw = Stopwatch.StartNew();
+            var result = await runner.RunAsync(
+                new ExternalProcessStart(tool!, [$"control={ctl}", $"log={log}", $"bad={Path.Combine(dir, $"p{n}.bad")}"], dir, SqlLoaderCommand.BaseEnvironment,
+                                         $"{scope.DstUser}/\"{scope.Password}\"@{_db.DataSource}\n", TimeSpan.FromSeconds(90)),
+                CancellationToken.None);
+            sw.Stop();
+            await stop.CancelAsync();
+            await serve;
+            var loaded = await CountAsync($"SELECT COUNT(*) FROM {scope.DstUser}.XL_PIPE");
+            await scope.ExecTargetAsync("TRUNCATE TABLE XL_PIPE");
+            var text = $"stdout: {result.StandardOutput.Trim()}\nstderr: {result.StandardError.Trim()}\nlog: {(File.Exists(log) ? File.ReadAllText(log).Trim() : "(없음)")}"
+                       .Replace(scope.Password, "********", StringComparison.Ordinal);
+            var good = result.ExitCode == 0 && !result.TimedOut && loaded == rowsPerConnection;
+            if (good)
+            {
+                ok.Add(c.Name);
+            }
+
+            report.Append(CultureInfo.InvariantCulture,
+                $"===== {c.Name} · exit {result.ExitCode}{(result.TimedOut ? " (시간 제한)" : string.Empty)} · 넣은 행 {loaded} · 연결 {connections} · {sw.Elapsed.TotalSeconds:F1}초 · {(good ? "OK" : "FAILED")}\n");
+            if (serverErrors.Count > 0)
+            {
+                report.Append("server: ").Append(string.Join(" / ", serverErrors)).Append('\n');
+            }
+
+            report.Append(text.Length > 2500 ? text[..2500] + " …" : text).Append('\n');
+        }
+
+        _out.WriteLine("pipe ok: " + string.Join(" | ", ok));
+        _out.WriteLine(report.ToString());
+        Assert.True(ok.Count > 0, "sqlldr 가 어느 모양으로도 파이프 INFILE 을 읽지 못했습니다.\n" + report);
     }
 
     /// <summary>
@@ -345,7 +480,8 @@ public sealed class ExternalLoadTests
 
     // ---- 준비물 ----
 
-    private CopyExternalLoad External(CopyDbScope scope, LoaderPasswordVia via = LoaderPasswordVia.StandardInput)
+    private CopyExternalLoad External(CopyDbScope scope, LoaderPasswordVia via = LoaderPasswordVia.StandardInput, int chunkRows = CopyExternalLoad.DefaultChunkRows,
+                                      LoaderFeed feed = LoaderFeed.File)
     {
         var runner = new TestProcessRunner();
         var setting = ToolSetting == "auto" ? null : ToolSetting;
@@ -354,6 +490,8 @@ public sealed class ExternalLoadTests
         {
             WorkRoot = WorkRoot(scope),
             PasswordVia = via,
+            ChunkRows = chunkRows,
+            Feed = feed,
         };
     }
 

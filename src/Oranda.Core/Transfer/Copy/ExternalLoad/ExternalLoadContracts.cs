@@ -125,4 +125,32 @@ public sealed record CopyExternalLoad(IExternalToolProbe Probe, IExternalProcess
 
     /// <summary>비밀번호를 넘기는 길(조정 결정 89). 기본 = 표준 입력, 도구가 콘솔에서만 읽으면 현재 사용자만 읽는 임시 parfile(SQL*Loader 만).</summary>
     public LoaderPasswordVia PasswordVia { get; init; }
+
+    /// <summary>
+    /// 조각 하나의 행 수(결정 97): 조각 k 를 도구가 넣는 동안 조각 k+1 을 쓴다. 0 = 조각 없이 데이터 파일 하나(기본, 결정 98 — win144 #185 에서 조각마다
+    /// 도구 기동·로그인·direct path 준비·인덱스 병합이 붙어 단일 파일보다 느렸다). <see cref="Feed"/> 가 <see cref="LoaderFeed.Pipe"/> 면 쓰지 않는다.
+    /// </summary>
+    public int ChunkRows { get; init; } = DefaultChunkRows;
+
+    /// <summary>기본 조각 행 수 = 0(데이터 파일 하나).</summary>
+    public const int DefaultChunkRows = 0;
+
+    /// <summary>
+    /// 데이터를 도구에 건네는 길(결정 98). 기본 = 파일. 파이프는 실험(결정 99, 앱 설정에 없음): win144 #186 에서 쓰기가 sqlldr 읽기 속도에 묶여
+    /// 단일 파일보다 느렸다(50만 행 약 3.1~3.4만 대 4.4~5.8만 행/초). SQL*Loader·Windows 에서만(그 밖은 파일).
+    /// </summary>
+    public LoaderFeed Feed { get; init; }
+}
+
+/// <summary>데이터를 외부 도구에 건네는 길(결정 98). <see cref="Pipe"/> 는 실험(결정 99).</summary>
+public enum LoaderFeed
+{
+    /// <summary>임시 폴더에 데이터 파일을 다 쓴 뒤 도구를 띄운다(<see cref="CopyExternalLoad.ChunkRows"/> 가 있으면 조각마다).</summary>
+    File,
+
+    /// <summary>
+    /// 도구를 먼저 띄우고 Windows 이름 있는 파이프(<c>INFILE '\\.\pipe\…'</c>, 현재 사용자만 열 수 있음)로 행을 흘려 넣는다: 쓰기와 적재가 도구 한 번 안에서 겹친다.
+    /// LOB 파일·키 곁 파일은 그대로 작업 폴더에 쓴다. SQL*Loader·Windows 가 아니면 <see cref="File"/>.
+    /// </summary>
+    Pipe,
 }
