@@ -115,10 +115,10 @@ public partial class DataCopyWindow
         RuleGrid.ExtraMenuItems = RuleMenuItems;
         RuleGrid.KeyDown += (_, e) =>
         {
-            if (e.Key == Avalonia.Input.Key.Delete && editor.SelectedRule is { } rule)
+            if (e.Key == Avalonia.Input.Key.Delete && PickedRules().Count > 0)
             {
-                editor.RemoveRule(rule);
                 e.Handled = true;
+                _ = RemovePickedRulesAsync();
             }
         };
 
@@ -182,6 +182,7 @@ public partial class DataCopyWindow
     {
         var editor = Vm?.Editor;
         var picked = editor?.SelectedRule;
+        var pickedRules = PickedRules();
         var index = picked is null || editor is null ? -1 : editor.Rules.IndexOf(picked);
         MenuItem Item(string header, string icon, bool enabled, Action run)
         {
@@ -193,7 +194,7 @@ public partial class DataCopyWindow
         return
         [
             Item("테이블 추가…", "rowAdd", editor is not null, () => AddTableBox.Focus()),
-            Item("규칙 제거", "rowDelete", picked is not null, () => editor!.RemoveRule(picked!)),
+            Item("규칙 제거", "rowDelete", pickedRules.Count > 0, () => _ = RemovePickedRulesAsync()),
             new Separator(),
             Item("위로", "up", index > 0 && !RuleGridSorted, () => MoveSelectedRule(-1)),
             Item("아래로", "down", index >= 0 && index < (editor?.Rules.Count ?? 0) - 1 && !RuleGridSorted, () => MoveSelectedRule(1)),
@@ -202,6 +203,21 @@ public partial class DataCopyWindow
             Item("열 정보 읽기", "columns", picked is not null, () => _ = LoadSelectedColumnsAsync()),
         ];
     }
+
+    // 규칙 그리드에서 고른 규칙들(화면 순서). 그리드에 고른 행이 없으면 현재 규칙 하나. 오른쪽 클릭은 고른 행 안이면 선택을 그대로 두고 아니면 그 행 하나를 고른다(그리드가 처리).
+    internal IReadOnlyList<TableRuleViewModel> PickedRules()
+    {
+        if (_ruleGrid?.SelectedItems is { Count: > 0 } picked)
+        {
+            return picked;
+        }
+
+        return Vm?.Editor.SelectedRule is { } rule ? [rule] : [];
+    }
+
+    // 툴바 「규칙 제거」·Delete 키·오른쪽 클릭 메뉴가 함께 쓴다: 고른 규칙을 모두 지운다(둘 이상이면 확인 한 번).
+    internal Task RemovePickedRulesAsync() =>
+        Vm is { } vm ? RunUiAsync(_ => vm.RemoveRulesAsync(PickedRules())) : Task.CompletedTask;
 
     private async Task LoadSelectedColumnsAsync()
     {

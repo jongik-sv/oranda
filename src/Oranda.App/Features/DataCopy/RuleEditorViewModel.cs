@@ -878,15 +878,39 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     public void RemoveRule(TableRuleViewModel rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
-        if (Rules.Remove(rule) && rule.Origin is { } origin)
+        RemoveRules([rule]);
+    }
+
+    /// <summary>
+    /// 규칙 여럿을 한 번에 지운다(<see cref="RemoveRule"/> 과 같은 처리: 저장할 때 시퀀스 연결도 함께 지우고, 저장 안 한 변경은 <see cref="BuildJob"/> 으로 가려진다).
+    /// 선택한 규칙이 지워지면 지운 것 중 가장 위 행 자리의 다음 규칙(없으면 마지막 규칙)을 고른다. 목록에 없는 규칙은 건너뛴다.
+    /// </summary>
+    /// <returns>지운 규칙 수.</returns>
+    public int RemoveRules(IEnumerable<TableRuleViewModel> rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        var picked = rules.Distinct().Select(r => (Rule: r, Index: Rules.IndexOf(r))).Where(p => p.Index >= 0).ToList();
+        if (picked.Count == 0)
         {
-            _removedOrigins.Add(origin);
+            return 0;
         }
 
-        if (ReferenceEquals(SelectedRule, rule))
+        var firstIndex = picked.Min(p => p.Index);
+        var selectedGone = picked.Any(p => ReferenceEquals(p.Rule, SelectedRule));
+        foreach (var (rule, _) in picked)
         {
-            SelectedRule = Rules.FirstOrDefault();
+            if (Rules.Remove(rule) && rule.Origin is { } origin)
+            {
+                _removedOrigins.Add(origin);
+            }
         }
+
+        if (selectedGone)
+        {
+            SelectedRule = Rules.Count == 0 ? null : Rules[Math.Min(firstIndex, Rules.Count - 1)];
+        }
+
+        return picked.Count;
     }
 }
 

@@ -69,6 +69,32 @@ public sealed class MonitorGridBinder<T> where T : class
     /// <summary>그리드 현재 행(▶)의 항목. 없으면 null.</summary>
     public T? CurrentItem => _grid.Model is { } m ? ActiveItem(m) : null;
 
+    /// <summary>그리드에서 고른 행의 항목(화면 순서). 선택이 없으면 빈 목록. 칸 범위가 걸친 행과 Ctrl 로 더한 행을 모두 포함한다.</summary>
+    public IReadOnlyList<T> SelectedItems
+    {
+        get
+        {
+            if (_grid.Model is not { HasSelection: true } m)
+            {
+                return [];
+            }
+
+            var picked = new List<T>();
+            foreach (var (first, last) in m.SelectedRowRanges())
+            {
+                for (var r = first; r <= last; r++)
+                {
+                    if (ItemAt(m, _shown, r) is { } item)
+                    {
+                        picked.Add(item);
+                    }
+                }
+            }
+
+            return picked;
+        }
+    }
+
     /// <summary>지금 보이는 결과(시험용).</summary>
     public ResultGridModel? Model => _grid.Model;
 

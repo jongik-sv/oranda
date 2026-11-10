@@ -48,13 +48,7 @@ public partial class DataCopyWindow : Window
             return found;
         };
         AddTableBox.GotFocus += async (_, _) => await RunUiAsync(ct => Vm?.PrepareTableCandidatesAsync(ct) ?? Task.CompletedTask).ConfigureAwait(true);
-        RemoveRuleButton.Click += (_, _) =>
-        {
-            if (Vm is { Editor.SelectedRule: { } rule } vm)
-            {
-                vm.Editor.RemoveRule(rule);
-            }
-        };
+        RemoveRuleButton.Click += (_, _) => _ = RemovePickedRulesAsync();
         ToPrecheckButton.Click += async (_, _) => await RunUiAsync(ct => Vm!.GoToPrecheckAsync(ct)).ConfigureAwait(true);
         RecheckButton.Click += async (_, _) => await RunUiAsync(ct => Vm!.GoToPrecheckAsync(ct)).ConfigureAwait(true);
         CancelCheckButton.Click += (_, _) => Vm?.Precheck.Cancel();
@@ -194,6 +188,7 @@ public partial class DataCopyWindow : Window
         };
         vm.Precheck.SaveScript = SaveScriptAsync;
         vm.ConfirmRun = confirmation => Dialogs.ConfirmRunAsync(confirmation);
+        vm.ConfirmMessage = message => Dialogs.ConfirmAsync(message, CancellationToken.None);
         _editor = vm.Editor;
         _editor.PropertyChanged += OnEditorChanged;
         _editor.Rules.CollectionChanged += (_, _) => SyncRulePanel(); // 변수 칸은 접힌 채로 둔다(머리줄에 변수 수가 보인다)

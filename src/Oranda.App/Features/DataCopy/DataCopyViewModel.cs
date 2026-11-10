@@ -144,6 +144,44 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     public Func<RunConfirmation, Task<bool>>? ConfirmRun { get; set; }
 
+    /// <summary>
+    /// 글 한 줄을 보이고 예/아니오를 묻는 대화상자(창이 복사 창을 소유자로 띄워 연결한다). 규칙을 여럿 지울 때 쓴다.
+    /// 연결이 없으면 묻지 못했으니 지우지 않는다(fail-closed).
+    /// </summary>
+    public Func<string, Task<bool>>? ConfirmMessage { get; set; }
+
+    /// <summary>
+    /// 고른 규칙을 지운다. 둘 이상이면 확인 창을 한 번 띄우고(취소하면 아무것도 지우지 않는다), 하나면 묻지 않고 지운다.
+    /// </summary>
+    /// <returns>지웠으면 true.</returns>
+    public async Task<bool> RemoveRulesAsync(IReadOnlyList<TableRuleViewModel> picked)
+    {
+        ArgumentNullException.ThrowIfNull(picked);
+        var rules = picked.Distinct().Where(Editor.Rules.Contains).ToList();
+        if (rules.Count == 0)
+        {
+            return false;
+        }
+
+        if (rules.Count > 1)
+        {
+            if (ConfirmMessage is not { } ask)
+            {
+                Say(DataCopyText.L("확인 창을 띄울 수 없어 규칙을 지우지 않았습니다."), error: true);
+                return false;
+            }
+
+            var message = DataCopyText.L("{0}개 테이블 규칙을 지웁니다. 계속할까요?")
+                .Replace("{0}", rules.Count.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+            if (!await ask(message).ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+
+        return Editor.RemoveRules(rules) > 0;
+    }
+
     public bool IsRuleEdit => Step == DataCopyStep.RuleEdit;
 
     public bool IsPrecheck => Step == DataCopyStep.Precheck;
