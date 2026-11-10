@@ -1763,5 +1763,10 @@
   "대상에 같은 이름의 테이블이 없으면 원본 구조로 만든 뒤 넣습니다. 대상에 이미 있는 테이블과 만들 수 없는 테이블에는 켜지 않습니다.": "If the target has no table of the same name, create it from the source structure and then load it. Not turned on for tables that already exist in the target or cannot be created.",
   "스키마 브라우저 객체 목록을 서버에서 마지막으로 받은 때(로컬 시각). 유형 범주(함수 등)에서 F5 를 누르면 그 유형만 바로 다시 받는다": "When the schema browser object list was last read from the server (local time). Press F5 on a type folder (such as Functions) to reload just that type now.",
   "{0}개 테이블 규칙을 지웁니다. 계속할까요?": "This removes {0} table rules. Continue?",
-  "확인 창을 띄울 수 없어 규칙을 지우지 않았습니다.": "Could not show the confirmation window, so the rules were not removed."
+  "확인 창을 띄울 수 없어 규칙을 지우지 않았습니다.": "Could not show the confirmation window, so the rules were not removed.",
+  "적재 끝 · 마무리 대기": "Load done · waiting to finish",
+  "마무리 중 · 건수 비교": "Finishing · Row count check",
+  "마무리 중 · 시퀀스 맞추기": "Finishing · Adjust sequences",
+  "마무리 중 · 다시 켜기": "Finishing · Re-enable",
+  "마무리 중 · 되살리기": "Finishing · Restore"
 }

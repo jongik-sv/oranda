@@ -43,14 +43,21 @@ public partial class CopyRunner : ICopyRunner
 
     internal const string PhaseDisable = "끄기";
     internal const string PhaseDelete = "정리";
-    internal const string PhaseLoad = "적재";
-    internal const string PhaseSequence = "시퀀스";
-    internal const string PhaseEnable = "다시 켜기";
-    internal const string PhaseCount = "건수 비교";
-    internal const string PhaseRetry = "다시 넣기";
+    public const string PhaseLoad = "적재";
+
+    /// <summary>
+    /// 한 테이블의 적재가 끝났다는 알림(진행 값만, 작업 로그 줄이 아니다): 읽기를 마쳤고(<see cref="CopyProgress.Rows"/> = 실제로 읽은 수, <see cref="CopyProgress.Estimated"/> = 같은 수)
+    /// 테이블마다 커밋이면 커밋까지 끝났다. 받는 쪽은 예상 건수 대신 이 수로 막대를 채우고, 뒤따르는 시퀀스·다시 켜기·건수 비교 보고는 단계 글만 바꾼다.
+    /// </summary>
+    public const string PhaseLoadEnd = "적재 끝";
+
+    public const string PhaseSequence = "시퀀스";
+    public const string PhaseEnable = "다시 켜기";
+    public const string PhaseCount = "건수 비교";
+    public const string PhaseRetry = "다시 넣기";
     internal const string PhaseRecreate = "다시 만들기";
     internal const string PhaseCreate = "테이블 만들기";
-    internal const string PhaseRestore = "되살리기";
+    public const string PhaseRestore = "되살리기";
     internal const string PhaseStart = "시작";
     internal const string PhaseSource = "원본 준비";
     internal const string PhaseFinish = "마무리";
@@ -1554,6 +1561,12 @@ public partial class CopyRunner : ICopyRunner
 
             // 실행 기록(copy-runs)에도 바로 한 줄: 표 결과 줄은 마무리 때 한꺼번에 쓰므로 실행 중에는 이 줄로 어디까지 왔는지 안다(결정 70).
             await RecordEventAsync(run, "tableEnd", table.Name, end);
+
+            // 적재를 마친 테이블만(실패·되돌린 테이블은 결과가 정한다): 막대는 예상 건수가 아니라 실제로 읽은 수로 가득 찬다.
+            if (table.LoadCompleted)
+            {
+                run.ReportLoadEnd(table.Name, table.SourceRows, table.Loaded);
+            }
         }
     }
 
@@ -3453,6 +3466,12 @@ public partial class CopyRunner : ICopyRunner
         /// <param name="phase">진행 줄 단계(적재, 또는 대상 정리 DELETE 를 기다릴 때 대상 정리).</param>
         public void ReportWaits(string table, long rows, long? estimated, long written, IReadOnlyList<CopyWait> waits, string phase = PhaseLoad) =>
             Send(new CopyProgress(table, rows, estimated, phase) { Written = written, Waits = waits });
+
+        /// <summary>
+        /// 테이블 적재 끝 알림(<see cref="PhaseLoadEnd"/>). 지금 표·단계를 바꾸지 않는다(뒤따르는 로그 줄의 단계 이름이 달라지지 않게).
+        /// </summary>
+        public void ReportLoadEnd(string table, long rows, long written) =>
+            Send(new CopyProgress(table, rows, rows, PhaseLoadEnd) { Written = written });
 
         /// <summary>진행·로그 보고는 한 번에 하나씩(적재 흐름·멈춤 감시가 서로 다른 스레드에서 보낼 수 있다).</summary>
         private void Send(CopyProgress p)

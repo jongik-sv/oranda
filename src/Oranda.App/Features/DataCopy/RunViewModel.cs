@@ -26,6 +26,7 @@ public sealed partial class TableRunRowViewModel(string table) : ViewModelBase
     private long? _targetRows;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Percent), nameof(HasEstimate))]
     private CopyOutcome? _outcome;
 
     [ObservableProperty]
@@ -33,7 +34,31 @@ public sealed partial class TableRunRowViewModel(string table) : ViewModelBase
 
     /// <summary>대상에 넣은 행 수(적재 중). 읽기·쓰기를 겹치면 읽은 수(<see cref="Rows"/>)보다 늦다. 모르면 null.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Percent))]
     private long? _written;
+
+    /// <summary>
+    /// 이 테이블의 적재가 끝났다는 알림(<see cref="CopyRunner.PhaseLoadEnd"/>)을 받았다. 그 뒤 시퀀스·다시 켜기·건수 비교 같은 보고(읽은 수 0)가 와도
+    /// 읽은 수·넣은 수·예상 건수는 그대로 두고 단계 글만 바꾼다.
+    /// </summary>
+    public bool LoadEnded { get; private set; }
+
+    /// <summary>
+    /// 적재 끝 알림을 반영한다: 예상 건수(점검 때 센 값) 대신 실제로 읽은 수가 기준이 되어 막대가 이 시점에 찬다.
+    /// 실패한 행이 있으면 넣은 수가 읽은 수보다 적어 100% 미만으로 남고, 결과가 오면(<see cref="Percent"/>) 가득 찬다.
+    /// </summary>
+    internal void EndLoad(long rowsRead, long? written)
+    {
+        LoadEnded = true;
+        Rows = rowsRead;
+        Estimated = rowsRead;
+        if (written is { } w)
+        {
+            Written = w;
+        }
+
+        Phase = RunPhases.LoadEnded;
+    }
 
     /// <summary>멈춤 표시(결정 70): 「배치 n 쓰는 중 · m분째 대기」 등. 없으면 빈 글자. 단계 칸에 덧붙여 보인다.</summary>
     [ObservableProperty]
@@ -49,10 +74,17 @@ public sealed partial class TableRunRowViewModel(string table) : ViewModelBase
     /// <summary>그리드에 보이는 표 이름 <c>계정.표</c>. 정하지 않으면 키 그대로.</summary>
     public string Display { get; init; } = table;
 
-    public bool HasEstimate => Estimated is > 0;
+    /// <summary>끝까지 읽은 테이블의 결과(성공·일부 실패)가 정해졌다. 막대는 예상 건수와 상관없이 가득 찬다.</summary>
+    private bool ReadCompleted => Outcome is CopyOutcome.Succeeded or CopyOutcome.PartiallyFailed;
 
-    /// <summary>0~100. 예상 건수가 없으면 0.</summary>
-    public double Percent => Estimated is > 0 ? Math.Min(100d, Rows * 100d / Estimated.Value) : 0d;
+    public bool HasEstimate => ReadCompleted || Estimated is > 0;
+
+    /// <summary>
+    /// 0~100. 대상에 넣은 행(<see cref="Written"/>, 모르면 읽은 수)을 예상 건수로 나눈다. 끝까지 읽은 테이블은 결과가 오면 100(예상 건수가 어긋나도),
+    /// 적재가 끝나면 예상 건수 자리에 실제로 읽은 수가 들어간다(<see cref="EndLoad"/>). 예상 건수가 없으면 0.
+    /// </summary>
+    public double Percent => ReadCompleted ? 100d
+        : Estimated is > 0 ? Math.Min(100d, (Written ?? Rows) * 100d / Estimated.Value) : 0d;
 
     /// <summary>끝난 뒤 원본·대상 건수가 같은지. 아직 비교 전이면 null.</summary>
     public bool? CountsMatch => SourceRows is { } s && TargetRows is { } t ? s == t : null;
@@ -331,12 +363,36 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
             return;
         }
 
-        row.Rows = p.Rows;
-        row.Estimated = p.Estimated ?? row.Estimated;
-        row.Phase = p.Phase;
-        if (p.Written is { } written)
+        if (p.Phase == CopyRunner.PhaseLoadEnd)
         {
-            row.Written = written;
+            row.EndLoad(p.Rows, p.Written); // 실제로 읽은 수가 기준이 된다: 막대는 이 시점에 찬다(결과를 기다리지 않는다)
+        }
+        else if (p.Phase is CopyRunner.PhaseLoad or CopyRunner.PhaseRetry)
+        {
+            // 진행 값(읽은 수·넣은 수·예상 건수)은 적재(와 다시 넣기) 보고만 정한다. 적재가 끝난 테이블에 늦게 온 적재 보고는 값을 되돌리지 않는다.
+            if (!row.LoadEnded || p.Phase == CopyRunner.PhaseRetry)
+            {
+                row.Rows = p.Rows;
+                row.Estimated = p.Estimated ?? row.Estimated;
+                row.Phase = p.Phase;
+                if (p.Written is { } written)
+                {
+                    row.Written = written;
+                }
+            }
+        }
+        else if (row.LoadEnded)
+        {
+            // 적재를 마친 테이블에 시퀀스·다시 켜기·건수 비교 같은 마무리 보고가 온다(읽은 수 0 등): 단계 글만 바꾼다.
+            if (RunPhases.Finishing(p.Phase) is { } finishing)
+            {
+                row.Phase = finishing;
+            }
+        }
+        else
+        {
+            // 끄기·정리·다시 만들기·되살리기 같은 보고도 단계 글만 바꾼다(적재 전이면 읽은 수는 어차피 0, 적재 중 멈춘 테이블의 값은 남긴다).
+            row.Phase = p.Phase;
         }
 
         if (p.Waits is { } waits)
@@ -358,7 +414,16 @@ public sealed partial class RunViewModel(DataCopyServices services) : ViewModelB
                 Rows.Add(row);
             }
 
-            row.Estimated ??= table.SourceRows; // 끝난 표는 진행 막대가 가득 차게
+            // 끝까지 읽은 테이블(성공·일부 실패)은 실제로 읽은 수가 기준이다(점검 때 센 예상 건수가 어긋나도 막대는 가득 찬다: Percent). 아니면 예상 건수가 없을 때만 채운다.
+            if (table.Outcome is CopyOutcome.Succeeded or CopyOutcome.PartiallyFailed)
+            {
+                row.Estimated = table.SourceRows;
+            }
+            else
+            {
+                row.Estimated ??= table.SourceRows;
+            }
+
             row.SourceRows = table.SourceRows;
             row.TargetRows = table.TargetRows >= 0 ? table.TargetRows : null; // -1 = 대상 건수 모름(중지 등): 그리드에서 「-」, 건수 비교 없음
             row.Outcome = table.Outcome;

@@ -763,6 +763,15 @@ public sealed class CopyRunnerPipelineTests
                                               && l.Text.Contains(" · 쓰기 ", StringComparison.Ordinal));
         // 진행 보고에 넣은 수가 따라온다(첫 배치 뒤).
         Assert.Contains(f.Progress.Reports, p => p.Table == "A" && p.Written == 2);
+
+        // PG1: 적재가 끝난 테이블마다 끝 알림 한 번 — 실제로 읽은 수가 읽은 수·예상 건수 자리에, 넣은 수가 따라온다. 작업 로그 줄이 아니다.
+        var ends = f.Progress.Reports.Where(p => p.Phase == CopyRunner.PhaseLoadEnd).ToList();
+        Assert.Equal(["A", "B"], ends.Select(p => p.Table));
+        Assert.All(ends, p => Assert.Null(p.Log));
+        Assert.Equal((3L, (long?)3L, (long?)3L), (ends[0].Rows, ends[0].Estimated, ends[0].Written));
+        Assert.Equal((2L, (long?)2L, (long?)2L), (ends[1].Rows, ends[1].Estimated, ends[1].Written));
+        var all = f.Progress.Reports.ToList();
+        Assert.True(all.IndexOf(ends[0]) > all.FindLastIndex(p => p.Table == "A" && p.Phase == CopyRunner.PhaseLoad && p.Log is null), "끝 알림은 그 테이블의 적재 진행 뒤에 온다");
     }
 
     [Fact]

@@ -120,3 +120,28 @@ internal static class DataCopyText
 
     public static string TargetNotFound(string name) => $"대상 접속 「{name}」 을(를) 이 PC 에서 찾지 못했습니다. 접속을 다시 고르세요.";
 }
+
+/// <summary>
+/// 테이블 줄의 「단계」 칸 글(적재가 끝난 뒤). 실행기의 단계 이름(<see cref="Oranda.Core.Transfer.Copy.CopyRunner"/> 의 Phase*)을 마무리 단계 글로 옮긴다.
+/// 영어 화면은 문구 표(literals-en.json)에 같은 글로 등록돼 있다.
+/// </summary>
+internal static class RunPhases
+{
+    /// <summary>적재는 끝났고 시퀀스·다시 켜기·건수 비교 같은 마무리가 이 테이블에 닿기를 기다린다.</summary>
+    public const string LoadEnded = "적재 끝 · 마무리 대기";
+
+    public const string FinishingCount = "마무리 중 · 건수 비교";
+    public const string FinishingSequence = "마무리 중 · 시퀀스 맞추기";
+    public const string FinishingEnable = "마무리 중 · 다시 켜기";
+    public const string FinishingRestore = "마무리 중 · 되살리기";
+
+    /// <summary>적재를 마친 테이블에 온 보고의 단계 이름 → 마무리 중 글. 마무리 단계가 아니면 null(글을 바꾸지 않는다).</summary>
+    public static string? Finishing(string phase) => phase switch
+    {
+        Oranda.Core.Transfer.Copy.CopyRunner.PhaseCount => FinishingCount,
+        Oranda.Core.Transfer.Copy.CopyRunner.PhaseSequence => FinishingSequence,
+        Oranda.Core.Transfer.Copy.CopyRunner.PhaseEnable => FinishingEnable,
+        Oranda.Core.Transfer.Copy.CopyRunner.PhaseRestore => FinishingRestore,
+        _ => null,
+    };
+}
