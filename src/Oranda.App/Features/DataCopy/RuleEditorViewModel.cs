@@ -43,12 +43,12 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
     private string _name = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DifferentDbmsNotice), nameof(HasDifferentDbmsNotice))]
+    [NotifyPropertyChangedFor(nameof(UnsupportedPairNotice), nameof(HasUnsupportedPairNotice))]
     private ConnectionOption? _source;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanRecreate), nameof(AvailableActions), nameof(TargetReadOnlyNotice), nameof(HasTargetReadOnlyNotice),
-        nameof(DifferentDbmsNotice), nameof(HasDifferentDbmsNotice))]
+        nameof(UnsupportedPairNotice), nameof(HasUnsupportedPairNotice))]
     private ConnectionOption? _target;
 
     [ObservableProperty]
@@ -309,12 +309,15 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
     public bool HasTargetReadOnlyNotice => TargetReadOnlyNotice.Length > 0;
 
-    /// <summary>원본과 대상의 DBMS 가 다르면 복사할 수 없다는 안내(TU0). 같거나 한쪽을 안 골랐으면 빈 글자.</summary>
-    public string DifferentDbmsNotice => Source is { } s && Target is { } t && s.Profile.Dbms != t.Profile.Dbms
-        ? DataCopyText.DifferentDbms(DbmsAvailability.Label(s.Profile.Dbms), DbmsAvailability.Label(t.Profile.Dbms))
+    /// <summary>
+    /// 복사할 수 없는 DBMS 쌍이면 안내(xdb-copy D14). 같은 DBMS 끼리와, 교차 부품이 등록된 Oracle↔Tibero 는 허용한다.
+    /// 한쪽을 안 골랐으면 빈 글자.
+    /// </summary>
+    public string UnsupportedPairNotice => Source is { } s && Target is { } t && !_services.IsPairSupported(s.Profile.Dbms, t.Profile.Dbms)
+        ? DataCopyText.UnsupportedPair(DbmsAvailability.Label(s.Profile.Dbms), DbmsAvailability.Label(t.Profile.Dbms))
         : string.Empty;
 
-    public bool HasDifferentDbmsNotice => DifferentDbmsNotice.Length > 0;
+    public bool HasUnsupportedPairNotice => UnsupportedPairNotice.Length > 0;
 
     public IReadOnlyList<TargetAction> AvailableActions =>
         CanRecreate
@@ -536,10 +539,10 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             return DataCopyText.TargetMissing;
         }
 
-        // DBMS 가 다른 쌍은 이번 회차에 지원하지 않는다: 세션을 열기 전에 이유를 알리고 막는다.
-        if (DifferentDbmsNotice is { Length: > 0 } differentDbms)
+        // 지원하지 않는 DBMS 쌍은 세션을 열기 전에 이유를 알리고 막는다.
+        if (UnsupportedPairNotice is { Length: > 0 } unsupportedPair)
         {
-            return differentDbms;
+            return unsupportedPair;
         }
 
         if (!CopyTargetGuard.IsAllowedTarget(Target.Profile))

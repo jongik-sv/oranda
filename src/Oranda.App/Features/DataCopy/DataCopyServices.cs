@@ -44,6 +44,35 @@ public sealed class DataCopyServices
     /// <summary>세션에서 문장 하나를 실행하고 실패 이유(성공이면 null)를 돌려준다. 없으면 <see cref="Execution"/> 으로 실행한다.</summary>
     public Func<ISession, string, CancellationToken, Task<string?>>? StatementRunner { get; init; }
 
+    /// <summary>
+    /// 이 DBMS 쌍을 복사할 수 있는가. 같은 DBMS 끼리는 항상 참, 다른 DBMS 는 지원 쌍(Oracle↔Tibero)이고 두 DBMS 의 교차 부품(<see cref="ICopyDbmsParts"/>)이
+    /// 모두 등록돼 있을 때 참. 서비스 선택기가 없는 조립(시험)은 쌍 규칙만 본다. <see cref="PairSupport"/> 로 바꿔 쓸 수 있다(시험).
+    /// </summary>
+    public bool IsPairSupported(Dbms source, Dbms target)
+    {
+        if (PairSupport is { } custom)
+        {
+            return custom(source, target);
+        }
+
+        if (source == target)
+        {
+            return true;
+        }
+
+        // Core 디스패처의 쌍 규칙(DispatchRules.IsCrossCopyPair, xdb-copy D1)과 같다 — 그쪽은 Core 내부 형식이라 여기서 한 번 더 적는다.
+        if ((source, target) is not ((Dbms.Oracle, Dbms.Tibero) or (Dbms.Tibero, Dbms.Oracle)))
+        {
+            return false;
+        }
+
+        var selector = DbmsServices.SelectorOf(_provider);
+        return selector is null || (selector.Find<ICopyDbmsParts>(source) is not null && selector.Find<ICopyDbmsParts>(target) is not null);
+    }
+
+    /// <summary>쌍 판정을 바꿔 쓴다(시험).</summary>
+    public Func<Dbms, Dbms, bool>? PairSupport { get; init; }
+
     private T? Get<T>()
         where T : class => _provider?.GetService(typeof(T)) as T;
 

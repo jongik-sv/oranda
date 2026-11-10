@@ -238,6 +238,9 @@ internal sealed class DataCopyHarness
     /// <summary>참이면 그 접속은 열지 않는다(비밀번호 입력 취소·접속 실패처럼 null). 연 시도는 <see cref="Opened"/> 에 남는다.</summary>
     public Func<ConnectionProfile, bool>? RefuseOpen { get; set; }
 
+    /// <summary>DBMS 쌍 판정을 바꿔 쓴다(교차 부품이 등록되지 않은 조립 시험). 없으면 서비스 선택기 없이 쌍 규칙만 본다.</summary>
+    public Func<Dbms, Dbms, bool>? PairSupport { get; set; }
+
     public DataCopyHarness() => Profiles = [Source, Target, Production];
 
     public DataCopyServices Services() => new()
@@ -248,6 +251,7 @@ internal sealed class DataCopyHarness
         RunLog = RunLog,
         Metadata = NoMetadata ? null : Metadata,
         Time = new FixedTime(),
+        PairSupport = PairSupport,
         ProfileLoader = _ => Task.FromResult<IReadOnlyList<ConnectionProfile>>([.. Profiles]),
         SessionOpener = (profile, _) =>
         {

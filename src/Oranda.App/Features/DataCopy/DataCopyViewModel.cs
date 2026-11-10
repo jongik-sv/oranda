@@ -114,7 +114,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     public bool HasJob => CurrentJob is not null;
 
     /// <summary>점검을 시작할 수 있는지: 열린 작업이 있고, 다른 점검·세션 열기·실행이 도는 중이 아니며, 대상이 읽기 전용이 아니고, 새 버전 작업이 아닐 때.</summary>
-    public bool CanGoToPrecheck => HasJob && !IsBusy && !Run.IsRunning && !Editor.HasTargetReadOnlyNotice && !Editor.HasDifferentDbmsNotice && !IsReadOnlyJob;
+    public bool CanGoToPrecheck => HasJob && !IsBusy && !Run.IsRunning && !Editor.HasTargetReadOnlyNotice && !Editor.HasUnsupportedPairNotice && !IsReadOnlyJob;
 
     /// <summary>「복사 실행」: 점검이 통과했고 다른 점검·세션 열기·실행이 도는 중이 아니며, 새 버전 작업이 아닐 때.</summary>
     public bool CanStartRun => Precheck.CanRun && !IsBusy && !Run.IsRunning && !IsReadOnlyJob;
@@ -156,7 +156,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     // 이미 세션이 열려 있으면 규칙을 고를 때 열 정보를 자동으로 읽는다. 열려 있지 않으면 비밀번호를 묻게 되므로 「열 정보 읽기」를 눌렀을 때만 읽는다.
     private void OnEditorChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(RuleEditorViewModel.HasTargetReadOnlyNotice) or nameof(RuleEditorViewModel.HasDifferentDbmsNotice))
+        if (e.PropertyName is nameof(RuleEditorViewModel.HasTargetReadOnlyNotice) or nameof(RuleEditorViewModel.HasUnsupportedPairNotice))
         {
             OnPropertyChanged(nameof(CanGoToPrecheck)); // 읽기 전용 대상을 고르면 다음 단계 단추가 꺼진다
         }

@@ -840,15 +840,16 @@ public sealed class PrecheckStepTests
     }
 
     [Fact]
-    public async Task Different_dbms_pair_stops_before_the_precheck_with_a_notice()
+    public async Task Unsupported_dbms_pair_stops_before_the_precheck_with_a_notice()
     {
         var h = new DataCopyHarness();
         h.Profiles[1] = h.Target with { Dbms = Dbms.Tibero };
-        var vm = await h.OpenAsync(TestJobs.Job("DBMS 다른 쌍", rules: TestJobs.Rule("ORDERS")));
+        h.PairSupport = (_, _) => false; // 교차 부품이 등록되지 않은 조립
+        var vm = await h.OpenAsync(TestJobs.Job("지원하지 않는 쌍", rules: TestJobs.Rule("ORDERS")));
 
-        var reason = DataCopyText.DifferentDbms("Oracle", "Tibero");
-        Assert.Equal(reason, vm.Editor.DifferentDbmsNotice);
-        Assert.True(vm.Editor.HasDifferentDbmsNotice);
+        var reason = DataCopyText.UnsupportedPair("Oracle", "Tibero");
+        Assert.Equal(reason, vm.Editor.UnsupportedPairNotice);
+        Assert.True(vm.Editor.HasUnsupportedPairNotice);
         Assert.Equal(reason, vm.Editor.Validate());
         Assert.False(vm.CanGoToPrecheck);
 
@@ -861,18 +862,33 @@ public sealed class PrecheckStepTests
         Assert.True(vm.StatusIsError);
     }
 
+    [Theory]
+    [InlineData(Dbms.Oracle, Dbms.Tibero)]
+    [InlineData(Dbms.Tibero, Dbms.Oracle)]
+    public async Task Cross_dbms_pair_is_allowed_when_the_cross_parts_are_registered(Dbms source, Dbms target)
+    {
+        var h = new DataCopyHarness();
+        h.Profiles[0] = h.Source with { Dbms = source };
+        h.Profiles[1] = h.Target with { Dbms = target };
+        var vm = await h.OpenAsync(TestJobs.Job("교차 쌍", rules: TestJobs.Rule("ORDERS")));
+
+        Assert.False(vm.Editor.HasUnsupportedPairNotice);
+        Assert.Null(vm.Editor.Validate());
+        Assert.True(vm.CanGoToPrecheck);
+    }
+
     [Fact]
     public async Task Same_dbms_pair_has_no_dbms_notice_for_oracle_and_for_tibero()
     {
         var h = new DataCopyHarness();
         var vm = await h.OpenAsync(TestJobs.Job("같은 DBMS", rules: TestJobs.Rule("ORDERS")));
-        Assert.False(vm.Editor.HasDifferentDbmsNotice);
+        Assert.False(vm.Editor.HasUnsupportedPairNotice);
         Assert.True(vm.CanGoToPrecheck);
 
         h.Profiles[0] = h.Source with { Dbms = Dbms.Tibero };
         h.Profiles[1] = h.Target with { Dbms = Dbms.Tibero };
         var tibero = await h.OpenAsync(TestJobs.Job("Tibero 끼리", rules: TestJobs.Rule("ORDERS")));
-        Assert.False(tibero.Editor.HasDifferentDbmsNotice);
+        Assert.False(tibero.Editor.HasUnsupportedPairNotice);
         Assert.Null(tibero.Editor.Validate());
     }
 

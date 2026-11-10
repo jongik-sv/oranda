@@ -410,10 +410,10 @@
                 <TextBlock x:Name="TargetReadOnlyNoticeText" Text="{Binding TargetReadOnlyNotice}" TextWrapping="Wrap" VerticalAlignment="Center" FontWeight="SemiBold"
                            AutomationProperties.Name="대상 접속 읽기 전용 안내" />
               </StackPanel>
-              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasDifferentDbmsNotice}">
+              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasUnsupportedPairNotice}">
                 <ContentControl Content="{Binding Source='error', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
-                <TextBlock x:Name="DifferentDbmsNoticeText" Text="{Binding DifferentDbmsNotice}" TextWrapping="Wrap" VerticalAlignment="Center" FontWeight="SemiBold"
-                           AutomationProperties.Name="원본·대상 DBMS 불일치 안내" />
+                <TextBlock x:Name="UnsupportedPairNoticeText" Text="{Binding UnsupportedPairNotice}" TextWrapping="Wrap" VerticalAlignment="Center" FontWeight="SemiBold"
+                           AutomationProperties.Name="원본·대상 DBMS 쌍 지원 안 함 안내" />
               </StackPanel>
             </StackPanel>
 
