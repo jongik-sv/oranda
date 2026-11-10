@@ -29,7 +29,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// <list type="bullet">
 /// <item>관문: Tibero 쪽은 <see cref="TiberoItGate"/>(서버·드라이버·<c>ORANDA_IT_TIBERO_WRITE=1</c>), Oracle 쪽은 <c>ORANDA_IT_ADMIN_PASSWORD</c>
 /// (선택: <c>ORANDA_IT_ADMIN_USER</c> 기본 SYSTEM, <c>ORANDA_IT_HOST</c> 기본 127.0.0.1, <c>ORANDA_IT_PORT</c> 기본 1521, <c>ORANDA_IT_SERVICE</c> 기본 FREEPDB1 — <c>ItDb</c> 와 같은 규칙).
-/// 없으면 「건너뜀」, <c>ORANDA_IT_REQUIRE=1</c> 이면 실패한다.</item>
+/// 없으면 「건너뜀」, <c>ORANDA_IT_REQUIRE=1</c> 이면 실패한다(단, Tibero 쓰기 스위치 <c>ORANDA_IT_TIBERO_WRITE</c> 가 없을 때는 기존 Tibero 쓰기 IT 와 같이 건너뛴다).</item>
 /// <item>Oracle 쪽 표는 시험마다 만드는 임시 사용자(<c>ORA_XC10_…</c>) 소유이고 끝에 사용자째 지운다. Tibero 쪽 표·시퀀스는 <c>ORT_</c> 이름만 쓰고
 /// 처음과 끝에 <c>DROP … PURGE</c> 한다. 복사 표 이름은 두 쪽이 같다(복사는 같은 이름 표로 넣는다).</item>
 /// <item>부품 구성: Tibero 의 <see cref="ICopyDbmsParts"/> 키 등록은 XC11 이 했지만 이 시험은 디스패처(<c>CopyRunnerDispatcher</c>)를 거치지 않고

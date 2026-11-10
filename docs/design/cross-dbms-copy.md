@@ -1,6 +1,6 @@
 # 교차 DBMS 데이터 복사 (Oracle ↔ Tibero) 설계
 
-상태: 초안(XC10 시험 반영, XC12 에서 확정). 결정 원문 = 조정자 확정 D1~D19(§1.1). 이 문서는 사내 설계 문서이며 공개 설명서·릴리스 노트에는 Tibero·교차 복사를 쓰지 않는다(D16).
+상태: 확정(XC12, 2026-11-10). 결정 원문 = 조정자 확정 D1~D19(§1.1). 이 문서는 사내 설계 문서이며 공개 설명서·릴리스 노트에는 Tibero·교차 복사를 쓰지 않는다(D16).
 실측으로 확정한 항목은 `docs/design/tibero-driver-transfer.md` §5(XC5)에 있고, 결과 요약은 §6 에 옮겼다. 사용자에게 알리는 안내는 `docs/user/tibero.md`(사내).
 
 ## 1. 범위와 원칙
@@ -24,7 +24,7 @@
 | D6 | Oracle BINARY_* → Tibero | NUMBER 글자 바인드(Tibero BINARY 쓰기를 켜지 않는다). XC5 실측으로 확정: `:C1` 그대로 넣으면 서버가 BINARY_* 로 바꾸고 값이 보존된다. |
 | D7 [제품] | TZ 지역 이름 | 그 시각의 오프셋으로 옮긴다(지역 잃음 안내). XC5 실측으로 확정: Tibero TZ 쓰기 됨(`TO_TIMESTAMP_TZ(:C1, '… FF9 TZH:TZM')`, 배열 = 스칼라). 시 0 인 음수 오프셋 `-00:MM` 은 같은 시각을 `+00:00` 으로 옮긴다. |
 | D8 [제품] | LTZ | 양방향 Dropped + 안내. XC5 실측으로 뜻은 확인됨(절대 시각 저장, 세션 시간대 표시) → 후속 후보로 남김. |
-| D9 | Tibero VARCHAR2 >4000B → Oracle | CLOB(만들기 한정, 기존 대상 표는 `NarrowerType`). EXTENDED 여부와 무관(단순·안전). NVARCHAR2·NCHAR 가 Oracle 한도를 넘으면 NCLOB. |
+| D9 | Tibero VARCHAR2 >4000B → Oracle | CLOB(만들기 한정, 기존 대상 테이블은 `NarrowerType`). EXTENDED 여부와 무관(단순·안전). NVARCHAR2·NCHAR 가 Oracle 한도를 넘으면 NCLOB. |
 | D10 | LONG·LONG RAW | Tibero 원본 = CLOB·BLOB 으로 옮김. Oracle 원본 = Dropped(Oracle 대량 읽기 미지원). |
 | D11 [제품] | CreateIfMissing 교차 | 양방향 범위 안. Tibero 대상 만들기 차단(`ICopyPrecheckDialect.CreateBlockedReason`, 다시 만들기 차단과 갈랐다)은 XC8b 에서 풀렸다(Tibero 대상 만들기는 막히지 않는다). 가상 열·함수 기반 인덱스는 만들지 않고 안내. |
 | D12 [제품] | Recreate 교차 | Tibero→Oracle 만. Oracle→Tibero 는 막힘 유지(`RecreateBlockedReason`). |
@@ -34,7 +34,7 @@
 | D16 | 문서 | 공개 설명서(`site/` 아래)·릴리스 노트에 Tibero·교차 복사 언급 없음(기록된 결정). 이 문서와 `docs/user/tibero.md`(사내)만 쓴다. |
 | D17 | 길이 0 BLOB → Tibero | 길이 0 BLOB 은 Tibero 에서 NULL 이 된다. 받아들이고, 복사 열에 BLOB 이 있으면 사전 점검(`BlobEmptyToNull`, 통과 항목)으로 안내한다. |
 | D18 | 같은 DB 판정 | DBMS 가 다르면 DbKey 비교 전에 다른 DB 로 본다. |
-| D19 | 교차 DDL 의 인덱스·주석 실패 | 표 실패로 둔다(지금 경로 그대로). XC5 실측으로 확정: CHAR 길이·DEFAULT·CHECK·인덱스·COMMENT 모두 되므로 완화 불필요. 만든 표 정리 = `DROP TABLE … PURGE`. CREATE TABLE 은 앞 트랜잭션을 묵시 커밋한다. |
+| D19 | 교차 DDL 의 인덱스·주석 실패 | 테이블 실패로 둔다(지금 경로 그대로). XC5 실측으로 확정: CHAR 길이·DEFAULT·CHECK·인덱스·COMMENT 모두 되므로 완화 불필요. 만든 테이블 정리 = `DROP TABLE … PURGE`. CREATE TABLE 은 앞 트랜잭션을 묵시 커밋한다. |
 
 ## 2. 구조
 
@@ -51,15 +51,15 @@
 | 원본/대상 부품 | `CopyDbmsParts`(DBMS·카탈로그·오류 분류·복사 방언·점검 방언·코덱·다시 만들기 전 단계 한 벌)와 DBMS 어셈블리가 내는 `ICopyDbmsParts`. 실행기·점검은 원본 벌과 대상 벌을 따로 받는다: 원본 세션에 보내는 문장·원본 값 해석은 원본 벌, 나머지(대상 조회·DML·DDL·되살리기)는 대상 벌. 같은 DBMS 복사는 같은 벌을 두 번 넘긴다. | `src/Oranda.Core/Transfer/Copy/CopyDbmsParts.cs`, `src/Oranda.Oracle/Transfer/Copy/OracleCopyParts.cs`, `src/Oranda.Tibero/Transfer/Copy/TiberoCopyParts.cs` |
 | 이식 값 | 두 DBMS 드라이버 형식 사이의 중립 값(§2.2)과 변환 실패 예외 `PortableConversionException`. | `src/Oranda.Core/Transfer/Copy/CrossDbms/PortableValues.cs` |
 | 코덱 확장 | `IBulkValueCodec` 의 기본 구현 멤버 `IsReadable`·`IsCrossWritable`·`ToPortable`·`FromPortable`(D2). 구현은 DBMS 별 코덱에 있다. | `src/Oranda.Core/Transfer/Copy/IBulkValueCodec.cs`, `src/Oranda.Oracle/Transfer/Copy/OracleBulkValueCodec.cs`·`OraclePortable.cs`, `src/Oranda.Tibero/Execution/TiberoBulkValueCodec.cs`·`TiberoBulkPortable.cs` |
-| 형식 지도 | `CrossTypeMap.Map(srcDbms, tgtDbms, ColumnInfo)` — 순수 함수, 결과 `CrossColumnMapping`(Exact/Converted/Dropped, 바인드 형식, 이유 `CrossNote`·`CrossDropReason`). 점검·실행기·DDL 이 같은 표를 쓴다(§3). | `src/Oranda.Core/Transfer/Copy/CrossDbms/CrossTypeMap.cs` |
+| 형식 지도 | `CrossTypeMap.Map(srcDbms, tgtDbms, ColumnInfo)` — 순수 함수, 결과 `CrossColumnMapping`(Exact/Converted/Dropped, 바인드 형식, 이유 `CrossNote`·`CrossDropReason`). 점검·실행기·DDL 이 같은 테이블을 쓴다(§3). | `src/Oranda.Core/Transfer/Copy/CrossDbms/CrossTypeMap.cs` |
 | 교차 실행기 | `CopyRunner` 가 원본·대상 DBMS 가 다르면 열마다 `CrossTypeMap` 으로 옮기고(옮길 형식 없는 열은 뺀다) 마스킹한 원본 값을 대상 값으로 바꾼다(`RowShape`·`CrossSides`). 값 변환 실패는 그 행 실패로 기록하고, 빠진 열은 실행 로그(`Notices`)에 한 줄 남긴다. | `src/Oranda.Core/Transfer/Copy/CopyRunner.cs` |
 | 교차 디스패치 | 같은 DBMS 는 기존 키 서비스(`ICopyRunner`·`ICopyPrecheckService`), 다르면 두 DBMS 의 `ICopyDbmsParts` 로 `CopyRunner`·`CopyPrecheckService` 를 만든다. 쌍 판정은 `DispatchRules`. | `src/Oranda.Core/Composition/Dispatch/DispatchRules.cs`, `CopyRunnerDispatcher.cs`, `CopyPrecheckServiceDispatcher.cs` |
-| 교차 점검 | `ColumnDropped`·`KeyColumnDropped`·`TypeConverted`·`CrossCharset`·`BlobEmptyToNull` 항목(코드 상수는 `CopyCheckCodes`). 열 고르기·형식 판정은 원본 읽기 가능·대상 쓰기 가능으로 가른다. | `src/Oranda.Core/Transfer/Copy/PrecheckRules.cs`, `CopyPrecheckService.cs`, `ICopyPrecheckService.cs` |
-| 표 만들기 | 매핑한 표 구조로 `CreateTableDdl` 을 호출한다(`CrossTableMap.MapTable`/`Build`). 실행기와 사전 점검 미리 보기가 같은 함수를 써서 보내는 문장과 보여 주는 문장이 같다. 만들기·다시 만들기 차단은 `ICopyPrecheckDialect.CreateBlockedReason`/`RecreateBlockedReason` 으로 가른다. | `src/Oranda.Core/Transfer/Copy/CrossTableMap.cs`(XC8), `CreateTableDdl.cs`, `ICopyPrecheckDialect.cs`, `src/Oranda.Tibero/Transfer/Copy/TiberoCopyPrecheckDialect.cs` |
+| 교차 점검 | `ColumnDropped`·`KeyColumnDropped`·`TypeConverted`·`CrossCharset`·`BlobEmptyToNull`·`CrossStringBytes`·`CharPadDiffers`·`SequenceDefaultDropped` 항목(코드 상수는 `CopyCheckCodes`). 열 고르기·형식 판정은 원본 읽기 가능·대상 쓰기 가능으로 가른다. | `src/Oranda.Core/Transfer/Copy/PrecheckRules.cs`, `CopyPrecheckService.cs`, `ICopyPrecheckService.cs` |
+| 테이블 만들기 | 매핑한 테이블 구조로 `CreateTableDdl` 을 호출한다(`CrossTableMap.MapTable`/`Build`). 실행기와 사전 점검 미리 보기가 같은 함수를 써서 보내는 문장과 보여 주는 문장이 같다. 만들기·다시 만들기 차단은 `ICopyPrecheckDialect.CreateBlockedReason`/`RecreateBlockedReason` 으로 가른다. | `src/Oranda.Core/Transfer/Copy/CrossTableMap.cs`(XC8), `CreateTableDdl.cs`, `ICopyPrecheckDialect.cs`, `src/Oranda.Tibero/Transfer/Copy/TiberoCopyPrecheckDialect.cs` |
 | 앱 | 지원 쌍 판정과 점검 코드의 표시 이름. | `src/Oranda.App/Features/DataCopy/DataCopyServices.cs`(`IsPairSupported`), `PrecheckViewModel.cs`(`CodeNames`) |
 
 - 코덱(`IBulkValueCodec`) 기본 구현 멤버(D2): `IsReadable(serverType)`(기본 = `IsSupported`), `IsCrossWritable(bindType)`(기본 = `IsSupported`; Tibero 는 TZ 를 더해 켠다, §6), `ToPortable(value, serverType)`, `FromPortable(portable, bindType)`(기본 = NotSupported).
-- **바인드 형식 = 원본 형식을 대상 DBMS 로 옮긴 형식**(D3). 대상 열 형식이 아니다: 기존 대상 표의 형식 차이는 지금처럼 서버가 바꾼다(`NarrowerType` 그대로).
+- **바인드 형식 = 원본 형식을 대상 DBMS 로 옮긴 형식**(D3). 대상 열 형식이 아니다: 기존 대상 테이블의 형식 차이는 지금처럼 서버가 바꾼다(`NarrowerType` 그대로).
 - 오류 분류는 원본 벌·대상 벌을 합쳐 쓴다(대상 우선). 같은 DB 판정(`CopySameDatabase.cs`)은 DBMS 가 다르면 DbKey 비교 전에 다른 DB 로 본다(D18).
 
 ### 2.2 이식 값
@@ -97,7 +97,7 @@
 | DATE·TIMESTAMP(n) | 같음 | Exact | 같음 |
 | TIMESTAMP WITH TIME ZONE | 같음 | Converted `TimeZoneRegionToOffset` (지역 → 그 시각 오프셋, 지역 잃음 안내, D7). XC5 실측(win144 #128)으로 확정: Tibero TZ 쓰기 됨. 시 0 인 음수 오프셋(`-00:30`)은 같은 시각을 `+00:00` 으로 옮김 | TIMESTAMP WITH TIME ZONE |
 | INTERVAL YM·DS | 같음 | Exact | 같음 |
-| IDENTITY 열 | 일반 열 | Converted `IdentityToPlain` (표 만들기 전용 — 형식 판정이 Exact 일 때만 이유로 나옴) | 형식 그대로 |
+| IDENTITY 열 | 일반 열 | Converted `IdentityToPlain` (테이블 만들기 전용 — 형식 판정이 Exact 일 때만 이유로 나옴) | 형식 그대로 |
 | TIMESTAMP WITH LOCAL TIME ZONE | — | Dropped `LocalTimeZone` (D8) | |
 | LONG·LONG RAW | — | Dropped `LongSource` (D10, 대량 읽기 미지원) | |
 | ROWID·UROWID | — | Dropped `RowId` | |
@@ -110,7 +110,7 @@
 | NUMBER·FLOAT | 같음 | Exact | NUMBER |
 | BINARY_FLOAT·BINARY_DOUBLE | 같음 | Exact (원시 바이트 읽기 → float/double) | 같음 |
 | CHAR·NCHAR(≤1000)·NVARCHAR2(≤2000)·VARCHAR2(≤4000) | 같음 | Exact (Tibero 사전 이름 VARCHAR·NVARCHAR 는 VARCHAR2·NVARCHAR2 로 통일) | |
-| VARCHAR2 > 4000 | CLOB | Converted `LongStringToClob` (D9, 만들기 한정 — 기존 대상 표는 `NarrowerType`) | CLOB |
+| VARCHAR2 > 4000 | CLOB | Converted `LongStringToClob` (D9, 만들기 한정 — 기존 대상 테이블은 `NarrowerType`) | CLOB |
 | NVARCHAR2 > 2000·NCHAR > 1000 | NCLOB | Converted `LongNationalStringToNClob` (Oracle 4000B 한도, AL16UTF16 가정 문자당 2B) | NCLOB |
 | CLOB·NCLOB·BLOB·RAW | 같음 | Exact | |
 | LONG | CLOB | Converted `LongToClob` (D10) | CLOB |
@@ -124,12 +124,12 @@
 
 ### 3.3 대상 열 정의(`CrossColumnMapping.Target`)
 
-표 만들기 DDL 이 쓰는 열: 이름·위치·널 허용·기본값·길이·정밀도·`DataType` 의 괄호(`TIMESTAMP(9)`)는 원본 그대로, IDENTITY·도메인(Oracle 23ai)은 지운다.
+테이블 만들기 DDL 이 쓰는 열: 이름·위치·널 허용·기본값·길이·정밀도·`DataType` 의 괄호(`TIMESTAMP(9)`)는 원본 그대로, IDENTITY·도메인(Oracle 23ai)은 지운다.
 형식을 바꾼 열(LOB 로의 변환)은 `DataType` 을 바꾸고 길이·정밀도를 버린다. 가상 열·옮기지 않는 열·LOB 로 옮기는 열을 쓰는 제약·인덱스는 만들지 않고 안내하며, 함수 기반 인덱스는 카탈로그에 식이 없어 만들지 않는다. 이 처리는 `CrossTableMap.cs` 가 한다.
 
-### 3.4 표 만들기·다시 만들기 범위
+### 3.4 테이블 만들기·다시 만들기 범위
 
-- 만들기(CreateIfMissing): 양방향 범위 안(D11). 만든 표 실패 정리 = `DROP TABLE … PURGE`(D19).
+- 만들기(CreateIfMissing): 양방향 범위 안(D11). 만든 테이블 실패 정리 = `DROP TABLE … PURGE`(D19).
 - 다시 만들기(Recreate): Tibero→Oracle 만(D12). Oracle→Tibero 는 `RecreateBlockedReason` 으로 막는다. 옛 테이블을 지운 뒤 CREATE 가 실패하면 실행기가 그 자리에서 `FLASHBACK TABLE … TO BEFORE DROP` 으로 되살리고 결과에 알린다(XC8e, 결정 67: 같은 DBMS 다시 만들기도 같다). 휴지통에 남지 않았거나 되살리기도 실패하면 직접 되돌리는 안내가 나온다.
 - Oracle→Tibero 만들기: Tibero 대상 만들기 차단(`CreateBlockedReason`)은 XC8b 에서 풀렸다(D11).
 
@@ -137,7 +137,7 @@
 
 - Oracle `CHAR(n CHAR)` → Tibero: Oracle 은 CHAR 를 바이트로, Tibero 는 글자 수로 공백을 채워 뒤 공백 수가 달라질 수 있다(점검 `CharPadDiffers`, 통과 안내).
 - Tibero `VARCHAR(n CHAR)` → Oracle: DDL 은 `VARCHAR2(n CHAR)` 그대로이나 Oracle 은 4000바이트를 넘는 값을 받지 못해 그 행이 실패한다(ORA-12899). 점검 `CrossStringBytes`(확인): 복사 열의 짧은 쪽 길이 × 4바이트(UTF-8 최대) > 4000 인 VARCHAR2 열을 알린다(MAX_STRING_SIZE 는 읽지 않고 STANDARD 로 봄).
-- 기본값 `시퀀스.NEXTVAL`(양방향 표 만들기): 시퀀스 이름을 대상 스키마 `ALL_SEQUENCES` 에서 찾아 없으면 그 열의 DEFAULT 만 빼고 만든다(점검 `SequenceDefaultDropped`, 확인). 미리 보기·실행 DDL 은 같은 계획 구조에서 나온다. 같은 DBMS 복사는 바꾸지 않는다. 대상이 Oracle 11g(주 버전 11 이하)이면 시퀀스가 있어도 DEFAULT 시퀀스.NEXTVAL 을 쓸 수 없어(12c 부터, ORA-00984) 모든 시퀀스 기본값을 빼고 같은 항목(`SequenceDefaultDropped`)으로 알린다(XC8e).
+- 기본값 `시퀀스.NEXTVAL`(양방향 테이블 만들기): 시퀀스 이름을 대상 스키마 `ALL_SEQUENCES` 에서 찾아 없으면 그 열의 DEFAULT 만 빼고 만든다(점검 `SequenceDefaultDropped`, 확인). 미리 보기·실행 DDL 은 같은 계획 구조에서 나온다. 같은 DBMS 복사는 바꾸지 않는다. 대상이 Oracle 11g(주 버전 11 이하)이면 시퀀스가 있어도 DEFAULT 시퀀스.NEXTVAL 을 쓸 수 없어(12c 부터, ORA-00984) 모든 시퀀스 기본값을 빼고 같은 항목(`SequenceDefaultDropped`)으로 알린다(XC8e).
 
 ## 4. 실측이 필요했던 가정(XC5) — 결과는 `tibero-driver-transfer.md` §5
 
@@ -165,7 +165,7 @@
 
 - **Tibero VARCHAR(n CHAR) 다바이트 값 → Oracle 4000B 초과**: 만든 열은 `VARCHAR2(n CHAR)` 그대로이고 4000바이트를 넘는 행은 ORA-12899 로 그 행만 실패한다(PartiallyFailed). 결정(xc-core XC8d): 열은 그대로 두고 사전 점검 안내를 낸다.
 - **Oracle CHAR(n CHAR) → Tibero**: Oracle 은 바이트로, Tibero 는 글자로 채워 뒤 공백 수가 다르다(값은 같음). 결정: 안내 + 문서(값을 맞추지 않음).
-- **Tibero DEFAULT seq.NEXTVAL → Oracle**: 카탈로그 저장 모양은 `이름.NEXTVAL`(소유자·따옴표 없음) → Oracle 대상 스키마의 같은 이름 시퀀스를 가리킨다. 대상에 시퀀스가 없으면 CREATE 가 ORA-02289 로 실패하고 점검 안내도 없었다. 결정: 그 DEFAULT 를 빼고 표를 만들고 안내한다.
+- **Tibero DEFAULT seq.NEXTVAL → Oracle**: 카탈로그 저장 모양은 `이름.NEXTVAL`(소유자·따옴표 없음) → Oracle 대상 스키마의 같은 이름 시퀀스를 가리킨다. 대상에 시퀀스가 없으면 CREATE 가 ORA-02289 로 실패하고 점검 안내도 없었다. 결정: 그 DEFAULT 를 빼고 테이블을 만들고 안내한다.
 - **VARCHAR2(32767 CHAR)** 는 EXTENDED 가 아닌 Oracle 26ai 에서는 원본을 만들 수 없어 측정하지 못했다. 임시 사용자는 `V$PARAMETER` 를 못 읽는다(MAX_STRING_SIZE 조회 ORA-00942).
-- Oracle 다시 만들기(Tibero→Oracle)는 PURGE 없이 옛 표를 휴지통에 남긴다(FLASHBACK 안내가 나온다).
+- Oracle 다시 만들기(Tibero→Oracle)는 PURGE 없이 옛 테이블을 휴지통에 남긴다(FLASHBACK 안내가 나온다).
 

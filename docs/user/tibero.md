@@ -84,6 +84,9 @@ Tibero 드라이버(TDP.NET Core, `Tibero.DataAccess.dll`)는 TmaxTibero 라이�
 | 형식 바꿔 옮김(`TypeConverted`) | 확인(값이 바뀌는 열이 있을 때) 또는 통과 | 위 「바뀌어 옮겨지는 형식」. BINARY_*→NUMBER·시간대 지역→오프셋처럼 값에 닿는 변환이 있으면 확인, 테이블 만들기에만 해당하는 변환(IDENTITY·RAW→BLOB·긴 문자열→LOB 등)만 있으면 통과 |
 | 대상 문자셋 안내(`CrossCharset`) | 확인 | Oracle→Tibero 에 문자 열이 있으면 작업 전체에 한 번. 대상 DB 문자셋이 원본보다 좁으면 그 밖 글자가 실패하거나 바뀔 수 있습니다. 앱은 대상 문자셋을 조회하지 않고 늘 같은 안내를 냅니다 |
 | 빈 BLOB 은 NULL(`BlobEmptyToNull`) | 통과 | Oracle→Tibero 에서 BLOB 열이 있을 때 |
+| 문자열 바이트 한도(`CrossStringBytes`) | 확인 | Tibero→Oracle 에서 `VARCHAR2(n CHAR)` 열이 Oracle 의 4000바이트 한도를 넘을 수 있을 때. 열은 그대로 두고, 넘는 값이 있는 행만 실패합니다 |
+| CHAR 뒤 공백(`CharPadDiffers`) | 통과 | Oracle→Tibero 에서 CHAR 열이 있을 때. 뒤 공백 수가 달라질 수 있습니다 |
+| 시퀀스 기본값 뺌(`SequenceDefaultDropped`) | 확인 | Tibero→Oracle 로 테이블을 만들 때 `DEFAULT 시퀀스.NEXTVAL` 의 시퀀스가 대상에 없거나 대상이 Oracle 11g 이면 그 기본값만 빼고 만듭니다 |
 
 ### 제약과 주의
 
