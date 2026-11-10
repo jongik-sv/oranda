@@ -53,6 +53,14 @@ public sealed record ExecutionOptions
     /// 호출한 쪽이 다시 입력을 받는다(설계 6.2.3).
     /// </summary>
     public IReadOnlySet<string>? PreConfirmed { get; init; }
+
+    /// <summary>
+    /// 대량 읽기(<see cref="IBulkExecutionService.StreamRowsAsync"/>)가 LOB(CLOB·NCLOB·BLOB) 값을 행과 함께 미리 받을 크기(CLOB·NCLOB 은 글자,
+    /// BLOB 은 바이트, PF3). 이보다 짧은 값은 행과 함께 와서 LOB 마다 서버를 다시 부르지 않고, 긴 값은 나머지를 따로 받는다(값은 언제나 끝까지).
+    /// null·0 이하(기본) = 미리 받지 않음(위치자만 받고 값은 LOB 마다 따로 읽는 옛 동작). 드라이버가 이 설정을 쓰지 않으면 무시한다.
+    /// 다른 실행 경로(<see cref="IExecutionService"/>·결과 그리드)는 읽지 않는다.
+    /// </summary>
+    public int? LobPrefetchSize { get; init; }
 }
 
 /// <summary>스크립트 오류 처리(EXEC-10). 설정 <c>execution.scriptErrorMode</c> 와 같은 형식.</summary>

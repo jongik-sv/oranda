@@ -116,4 +116,20 @@ public sealed class RunWaitTests
         Assert.False(options.SerialReadWrite);
         Assert.Equal(5, options.WaitLimitMinutes);
     }
+
+    /// <summary>PF3: 화면에 칸이 없는 옵션(LOB 미리 받기 끄기 — 파일에서만 켬)은 규칙 편집기가 저장해도 지워지지 않는다.</summary>
+    [Fact]
+    public void Options_without_a_box_on_screen_survive_saving_from_the_editor()
+    {
+        var h = new DataCopyHarness();
+        var editor = new RuleEditorViewModel(h.Services());
+        editor.SetConnections([h.Source, h.Target]);
+        editor.Load(TestJobs.Job("옵션") with { Options = new CopyOptions { NoLobPrefetch = true, BatchSize = 300 } }, h.Source, h.Target);
+
+        editor.BatchSize = 400;
+        var options = editor.BuildJob().Options;
+
+        Assert.True(options.NoLobPrefetch);
+        Assert.Equal(400, options.BatchSize);
+    }
 }

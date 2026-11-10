@@ -35,6 +35,15 @@ public partial class CopyRunner
     /// </summary>
     internal const int BufferedLobBatches = 1;
 
+    /// <summary>
+    /// 테이블 원본 읽기의 LOB 미리 받기 크기(<see cref="ExecutionOptions.LobPrefetchSize"/>, CLOB·NCLOB 글자 · BLOB 바이트, PF3).
+    /// 이보다 짧은 LOB 은 행과 함께 와서 행마다 서버를 다시 부르지 않고, 긴 값만 옛 방식처럼 나머지를 따로 읽는다(긴 값은 옮기는 시간이 왕복보다 훨씬 길다).
+    /// 메모리: 배치에 쌓이는 양은 그대로다(옛 동작도 LOB 을 끝까지 읽어 배치에 담았다, 배치 수 = <see cref="BufferedLobBatches"/>).
+    /// 더해지는 것은 원본 드라이버의 행 버퍼뿐이고 드라이버가 왕복 한 번 양에 상한을 둔다(Oracle 32MB). 64K 는 업무 테이블 LOB 대부분을 덮는 크기다.
+    /// <see cref="CopyOptions.NoLobPrefetch"/> 면 넘기지 않는다.
+    /// </summary>
+    internal const int LobPrefetchSize = 64 * 1024;
+
     /// <summary>멈춤 감시 시각. 시험이 줄인다(실행기 인스턴스마다라 시험끼리 섞이지 않는다).</summary>
     internal CopyWatchTiming WatchTiming { get; set; } = CopyWatchTiming.Default;
 
@@ -202,7 +211,7 @@ public partial class CopyRunner
         try
         {
             watch.Source.Busy();
-            await using var rows = _bulk.StreamRowsAsync(run.Source, CopyCommonStatements.Query(select), select.Binds, run.BulkOptions, watch.Source.Token)
+            await using var rows = _bulk.StreamRowsAsync(run.Source, CopyCommonStatements.Query(select), select.Binds, SourceReadOptions(run), watch.Source.Token)
                 .GetAsyncEnumerator(CancellationToken.None); // 토큰은 호출 인자로 넘겼다
             while (await NextRowAsync(rows, table))
             {
@@ -327,7 +336,7 @@ public partial class CopyRunner
         var select = load.Select;
         var batch = new List<object?[]>(size);
         reader.Busy();
-        await using var rows = _bulk.StreamRowsAsync(run.Source, CopyCommonStatements.Query(select), select.Binds, run.BulkOptions, reader.Token)
+        await using var rows = _bulk.StreamRowsAsync(run.Source, CopyCommonStatements.Query(select), select.Binds, SourceReadOptions(run), reader.Token)
             .GetAsyncEnumerator(CancellationToken.None); // 토큰은 호출 인자로 넘겼다
         while (await NextRowAsync(rows, table))
         {
@@ -376,6 +385,13 @@ public partial class CopyRunner
 
         return false;
     }
+
+    /// <summary>
+    /// 원본 테이블 행을 읽는 대량 읽기 옵션: <see cref="RunState.BulkOptions"/> 에 LOB 미리 받기(<see cref="LobPrefetchSize"/>)를 더한다(PF3).
+    /// <see cref="CopyOptions.NoLobPrefetch"/> 면 그대로. 대상 COUNT·카탈로그 조회 같은 다른 읽기는 이것을 쓰지 않는다.
+    /// </summary>
+    private static ExecutionOptions SourceReadOptions(RunState run) =>
+        run.Job.Options.NoLobPrefetch ? run.BulkOptions : run.BulkOptions with { LobPrefetchSize = LobPrefetchSize };
 
     /// <summary>
     /// 원본 행 하나를 받는다. 받기까지 걸린 시간(커서 열기 포함 — 원본 DB 를 기다린 시간)을 표의 읽기 시간에 더한다(결정 74). 겹치기에서는 읽기 작업이

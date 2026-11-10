@@ -27,8 +27,22 @@ namespace Oranda.Oracle.Execution;
 [OrandaService(typeof(IBulkExecutionService), Dbms = Dbms.Oracle)]
 internal sealed class OracleBulkExecutionService : IBulkExecutionService
 {
-    /// <summary>한 번에 가져올 행 수(FetchSize = RowSize × 이 값). LOB 은 위치자만 오고 값은 열마다 따로 읽는다.</summary>
+    /// <summary>
+    /// 한 번에 가져올 행 수(FetchSize = RowSize × 이 값). LOB 미리 받기(<see cref="ExecutionOptions.LobPrefetchSize"/>)가 꺼져 있으면
+    /// LOB 은 위치자만 오고 값은 열마다 따로 읽는다(LOB 하나마다 서버 왕복).
+    /// </summary>
     internal const int FetchRows = 1000;
+
+    /// <summary>
+    /// LOB 미리 받기를 켠 읽기에서 서버 왕복 한 번에 받을 양의 상한(바이트, 드라이버 행 버퍼 = RowSize × 행 수).
+    /// <para>
+    /// 근거(ODP.NET 문서 「Obtaining LOB Data」·<c>OracleDataReader.RowSize</c>): <c>InitialLOBFetchSize</c> 를 0 보다 크게 두면 LOB 마다 그 크기까지
+    /// (CLOB·NCLOB 은 글자, BLOB 은 바이트) 행과 함께 받아 리더 버퍼에 두고, <c>RowSize</c> 에 그 크기가 들어간다. 그래서 LOB 열이 있는 질의에
+    /// 「RowSize × <see cref="FetchRows"/>」를 그대로 쓰면 버퍼가 미리 받기 크기 × 1000 행만큼 커질 수 있다(64K 글자 CLOB 하나면 수백 MB).
+    /// 이 상한으로 한 번에 받는 행 수를 줄인다(적어도 1행, 많아야 <see cref="FetchRows"/>). LOB 열이 없는 질의·미리 받기를 끈 읽기는 옛 계산 그대로다.
+    /// </para>
+    /// </summary>
+    internal const long LobPrefetchFetchBytes = 32L * 1024 * 1024;
 
     private const string CancelledMessage = "대량 읽기를 취소했습니다.";
 
@@ -81,7 +95,7 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
         session.SetBusy(true);
         try
         {
-            await foreach (var row in ReadRowsAsync(session, query, binds, ct))
+            await foreach (var row in ReadRowsAsync(session, query, binds, options, ct))
             {
                 yield return row;
             }
@@ -95,7 +109,7 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
 
     /// <summary>잠금을 쥔 채로 부른다. 리더·명령 정리는 여기서, 잠금 해제는 호출한 쪽 finally 에서 한다.</summary>
     private static async IAsyncEnumerable<object?[]> ReadRowsAsync(OracleSession session, SqlStatement query,
-                                                                   IReadOnlyDictionary<string, BindValue> binds,
+                                                                   IReadOnlyDictionary<string, BindValue> binds, ExecutionOptions options,
                                                                    [EnumeratorCancellation] CancellationToken ct)
     {
         OracleCommand? cmd = null;
@@ -106,6 +120,7 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
             cmd = session.Connection.CreateCommand();
             cmd.BindByName = true;
             cmd.CommandText = query.Text;
+            var prefetch = ApplyLobPrefetch(cmd, options);
             BindBuilder.Build(cmd, query, binds);
             using var cancel = cmd.CancelOnToken(ct);
 
@@ -113,8 +128,9 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
             try
             {
                 reader = (OracleDataReader)await cmd.ExecuteReaderAsync(ct);
-                reader.FetchSize = Math.Max(reader.RowSize, 1) * FetchRows;
                 readers = ColumnReaders(reader);
+                prefetch = prefetch && HasLob(readers);
+                reader.FetchSize = FetchSizeFor(reader.RowSize, prefetch); // 첫 Read 전에 둔다(첫 왕복부터 먹게)
             }
             catch (OracleException ex) when (OracleExecutionService.IsCancellation(ex, ct))
             {
@@ -135,7 +151,7 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
                         break;
                     }
 
-                    row = ReadRow(reader, readers);
+                    row = ReadRow(reader, readers, prefetch);
                 }
                 catch (OracleException ex) when (OracleExecutionService.IsCancellation(ex, ct))
                 {
@@ -446,8 +462,51 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
         return result;
     }
 
-    /// <summary>행 하나. LOB 은 끝까지 읽는다(그리드의 미리보기 경로 <c>OracleValues.ReadCell</c> 을 쓰지 않는다).</summary>
-    private static object?[] ReadRow(OracleDataReader reader, BulkReadKind[] readers)
+    /// <summary>
+    /// 대량 읽기 명령에 LOB 미리 받기 크기를 둔다(<see cref="ExecutionOptions.LobPrefetchSize"/> 가 0 보다 클 때만, 실행 전). 두었으면 true.
+    /// <para>
+    /// ODP.NET(Managed) <c>OracleCommand.InitialLOBFetchSize</c> 의 뜻(문서 「Obtaining LOB Data」, 12.1.0.2 이후 동작): 0(기본) = 위치자만 받고
+    /// 값은 꺼낼 때 LOB 마다 따로 받는다. 0 보다 크면 LOB 마다 그 크기까지(CLOB·NCLOB 글자, BLOB 바이트) <c>Read</c> 때 행과 함께 받고, 더 긴 값은
+    /// 꺼낼 때(형식 접근자) 나머지를 서버에서 더 받는다 — 값은 언제나 끝까지 오고 기본 키·ROWID 가 없어도 된다. -1 = 크기 상한 없이 LOB 전체를
+    /// 행 버퍼에 받는다(최대 2GB).
+    /// </para>
+    /// <para>
+    /// 복사는 -1 을 쓰지 않는다: 한 번에 받는 행 수만큼 LOB 전체가 드라이버 버퍼에 쌓여 아주 큰 LOB(수백 MB) 이 있으면 메모리 상한이 없다.
+    /// 상한 있는 크기면 그보다 큰 값만 옛 방식(나머지 따로 읽기)으로 가고, 큰 값은 왕복 한 번보다 옮기는 시간이 훨씬 길어 손해가 작다.
+    /// 문서도 「대부분(80%) 행의 LOB 보다 큰 값」을 권한다. 크기는 호출한 쪽(복사 실행기)이 정한다.
+    /// </para>
+    /// </summary>
+    internal static bool ApplyLobPrefetch(OracleCommand cmd, ExecutionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(cmd);
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.LobPrefetchSize is not { } size || size <= 0)
+        {
+            return false;
+        }
+
+        cmd.InitialLOBFetchSize = size;
+        return true;
+    }
+
+    /// <summary>
+    /// 리더의 FetchSize(바이트). 미리 받기를 켠 LOB 질의는 왕복 한 번이 <see cref="LobPrefetchFetchBytes"/> 를 넘지 않게 행 수를 줄이고(적어도 1행),
+    /// 그 밖에는 옛 계산(RowSize × <see cref="FetchRows"/>) 그대로다.
+    /// </summary>
+    internal static long FetchSizeFor(long rowSize, bool lobPrefetch)
+    {
+        var size = Math.Max(rowSize, 1);
+        var rows = lobPrefetch ? Math.Clamp(LobPrefetchFetchBytes / size, 1, FetchRows) : FetchRows;
+        return size * rows;
+    }
+
+    private static bool HasLob(BulkReadKind[] readers) => Array.Exists(readers, k => k is BulkReadKind.Clob or BulkReadKind.Blob);
+
+    /// <summary>
+    /// 행 하나. LOB 은 끝까지 읽는다(그리드의 미리보기 경로 <c>OracleValues.ReadCell</c> 을 쓰지 않는다).
+    /// <paramref name="lobPrefetched"/> 면 LOB 을 위치자 대신 값 접근자로 꺼낸다(<see cref="ReadPrefetchedClob"/>·<see cref="ReadPrefetchedBlob"/>).
+    /// </summary>
+    private static object?[] ReadRow(OracleDataReader reader, BulkReadKind[] readers, bool lobPrefetched)
     {
         var row = new object?[readers.Length];
         for (var i = 0; i < readers.Length; i++)
@@ -459,8 +518,8 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
 
             row[i] = readers[i] switch
             {
-                BulkReadKind.Clob => ReadClob(reader, i),
-                BulkReadKind.Blob => ReadBlob(reader, i),
+                BulkReadKind.Clob => lobPrefetched ? ReadPrefetchedClob(reader, i) : ReadClob(reader, i),
+                BulkReadKind.Blob => lobPrefetched ? ReadPrefetchedBlob(reader, i) : ReadBlob(reader, i),
                 BulkReadKind.Raw => reader.GetOracleBinary(i).Value,
                 BulkReadKind.BinaryFloat => reader.GetFloat(i),
                 BulkReadKind.BinaryDouble => reader.GetDouble(i),
@@ -488,5 +547,22 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
     {
         using var blob = reader.GetOracleBlob(i);
         return blob.Value;
+    }
+
+    /// <summary>
+    /// 미리 받은 CLOB·NCLOB. 형식 접근자 <c>GetString</c> 은 행과 함께 온 앞부분을 쓰고, 미리 받기 크기보다 긴 값이면 나머지를 서버에서 더 받아
+    /// 끝까지 돌려준다(문서). 위치자(<c>GetOracleClob</c>)를 만들지 않으므로 미리 받은 값은 LOB 마다 왕복 없이 쓰인다.
+    /// NULL 은 부른 쪽이 이미 걸렀다(IsDBNull): null 이 오면 빈 값(EMPTY_CLOB)으로 본다.
+    /// </summary>
+    private static string ReadPrefetchedClob(OracleDataReader reader, int i) => reader.GetString(i) ?? string.Empty;
+
+    /// <summary>
+    /// 미리 받은 BLOB. <c>GetOracleBinary</c> 는 BLOB 열에 쓸 수 있는 형식 접근자이고 긴 값은 나머지를 더 받는다(문서).
+    /// 빈 BLOB(EMPTY_BLOB) 을 미리 받으면 값 없음으로 온다는 드라이버 보고가 있어, NULL 을 이미 거른 이 자리에서는 빈 배열로 본다.
+    /// </summary>
+    private static byte[] ReadPrefetchedBlob(OracleDataReader reader, int i)
+    {
+        var value = reader.GetOracleBinary(i);
+        return value.IsNull ? [] : value.Value ?? [];
     }
 }

@@ -101,7 +101,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
         session.SetBusy(true);
         try
         {
-            await foreach (var row in TiberoBulkReader.ReadAsync(session, query, binds, ct).ConfigureAwait(false))
+            await foreach (var row in TiberoBulkReader.ReadAsync(session, query, binds, TiberoBulkReader.LobPrefetchFor(options), ct).ConfigureAwait(false))
             {
                 yield return row;
             }

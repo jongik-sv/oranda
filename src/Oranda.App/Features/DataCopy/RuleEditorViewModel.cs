@@ -683,7 +683,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
             Sequences = sequences,
             Variables = [.. Variables.Select(v => v.ToVariable())],
             TableDefaults = legacy ? null : CurrentTableDefaults,
-            Options = new CopyOptions
+            // 화면에 칸이 없는 옵션(예: NoLobPrefetch — 파일에서만 켬)은 불러온 값을 그대로 이어 쓴다. 새로 만들면 저장할 때 지워진다.
+            Options = baseJob.Options with
             {
                 BatchSize = BatchSize,
                 Commit = Commit,

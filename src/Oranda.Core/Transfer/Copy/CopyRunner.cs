@@ -1914,7 +1914,7 @@ public partial class CopyRunner : ICopyRunner
                 run.Progress(tableName, table.SourceRows, rows.Count, PhaseRetry);
                 var binds = shape.KeyBinds(failedRow);
                 object?[]? source = null;
-                await foreach (var row in _bulk.StreamRowsAsync(run.Source, query, binds, run.BulkOptions, ct))
+                await foreach (var row in _bulk.StreamRowsAsync(run.Source, query, binds, SourceReadOptions(run), ct))
                 {
                     source = shape.Apply(row);
                 }

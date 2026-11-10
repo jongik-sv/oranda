@@ -42,11 +42,26 @@ internal static class TiberoBulkReader
     private const string CancelledMessage = "대량 읽기를 취소했습니다.";
 
     /// <summary>
+    /// LOB 미리 받기(<see cref="ExecutionOptions.LobPrefetchSize"/>, PF3)를 드라이버 명령(<c>TiberoCommand.InitialLOBFetchSize</c>)에 둘지. 지금은 끔.
+    /// 드라이버 1.1.35 에 설정은 있지만(<see cref="TiberoDriver.SetInitialLobFetchSize"/>) 두어도 리더에서 0 으로 읽히고 효과를 관찰하지 못했다
+    /// (docs/design/tibero-driver-values.md 4장). 이 읽기는 LOB 을 위치자에서 조각으로 읽으므로 켜도 값은 같다.
+    /// win144 실측 뒤 켬(조정자 지시: Tibero 는 실측 뒤 적용) — 켜기 전에 LOB 테이블 행/초와 값(큰 것·작은 것·NULL·빈 값)을 실측한다.
+    /// </summary>
+    internal static readonly bool LobPrefetchEnabled; // 기본값 false = 끔
+
+    /// <summary>드라이버 명령에 둘 LOB 미리 받기 크기. <see cref="LobPrefetchEnabled"/> 가 꺼져 있거나 옵션이 0 이하·없으면 null(두지 않음).</summary>
+    internal static int? LobPrefetchFor(ExecutionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return LobPrefetchEnabled && options.LobPrefetchSize is > 0 ? options.LobPrefetchSize : null;
+    }
+
+    /// <summary>
     /// 질의를 실행하고 행을 낸다. 명령 잠금을 쥔 채로 부른다. 리더·명령 정리는 여기서 한다(조기 중단·예외 포함).
     /// 취소(토큰 취소, 또는 취소된 토큰 뒤의 TBR-12040)는 <see cref="OperationCanceledException"/>, 드라이버 예외는 <see cref="TiberoSession.ReportFailure"/> 에 알린 뒤 그대로 올린다.
     /// </summary>
     public static async IAsyncEnumerable<object?[]> ReadAsync(TiberoSession session, SqlStatement query,
-                                                              IReadOnlyDictionary<string, BindValue> binds,
+                                                              IReadOnlyDictionary<string, BindValue> binds, int? lobPrefetchSize,
                                                               [EnumeratorCancellation] CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -59,6 +74,11 @@ internal static class TiberoBulkReader
         {
             // 명령·바인드 만들기는 서버를 부르지 않는다. 값이 없는 바인드는 여기서 InvalidOperationException(보내지 않음).
             cmd = session.CreateCommand(query.Text);
+            if (lobPrefetchSize is { } lobSize)
+            {
+                driver.SetInitialLobFetchSize(cmd, lobSize); // 기본은 오지 않는다(LobPrefetchEnabled 끔)
+            }
+
             Bind(driver, cmd, query, binds);
             var command = cmd;
 
