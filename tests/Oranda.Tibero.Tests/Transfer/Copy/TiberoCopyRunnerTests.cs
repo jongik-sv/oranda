@@ -16,7 +16,7 @@ using Oranda.Tibero.Transfer.Copy;
 namespace Oranda.Tibero.Tests.Transfer.Copy;
 
 /// <summary>
-/// Tibero 복사 실행기·사전 점검 하위 형식(T5 TI1b, 서버 없음). 키 등록은 하지 않는다(두 번째 계정 복사 IT 뒤, 결정65).
+/// Tibero 복사 실행기·사전 점검 하위 형식(T5 TI1b, 서버 없음). <c>Dbms.Tibero</c> 키로 등록한다(xdb-copy XC0, Tibero→Tibero 복사 켬).
 /// 같은 계정·같은 표 복사는 Core 판정(<see cref="CopySameDatabase"/>)이 Tibero 의 DbKey 모양(<c>DB이름/-/계정</c>)에서 막는지 가짜 세션으로 본다.
 /// 서버로 도는 확인은 <c>TiberoCopySameAccountIt</c>.
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class TiberoCopyRunnerTests
     private const string Table = "EMP";
 
     [Fact]
-    public void Subtypes_construct_with_fakes_and_are_not_registered_as_services()
+    public void Subtypes_construct_with_fakes_and_are_registered_under_the_Tibero_key()
     {
         var bulk = new TiberoBulkExecutionService(new AllowAll(), new NoQuestions(), new EventBus());
         var execution = new TiberoExecutionService(new AllowAll(), new NoQuestions(), new EventBus(), null, dbmsOutput: false);
@@ -36,8 +36,16 @@ public sealed class TiberoCopyRunnerTests
 
         Assert.IsAssignableFrom<ICopyRunner>(runner);
         Assert.IsAssignableFrom<ICopyPrecheckService>(precheck);
-        Assert.Empty(typeof(TiberoCopyRunner).GetCustomAttributes(typeof(OrandaServiceAttribute), inherit: false));
-        Assert.Empty(typeof(TiberoCopyPrecheckService).GetCustomAttributes(typeof(OrandaServiceAttribute), inherit: false));
+        AssertRegistered(typeof(TiberoCopyRunner), typeof(ICopyRunner));
+        AssertRegistered(typeof(TiberoCopyPrecheckService), typeof(ICopyPrecheckService));
+        AssertRegistered(typeof(TiberoBulkExecutionService), typeof(IBulkExecutionService));
+    }
+
+    private static void AssertRegistered(Type implementation, Type service)
+    {
+        var attribute = Assert.Single(implementation.GetCustomAttributes<OrandaServiceAttribute>(inherit: false));
+        Assert.Equal(service, attribute.ServiceType);
+        Assert.Equal(Dbms.Tibero, attribute.Dbms);
     }
 
     [Fact]

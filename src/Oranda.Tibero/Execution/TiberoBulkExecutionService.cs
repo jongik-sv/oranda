@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
@@ -33,9 +34,10 @@ namespace Oranda.Tibero.Execution;
 /// <para>
 /// 읽기 전용 프로필이라도 문장마다 읽기 전용 트랜잭션을 걸지 않는다(원본 스냅숏은 호출한 쪽이 <see cref="TiberoExecutionService.ReadOnlyBlock"/> 으로 연다 —
 /// 읽기 전용 프로필에서는 그 글만 이중 방어를 지난다). DBMS_OUTPUT·변경 일지도 거치지 않는다.
-/// 등록하지 않는다: Tibero 복사 키 등록(두 번째 계정 복사 IT 뒤, TI1b 결정65)에 DBMS 키로 등록한다(TiberoDataTransferService 와 같은 순서).
+/// Tibero→Tibero 복사를 켜며(xdb-copy XC0, 사내용) 실행기·사전 점검과 함께 <c>Dbms.Tibero</c> 키로 등록한다.
 /// </para>
 /// </summary>
+[OrandaService(typeof(IBulkExecutionService), Dbms = Dbms.Tibero)]
 internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
 {
     /// <summary>배열 DML 이 오류 없이 행을 덜 넣었을 때의 오류 코드(TB1 설계 3.2).</summary>

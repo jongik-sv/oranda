@@ -251,6 +251,7 @@ Oracle 과 같음. **실패한 DDL 도 커밋한다** → 복사 도중 DDL(트�
 
 - **켜진 것**: 내보내기·가져오기·정의서(TI1a 키 등록). 결과 격자·복사 읽기의 BINARY_FLOAT/DOUBLE·LONG·LONG RAW 읽기 고침(R1x, values.md 3장).
 - **있지만 꺼진 것 = Tibero 데이터 복사**: 대량 실행(`TiberoBulkExecutionService`)·값 코덱(`TiberoBulkValueCodec`)·방언(`TiberoCopyDialect`)·사전 점검 방언·다시 만들기 단계·실행기/사전 점검 하위 형식(`TiberoCopyRunner`·`TiberoCopyPrecheckService`)이 모두 있으나 어느 것도 `[OrandaService]` 로 등록하지 않았다. 이유: 같은 계정 안 복사는 Core 가 막고(같은 DB·같은 소유자, `TiberoCopySameAccountIt` 로 확인), 다른 계정으로의 실제 복사를 잴 두 번째 Tibero 계정이 시험 서버에 없다(결정65). 화면은 「Tibero 복사는 아직 꺼져 있음」으로 남는다(TU1).
+- **켬(xdb-copy XC0, 2026-11-10, 사내용)**: 위 꺼짐을 사용자 지시로 풀었다 — 대량 실행·실행기·사전 점검을 `Dbms.Tibero` 키로 등록해 Tibero→Tibero 복사 메뉴가 켜진다. **두 번째 계정 IT(아래 1번)는 아직 못 쟀다.** 같은 계정 차단(Core)·다시 만들기 차단(`RecreateBlockedReason`)은 그대로다.
 - **켜기 전에 할 일** (두 번째 계정 `ORANDA_IT_TIBERO_USER2`·`PASSWORD2` 가 생기면):
   1. 실제 복사 IT(실행기 경로: 다중 배치·배치 실패 뒤 한 행씩·실패 행 재시도·4000자 넘는 CLOB·1 MB BLOB, Q7·Q8) → 녹색이면 대량 실행·실행기·사전 점검을 `Dbms.Tibero` 키로 등록.
   2. ~~CopyRunner 안내 글의 Oracle 번호 고정 → 방언 메시지로.~~ **서버 없이 끝냄(T5 켜기 전 1)**: `ICopyDialect` 에 기본 구현(= 지금 Oracle 글) 멤버를 더했고 Tibero 방언이 채운다. Oracle 글은 한 글자도 안 바뀐다(`OracleCopyDialectTests` 가 글자까지 못 박음). 한국어 글을 코드에 두는 복사 쪽 기존 방식 그대로(복사 Core 에 리소스 파일 방식은 없다).
