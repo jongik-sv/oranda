@@ -9,6 +9,7 @@ using Oranda.App.Features.MyBatisWorkspace.Expanded;
 using Oranda.App.Features.MyBatisWorkspace.Hooks;
 using Oranda.App.Features.MyBatisWorkspace.Parameters;
 using Oranda.App.Features.SqlEditor;
+using Oranda.App.Tests.Features.Diagnostics;
 using Oranda.App.Tests.Features.MyBatisWorkspace.Fakes;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.Core.Language;
@@ -55,8 +56,13 @@ public sealed class MyBatisDiagnosticsTests
         using var f = new Fixture(EntityStatement);
 
         // 꾸밈 전: 원문을 SQL 로 읽은 거짓 오류가 있다(고치기 전 동작).
+        var analyzing = Stopwatch.StartNew();
         await f.Diagnostics.AnalyzeNowAsync();
-        Assert.Contains(f.Diagnostics.Current, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.True(
+            f.Diagnostics.Current.Any(d => d.Severity == DiagnosticSeverity.Error),
+            $"분석 뒤 오류가 없다: 진단 {f.Diagnostics.Current.Count}개, 적용 {f.Diagnostics.AppliedAnalyses}회, 대기 중 {f.Diagnostics.IsPending}, "
+            + $"SQL 분석 끔 {f.Diagnostics.SqlAnalysisOff}, 분석 {analyzing.ElapsedMilliseconds} ms, "
+            + Oranda.App.Tests.Features.Diagnostics.DiagnosticsLatencyTests.PoolState());
 
         f.Attach();
         await WaitUntil(() => f.Applied >= 1);
@@ -170,9 +176,7 @@ public sealed class MyBatisDiagnosticsTests
     {
         var vm = new SqlEditorViewModel(Guid.NewGuid(), "SELECT * FROM WHERE x = 1");
         var view = new SqlEditorView { DataContext = vm };
-        var window = new Window { Width = 600, Height = 300, Content = view };
-        window.Show();
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, diagnostics) = DiagnosticsEditor.ShowAttached(view, () => Language, 600, 300);
         await diagnostics.AnalyzeNowAsync();
 
         Assert.False(diagnostics.SqlAnalysisOff);
@@ -183,8 +187,14 @@ public sealed class MyBatisDiagnosticsTests
     private static async Task WaitUntil(Func<bool> done, int timeoutMs = 20000)
     {
         var sw = Stopwatch.StartNew();
-        while (!done() && sw.ElapsedMilliseconds < timeoutMs)
+        long last = 0, maxGap = 0;
+        while (!done())
         {
+            long now = sw.ElapsedMilliseconds;
+            maxGap = Math.Max(maxGap, now - last);
+            last = now;
+            Assert.True(now < timeoutMs, // 조용히 넘어가지 않는다
+                $"조건이 {timeoutMs} ms 안에 참이 되지 않았다. 루프 사이 최대 {maxGap} ms, {Oranda.App.Tests.Features.Diagnostics.DiagnosticsLatencyTests.PoolState()}");
             Dispatcher.UIThread.RunJobs();
             await Task.Delay(10);
         }
@@ -221,10 +231,7 @@ public sealed class MyBatisDiagnosticsTests
 
             _hub = new MyBatisEvalHub(MyBatisEvalHub.Services(new MyBatisEvaluator(), null)) { Host = host, Post = a => a(), Debounce = TimeSpan.FromMilliseconds(20) };
             _view = new SqlEditorView { DataContext = Tab };
-            _window = new Window { Width = 700, Height = 400, Content = _view };
-            _window.Show();
-            Dispatcher.UIThread.RunJobs();
-            Diagnostics = EditorDiagnostics.Attach(_view, () => Language);
+            (_window, Diagnostics) = DiagnosticsEditor.ShowAttached(_view, () => Language, 700, 400);
             Eval = _hub.For(_session, StatementId);
         }
 

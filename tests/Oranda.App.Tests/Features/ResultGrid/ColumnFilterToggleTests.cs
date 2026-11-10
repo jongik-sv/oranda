@@ -19,6 +19,16 @@ public sealed class ColumnFilterToggleTests : IDisposable
     private readonly Func<bool>? _oldProvider = SqlResultPaneViewModel.ColumnFilterDefaultProvider;
     private readonly Func<bool, Task>? _oldSaver = SqlResultPaneViewModel.ColumnFilterDefaultSaver;
 
+    /// <summary>
+    /// 기본(켬, 저장 안 함)에서 시작한다. 이 정적 값은 앱 전체를 띄우는 다른 시험의 ResultGridSettingsStartup 이 그 시험의 설정으로 바꿔 두고
+    /// 되돌리지 않는다. 그 설정에 다른 시험(GridEditTests 등)이 「끔」 을 저장해 두면 여기 시험이 꺼진 채로 시작해 전체 실행에서만 매번 깨졌다(ci-flaky F10).
+    /// </summary>
+    public ColumnFilterToggleTests()
+    {
+        SqlResultPaneViewModel.ColumnFilterDefaultProvider = null;
+        SqlResultPaneViewModel.ColumnFilterDefaultSaver = null;
+    }
+
     public void Dispose()
     {
         SqlResultPaneViewModel.ColumnFilterDefaultProvider = _oldProvider;

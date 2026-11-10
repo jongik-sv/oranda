@@ -88,7 +88,8 @@ public sealed class GridFetchSettingsTests
     public async Task The_memory_limit_setting_sets_the_page_cache_of_the_next_result()
     {
         var settings = await LoadedAsync(s => WithGrid(s, g => g with { MemoryLimitMb = 64 }));
-        var previous = ResultGridModel.CacheOptionsProvider;
+        // 시작 작업은 캐시 말고도 정렬 한도·열 필터 기본값·명령 이름 정적 값을 이 시험의 설정에 묶는다: 전부 되돌린다(남으면 뒤 시험이 이 설정을 읽는다, ci-flaky F10).
+        var previous = Oranda.App.Tests.Shell.Headless.StartupStatics.Capture();
         try
         {
             await new ResultGridSettingsStartup(settings).RunAsync(default);
@@ -103,7 +104,7 @@ public sealed class GridFetchSettingsTests
         }
         finally
         {
-            ResultGridModel.CacheOptionsProvider = previous;
+            previous.Restore();
         }
     }
 

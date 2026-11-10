@@ -14,15 +14,6 @@ public sealed class LintDiagnosticsTests
 {
     private static readonly ILanguageService Language = new LanguageService();
 
-    private static (Window Window, SqlEditorView View, SqlEditorViewModel Vm) Show(string text)
-    {
-        var vm = new SqlEditorViewModel(Guid.NewGuid(), text);
-        var view = new SqlEditorView { DataContext = vm };
-        var window = new Window { Width = 900, Height = 600, Content = view };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-        return (window, view, vm);
-    }
 
     private static async Task<T> WithLint<T>(bool enabled, Func<Task<T>> body)
     {
@@ -44,8 +35,7 @@ public sealed class LintDiagnosticsTests
     [Fact]
     public Task Lint_warning_is_underlined_and_survives_syntax_pass() => Ui.Run(() => WithLint(true, async () =>
     {
-        var (window, view, vm) = Show("SELECT * FROM emp WHERE mgr = NULL");
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, _, _, diagnostics) = DiagnosticsEditor.Show("SELECT * FROM emp WHERE mgr = NULL", () => Language);
         await diagnostics.AnalyzeNowAsync();
 
         var warning = Assert.Single(diagnostics.Current);
@@ -59,8 +49,7 @@ public sealed class LintDiagnosticsTests
     [Fact]
     public Task Lint_off_gives_no_warning() => Ui.Run(() => WithLint(false, async () =>
     {
-        var (window, view, _) = Show("SELECT * FROM emp WHERE mgr = NULL");
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, _, _, diagnostics) = DiagnosticsEditor.Show("SELECT * FROM emp WHERE mgr = NULL", () => Language);
         await diagnostics.AnalyzeNowAsync();
 
         Assert.Empty(diagnostics.Current);

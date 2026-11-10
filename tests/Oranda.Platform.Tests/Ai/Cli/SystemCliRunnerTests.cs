@@ -133,6 +133,15 @@ public sealed class SystemCliRunnerTests : IDisposable
         });
 
         Assert.True(run.TimedOut);
+
+        // 종료(Kill)는 실행 토큰의 취소 콜백이다. 콜백은 등록 역순으로 돌아 나중에 걸린 읽기 취소가 먼저 끝날 수 있으므로,
+        // 읽기가 돌아온 바로 그 순간이 아니라 시간 제한이 프로세스를 끝내는지를 본다(10 초는 멈춤 방지용 한도).
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!_launcher.Process!.Killed && DateTime.UtcNow < until)
+        {
+            await Task.Delay(10);
+        }
+
         Assert.True(_launcher.Process!.Killed);
         Assert.Equal("cli_timeout", SystemCliRun.TimeoutError("fake", TimeSpan.FromMilliseconds(100)).Code);
     }

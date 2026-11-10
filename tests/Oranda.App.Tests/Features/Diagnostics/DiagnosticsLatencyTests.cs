@@ -23,10 +23,10 @@ public sealed class DiagnosticsLatencyTests(ITestOutputHelper output)
     [Fact]
     public Task Analysis_starts_once_the_debounce_has_passed_since_the_last_key() => Ui.Run(async () =>
     {
-        var (window, view, vm) = Show("SELECT 1 FROM dual");
         var probe = new ProbeLanguage(Language);
-        var diagnostics = EditorDiagnostics.Attach(view, () => probe);
-        await WaitUntil(() => diagnostics.AppliedAnalyses >= 1 && !diagnostics.IsPending);
+        var (window, _, vm, diagnostics) = DiagnosticsEditor.Show("SELECT 1 FROM dual", () => probe);
+        string State() => $"분석 호출 {probe.Calls}회, 적용 {diagnostics.AppliedAnalyses}회, 대기 중 {diagnostics.IsPending}";
+        await WaitUntil(() => diagnostics.AppliedAnalyses >= 1 && !diagnostics.IsPending, state: State);
         int calls = probe.Calls;
 
         // 디바운스보다 짧은 간격으로 다섯 번 입력한다.
@@ -45,7 +45,7 @@ public sealed class DiagnosticsLatencyTests(ITestOutputHelper output)
             await Pump(gap);
         }
 
-        await WaitUntil(() => diagnostics.AppliedAnalyses >= 2 && !diagnostics.IsPending);
+        await WaitUntil(() => diagnostics.AppliedAnalyses >= 2 && !diagnostics.IsPending, state: State);
 
         var waited = Stopwatch.GetElapsedTime(lastKey, probe.LastCallAt);
         output.WriteLine($"마지막 키 → 분석 시작 {waited.TotalMilliseconds:F1} ms (디바운스 {EditorDiagnostics.Debounce.TotalMilliseconds:F0} ms), 키 사이 최대 {longestGap.TotalMilliseconds:F0} ms");
@@ -66,8 +66,7 @@ public sealed class DiagnosticsLatencyTests(ITestOutputHelper output)
         // tests/Oranda.Perf.Ui DiagnosticsScenario 와 같은 문서·편집·횟수를 헤드리스 창에서 잰다(화면에 창을 띄우지 않는다).
         const int Warmup = 3, Samples = 15;
         const string Bad = "select (1 from dual;\n";
-        var (window, view, vm) = Show(TenThousandLineDocument());
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, _, vm, diagnostics) = DiagnosticsEditor.Show(TenThousandLineDocument(), () => Language);
         var cold = Stopwatch.StartNew();
         await WaitUntil(() => diagnostics.AppliedAnalyses >= 1 && !diagnostics.IsPending, 120_000);
         var coldMs = cold.Elapsed.TotalMilliseconds;
@@ -134,8 +133,7 @@ public sealed class DiagnosticsLatencyTests(ITestOutputHelper output)
     {
         // 디바운스(100 ms)보다 짧은 간격으로 계속 입력하며 UI 스레드가 한 번에 묶이는 가장 긴 시간을 잰다(분석은 백그라운드여야 한다).
         const int Keys = 60;
-        var (window, view, vm) = Show(TenThousandLineDocument());
-        var diagnostics = EditorDiagnostics.Attach(view, () => Language);
+        var (window, _, vm, diagnostics) = DiagnosticsEditor.Show(TenThousandLineDocument(), () => Language);
         await WaitUntil(() => diagnostics.AppliedAnalyses >= 1 && !diagnostics.IsPending, 120_000);
 
         var longest = TimeSpan.Zero;
@@ -159,27 +157,30 @@ public sealed class DiagnosticsLatencyTests(ITestOutputHelper output)
         window.Close();
     });
 
-    private static (Window Window, SqlEditorView View, SqlEditorViewModel Vm) Show(string text)
-    {
-        var vm = new SqlEditorViewModel(Guid.NewGuid(), text);
-        var view = new SqlEditorView { DataContext = vm };
-        var window = new Window { Width = 900, Height = 600, Content = view };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-        return (window, view, vm);
-    }
 
-    private static async Task WaitUntil(Func<bool> done, int timeoutMs = 20000)
+    private static async Task WaitUntil(Func<bool> done, int timeoutMs = 20000, Func<string>? state = null)
     {
         var sw = Stopwatch.StartNew();
-        while (!done() && sw.ElapsedMilliseconds < timeoutMs)
+        long last = 0, maxGap = 0;
+        int loops = 0;
+        while (!done())
         {
+            // 시간이 지나도 조용히 넘어가면 뒤 단정이 엉뚱한 값(분석이 한 번도 안 불린 시각 0 등)으로 깨져 원인이 안 보인다.
+            // 실패 글에 루프 사이 최대 공백(UI 스레드·타이머가 멈췄나)과 스레드 풀 상태(풀이 굶었나)를 남긴다.
+            long now = sw.ElapsedMilliseconds;
+            maxGap = Math.Max(maxGap, now - last);
+            last = now;
+            loops++;
+            Assert.True(now < timeoutMs, $"조건이 {timeoutMs} ms 안에 참이 되지 않았다. 루프 {loops}회, 루프 사이 최대 {maxGap} ms, {PoolState()} {state?.Invoke()}");
             Dispatcher.UIThread.RunJobs();
             await Task.Delay(10);
         }
 
         Dispatcher.UIThread.RunJobs();
     }
+
+    internal static string PoolState() =>
+        $"풀 스레드 {ThreadPool.ThreadCount}개, 대기 작업 {ThreadPool.PendingWorkItemCount}개, 끝낸 작업 {ThreadPool.CompletedWorkItemCount}개";
 
     /// <summary>UI 작업을 돌리며 <paramref name="duration"/> 만큼 기다린다(타이머가 그동안 깬다).</summary>
     private static async Task Pump(TimeSpan duration)

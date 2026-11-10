@@ -523,13 +523,16 @@ public sealed class LobRowViewTests : IDisposable
         Assert.Equal("3 / 3", vm.HeaderText);
         Assert.False(vm.CanGoForward);
 
+        // 그리드 알림은 시험이 잡은 문맥으로 올라와 다른 스레드에서 돈다: 행 번호(Row)를 먼저 바꾸고 머리글은 그 뒤에 고치므로
+        // 단정할 값(HeaderText) 자체를 기다린다(Row 를 기다리면 머리글이 고쳐지기 전 틈에 단정할 수 있다).
         vm.MoveFirst();
-        for (var i = 0; i < 100 && vm.Row != 0; i++)
+        for (var i = 0; i < 100 && vm.HeaderText != "1 / 3"; i++)
         {
             await Task.Delay(20);
         }
 
         Assert.Equal("1 / 3", vm.HeaderText);
+        Assert.Equal(0, vm.Row);
     }
 
     [Fact]

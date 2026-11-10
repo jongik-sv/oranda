@@ -99,6 +99,8 @@ public sealed class ShellHarness : IDisposable
 
     private readonly Oranda.App.Features.SqlEditor.SqlEditorHost _previousHost;
 
+    private readonly StartupStatics _previousStatics = StartupStatics.Capture();
+
     public ShellHarness(string? dataDirectory = null, bool show = true, bool nativeMenu = false, bool allFeatures = true)
     {
         _ownsDirectory = dataDirectory is null;
@@ -139,6 +141,7 @@ public sealed class ShellHarness : IDisposable
         (Application.Current as Oranda.App.App)?.ReleaseServices(Services);
         Services.Dispose();
         Oranda.App.Features.SqlEditor.SqlEditorHost.Current = _previousHost;
+        _previousStatics.Restore();
         if (_ownsDirectory)
         {
             try
@@ -149,5 +152,47 @@ public sealed class ShellHarness : IDisposable
             {
             }
         }
+    }
+}
+
+/// <summary>
+/// 앱 시작 작업(<see cref="Oranda.App.Features.Diagnostics.EditorDiagnosticsStartup"/>·<see cref="Oranda.App.Features.ResultGrid.ResultGridSettingsStartup"/>)이
+/// 프로세스 정적 값에 그 앱의 서비스·설정을 묶는다. 하네스가 끝난 뒤에도 남으면 뒤 시험이 닫힌 컨테이너·남의 설정을 읽는다
+/// (예: 앞 시험이 저장한 「열 필터 끔」 으로 결과 영역이 시작, 닫힌 컨테이너로 점검 세션 조회). 하네스는 시작 전 값을 잡아 두고 끝날 때 되돌린다(ci-flaky F10).
+/// 시작 작업에 정적 대입을 더하면 여기에도 더한다.
+/// </summary>
+internal sealed record StartupStatics(
+    Func<Oranda.Core.Language.ILanguageService?> LanguageServiceProvider,
+    Func<Oranda.Core.Language.ILintService?> LintServiceProvider,
+    Func<Oranda.Core.Sessions.ISession?> LintSessionProvider,
+    Func<bool> LintEnabledProvider,
+    Func<int>? LocalSortMaxRowsProvider,
+    Func<Oranda.Core.Grid.ResultPageCacheOptions>? CacheOptionsProvider,
+    Func<bool>? ColumnFilterDefaultProvider,
+    Func<bool, Task>? ColumnFilterDefaultSaver,
+    Func<string, Oranda.App.Shell.IShellText, string?>? TitleOverride)
+{
+    public static StartupStatics Capture() => new(
+        Oranda.App.Features.Diagnostics.EditorDiagnostics.LanguageServiceProvider,
+        Oranda.App.Features.Diagnostics.EditorDiagnostics.LintServiceProvider,
+        Oranda.App.Features.Diagnostics.EditorDiagnostics.LintSessionProvider,
+        Oranda.App.Features.Diagnostics.EditorDiagnostics.LintEnabledProvider,
+        Oranda.App.Features.ResultGrid.ResultGridModel.LocalSortMaxRowsProvider,
+        Oranda.App.Features.ResultGrid.ResultGridModel.CacheOptionsProvider,
+        Oranda.App.Features.ResultGrid.SqlResultPaneViewModel.ColumnFilterDefaultProvider,
+        Oranda.App.Features.ResultGrid.SqlResultPaneViewModel.ColumnFilterDefaultSaver,
+        Oranda.App.Shell.ShellText.TitleOverride);
+
+    public void Restore()
+    {
+        Oranda.App.Features.Diagnostics.EditorDiagnostics.LanguageServiceProvider = LanguageServiceProvider;
+        Oranda.App.Features.Diagnostics.EditorDiagnostics.LintServiceProvider = LintServiceProvider;
+        Oranda.App.Features.Diagnostics.EditorDiagnostics.LintSessionProvider = LintSessionProvider;
+        Oranda.App.Features.Diagnostics.EditorDiagnostics.LintEnabledProvider = LintEnabledProvider;
+        Oranda.App.Features.ResultGrid.ResultGridModel.LocalSortMaxRowsProvider = LocalSortMaxRowsProvider;
+        Oranda.App.Features.ResultGrid.ResultGridModel.CacheOptionsProvider = CacheOptionsProvider;
+        Oranda.App.Features.ResultGrid.SqlResultPaneViewModel.ColumnFilterDefaultProvider = ColumnFilterDefaultProvider;
+        Oranda.App.Features.ResultGrid.SqlResultPaneViewModel.ColumnFilterDefaultSaver = ColumnFilterDefaultSaver;
+        Oranda.App.Shell.ShellText.TitleOverride = TitleOverride;
     }
 }

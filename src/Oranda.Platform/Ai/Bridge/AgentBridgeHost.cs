@@ -54,6 +54,9 @@ internal sealed class AgentBridgeHost : IAgentBridgeEndpoint, IAgentBridgeHost, 
     /// <summary>hello 를 보내지 않은 연결을 기다리는 시간. 시험이 줄인다.</summary>
     internal TimeSpan HelloTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>hello·대기열 시한을 재는 시계. 시험은 손으로 돌리는 시계를 넣어 실제 시간·부하에 판정이 흔들리지 않게 한다.</summary>
+    internal TimeProvider Time { get; init; } = TimeProvider.System;
+
     /// <summary>수락 루프가 살아 있을 때만 이름을 돌려준다. 죽었으면 null 이라 CliDriver 가 bridge_not_ready 로 알린다.</summary>
     public string? PipeName => _server is { IsRunning: true } server ? server.PipeName : null;
 
@@ -99,9 +102,9 @@ internal sealed class AgentBridgeHost : IAgentBridgeEndpoint, IAgentBridgeHost, 
         var token = linked.Token;
         AgentSession? session = null;
 
-        // hello 를 보내지 않고 붙어만 있는 연결이 자리를 차지하지 못하게, hello 전의 읽기에는 시한을 둔다.
-        using var beforeHello = CancellationTokenSource.CreateLinkedTokenSource(token);
-        beforeHello.CancelAfter(HelloTimeout);
+        // hello 를 보내지 않고 붙어만 있는 연결이 자리를 차지하지 못하게, hello 전의 읽기에는 시한을 둔다. hello 가 끝나면 시한 타이머는 버린다.
+        using var helloTimer = new CancellationTokenSource(HelloTimeout, Time);
+        using var beforeHello = CancellationTokenSource.CreateLinkedTokenSource(token, helloTimer.Token);
 
         while (true)
         {
@@ -136,6 +139,10 @@ internal sealed class AgentBridgeHost : IAgentBridgeEndpoint, IAgentBridgeHost, 
             if (request.Method == Methods.Hello)
             {
                 (response, session) = Hello(request, session);
+                if (session is not null)
+                {
+                    helloTimer.Dispose();
+                }
             }
             else
             {
@@ -241,9 +248,17 @@ internal sealed class AgentBridgeHost : IAgentBridgeEndpoint, IAgentBridgeHost, 
     /// <summary>도구 실행은 연결이 여럿이어도 한 번에 하나만 한다(같은 DB 세션을 쓰는 조회가 겹치지 않게). 오래 기다리면 busy 결과를 돌려준다.</summary>
     private async Task<AgentRpcMessage> CallToolSerializedAsync(long? id, AgentSession session, AgentCallToolParams call, CancellationToken ct)
     {
-        if (!await _callGate.WaitAsync(CallQueueTimeout, ct).ConfigureAwait(false))
+        using (var queueTimer = new CancellationTokenSource(CallQueueTimeout, Time))
+        using (var waiting = CancellationTokenSource.CreateLinkedTokenSource(ct, queueTimer.Token))
         {
-            return Success(id, ToNode(ErrorResult("busy", "다른 AI 요청의 조회가 끝나기를 기다리다 시간이 지났습니다. 잠시 뒤 다시 요청하세요."), AgentRpcJsonContext.Default.AgentCallToolResult));
+            try
+            {
+                await _callGate.WaitAsync(waiting.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return Success(id, ToNode(ErrorResult("busy", "다른 AI 요청의 조회가 끝나기를 기다리다 시간이 지났습니다. 잠시 뒤 다시 요청하세요."), AgentRpcJsonContext.Default.AgentCallToolResult));
+            }
         }
 
         try

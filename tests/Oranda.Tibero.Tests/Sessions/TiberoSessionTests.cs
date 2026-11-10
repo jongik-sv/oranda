@@ -13,6 +13,21 @@ public class TiberoSessionTests
     private static readonly ServerInfo Server = new("6", "i", "h", null, "D", null, false, 7,
         new ServerCapabilities(false, false, true, false, false, Dbms.Tibero), DbUniqueName: "D", SessionUser: "U", Dbms: Dbms.Tibero);
 
+    /// <summary>
+    /// 닫기가 실제로 끝날 때까지 기다린다. DisposeAsync 는 닫기(스레드 풀)를 TimedClose.Timeout(실제 시간 5초)까지만 기다리고 돌아온다(설계대로:
+    /// 응답 없는 서버가 UI 를 막지 않게). 같은 어셈블리의 실서버 시험이 스레드 풀·CPU 를 잡으면 닫기가 그 안에 못 끝나 닫기 결과를 단정하는 시험이
+    /// 간헐로 실패했다(win144 실서버 변수 켠 전체 실행 5번 중 3번, 단독 26번 통과 — ci-flaky F7). 시한은 부하 큰 PC 용으로 넉넉히 둔다.
+    /// </summary>
+    private static async Task WaitForClose(Func<bool> closed, int timeoutMs = 60_000)
+    {
+        var until = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (!closed())
+        {
+            Assert.True(DateTime.UtcNow < until, $"닫기가 {timeoutMs} ms 안에 끝나지 않았다.");
+            await Task.Delay(10);
+        }
+    }
+
     private static (TiberoSession Session, FakeDbConnection Connection, List<OrandaEvent> Events, List<Guid> Removed) Create(
         Func<ValueTask>? close = null)
     {
@@ -95,12 +110,13 @@ public class TiberoSessionTests
         var closes = 0;
         var (session, connection, events, removed) = Create(() =>
         {
-            closes++;
+            Interlocked.Increment(ref closes);
             return ValueTask.CompletedTask;
         });
 
         await session.DisposeAsync();
         await session.DisposeAsync();
+        await WaitForClose(() => Volatile.Read(ref closes) >= 1);
         connection.Drop(); // 닫은 뒤 Closed 알림은 끊김이 아니다.
 
         Assert.Equal(1, closes);
@@ -116,6 +132,7 @@ public class TiberoSessionTests
         var (session, connection, _, _) = Create();
 
         await session.DisposeAsync();
+        await WaitForClose(() => connection.DisposeCount >= 1);
 
         Assert.True(connection.DisposeCount >= 1);
     }
@@ -135,6 +152,7 @@ public class TiberoSessionTests
         }
 
         await session.DisposeAsync();
+        await WaitForClose(() => connection.DisposeCount >= 1); // 연결 닫기는 트랜잭션 정리 뒤(finally)라, 닫혔으면 정리도 끝났다
 
         Assert.Equal(reportsClosed ? 0 : 1, transaction.DisposeCalls);
         Assert.True(connection.DisposeCount >= 1);
