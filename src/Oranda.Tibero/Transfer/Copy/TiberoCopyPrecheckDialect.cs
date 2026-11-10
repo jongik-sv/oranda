@@ -44,8 +44,14 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
         "Tibero 의 테이블 다시 만들기는 아직 지원하지 않습니다(트리거 컴파일 오류·지연 FK·큰 바이트 길이 열을 다시 만드는 경로가 서버에서 확인되지 않음)";
 
     /// <summary>
-    /// 원본도 Tibero 이므로(DBMS 가 다른 복사는 실행 전에 막는다, 결정 Q4) 문자열 길이 한도가 같아 막을 것이 없다.
-    /// Oracle 의 MAX_STRING_SIZE 같은 문자열 한도 파라미터가 Tibero 에는 확인되지 않았다.
+    /// 「없으면 만들기」도 아직 막는다(<see cref="RecreateBlockedReason"/> 와 같은 글). 새 표 만들기만 따로 풀 수 있게 갈라 둔 자리다:
+    /// 교차 복사 IT(XC10)가 양방향 만들기를 통과한 뒤 null 로 바꾼다(D11). 만든 표 정리(<c>DROP … PURGE</c>)의 Tibero 글은 XC5 실측으로 확인한다.
+    /// </summary>
+    public string? CreateBlockedReason(ISession target) => RecreateBlocked;
+
+    /// <summary>
+    /// 문자열 길이 한도가 같은 Tibero 끼리뿐 아니라 Oracle 원본도 막을 것이 없다: 교차 복사는 이 함수에 원본을 Tibero 로 옮긴 구조(<c>CrossTableMap</c>)를 넘기고,
+    /// 대상 Tibero VARCHAR2 한도(65532바이트) 안이다. Oracle 의 MAX_STRING_SIZE 같은 문자열 한도 파라미터가 Tibero 에는 확인되지 않았다.
     /// 다시 만들기 DDL 은 길이를 CHAR 단위로 쓴다: <c>VARCHAR2(4000 BYTE)</c> 를 CHAR 길이로 다시 만들어 4000바이트 값을 다시 넣는 것은 <c>TiberoRecreateStepIt</c> 가 단언하고,
     /// 최대 바이트 길이(65532 BYTE) 열은 같은 IT 가 결과만 남긴다(다시 만들기는 지금 막혀 있다 — 풀 때 그 결과로 여기서 막을지 정한다).
     /// </summary>

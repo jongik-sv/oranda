@@ -150,6 +150,21 @@ public sealed class CopyPrecheckCrossDbmsTests
     }
 
     [Fact]
+    public async Task Cross_writability_uses_the_cross_writable_answer_of_the_target_codec()
+    {
+        // 대상 코덱이 같은 DBMS 로는 TZ 를 지원하지 않지만 교차 쓰기는 된다(XC5: Tibero TZ 교차 쓰기) → 교차 점검은 막지 않는다.
+        var p = new Fixture(Dbms.Oracle, Dbms.Tibero,
+            source: Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("AT", 2, "TIMESTAMP(6) WITH TIME ZONE")),
+            target: Table("DST", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("AT", 2, "TIMESTAMP(6) WITH TIME ZONE")),
+            unsupportedByTarget: ["TIMESTAMP WITH TIME ZONE"], crossWritableByTarget: ["TIMESTAMP WITH TIME ZONE"]);
+
+        var report = await p.RunAsync();
+
+        Assert.DoesNotContain(report.Items, i => i.Code == "UnsupportedType");
+        Assert.Equal(["ID", "AT"], Assert.Single(report.Order).Columns);
+    }
+
+    [Fact]
     public async Task Dropped_primary_key_column_is_a_key_column_dropped_error_instead_of_a_no_primary_key_item()
     {
         var p = new Fixture(Dbms.Oracle, Dbms.Tibero,
@@ -240,7 +255,7 @@ public sealed class CopyPrecheckCrossDbmsTests
     private sealed class Fixture
     {
         public Fixture(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TableInfo target, string[]? unsupportedBySource = null,
-                       string[]? unsupportedByTarget = null)
+                       string[]? unsupportedByTarget = null, string[]? crossWritableByTarget = null)
         {
             Job = new CopyJob
             {
@@ -254,7 +269,7 @@ public sealed class CopyPrecheckCrossDbmsTests
             metadata.Tables[new DbObjectRef("SRC", "ORDERS", "TABLE")] = source;
             metadata.Tables[new DbObjectRef("DST", "ORDERS", "TABLE")] = target;
             Service = new CopyPrecheckService(new FakePrecheckBulk(Source, Target), metadata, new AllowPolicy(),
-                Parts(sourceDbms, new FakeCodec(unsupportedBySource ?? [])), Parts(targetDbms, new FakeCodec(unsupportedByTarget ?? [])));
+                Parts(sourceDbms, new FakeCodec(unsupportedBySource ?? [])), Parts(targetDbms, new FakeCodec(unsupportedByTarget ?? [], crossWritableByTarget ?? [])));
         }
 
         public CopyJob Job { get; }
@@ -336,10 +351,16 @@ public sealed class CopyPrecheckCrossDbmsTests
         public DbError? FromException(Exception exception) => null;
     }
 
-    /// <summary><paramref name="unsupported"/> 에 든 형식(괄호 앞 이름)은 지원하지 않는 형식이다(읽기도 같다).</summary>
-    private sealed class FakeCodec(string[] unsupported) : IBulkValueCodec
+    /// <summary>
+    /// <paramref name="unsupported"/> 에 든 형식(괄호 앞 이름)은 지원하지 않는 형식이다(읽기도 같다).
+    /// <paramref name="crossWritable"/> 에 든 형식은 같은 DBMS 로는 지원하지 않아도 교차 쓰기는 된다(Tibero TIMESTAMP WITH TIME ZONE 처럼).
+    /// </summary>
+    private sealed class FakeCodec(string[] unsupported, string[]? crossWritable = null) : IBulkValueCodec
     {
         public bool IsSupported(string serverType) => !unsupported.Contains(serverType.Split('(')[0].Trim(), StringComparer.OrdinalIgnoreCase);
+
+        public bool IsCrossWritable(string bindType)
+            => IsSupported(bindType) || (crossWritable ?? []).Contains(bindType.Split('(')[0].Trim(), StringComparer.OrdinalIgnoreCase);
 
         public BulkKind KindOf(string serverType) => serverType.StartsWith("VARCHAR", StringComparison.Ordinal) ? BulkKind.Text : BulkKind.Other;
 

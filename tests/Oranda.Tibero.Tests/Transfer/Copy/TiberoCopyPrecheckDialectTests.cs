@@ -55,6 +55,17 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         Assert.False(string.IsNullOrWhiteSpace(TiberoCopyPrecheckDialect.RecreateBlocked));
     }
 
+    /// <summary>「없으면 만들기」 차단은 다시 만들기와 따로 풀 수 있게 갈라졌지만 교차 IT 전까지 같은 글로 막혀 있다(D11).</summary>
+    [Fact]
+    public void Create_if_missing_is_blocked_with_the_same_text_as_recreate_until_the_cross_it_passes()
+    {
+        ICopyPrecheckDialect dialect = Dialect;
+
+        Assert.NotNull(dialect.CreateBlockedReason(null!));
+        Assert.Equal(TiberoCopyPrecheckDialect.RecreateBlocked, dialect.CreateBlockedReason(null!));
+        Assert.Equal(dialect.RecreateBlockedReason(null!), dialect.CreateBlockedReason(null!));
+    }
+
     /// <summary>
     /// 다시 만들기 단계(<see cref="TiberoRecreateStep"/>)가 쓰는 5개 id 가 Tibero 파일로 있고 Oracle 판과 바인드 이름·열 수가 같다(호출 쪽이 이름으로 보내고 위치로 읽는다).
     /// 이 id 들은 Core 가 아니라 DBMS 단계가 쓰므로 Core 소스 훑기(<see cref="Every_copy_id_the_core_asks_for_resolves_to_a_tibero_file"/>)에 잡히지 않는다.

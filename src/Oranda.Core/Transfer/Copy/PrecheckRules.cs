@@ -61,7 +61,7 @@ public static class PrecheckRules
             {
                 var map = CrossTypeMap.Map(pair.Source, pair.Target, column);
                 // 값은 원본 형식을 대상 DBMS 로 옮긴 형식(BindType)으로 묶는다(D3): 대상 코덱이 그 형식을 쓸 수 있어야 한다. 대상 열 형식과의 차이는 서버가 바꾼다.
-                if (!map.IsDropped && sourceCodec.IsReadable(column.DataType) && targetCodec.IsSupported(map.BindType!))
+                if (!CrossTableMap.IsDropped(map, column, sourceCodec) && targetCodec.IsCrossWritable(map.BindType!))
                 {
                     result.Add(column.Name);
                 }
@@ -104,7 +104,7 @@ public static class PrecheckRules
                 continue;
             }
 
-            if (CrossTypeMap.Map(sourceDbms, targetDbms, column).IsDropped || !sourceCodec.IsReadable(column.DataType))
+            if (CrossTableMap.IsDropped(CrossTypeMap.Map(sourceDbms, targetDbms, column), column, sourceCodec))
             {
                 result.Add(column.Name);
             }
@@ -225,7 +225,7 @@ public static class PrecheckRules
             if (cross is { } pair)
             {
                 map = CrossTypeMap.Map(pair.Source, pair.Target, s);
-                if (map.IsDropped || !sourceCodec.IsReadable(s.DataType))
+                if (CrossTableMap.IsDropped(map, s, sourceCodec))
                 {
                     dropped.Add(s.Name);
                     items.Add(new CheckItem(table, CopyCheckCodes.ColumnDropped, CheckLevel.Confirm,
@@ -239,7 +239,9 @@ public static class PrecheckRules
 
             // 교차: 원본 쪽은 위에서 읽을 수 있는 형식만 남겼다(읽기 지원 = IsReadable). 같은 DBMS: 원본 형식도 지원 형식이어야 한다.
             var sourceOk = map is not null || sourceCodec.IsSupported(s.DataType);
-            if (!sourceOk || !targetCodec.IsSupported(writeType))
+            // 교차 쓰기 판정은 IsCrossWritable(기본 = IsSupported, Tibero 는 TIMESTAMP WITH TIME ZONE 도 — XC5 실측). 같은 DBMS 는 IsSupported 그대로.
+            var targetOk = map is null ? targetCodec.IsSupported(writeType) : targetCodec.IsCrossWritable(writeType);
+            if (!sourceOk || !targetOk)
             {
                 var unsupported = sourceOk ? writeType : s.DataType;
                 items.Add(new CheckItem(table, "UnsupportedType", CheckLevel.Error,
@@ -403,7 +405,7 @@ public static class PrecheckRules
             : null;
     }
 
-    private static string DropReasonText(CrossDropReason reason) => reason switch
+    internal static string DropReasonText(CrossDropReason reason) => reason switch
     {
         CrossDropReason.LongSource => "LONG·LONG RAW 는 대량 읽기를 지원하지 않음",
         CrossDropReason.RowId => "ROWID 는 다른 DB 에서 뜻이 없음",
@@ -411,7 +413,7 @@ public static class PrecheckRules
         _ => "대량 읽기를 지원하지 않는 형식",
     };
 
-    private static string NoteText(CrossNote note) => note switch
+    internal static string NoteText(CrossNote note) => note switch
     {
         CrossNote.BinaryAsNumber => "NUMBER 로 옮김, NaN·무한대 값은 그 행이 실패함",
         CrossNote.TimeZoneRegionToOffset => "시간대 지역 이름은 그 시각의 UTC 오프셋으로 바뀜",

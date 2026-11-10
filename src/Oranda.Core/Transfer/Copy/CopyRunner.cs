@@ -79,6 +79,9 @@ public class CopyRunner : ICopyRunner
     private readonly IBulkValueCodec _codec;
     private readonly ICopyRecreateStep _recreate;
 
+    /// <summary>대상 DBMS 가 표 만들기·다시 만들기를 막는 이유(사전 점검 오류가 없어도 실행기가 한 번 더 막는다).</summary>
+    private readonly ICopyPrecheckDialect _targetPrecheck;
+
     /// <summary>원본·대상 두 DBMS 의 예외를 함께 알아보는 분류기(<see cref="CopyErrors.Combine"/>, 같은 DBMS 면 대상 것 그대로).</summary>
     private readonly IDbErrorClassifier _errors;
 
@@ -102,6 +105,7 @@ public class CopyRunner : ICopyRunner
         _dialect = target.Dialect;
         _codec = target.Codec;
         _recreate = target.Recreate;
+        _targetPrecheck = target.PrecheckDialect;
         _errors = CopyErrors.Combine(target.Errors, source.Errors);
     }
 
@@ -155,6 +159,8 @@ public class CopyRunner : ICopyRunner
             if (!run.Aborted)
             {
                 // 대상에 없는 표 만들기(「없으면 만들기」)도 DDL 이라 DELETE·적재보다 먼저 한다.
+                // Tibero 의 CREATE TABLE 도 앞선 트랜잭션을 묵시 커밋한다(실측): 대상 쓰기 트랜잭션을 여는 DeleteTargetsAsync·LoadAllAsync 앞이라 대기 중인 DML 이 없다.
+                // 만든 표 정리(DROP … PURGE)는 대상 트랜잭션을 끝낸 뒤에만 한다(PurgeUnloadedNewTablesAsync).
                 await CreateMissingTablesAsync(run, ct);
             }
 
@@ -370,12 +376,18 @@ public class CopyRunner : ICopyRunner
         => CopySameDatabase.SameSourceTargets(sessions, job);
 
     /// <summary>DROP·CREATE 는 개발 라벨 대상에서만 실행한다(사전 점검과 따로 한 번 더 막는다, Global Constraints).</summary>
-    private static void EnsureRecreateAllowed(CopySessions sessions, CopyJob job)
+    private void EnsureRecreateAllowed(CopySessions sessions, CopyJob job)
     {
         var recreate = job.Tables.Where(r => r.Kind != RuleKind.Exclude && r.Action == TargetAction.Recreate).ToList();
         if (recreate.Count > 0 && !CopyTargetGuard.CanRecreate(sessions.Target.Profile))
         {
             throw new InvalidOperationException($"대상 접속 '{sessions.Target.Profile.Name}' 은 개발 접속이 아니라 「테이블 다시 만들기」를 실행할 수 없습니다.");
+        }
+
+        // 대상 DBMS 가 다시 만들기를 막으면(Tibero 는 아직 막는다) 오류 없는 점검 결과를 받았어도 DROP 전에 멈춘다.
+        if (recreate.Count > 0 && _targetPrecheck.RecreateBlockedReason(sessions.Target) is { } blocked)
+        {
+            throw new InvalidOperationException($"대상 DBMS({_targetDbms}) 에서는 「테이블 다시 만들기」를 실행할 수 없습니다: {blocked}");
         }
 
         // 다시 만들기는 대상 소유자 계정으로만 한다(표마다, 사전 점검 RecreateNoPrivilege 와 같은 판정). DbKey 의 끝 마디가 SESSION_USER 다.
@@ -389,7 +401,7 @@ public class CopyRunner : ICopyRunner
     /// <summary>
     /// 「없으면 만들기」 표(<see cref="CopyTablePlan.CreateMissing"/>)도 개발 접속·대상 소유자 계정으로만 만든다(사전 점검과 따로 한 번 더 막는다).
     /// </summary>
-    private static void EnsureCreateAllowed(CopySessions sessions, CopyJob job, PrecheckReport report)
+    private void EnsureCreateAllowed(CopySessions sessions, CopyJob job, PrecheckReport report)
     {
         var creating = report.Order.Where(p => p.CreateMissing).ToList();
         if (creating.Count == 0)
@@ -400,6 +412,12 @@ public class CopyRunner : ICopyRunner
         if (!CopyTargetGuard.CanRecreate(sessions.Target.Profile))
         {
             throw new InvalidOperationException($"대상 접속 '{sessions.Target.Profile.Name}' 은 개발 접속이 아니라 「없으면 만들기」로 표를 만들 수 없습니다.");
+        }
+
+        // 대상 DBMS 가 표 만들기를 막으면 오류 없는 점검 결과를 받았어도 CREATE 전에 멈춘다.
+        if (_targetPrecheck.CreateBlockedReason(sessions.Target) is { } blocked)
+        {
+            throw new InvalidOperationException($"대상 DBMS({_targetDbms}) 에서는 「없으면 만들기」로 표를 만들 수 없습니다: {blocked}");
         }
 
         var user = SessionUser(sessions.Target.DbKey);
@@ -583,8 +601,19 @@ public class CopyRunner : ICopyRunner
                 // 작업 안 FK 는 CreateTableDdl 대신 원본 카탈로그로 만든다(ON DELETE·DEFERRABLE·UK 참조를 원본대로, 조정 결정 16).
                 // 서버가 지은 제약 이름(Oracle SYS_C…, Tibero <소유자>_CON<숫자>)은 명시하지 않고 대상 서버가 새로 짓게 둔다.
                 // 서버가 지은 이름인지는 원본 이름을 보는 판정이라 원본 방언이 한다.
-                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, noForeignKeys, name => _sourceDialect.IsServerName(name, sourceOwner));
-                table.JobForeignKeys = await _sourceRecreate.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
+                var built = BuildCreate(plan, owner, noForeignKeys);
+                table.CreateDdl = built.Statements;
+                table.JobForeignKeys = JobForeignKeys(run, plan, await _sourceRecreate.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct), built, out var fkNote);
+                if (CrossNote(built) is { } crossNote)
+                {
+                    table.Note(crossNote);
+                }
+
+                if (fkNote is not null)
+                {
+                    table.Note(fkNote);
+                }
+
                 table.BinBefore = await step.RecycleBinAsync(run.Target, plan.Rule.Table, ct);
                 run.Log($"지우기 전에 받아 둠: 트리거 {table.Preserved.Triggers.Count.ToString(CultureInfo.InvariantCulture)}개 · 권한 {table.Preserved.Grants.Count.ToString(CultureInfo.InvariantCulture)}개"
                         + $" · 참조 FK {table.Preserved.ReferencingForeignKeys.Count.ToString(CultureInfo.InvariantCulture)}개 · 작업 안 FK {table.JobForeignKeys.Count.ToString(CultureInfo.InvariantCulture)}개");
@@ -654,6 +683,40 @@ public class CopyRunner : ICopyRunner
         }
     }
 
+    /// <summary>
+    /// 만들 표의 문장(다시 만들기·없으면 만들기). 교차 복사는 대상 DBMS 로 옮긴 구조로 만든다(<see cref="CrossTableMap"/>).
+    /// 사전 점검 미리 보기가 같은 함수를 써서 보여 준 문장이 곧 보내는 문장이다. 서버가 지은 이름 판정은 원본 이름을 보는 것이라 원본 방언이 한다.
+    /// </summary>
+    private CrossCreate BuildCreate(CopyTablePlan plan, string targetOwner, IReadOnlySet<string> tablesInJob)
+    {
+        var sourceOwner = plan.Source.Table.Owner;
+        return CrossTableMap.Build(_sourceDbms, _targetDbms, plan.Source, targetOwner, tablesInJob, name => _sourceDialect.IsServerName(name, sourceOwner), _sourceCodec);
+    }
+
+    /// <summary>
+    /// 교차 복사에서 대상에 만들 수 없는 작업 안 FK 는 붙이지 않는다(<see cref="CrossTableMap.FilterForeignKeys"/>, 사전 점검과 같은 판정): 만들지 않는 열을 쓰는 FK(서버가 지은 이름이라 이름이 없는 FK 도),
+    /// 함께 만드는 부모의 PK·UK 를 만들지 않아 참조할 키가 없는 FK(ORA-02270). 빼는 FK 마다 <paramref name="note"/> 에 글을 남긴다. 같은 DBMS 는 그대로다.
+    /// 문장에서 열을 읽지 못한 FK 는 이름이 만들지 않는 제약과 같을 때만 뺀다.
+    /// </summary>
+    private IReadOnlyList<(string Parent, string Ddl, string? Name)> JobForeignKeys(RunState run, CopyTablePlan plan, IReadOnlyList<(string Parent, string Ddl, string? Name)> foreignKeys,
+                                                                                    CrossCreate built, out string? note)
+    {
+        var owner = plan.Target.Table.Owner;
+        var sourceOwner = plan.Source.Table.Owner;
+        var (kept, skipped) = CrossTableMap.FilterForeignKeys(_sourceDbms, _targetDbms, plan.Source, _sourceCodec, foreignKeys,
+            parent => BuiltPlans(run).FirstOrDefault(p => CopyOwners.SameOwner(p.Target.Table.Owner, owner)
+                                                         && CopyOwners.SameOwner(p.Source.Table.Owner, sourceOwner)
+                                                         && string.Equals(p.Rule.Table, parent, StringComparison.Ordinal))?.Source);
+        note = skipped.Count == 0 ? null : "대상으로 옮기지 않는 열·키를 쓰는 작업 안 FK 는 만들지 않습니다: " + string.Join(", ", skipped) + ".";
+        return built.OmittedConstraints.Count == 0
+            ? kept
+            : [.. kept.Where(f => f.Name is null || !built.OmittedConstraints.Contains(f.Name))];
+    }
+
+    /// <summary>교차 복사로 만든 표가 원본과 달라지는 것(없으면 null).</summary>
+    private static string? CrossNote(CrossCreate built)
+        => built.Notes.Count == 0 ? null : "원본과 달라지는 것: " + string.Join(" / ", built.Notes) + ".";
+
     // ---- 1b. 대상에 없는 표 만들기(「없으면 만들기」, 개발 대상만) ----
 
     /// <summary>이번 실행이 만드는 표의 계획: 다시 만들기 + 없으면 만들기. 작업 안 FK 를 원본대로 붙이는 부모 후보다(사전 점검 <c>BuiltTables</c> 와 같은 판정).</summary>
@@ -680,10 +743,13 @@ public class CopyRunner : ICopyRunner
             var planned = BuiltPlans(run).Where(p => CopyOwners.SameOwner(p.Target.Table.Owner, owner)
                                                       && CopyOwners.SameOwner(p.Source.Table.Owner, sourceOwner))
                 .Select(p => p.Rule.Table).ToHashSet(StringComparer.Ordinal);
+            CrossCreate built;
+            string? fkNote;
             try
             {
-                table.CreateDdl = CreateTableDdl.Build(plan.Source, owner, new HashSet<string>(StringComparer.Ordinal), name => _sourceDialect.IsServerName(name, sourceOwner));
-                table.JobForeignKeys = await _sourceRecreate.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct);
+                built = BuildCreate(plan, owner, new HashSet<string>(StringComparer.Ordinal));
+                table.CreateDdl = built.Statements;
+                table.JobForeignKeys = JobForeignKeys(run, plan, await _sourceRecreate.SourceForeignKeysAsync(run.Source, sourceOwner, plan.Rule.Table, planned, owner, ct), built, out fkNote);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested
                                        && (CopyErrors.IsServer(_errors, ex) || ex is InvalidOperationException or BulkDeniedException or ArgumentException))
@@ -703,6 +769,16 @@ public class CopyRunner : ICopyRunner
             table.CreatedNew = true;
             table.Preserved = PreservedDdl.Empty; // 새 표: 되살릴 트리거·권한·참조 FK 가 없다
             table.Note("대상에 표가 없어 원본 구조로 만들었습니다.");
+            if (CrossNote(built) is { } crossNote)
+            {
+                table.Note(crossNote);
+            }
+
+            if (fkNote is not null)
+            {
+                table.Note(fkNote);
+            }
+
             foreach (var text in table.CreateDdl.Skip(1))
             {
                 await ApplyOrNoteAsync(run, table, text, "만든 표에 적용하지 못한 문장이 있습니다");
@@ -903,7 +979,9 @@ public class CopyRunner : ICopyRunner
 
             // IDENTITY 는 새로 만들면 1부터 시작한다: 복사한 최대값 뒤로 옮긴다(앱이 ID 없이 넣을 때 ORA-00001 이 나지 않게).
             var plan = run.Report.Order.FirstOrDefault(p => string.Equals(run.Key(p), t.Name, StringComparison.Ordinal));
-            foreach (var c in plan?.Source.Columns.Where(c => c.IsIdentity) ?? [])
+            // 교차 복사는 대상에 만든 구조(CrossTableMap)로 본다: IDENTITY 를 일반 열로 만든 열은 맞출 다음 값이 없다.
+            var identityColumns = plan is null ? [] : CrossTableMap.MapTable(_sourceDbms, _targetDbms, plan.Source, _sourceCodec).Target.Columns.Where(c => c.IsIdentity).ToList();
+            foreach (var c in identityColumns)
             {
                 var text = _dialect.RestartIdentity(t.Owner, t.TableName, c.Name);
                 var r = await TryRestoreAsync(run, text, LongCleanupTimeout);

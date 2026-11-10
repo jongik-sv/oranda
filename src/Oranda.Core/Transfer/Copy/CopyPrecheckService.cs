@@ -7,6 +7,7 @@ using Oranda.Core.History;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Text;
+using Oranda.Core.Transfer.Copy.CrossDbms;
 
 namespace Oranda.Core.Transfer.Copy;
 
@@ -450,7 +451,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             // 대상 계정이 같은 다시 만들기 표(먼저 지워지므로 이름 겹침에서 뺀다), 그중 원본 계정도 같은 표(작업 안 FK 를 원본대로 붙인다).
             var recreatedHere = RecreatedTables(owner, sourceOwner: null);
             var linked = BuiltTables(owner, SourceOwner(rule));
-            var blocked = await RecreateBlockersAsync(rule, source, recreatedHere, linked, ct).ConfigureAwait(false);
+            var blocked = await RecreateBlockersAsync(rule, source, recreatedHere, linked, creating: false, ct).ConfigureAwait(false);
             if (blocked.Count > 0)
             {
                 // DROP 뒤에야 드러나는 CREATE 실패(표가 휴지통에만 남음)를 지우기 전에 막는다(조정 결정 16).
@@ -475,7 +476,8 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 message += $" 함께 다시 만들지 않는 표를 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
             }
 
-            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null));
+            message += CrossSkippedForeignKeyNote(rule, source, linked);
+            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null)) + CrossCreateNote(source);
             var lost = await NotRestoredAsync(rule, ct).ConfigureAwait(false);
             if (lost.Count > 0)
             {
@@ -525,7 +527,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             }
 
             var linked = BuiltTables(owner, SourceOwner(rule));
-            var blocked = await RecreateBlockersAsync(rule, source, RecreatedTables(owner, sourceOwner: null), linked, ct).ConfigureAwait(false);
+            var blocked = await RecreateBlockersAsync(rule, source, RecreatedTables(owner, sourceOwner: null), linked, creating: true, ct).ConfigureAwait(false);
             if (blocked.Count > 0)
             {
                 _items.Add(new CheckItem(key, CopyCheckCodes.CreateBlocked, CheckLevel.Error,
@@ -545,9 +547,42 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 message += $" 함께 만들지 않는 표를 참조하는 원본 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
             }
 
-            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null));
+            message += CrossSkippedForeignKeyNote(rule, source, linked);
+            message += dialect.RecreateDifferenceNote(source.Columns.Any(c => c.Domain is not null)) + CrossCreateNote(source);
             _items.Add(new CheckItem(key, CopyCheckCodes.CreateTable, CheckLevel.Confirm, message));
         }
+
+        /// <summary>교차 복사로 만드는 표가 원본과 달라지는 것(<see cref="CrossTableMap"/>)을 확인 글에 덧붙일 문장(앞 공백 포함). 같은 DBMS 거나 달라지는 것이 없으면 빈 글.</summary>
+        private string CrossCreateNote(TableInfo source)
+        {
+            var notes = CrossTableMap.MapTable(sourceParts.Dbms, targetDbms, source, sourceParts.Codec).Notes;
+            return notes.Count == 0 ? string.Empty : " " + targetDbms + " 로 옮기며 달라지는 것: " + string.Join(" / ", notes) + ".";
+        }
+
+        /// <summary>
+        /// 교차 복사에서 함께 만드는 부모를 참조하지만 대상에 만들 수 없는 작업 안 FK(자식·부모 열을 옮기지 않거나, 부모의 PK·UK 를 만들지 않음)와 이유.
+        /// 실행기(<c>CopyRunner</c>)가 같은 판정(<see cref="CrossTableMap.FilterForeignKeys"/>)으로 붙이지 않는 FK 다. 같은 DBMS 면 비어 있다.
+        /// </summary>
+        private IReadOnlyList<(ConstraintInfo Fk, string Reason)> CrossSkippedForeignKeys(TableRule rule, TableInfo source, HashSet<string> linked)
+            => CrossTableMap.SkippedForeignKeys(sourceParts.Dbms, targetDbms, source, sourceParts.Codec,
+                source.Constraints.Where(c => c.Kind == ConstraintKind.ForeignKey && c.ReferencedTable is { } p && IsLinkedParent(p, rule, linked)),
+                parent => LinkedParentSource(parent, rule));
+
+        private string CrossSkippedForeignKeyNote(TableRule rule, TableInfo source, HashSet<string> linked)
+        {
+            var skipped = CrossSkippedForeignKeys(rule, source, linked)
+                .Select(x => CrossTableMap.FormatSkipped(x.Fk.Name, x.Fk.ReferencedTable!.Name, x.Reason)).ToList();
+            return skipped.Count == 0 ? string.Empty : $" 대상으로 옮기지 않는 열·키를 쓰는 작업 안 FK {string.Join(", ", skipped)} 는 만들지 않습니다.";
+        }
+
+        /// <summary>함께 만드는 부모 표(<see cref="BuiltTables"/> 와 같은 판정: 원본·대상 계정이 같고 이번 실행이 만든다)의 원본 구조. 없으면 null.</summary>
+        private TableInfo? LinkedParentSource(DbObjectRef parent, TableRule rule)
+            => job.Tables.Where(r => r.Kind != RuleKind.Exclude && (IsRecreate(r) || _creating.Contains(Key(r)))
+                                     && string.Equals(r.Table, parent.Name, StringComparison.Ordinal)
+                                     && CopyOwners.SameOwner(SourceOwner(r), SourceOwner(rule))
+                                     && CopyOwners.SameOwner(TargetOwner(r), TargetOwner(rule)))
+                .Select(r => _sourceTables.GetValueOrDefault(Key(r)))
+                .FirstOrDefault(t => t is not null);
 
         /// <summary>원본 FK 의 부모가 같은 원본 계정·같은 대상 계정으로 함께 다시 만드는 표인가(실행기 <c>RecreateStep.SourceForeignKeysAsync</c> 와 같은 판정).</summary>
         private bool IsLinkedParent(DbObjectRef parent, TableRule rule, HashSet<string> linked)
@@ -559,28 +594,51 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
         /// 대상 소유자의 다른 표와 겹치는 제약·인덱스 이름(함께 다시 만드는 표의 이름은 먼저 지워지므로 뺀다).
         /// </summary>
         private async Task<List<string>> RecreateBlockersAsync(TableRule rule, TableInfo source, HashSet<string> recreated, HashSet<string> linked,
-                                                               CancellationToken ct)
+                                                               bool creating, CancellationToken ct)
         {
             var owner = TargetOwner(rule);
             var blocked = new List<string>();
-            if (dialect.RecreateBlockedReason(Target) is { } reason)
+            // 새 표 만들기와 지우고 다시 만들기는 DBMS 가 따로 막을 수 있다.
+            if ((creating ? dialect.CreateBlockedReason(Target) : dialect.RecreateBlockedReason(Target)) is { } reason)
             {
                 blocked.Add(reason);
             }
 
-            // 원본 열 형식이라 원본 코덱으로 본다.
-            var unsupported = source.Columns.Where(c => !c.IsVirtual && !sourceParts.Codec.IsSupported(c.DataType))
+            // 교차 복사(DBMS 가 다름)는 대상 DBMS 에 만들 구조(CrossTableMap)로 본다: 옮길 형식이 없는 열은 만들지 않으므로 막지 않고(ColumnDropped 로 알린다),
+            // 옮긴 형식은 대상 코덱이 쓸 수 있어야 한다. 같은 DBMS 는 원본 열 형식을 원본 코덱으로 본다.
+            var cross = sourceParts.Dbms != targetDbms;
+            var mapped = CrossTableMap.MapTable(sourceParts.Dbms, targetDbms, source, sourceParts.Codec);
+            var effective = cross ? mapped.Target : source;
+            var unsupported = (cross
+                    ? source.Columns.Where(c => !c.IsVirtual
+                                                && CrossTypeMap.Map(sourceParts.Dbms, targetDbms, c) is { } map
+                                                && !CrossTableMap.IsDropped(map, c, sourceParts.Codec)
+                                                && !codec.IsCrossWritable(map.BindType!))
+                    : source.Columns.Where(c => !c.IsVirtual && !sourceParts.Codec.IsSupported(c.DataType)))
                 .Select(c => $"{c.Name}({c.DataType})").ToList();
             if (unsupported.Count > 0)
             {
                 blocked.Add($"지원하지 않는 형식 열 {string.Join(", ", unsupported)}(건너뛴 열도 다시 만들 때 만들어집니다)");
             }
 
-            // 기본 문자열 한도를 넘는 길이(Oracle: MAX_STRING_SIZE 가 EXTENDED 로 확인되지 않으면 막는다).
-            blocked.AddRange(await dialect.ExtendedStringBlockersAsync(source, TargetParameterAsync, ct).ConfigureAwait(false));
+            // 교차: 원본은 LOB 이 아닌데 대상에서 LOB 이 되는 열(Tibero VARCHAR2 4000 초과·긴 NVARCHAR2·NCHAR·LONG·LONG RAW → CLOB·NCLOB·BLOB)에는 PK·UK 를 만들 수 없다.
+            // 지우고 나서야 CREATE 가 실패하므로(Oracle ORA-02329) 지우기 전에 막는다. CHECK·FK·인덱스는 만들지 않고 넘어간다(CrossTableMap).
+            foreach (var key in source.Constraints.Where(k => k.Kind is ConstraintKind.PrimaryKey or ConstraintKind.Unique))
+            {
+                var lob = key.Columns.Where(mapped.LobMappedColumns.ContainsKey).ToList();
+                if (lob.Count > 0)
+                {
+                    var described = lob.Select(name => $"{name}({source.Columns.FirstOrDefault(c => c.Name == name)?.DataType} → {mapped.LobMappedColumns[name]})");
+                    blocked.Add($"{source.Table.Name} 의 {(key.Kind == ConstraintKind.PrimaryKey ? "PK" : "UK")} {key.Name} 의 열 {string.Join(", ", described)} 은(는) {targetDbms} 에서 LOB 형식이 되어 "
+                                + "LOB 열에는 PK·UK 를 만들 수 없습니다");
+                }
+            }
+
+            // 기본 문자열 한도를 넘는 길이(Oracle: MAX_STRING_SIZE 가 EXTENDED 로 확인되지 않으면 막는다). 교차는 CLOB 으로 옮긴 뒤의 구조로 본다.
+            blocked.AddRange(await dialect.ExtendedStringBlockersAsync(effective, TargetParameterAsync, ct).ConfigureAwait(false));
 
             // 기본값·가상 열 식이 원본 스키마 객체(시퀀스·함수)를 가리키면 대상 소유자의 같은 이름 객체로 바꿔 만든다.
-            var referenced = source.Columns.Where(c => !c.IsIdentity)
+            var referenced = effective.Columns.Where(c => !c.IsIdentity)
                 .SelectMany(c => CreateTableDdl.ReferencedObjects(c.DefaultValue, SourceOwner(rule)).Select(o => (Column: c.Name, Object: o)))
                 .ToList();
             var missingObjects = new List<string>();
@@ -602,9 +660,11 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             // 서버가 지은 이름 판정은 실행기와 같아야 한다(DBMS 마다 다르다: Oracle SYS_…, Tibero <소유자>_CON<숫자>).
             // 원본 이름을 보는 판정이라 원본 방언이다.
             bool IsServer(string name) => sourceParts.PrecheckDialect.IsServerName(name, source.Table.Owner);
-            var (constraints, indexes) = CreateTableDdl.NamedObjects(source, IsServer);
-            var foreignKeys = source.Constraints
-                .Where(c => c.Kind == ConstraintKind.ForeignKey && !IsServer(c.Name) && c.ReferencedTable is { } p && IsLinkedParent(p, rule, linked))
+            var (constraints, indexes) = CreateTableDdl.NamedObjects(effective, IsServer);
+            var notCreated = CrossSkippedForeignKeys(rule, source, linked).Select(x => x.Fk.Name).ToHashSet(StringComparer.Ordinal); // 교차: 만들지 않는 FK 는 이름이 겹쳐도 상관없다
+            var foreignKeys = effective.Constraints
+                .Where(c => c.Kind == ConstraintKind.ForeignKey && !IsServer(c.Name) && !notCreated.Contains(c.Name)
+                            && c.ReferencedTable is { } p && IsLinkedParent(p, rule, linked))
                 .Select(c => c.Name);
             var inUse = new List<string>();
             foreach (var name in constraints.Concat(foreignKeys).Distinct(StringComparer.Ordinal))
@@ -1169,8 +1229,9 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             foreach (var plan in created)
             {
                 var owner = TargetOwner(plan.Rule);
-                foreach (var text in CreateTableDdl.Build(plan.Source, owner, new HashSet<string>(StringComparer.Ordinal),
-                             name => sourceParts.PrecheckDialect.IsServerName(name, SourceOwner(plan.Rule))))
+                // 실행기(CopyRunner.CreateMissingTablesAsync)와 같은 함수·같은 입력이라 보여 주는 문장과 보내는 문장이 같다(교차면 대상 DBMS 로 옮긴 구조).
+                foreach (var text in CrossTableMap.Build(sourceParts.Dbms, targetDbms, plan.Source, owner, new HashSet<string>(StringComparer.Ordinal),
+                             name => sourceParts.PrecheckDialect.IsServerName(name, SourceOwner(plan.Rule)), sourceParts.Codec).Statements)
                 {
                     list.Add(await PreviewAsync(Target, CopyCommonStatements.RecreateDdl(text), PreviewSide.Target, ct).ConfigureAwait(false));
                 }

@@ -20,6 +20,12 @@ public interface ICopyPrecheckDialect
     string? RecreateBlockedReason(ISession target);
 
     /// <summary>
+    /// 「없으면 만들기」(<see cref="TableRule.CreateIfMissing"/>)를 이 DBMS 대상에서 막는 이유. 막지 않으면 null. 글은 <c>CreateBlocked</c> 항목의 막는 이유 목록에 그대로 들어간다.
+    /// 기본 구현 = <see cref="RecreateBlockedReason"/>(새 표 만들기와 지우고 다시 만들기를 따로 풀 수 있게 갈랐다: 교차 시험을 통과한 DBMS 만 만들기를 먼저 푼다).
+    /// </summary>
+    string? CreateBlockedReason(ISession target) => RecreateBlockedReason(target);
+
+    /// <summary>
     /// 다시 만들 원본 구조가 대상의 기본 문자열 한도를 넘어 CREATE 가 실패할 이유(0개 또는 몇 개의 글). <paramref name="targetParameter"/> 는
     /// 대상 세션의 초기화 파라미터 값을 글자로 읽는다(<c>copy.parameter_value</c>, 못 읽거나 서버 오류면 null).
     /// </summary>
