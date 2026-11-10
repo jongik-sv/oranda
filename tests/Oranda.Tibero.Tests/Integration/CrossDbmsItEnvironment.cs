@@ -72,12 +72,13 @@ internal sealed class CrossDbmsItEnvironment : IAsyncDisposable
         Metadata = new MetadataProviderDispatcher(selector);
 
         var oracleBulk = NewOracle<IBulkExecutionService>("Oranda.Oracle.Execution.OracleBulkExecutionService", Policy, ui, Events);
+        TiberoBulk = new TiberoBulkExecutionService(Policy, ui, Events);
         var oracleExecution = NewOracle<IExecutionService>("Oranda.Oracle.Execution.OracleExecutionService", Policy, ui, Events, null, 500, false, null);
         var oracleMetadata = NewOracle<IMetadataProvider>("Oranda.Oracle.Metadata.OracleMetadataProvider", new MemoryMetadataCache(), Events, Timeout.InfiniteTimeSpan);
         selector.Add(Dbms.Oracle, () => oracleBulk)
                 .Add(Dbms.Oracle, () => oracleExecution)
                 .Add(Dbms.Oracle, () => oracleMetadata)
-                .Add<IBulkExecutionService>(Dbms.Tibero, () => new TiberoBulkExecutionService(Policy, ui, Events))
+                .Add<IBulkExecutionService>(Dbms.Tibero, () => TiberoBulk)
                 .Add<IExecutionService>(Dbms.Tibero, () => new TiberoExecutionService(Policy, ui, Events, null, dbmsOutput: false))
                 .Add<IMetadataProvider>(Dbms.Tibero, () => new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync));
 
@@ -97,6 +98,9 @@ internal sealed class CrossDbmsItEnvironment : IAsyncDisposable
     public IBulkExecutionService Bulk { get; }
 
     public IExecutionService Execution { get; }
+
+    /// <summary>디스패처가 Tibero 세션에 쓰는 대량 실행(하나뿐). 측정 시험이 긴 CLOB 행 처리(<see cref="TiberoBulkExecutionService.LobWrite"/>)를 바꾼다.</summary>
+    public TiberoBulkExecutionService TiberoBulk { get; }
 
     public IMetadataProvider Metadata { get; }
 

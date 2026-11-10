@@ -10,7 +10,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// 측정 시험(PF1, 결정 69·74): 수십만 행 테이블을 Oracle→Tibero 로 읽기·쓰기 겹치기 켬·끔을 번갈아 3회씩 복사해 걸린 시간과 시간 나눔
 /// (적재 구간·읽기·첫 행·변환·쓰기·행/초·테이블 전체·기타)을 <c>PF1 measure …</c> 줄로, 끝에 켬·끔 각각 중앙값 줄을 출력한다. 단언은 결과 건수만.
 /// <list type="bullet">
-/// <item>교차 복사 관문(<see cref="CrossDbmsItEnvironment.SkipReason"/>)에 더해 <c>ORANDA_IT_COPY_MEASURE=1</c> 일 때만 돈다(행 수 <c>ORANDA_IT_COPY_MEASURE_ROWS</c>, 기본 300000).</item>
+/// <item>교차 복사 관문(<see cref="CrossDbmsItEnvironment.SkipReason"/>)에 더해 <c>ORANDA_IT_COPY_MEASURE=1</c> 일 때만 돈다(행 수 <c>ORANDA_IT_COPY_MEASURE_ROWS</c>, 기본 5000).</item>
 /// <item>실행: <c>ORANDA_IT_COPY_MEASURE=1 ORANDA_IT_TIBERO_WRITE=1 dotnet test tests/Oranda.Tibero.Tests --filter "FullyQualifiedName~CopyOverlapMeasureIt" --logger "console;verbosity=detailed"</c></item>
 /// </list>
 /// </summary>
@@ -67,7 +67,7 @@ public class CopyOverlapMeasureIt(ITestOutputHelper output)
     }
 }
 
-/// <summary>복사 측정 시험: 교차 복사 관문 + <c>ORANDA_IT_COPY_MEASURE=1</c>. 행 수는 <c>ORANDA_IT_COPY_MEASURE_ROWS</c>(기본 300000).</summary>
+/// <summary>복사 측정 시험: 교차 복사 관문 + <c>ORANDA_IT_COPY_MEASURE=1</c>. 행 수는 <c>ORANDA_IT_COPY_MEASURE_ROWS</c>(기본 5000).</summary>
 public sealed class CopyMeasureFactAttribute : FactAttribute
 {
     public CopyMeasureFactAttribute() =>
@@ -76,7 +76,7 @@ public sealed class CopyMeasureFactAttribute : FactAttribute
             : CrossDbmsItEnvironment.SkipReason();
 
     public static int Rows() =>
-        int.TryParse(Environment.GetEnvironmentVariable("ORANDA_IT_COPY_MEASURE_ROWS"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : 300_000;
+        int.TryParse(Environment.GetEnvironmentVariable("ORANDA_IT_COPY_MEASURE_ROWS"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : 5_000;
 }
 
 /// <summary>측정 시험의 중앙값 줄(원격 #155): 실행 전체·적재 구간·읽기·첫 행·변환·쓰기·행/초·테이블 전체·기타를 값마다 따로 중앙값으로.</summary>

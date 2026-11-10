@@ -79,12 +79,12 @@ public sealed class CopyLobPrefetchTests(OracleFreeFixture db, ITestOutputHelper
     /// <summary>
     /// 측정(PF3): LOB 열이 있는 테이블(대부분 수 KB, 1000행마다 64K 를 넘는 값)을 Oracle→Oracle 로 미리 받기 켬·끔 각각 복사해 걸린 시간과 시간 나눔
     /// (읽기·변환·쓰기·행/초)을 출력한다. 단언은 결과 건수만. <c>ORANDA_IT_COPY_MEASURE=1</c> 일 때만 돈다
-    /// (행 수 = <c>ORANDA_IT_COPY_MEASURE_ROWS</c>(기본 300000) ÷ 6).
+    /// (행 수 = <c>ORANDA_IT_COPY_MEASURE_ROWS</c>, 기본 5000).
     /// </summary>
     [CopyMeasureFact]
     public async Task Measure_oracle_to_oracle_lob_copy_with_and_without_prefetch()
     {
-        var rows = Math.Max(1, CopyMeasureFactAttribute.Rows() / 6);
+        var rows = CopyMeasureFactAttribute.Rows();
         await using var scope = await CopyDbScope.CreateAsync(db, CopyDbScope.NewTag());
         await BothAsync(scope, "PF_LOB");
         await scope.ExecSourceAsync(

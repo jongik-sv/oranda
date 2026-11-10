@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
@@ -22,6 +24,12 @@ namespace Oranda.Oracle.Execution;
 /// <para>
 /// 읽기 전용 프로필이라도 문장마다 새 읽기 전용 트랜잭션을 걸지 않는다: 원본 세션은 호출한 쪽이 연 <c>SET TRANSACTION READ ONLY</c>
 /// 하나에서 모든 테이블을 같은 시점으로 읽는다(설계 8.1). 쓰기는 정책 관문의 읽기 전용 규칙이 막는다.
+/// </para>
+/// <para>
+/// LOB 쓰기(PF5): 배열 INSERT 의 CLOB·NCLOB·BLOB 을 열 형식(LOB) 그대로 바인드하면 드라이버가 값마다 임시 LOB 을 만들어 채운다(값마다 서버 왕복).
+/// 기본은 그런 값을 LONG·LONG RAW 로 바인드해 서버가 넣을 때 LOB 으로 바꾸게 한다(<see cref="OracleLobWrite.LongBind"/>). 빈 값·큰 값처럼 그대로 못 보내는
+/// 값이 있는 행만 옛 동작으로 보낸다(행 순서 그대로 연속 구간, <see cref="LobWriteBinds.Plan"/>). 서버가 LONG 바인드 모양을 거부하면 1행 구간은 옛 동작으로
+/// 다시 보내고, 여러 행 구간은 실패로 돌려준다(이미 넣은 행이 있을 수 있다 — 실행기가 되돌리고 한 행씩 다시 넣는다, <see cref="LobWriteBinds.OnLongBindError"/>).
 /// </para>
 /// </summary>
 [OrandaService(typeof(IBulkExecutionService), Dbms = Dbms.Oracle)]
@@ -46,9 +54,24 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
 
     private const string CancelledMessage = "대량 읽기를 취소했습니다.";
 
+    /// <summary>
+    /// 접속마다 대상 DB 문자 집합의 종류(<see cref="LobWriteBinds.CharsetOf"/>). 글자 LOB 을 LONG 으로 보낼 때 한 번 묻고 기억한다.
+    /// 접속이 사라지면 함께 사라진다.
+    /// </summary>
+    private static readonly ConditionalWeakTable<OracleConnection, StrongBox<LongTextCharset>> Charsets = new();
+
+    /// <summary>LONG 거부를 기억해 둘 문장 수(접속마다). 넘으면 그 접속의 기억을 비운다.</summary>
+    private const int MaxRememberedStatements = 256;
+
     private readonly IExecutionPolicy _policy;
     private readonly IExecutionInteraction _interaction;
     private readonly IEventBus _events;
+
+    /// <summary>
+    /// 접속(대상 DB 세션)마다, LONG 바인드가 거부된 것으로 확정된 문장 글 — 그 뒤로는 LONG 을 시도하지 않고 옛 동작으로 보낸다(<see cref="RememberLongRefused"/>).
+    /// 접속을 열쇠로 두어 한 대상 DB 의 거부가 다른 대상의 같은 글을 막지 않는다. 접속이 사라지면 함께 사라진다.
+    /// </summary>
+    private readonly ConditionalWeakTable<OracleConnection, ConcurrentDictionary<string, bool>> _longRefused = new();
 
     public OracleBulkExecutionService(IExecutionPolicy policy, IExecutionInteraction interaction, IEventBus events)
     {
@@ -56,6 +79,15 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
         _interaction = interaction;
         _events = events;
     }
+
+    /// <summary>
+    /// 배열 INSERT 의 LOB 값 바인드 방법(PF5, <see cref="OracleLobWrite"/>). 기본 = <see cref="LobWriteBinds.DefaultMode"/>(환경 변수
+    /// <see cref="LobWriteBinds.SwitchVariable"/>). 측정 시험이 옛 동작과 번갈아 재려고 바꾼다.
+    /// </summary>
+    internal OracleLobWrite LobWrite { get; set; } = LobWriteBinds.DefaultMode;
+
+    /// <summary>LOB 쓰기 바인드 집계(측정·시험용).</summary>
+    internal LobWriteCounters LobWriteStats { get; } = new();
 
     public async IAsyncEnumerable<object?[]> StreamRowsAsync(ISession s, SqlStatement query, IReadOnlyDictionary<string, BindValue> binds,
                                                              ExecutionOptions options, [EnumeratorCancellation] CancellationToken ct)
@@ -263,48 +295,78 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
         }
     }
 
-    private static async Task<(BulkResult Result, TimeSpan Elapsed, bool Pending)> RunOnDriverAsync(
+    /// <summary>
+    /// 드라이버 단계. 바인드 열이 없으면 한 번, 있으면 행 구간(<see cref="LobSegment"/>)마다 배열 실행 한 번 — LOB 열이 없거나 옛 동작이면 구간은 하나(옛 동작 그대로).
+    /// 구간이 여럿이면 차례로 보내고 행 수를 더한다. 중간 구간이 실패하면 앞 구간의 행은 트랜잭션에 남는다(배열 하나가 중간 행에서 실패한 것과 같다 —
+    /// 복사 실행기는 배치 세이브포인트로 되돌리고 한 행씩 다시 넣는다).
+    /// <para>
+    /// LONG 구간이 거부 번호로 실패하면(<see cref="LobWriteBinds.OnLongBindError"/>) 1행 구간만 같은 행을 옛 동작으로 제자리에서 다시 보낸다. 여러 행 구간은
+    /// 이미 들어간 행이 있을 수 있어 다시 보내지 않고 그 오류로 실패한다 — 실행기의 한 행씩 다시 넣기가 1행 구간으로 다시 들어와 거부를 확정한다.
+    /// 기억(<see cref="RememberLongRefused"/>)은 옛 동작으로 다시 보낸 것이 성공했을 때만 한다: 같은 번호가 그 행 값 때문에 났다면(옛 동작도 실패) 기억하지 않아,
+    /// 진짜 값 오류가 빠른 길을 끄지 않는다.
+    /// </para>
+    /// </summary>
+    private async Task<(BulkResult Result, TimeSpan Elapsed, bool Pending)> RunOnDriverAsync(
         OracleSession session, SqlStatement stmt, IReadOnlyList<BulkColumn> columns, IReadOnlyList<object?[]> rows,
         PolicyDecision? applied, CancellationToken ct)
     {
         var kind = ExecutionPolicy.EffectiveKind(stmt);
         var sw = Stopwatch.StartNew();
-        OracleCommand? cmd = null;
         try
         {
             PrepareConnection(session);
-            cmd = session.Connection.CreateCommand();
-            cmd.BindByName = true;
-            cmd.CommandText = stmt.Text;
-            if (columns.Count > 0)
+            var types = new OracleDbType[columns.Count];
+            for (var c = 0; c < columns.Count; c++)
             {
-                cmd.ArrayBindCount = rows.Count;
-                for (var c = 0; c < columns.Count; c++)
-                {
-                    var values = new object[rows.Count];
-                    for (var r = 0; r < rows.Count; r++)
-                    {
-                        values[r] = rows[r][c] ?? DBNull.Value;
-                    }
-
-                    cmd.Parameters.Add(new OracleParameter(columns[c].BindName, BulkBinds.ToDbType(columns[c].ServerType))
-                    {
-                        Direction = ParameterDirection.Input,
-                        Value = values,
-                    });
-                }
+                types[c] = BulkBinds.ToDbType(columns[c].ServerType);
             }
 
-            long n;
-            using (cmd.CancelOnToken(ct))
+            var (segments, hasLob) = await PlanSegmentsAsync(session, stmt, columns, types, rows, ct);
+            long n = 0;
+            var longBind = true;
+            foreach (var segment in segments)
             {
-                n = await cmd.ExecuteNonQueryAsync(ct);
                 ct.ThrowIfCancellationRequested();
+                if (segment.LongBind && longBind)
+                {
+                    try
+                    {
+                        n += await ExecuteSegmentAsync(session, stmt, columns, types, rows, segment, longBind: true, ct);
+                        LobWriteStats.AddLong(segment.Count);
+                        continue;
+                    }
+                    catch (Exception ex) when (!OracleExecutionService.IsCancellation(ex, ct)
+                                               && LongBindErrorOf(ex, segment.Count) != LongBindErrorAction.NotRefusal)
+                    {
+                        if (LongBindErrorOf(ex, segment.Count) == LongBindErrorAction.Fail)
+                        {
+                            // 여러 행: 이미 넣은 행이 있을 수 있어 다시 보내지 않는다(아래 catch 가 실패로 돌려준다).
+                            LobWriteStats.AddRefusedRun();
+                            throw;
+                        }
+
+                        LobWriteStats.AddFallback(); // 1행: 넣은 행이 없다 — 아래에서 옛 동작으로 다시 보낸다
+                    }
+
+                    n += await ExecuteSegmentAsync(session, stmt, columns, types, rows, segment, longBind: false, ct);
+                    LobWriteStats.AddLocator(segment.Count);
+
+                    // 옛 동작은 됐다 = LONG 모양이 거부된 것이 확정: 이 접속·문장은 앞으로 옛 동작으로 보낸다.
+                    RememberLongRefused(session, stmt.Text);
+                    longBind = false;
+                    continue;
+                }
+
+                n += await ExecuteSegmentAsync(session, stmt, columns, types, rows, segment, longBind: false, ct);
+                if (hasLob)
+                {
+                    LobWriteStats.AddLocator(segment.Count);
+                }
             }
 
             sw.Stop();
             var pending = await OracleExecutionService.TrackTransactionAsync(session, stmt, kind, ct);
-            return (new BulkResult(ExecutionStatus.Succeeded, n >= 0 ? n : 0) { Policy = applied }, sw.Elapsed, pending);
+            return (new BulkResult(ExecutionStatus.Succeeded, n) { Policy = applied }, sw.Elapsed, pending);
         }
         catch (Exception ex) when (OracleExecutionService.IsCancellation(ex, ct))
         {
@@ -323,13 +385,148 @@ internal sealed class OracleBulkExecutionService : IBulkExecutionService
             return (new BulkResult(ExecutionStatus.Failed, 0) { Error = new DbError("ORANDA-EXEC", ex.Message), Policy = applied },
                 sw.Elapsed, session.HasPendingTransaction);
         }
-        finally
+    }
+
+    /// <summary>
+    /// 이 호출의 행 구간. LOB 열이 없거나, 옛 동작(<see cref="LobWrite"/>)이거나, LONG 바인드를 넣을 수 없는 문장(<see cref="LobWriteBinds.IsPlainInsertValues"/>)이거나,
+    /// 이 문장이 앞서 거부당했으면 모든 행이 옛 동작 구간 하나다. 아니면 <see cref="LobWriteBinds.Plan"/>.
+    /// </summary>
+    private async Task<(IReadOnlyList<LobSegment> Segments, bool HasLob)> PlanSegmentsAsync(
+        OracleSession session, SqlStatement stmt, IReadOnlyList<BulkColumn> columns, OracleDbType[] types, IReadOnlyList<object?[]> rows,
+        CancellationToken ct)
+    {
+        var lobs = new List<LobBindColumn>();
+        for (var c = 0; c < types.Length; c++)
         {
-            if (cmd is not null)
+            if (LobWriteBinds.IsLob(types[c]))
             {
-                await cmd.DisposeAsync();
+                lobs.Add(new LobBindColumn(c, types[c] != OracleDbType.Blob));
             }
         }
+
+        LobSegment[] whole = [new LobSegment(0, rows.Count, false)];
+        if (lobs.Count == 0)
+        {
+            return (whole, false);
+        }
+
+        if (LobWrite != OracleLobWrite.LongBind || IsLongRefused(session, stmt.Text)
+            || !LobWriteBinds.IsPlainInsertValues(stmt.Text, lobs.Select(l => columns[l.Index].BindName)))
+        {
+            return (whole, true);
+        }
+
+        var charset = lobs.Exists(l => l.Text) ? await DatabaseCharsetAsync(session, ct) : LongTextCharset.Other;
+        return (LobWriteBinds.Plan(rows, lobs, charset), true);
+    }
+
+    /// <summary>
+    /// 행 구간 하나를 배열 실행 한 번으로 보낸다(바인드 열이 없으면 배열 없이 한 번). <paramref name="longBind"/> 면 LOB 열을 LONG·LONG RAW 로 바인드한다
+    /// (<see cref="LobWriteBinds.LongTypeOf"/>), 아니면 열 형식 그대로(옛 동작). 돌려주는 행 수는 0 이상.
+    /// </summary>
+    private static async Task<long> ExecuteSegmentAsync(OracleSession session, SqlStatement stmt, IReadOnlyList<BulkColumn> columns, OracleDbType[] types,
+                                                        IReadOnlyList<object?[]> rows, LobSegment segment, bool longBind, CancellationToken ct)
+    {
+        await using var cmd = session.Connection.CreateCommand();
+        cmd.BindByName = true;
+        cmd.CommandText = stmt.Text;
+        if (columns.Count > 0)
+        {
+            cmd.ArrayBindCount = segment.Count;
+            for (var c = 0; c < columns.Count; c++)
+            {
+                var values = new object[segment.Count];
+                for (var r = 0; r < segment.Count; r++)
+                {
+                    values[r] = rows[segment.Start + r][c] ?? DBNull.Value;
+                }
+
+                cmd.Parameters.Add(new OracleParameter(columns[c].BindName, longBind ? LobWriteBinds.LongTypeOf(types[c]) : types[c])
+                {
+                    Direction = ParameterDirection.Input,
+                    Value = values,
+                });
+            }
+        }
+
+        using (cmd.CancelOnToken(ct))
+        {
+            var n = await cmd.ExecuteNonQueryAsync(ct);
+            ct.ThrowIfCancellationRequested();
+            return n >= 0 ? n : 0;
+        }
+    }
+
+    /// <summary>
+    /// LONG 구간의 실패를 어떻게 다룰지(<see cref="LobWriteBinds.OnLongBindError"/>): 서버 오류는 겉 번호와 <c>Errors[i]</c> 번호를 모두 넘긴다(배열 DML 의 ORA-24381
+    /// 안에 행 오류가 온다). 드라이버가 보내기 전에 바인드를 거부한 것(형식·인자 예외)도 거부로 본다. 그 밖은 <see cref="LongBindErrorAction.NotRefusal"/>.
+    /// </summary>
+    private static LongBindErrorAction LongBindErrorOf(Exception ex, int segmentRows) => ex switch
+    {
+        OracleException oracle => LobWriteBinds.OnLongBindError(ErrorNumbers(oracle), segmentRows),
+        ArgumentException or InvalidCastException or NotSupportedException => LobWriteBinds.OnLongBindError([], segmentRows, driverRejected: true),
+        _ => LongBindErrorAction.NotRefusal,
+    };
+
+    private static IEnumerable<int> ErrorNumbers(OracleException ex)
+    {
+        yield return ex.Number;
+        foreach (OracleError error in ex.Errors)
+        {
+            yield return error.Number;
+        }
+    }
+
+    private bool IsLongRefused(OracleSession session, string text) =>
+        _longRefused.TryGetValue(session.Connection, out var refused) && refused.ContainsKey(text);
+
+    /// <summary>
+    /// 이 접속에서 이 문장은 앞으로 LONG 을 시도하지 않는다. 같은 행을 옛 동작으로 다시 보내 성공했을 때만 부른다(<see cref="RunOnDriverAsync"/>).
+    /// 접속마다 <see cref="MaxRememberedStatements"/> 를 넘으면 그 접속의 기억을 비운다(다시 거부되면 다시 기억한다).
+    /// </summary>
+    private void RememberLongRefused(OracleSession session, string text)
+    {
+        var refused = _longRefused.GetValue(session.Connection, _ => new ConcurrentDictionary<string, bool>(StringComparer.Ordinal));
+        if (refused.Count >= MaxRememberedStatements)
+        {
+            refused.Clear();
+        }
+
+        if (refused.TryAdd(text, true))
+        {
+            LobWriteStats.AddRemembered();
+        }
+    }
+
+    /// <summary>
+    /// 대상 DB 문자 집합의 종류(<c>NLS_DATABASE_PARAMETERS</c>, 접속마다 한 번 묻고 기억한다). 묻지 못하면 <see cref="LongTextCharset.Other"/>
+    /// (ASCII 값만 LONG 으로 보낸다 — 어느 문자 집합에서든 그대로다)이고 기억하지 않는다. 사전 뷰 조회라 트랜잭션에 닿지 않는다.
+    /// </summary>
+    private static async Task<LongTextCharset> DatabaseCharsetAsync(OracleSession session, CancellationToken ct)
+    {
+        var conn = session.Connection;
+        if (Charsets.TryGetValue(conn, out var known))
+        {
+            return known.Value;
+        }
+
+        LongTextCharset charset;
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT VALUE FROM NLS_DATABASE_PARAMETERS WHERE PARAMETER = 'NLS_CHARACTERSET'";
+            using (cmd.CancelOnToken(ct))
+            {
+                charset = LobWriteBinds.CharsetOf(Convert.ToString(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture));
+            }
+        }
+        catch (OracleException) when (!ct.IsCancellationRequested)
+        {
+            return LongTextCharset.Other;
+        }
+
+        Charsets.AddOrUpdate(conn, new StrongBox<LongTextCharset>(charset));
+        return charset;
     }
 
     /// <summary>호출 한 번에 <see cref="StatementExecuted"/> 하나. 이력 저장 여부는 <see cref="ExecutionOptions.SkipHistory"/> 를 따른다.</summary>

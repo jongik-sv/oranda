@@ -634,6 +634,53 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
         Assert.Equal(length, commands == 1 ? ((string?[])sent[0].Parameters[1].Value!)[1]!.Length : ((string)sent[1].Parameters[1].Value!).Length);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_long_clob_row_goes_alone_and_the_rows_around_it_stay_arrays_unless_the_old_whole_batch_mode_is_on(bool split)
+    {
+        // PF5: 긴 CLOB 이 섞인 배열은 서버가 끊으므로 그 행만 한 행씩, 앞뒤 연속 구간은 배열(행 순서 그대로). 옛 동작은 묶음 전체를 한 행씩.
+        const string insert = "INSERT INTO \"T\" (\"A\", \"B\", \"C\") VALUES (:C1, :C2, :C3)";
+        Serve(cmd => cmd.CommandText == insert ? (FakeDriverHost.Get(cmd, "ArrayBindCount") is int n and > 0 ? n : 1) : null);
+        var service = NewService();
+        service.LobWrite = split ? TiberoLobWrite.SplitLongRows : TiberoLobWrite.WholeBatchRowByRow;
+        await using var session = NewSession();
+        BulkColumn[] columns = [new("C1", "NUMBER"), new("C2", "CLOB"), new("C3", "VARCHAR2(10)")];
+        var longText = new string('x', TiberoBulkExecutionService.ArrayClobMaxChars + 1);
+        object?[][] rows = [[1m, "a", "a"], [2m, null, "b"], [3m, longText, "c"], [4m, "d", "d"], [5m, "", "e"]];
+
+        var result = await service.ExecuteArrayAsync(session, Dml(insert), columns, rows, ExecutionOptions.Default, CancellationToken.None);
+
+        Assert.Equal(ExecutionStatus.Succeeded, result.Status);
+        Assert.Equal(5, result.RowsAffected);
+        var sent = _sent.Where(s => s.Text == insert).ToList();
+        if (!split)
+        {
+            Assert.Equal(5, sent.Count);
+            Assert.All(sent, s => Assert.Equal(0, s.ArrayBindCount));
+            return;
+        }
+
+        Assert.Equal([2, 0, 2], sent.Select(s => s.ArrayBindCount));
+        Assert.Equal(["1", "2"], (string?[])sent[0].Parameters[0].Value!);
+        Assert.Equal(["a", null], (string?[])sent[0].Parameters[1].Value!);
+        Assert.Equal(longText, Assert.IsType<string>(sent[1].Parameters[1].Value));
+        Assert.Equal(["4", "5"], (string?[])sent[2].Parameters[0].Value!);
+        Assert.Equal(["d", ""], (string?[])sent[2].Parameters[1].Value!);
+        Assert.Equal(["d", "e"], (string?[])sent[2].Parameters[2].Value!);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("split", false)]
+    [InlineData("rowbyrow", true)]
+    [InlineData(" RowByRow ", true)]
+    public void The_lob_write_switch_turns_the_old_whole_batch_mode_on_only_for_rowbyrow(string? value, bool old)
+    {
+        Assert.Equal(old ? TiberoLobWrite.WholeBatchRowByRow : TiberoLobWrite.SplitLongRows, TiberoBulkExecutionService.LobWriteOf(value));
+    }
+
     [Fact]
     public async Task A_server_error_on_the_second_blob_row_stops_there_with_the_classified_error()
     {

@@ -26,6 +26,7 @@ namespace Oranda.Tibero.Execution;
 /// <para>
 /// 경로(TB1 설계 3.1): 열 없음 = 한 번 실행, 행 1 = 스칼라 바인드(서버 오류가 그대로 나와 실패 행의 이유가 된다), 행 &gt; 1 = 배열(ArrayBindCount).
 /// BLOB 열이 있는 행 &gt; 1 묶음은 스칼라 한 행씩: 행마다 새 명령·매개변수를 만들어 실행하고 닫으며(재사용하면 큰 BLOB 뒤 TBR-590727, 실측), 행 사이에 취소를 확인한다.
+/// 긴 CLOB·NCLOB(<see cref="ArrayClobMaxChars"/> 초과)이 있는 묶음은 그 행만 한 행씩, 사이의 연속 구간은 배열로 보낸다(PF5, <see cref="LobWrite"/> — 옛 동작은 묶음 전체를 한 행씩).
 /// 드라이버 예외·INSERT 0 행(<see cref="PartialCode"/>, 몇 번째 행인지 글에 넣음)이면 거기서 멈추고 남은 행은 보내지 않는다(앞 행은 열린 트랜잭션에 남는다). Tibero 배열 DML 은 오류 없이 앞 k 행만 넣고 멈출 수 있다(실측 3.1) →
 /// INSERT … VALUES·MERGE 는 반환 행 수 k 가 보낸 행 수 n 과 같을 때만 성공한다: k &lt; n(앞 k 행만 넣고 멈춤)이든 k &gt; n(WHEN MATCHED UPDATE 가 대상 키가
 /// 유일하지 않아 한 원천 행에 여러 대상 행을 바꿈 — 어디서 멈췄는지 숨는다)이든 <see cref="PartialCode"/> 로 실패시킨다(RowsAffected 0, 앞 행은 열린 트랜잭션에 남는다 —
@@ -45,6 +46,9 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
 
     private const string ExecCode = "ORANDA-EXEC";
 
+    /// <summary>긴 CLOB 행 처리 방법을 고르는 환경 변수(PF5). <c>rowbyrow</c> 면 옛 동작(<see cref="TiberoLobWrite.WholeBatchRowByRow"/>), 그 밖은 <see cref="TiberoLobWrite.SplitLongRows"/>.</summary>
+    internal const string LobWriteVariable = "ORANDA_TIBERO_LOB_WRITE";
+
     private readonly IExecutionPolicy _policy;
     private readonly IExecutionInteraction _interaction;
     private readonly IEventBus _events;
@@ -58,6 +62,19 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
         _interaction = interaction;
         _events = events;
     }
+
+    /// <summary>프로세스 기본 긴 CLOB 행 처리 방법(시작할 때 <see cref="LobWriteVariable"/> 를 한 번 읽는다).</summary>
+    internal static TiberoLobWrite DefaultLobWrite { get; } = LobWriteOf(Environment.GetEnvironmentVariable(LobWriteVariable));
+
+    /// <summary>
+    /// 묶음 안에 <see cref="ArrayClobMaxChars"/> 보다 긴 CLOB·NCLOB 값이 있을 때의 처리(PF5, <see cref="TiberoLobWrite"/>). 기본 = <see cref="DefaultLobWrite"/>.
+    /// 측정 시험이 옛 동작과 번갈아 재려고 바꾼다.
+    /// </summary>
+    internal TiberoLobWrite LobWrite { get; set; } = DefaultLobWrite;
+
+    /// <summary><see cref="LobWriteVariable"/> 값 → 처리 방법. 앞뒤 공백·대소문자는 보지 않는다.</summary>
+    internal static TiberoLobWrite LobWriteOf(string? value) =>
+        string.Equals(value?.Trim(), "rowbyrow", StringComparison.OrdinalIgnoreCase) ? TiberoLobWrite.WholeBatchRowByRow : TiberoLobWrite.SplitLongRows;
 
     /// <summary>
     /// 조회 결과를 행마다 낸다(TB1 설계 1.1·1.2). 조회가 아니면(실효 분류가 Query 가 아니거나 첫 낱말이 SELECT·WITH 가 아니면) 정책을 묻기 전에
@@ -166,7 +183,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
         }
 
         // 값 → 바인드 글자(잠금 전). 지원 밖 형식·감싸지 않은 값 자리·형식이 맞지 않는 값이면 아무것도 보내지 않는다.
-        if (!TryPrepare(stmt, columns, rows, out var plan, out var refusal))
+        if (!TryPrepare(stmt, columns, rows, LobWrite, out var plan, out var refusal))
         {
             return Publish(s, stmt, options, Failed(ExecCode, refusal, applied), TimeSpan.Zero, session.HasPendingTransaction);
         }
@@ -225,9 +242,15 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
                 executed = true;
                 (k, shortfall) = await ExecuteRowByRowAsync(session, driver, stmt, plan, check, ct).ConfigureAwait(false);
             }
+            else if (plan.LongRows is { } longRows)
+            {
+                // 긴 CLOB 행만 한 행씩, 나머지는 연속 구간마다 배열(PF5, ExecuteSplitAsync).
+                executed = true;
+                (k, shortfall) = await ExecuteSplitAsync(session, driver, stmt, plan, longRows, check, ct).ConfigureAwait(false);
+            }
             else
             {
-                cmd = BuildCommand(session, driver, stmt, plan, array, 0);
+                cmd = BuildCommand(session, driver, stmt, plan, array, 0, n);
                 executed = true;
                 using (cmd.CancelOnToken(ct))
                 {
@@ -299,7 +322,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
             DbCommand? cmd = null;
             try
             {
-                cmd = BuildCommand(session, driver, stmt, plan, false, r);
+                cmd = BuildCommand(session, driver, stmt, plan, false, r, 1);
                 long k;
                 using (cmd.CancelOnToken(ct))
                 {
@@ -324,16 +347,71 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
     }
 
     /// <summary>
-    /// 명령 하나와 매개변수 한 벌을 만든다. 배열이면 열 전체를 배열 바인드로, 아니면 <paramref name="row"/> 번째 행의 스칼라 값만 담는다.
+    /// 긴 CLOB·NCLOB 값(<see cref="ArrayClobMaxChars"/> 초과)이 있는 묶음(PF5, <see cref="TiberoLobWrite.SplitLongRows"/>): 행 순서 그대로 연속 구간으로 나눠
+    /// 긴 값이 없는 구간은 배열 한 번(구간이 1행이면 스칼라), 긴 값이 있는 행은 한 행씩 보낸다. 구간마다 새 명령을 만들고 바로 닫는다(<see cref="ExecuteRowByRowAsync"/> 와 같다).
+    /// 구간마다 실행 뒤 취소와 행 수(<see cref="Shortfall"/>)를 확인하고, 부족하면 거기서 멈춰 몇 번째 행 구간인지 넣은 글을 돌려준다(앞 구간의 행은 열린 트랜잭션에 남는다 —
+    /// 호출한 쪽이 세이브포인트로 되돌리고 한 행씩 다시 넣는다). 예외는 그대로 올라간다. 돌려주는 행 수는 지금까지 합이다.
     /// </summary>
-    private static DbCommand BuildCommand(TiberoSession session, TiberoDriver driver, SqlStatement stmt, BindPlan plan, bool array, int row)
+    private static async Task<(long Count, string? Shortfall)> ExecuteSplitAsync(
+        TiberoSession session, TiberoDriver driver, SqlStatement stmt, BindPlan plan, bool[] longRows, RowCountCheck check, CancellationToken ct)
+    {
+        long total = 0;
+        var r = 0;
+        while (r < plan.RowCount)
+        {
+            ct.ThrowIfCancellationRequested();
+            var start = r;
+            r++;
+            if (!longRows[start])
+            {
+                while (r < plan.RowCount && !longRows[r])
+                {
+                    r++;
+                }
+            }
+
+            var count = r - start;
+            var array = count > 1;
+            DbCommand? cmd = null;
+            try
+            {
+                cmd = BuildCommand(session, driver, stmt, plan, array, start, count);
+                long k;
+                using (cmd.CancelOnToken(ct))
+                {
+                    k = await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                }
+
+                ct.ThrowIfCancellationRequested();
+                if (Shortfall(check, array, count, k) is { } message)
+                {
+                    return (total, $"{(start + 1).ToString(CultureInfo.InvariantCulture)}번째 행부터 {count.ToString(CultureInfo.InvariantCulture)}행 구간 "
+                                   + $"(앞 {start.ToString(CultureInfo.InvariantCulture)}행은 넣음): {message}");
+                }
+
+                total += k >= 0 ? k : 0;
+            }
+            finally
+            {
+                await TiberoExecutionService.SafeDisposeAsync(cmd).ConfigureAwait(false);
+            }
+        }
+
+        return (total, null);
+    }
+
+    /// <summary>
+    /// 명령 하나와 매개변수 한 벌을 만든다. 배열이면 <paramref name="row"/> 번째부터 <paramref name="count"/> 행을 배열 바인드로(묶음 전체면 열 배열 그대로),
+    /// 아니면 <paramref name="row"/> 번째 행의 스칼라 값만 담는다.
+    /// </summary>
+    private static DbCommand BuildCommand(TiberoSession session, TiberoDriver driver, SqlStatement stmt, BindPlan plan, bool array, int row, int count)
     {
         var cmd = session.CreateCommand(stmt.Text);
         try
         {
             if (array)
             {
-                driver.SetArrayBindCount(cmd, plan.RowCount);
+                driver.SetArrayBindCount(cmd, count);
             }
 
             foreach (var column in plan.Columns)
@@ -342,7 +420,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
                 p.ParameterName = column.BindName;
                 driver.SetParameterKind(p, column.Kind);
                 p.Direction = ParameterDirection.Input;
-                p.Value = array ? column.Values : ScalarAt(column, row);
+                p.Value = array ? Slice(column.Values, row, count) : ScalarAt(column, row);
                 cmd.Parameters.Add(p);
             }
 
@@ -357,6 +435,22 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
 
     /// <summary>스칼라 바인드 값: <paramref name="row"/> 번째 행의 글(BLOB 은 byte[]), NULL 은 <see cref="DBNull.Value"/>.</summary>
     private static object ScalarAt(PreparedColumn column, int row) => column.Values.GetValue(row) ?? DBNull.Value;
+
+    /// <summary>열 배열의 <paramref name="start"/> 번째부터 <paramref name="count"/> 원소(같은 형식 배열 — 드라이버는 형식 배열만 받는다). 전체면 그 배열 그대로.</summary>
+    private static Array Slice(Array values, int start, int count)
+    {
+        if (start == 0 && count == values.Length)
+        {
+            return values;
+        }
+
+        return values switch
+        {
+            string?[] text => text[start..(start + count)],
+            byte[]?[] bytes => bytes[start..(start + count)],
+            _ => throw new InvalidOperationException($"바인드 배열 형식을 나눌 수 없습니다: {values.GetType().Name}"),
+        };
+    }
 
     /// <summary>
     /// 행 수 판정(TB1 설계 3.2). 배열: INSERT … VALUES·MERGE 는 돌려준 행 수 k 가 n 과 같을 때만 성공 — k &lt; n(앞 k 행만 넣고 멈춤)·음수는 물론
@@ -418,14 +512,16 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
 
     /// <summary>
     /// 열마다 모양을 보고 값을 바인드 배열로 바꾼다. 지원 밖 형식, 감싸야 하는 값 자리(<see cref="TiberoBulkShape.IsWrapped"/>)가 글에 없는 열,
-    /// 바꿀 수 없는 값이면 false 와 이유(열·행 번호).
+    /// 바꿀 수 없는 값이면 false 와 이유(열·행 번호). 행 &gt; 1 묶음에 긴 CLOB·NCLOB 값(<see cref="ArrayClobMaxChars"/> 초과)이 있으면 <paramref name="lobWrite"/> 를 따른다:
+    /// 옛 동작은 묶음 전체를 한 행씩, <see cref="TiberoLobWrite.SplitLongRows"/> 는 그 행만 표시한다(<see cref="BindPlan.LongRows"/>). BLOB 열이 있으면 언제나 묶음 전체가 한 행씩이다.
     /// </summary>
-    private static bool TryPrepare(SqlStatement stmt, IReadOnlyList<BulkColumn> columns, IReadOnlyList<object?[]> rows,
+    private static bool TryPrepare(SqlStatement stmt, IReadOnlyList<BulkColumn> columns, IReadOnlyList<object?[]> rows, TiberoLobWrite lobWrite,
                                    out BindPlan plan, out string refusal)
     {
         var prepared = new List<PreparedColumn>(columns.Count);
         var rowByRow = false;
-        plan = new BindPlan(prepared, rows.Count, false);
+        bool[]? longRows = null;
+        plan = new BindPlan(prepared, rows.Count, false, null);
         refusal = string.Empty;
         for (var c = 0; c < columns.Count; c++)
         {
@@ -482,13 +578,20 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
 
             if (shape.Type is TiberoBulkType.Clob or TiberoBulkType.NClob && rows.Count > 1 && HasLongText((string?[])values))
             {
-                rowByRow = true;
+                if (lobWrite == TiberoLobWrite.SplitLongRows)
+                {
+                    MarkLongText((string?[])values, longRows ??= new bool[rows.Count]);
+                }
+                else
+                {
+                    rowByRow = true;
+                }
             }
 
             prepared.Add(new PreparedColumn(column.BindName, paramKind, values));
         }
 
-        plan = new BindPlan(prepared, columns.Count == 0 ? 1 : rows.Count, rowByRow);
+        plan = new BindPlan(prepared, columns.Count == 0 ? 1 : rows.Count, rowByRow, rowByRow ? null : longRows);
         return true;
     }
 
@@ -510,6 +613,15 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
         }
 
         return false;
+    }
+
+    /// <summary><see cref="ArrayClobMaxChars"/> 보다 긴 값이 있는 행을 <paramref name="longRows"/> 에 표시한다(이미 표시된 행은 그대로).</summary>
+    private static void MarkLongText(string?[] values, bool[] longRows)
+    {
+        for (var r = 0; r < values.Length; r++)
+        {
+            longRows[r] |= values[r] is { Length: > ArrayClobMaxChars };
+        }
     }
 
     /// <summary>
@@ -656,6 +768,22 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
     /// <summary>바인드 열 하나: 이름(쌍점 없음)·매개변수 종류·행마다의 값(<c>string?[]</c>, BLOB 은 <c>byte[]?[]</c>).</summary>
     private sealed record PreparedColumn(string BindName, TiberoParamKind Kind, Array Values);
 
-    /// <summary>실행 계획: 열·행 수(열이 없으면 1)·스칼라 한 행씩 여부(BLOB 열이 있는 행 &gt; 1).</summary>
-    private sealed record BindPlan(IReadOnlyList<PreparedColumn> Columns, int RowCount, bool RowByRow);
+    /// <summary>
+    /// 실행 계획: 열·행 수(열이 없으면 1)·스칼라 한 행씩 여부(BLOB 열이 있는 행 &gt; 1, 옛 동작이면 긴 CLOB 이 있는 묶음도)·
+    /// 긴 CLOB·NCLOB 값이 있는 행 표시(<see cref="TiberoLobWrite.SplitLongRows"/> 일 때만, 없으면 null — 그 행만 한 행씩, 나머지는 구간마다 배열).
+    /// </summary>
+    private sealed record BindPlan(IReadOnlyList<PreparedColumn> Columns, int RowCount, bool RowByRow, bool[]? LongRows);
+}
+
+/// <summary>
+/// Tibero 대량 쓰기에서 묶음 안에 긴 CLOB·NCLOB 값(<see cref="TiberoBulkExecutionService.ArrayClobMaxChars"/> 초과)이 있을 때의 처리(PF5).
+/// 긴 값이 섞인 배열은 서버가 연결을 끊으므로(TBR-90405, 실측) 긴 값의 행은 언제나 한 행씩 보낸다 — 차이는 나머지 행이다.
+/// </summary>
+internal enum TiberoLobWrite
+{
+    /// <summary>옛 동작: 긴 값이 하나라도 있으면 묶음 전체(보통 5000행)를 한 행씩, 행마다 새 명령으로 보낸다(행마다 서버 왕복).</summary>
+    WholeBatchRowByRow,
+
+    /// <summary>긴 값이 있는 행만 한 행씩, 그 사이의 연속 구간은 배열 한 번씩 보낸다(행 순서 그대로). 행마다 바인드하는 값은 옛 동작과 같다.</summary>
+    SplitLongRows,
 }
