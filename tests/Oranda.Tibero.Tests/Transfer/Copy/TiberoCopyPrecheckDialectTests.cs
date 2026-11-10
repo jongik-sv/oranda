@@ -55,15 +55,67 @@ public sealed partial class TiberoCopyPrecheckDialectTests
         Assert.False(string.IsNullOrWhiteSpace(TiberoCopyPrecheckDialect.RecreateBlocked));
     }
 
-    /// <summary>「없으면 만들기」 차단은 다시 만들기와 따로 풀 수 있게 갈라졌지만 교차 IT 전까지 같은 글로 막혀 있다(D11).</summary>
+    /// <summary>「없으면 만들기」는 푼다(XC8b, D11 변경): Tibero 대상에 새 표를 만든다. 다시 만들기는 그대로 막는다.</summary>
     [Fact]
-    public void Create_if_missing_is_blocked_with_the_same_text_as_recreate_until_the_cross_it_passes()
+    public void Create_if_missing_is_not_blocked_but_recreate_still_is()
     {
         ICopyPrecheckDialect dialect = Dialect;
 
-        Assert.NotNull(dialect.CreateBlockedReason(null!));
-        Assert.Equal(TiberoCopyPrecheckDialect.RecreateBlocked, dialect.CreateBlockedReason(null!));
-        Assert.Equal(dialect.RecreateBlockedReason(null!), dialect.CreateBlockedReason(null!));
+        Assert.Null(dialect.CreateBlockedReason(null!));
+        Assert.NotNull(dialect.RecreateBlockedReason(null!));
+        Assert.Equal(TiberoCopyPrecheckDialect.RecreateBlocked, dialect.RecreateBlockedReason(null!));
+    }
+
+    /// <summary>
+    /// Tibero 카탈로그 모양의 표(문자 열 형식 이름 VARCHAR·CHAR, 길이 = 글자 수, 서버가 지은 제약 이름 <c>&lt;소유자&gt;_CON&lt;숫자&gt;</c>)를 같은 Tibero 에 만드는 문장.
+    /// 방언의 서버 이름 판정이 실행기·미리 보기와 같게 쓰여 서버 이름은 명시하지 않고, 길이는 글자 단위(CHAR)다.
+    /// </summary>
+    [Fact]
+    public void Tibero_catalog_shaped_table_is_created_in_another_account_with_char_lengths_and_without_server_named_constraints()
+    {
+        var table = new TableInfo(new DbObjectRef("FILM_USER", "ORT_T", "TABLE"),
+        [
+            new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false },
+            new ColumnInfo("NM", 2, "VARCHAR") { Length = 20, DefaultValue = "'x'" },
+            new ColumnInfo("CD", 3, "CHAR") { Length = 5 },
+            new ColumnInfo("NN", 4, "NVARCHAR") { Length = 10 },
+            new ColumnInfo("AMT", 5, "NUMBER") { Precision = 12, Scale = 2 },
+            new ColumnInfo("TS", 6, "TIMESTAMP(6)"),
+            new ColumnInfo("DOC", 7, "CLOB"),
+        ])
+        {
+            Comment = "표 주석",
+            Constraints =
+            [
+                new ConstraintInfo("FILM_USER_CON123", ConstraintKind.PrimaryKey, ["ID"]),
+                new ConstraintInfo("FILM_USER_CON124", ConstraintKind.Check, ["AMT"]) { Condition = "AMT > 0" },
+                new ConstraintInfo("CK_NM", ConstraintKind.Check, ["NM"]) { Condition = "LENGTH(NM) > 0" },
+            ],
+            Indexes =
+            [
+                new IndexInfo("FILM_USER_CON123", true, ["ID"]) { IndexType = "NORMAL" },
+                new IndexInfo("IX_NM", false, ["NM"]) { IndexType = "NORMAL" },
+                new IndexInfo("IX_FN", false, ["SYS_NC0001$"]) { IndexType = "FUNCTION-BASED NORMAL" },
+            ],
+        };
+
+        var built = CrossTableMap.Build(Dbms.Tibero, Dbms.Tibero, table, "FILM_CMN_USER", new HashSet<string>(StringComparer.Ordinal),
+            name => Dialect.IsServerName(name, "FILM_USER"));
+
+        Assert.Equal(
+        [
+            "CREATE TABLE \"FILM_CMN_USER\".\"ORT_T\" (\"ID\" NUMBER(10) NOT NULL, \"NM\" VARCHAR2(20 CHAR) DEFAULT 'x', \"CD\" CHAR(5 CHAR), \"NN\" NVARCHAR2(10),"
+            + " \"AMT\" NUMBER(12,2), \"TS\" TIMESTAMP(6), \"DOC\" CLOB, PRIMARY KEY (\"ID\"), CHECK (AMT > 0), CONSTRAINT \"CK_NM\" CHECK (LENGTH(NM) > 0))",
+            "CREATE INDEX \"FILM_CMN_USER\".\"IX_NM\" ON \"FILM_CMN_USER\".\"ORT_T\" (\"NM\")",
+            "COMMENT ON TABLE \"FILM_CMN_USER\".\"ORT_T\" IS '표 주석'",
+        ], built.Statements);
+        Assert.Empty(built.Notes); // 같은 DBMS: 달라지는 것 없음
+        Assert.Empty(built.OmittedConstraints);
+
+        // 사전 점검의 이름 겹침 검사가 보는 이름도 같은 판정이다: 서버 이름은 빠진다.
+        var (constraints, indexes) = CreateTableDdl.NamedObjects(table, name => Dialect.IsServerName(name, "FILM_USER"));
+        Assert.Equal(["CK_NM"], constraints);
+        Assert.Equal(["IX_NM"], indexes);
     }
 
     /// <summary>

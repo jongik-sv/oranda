@@ -465,6 +465,78 @@ public sealed class CrossCreateTableTests
         Assert.Equal(["CK_BARE_LOWER", "CK_QUOTED"], bare.OmittedConstraints.Order(StringComparer.Ordinal));
     }
 
+    // ---- Tibero → Tibero 같은 DB 다른 계정 (xdb-copy XC8b) ----
+
+    /// <summary>실제 사용 모양: FILM_USER 의 PK 없는 표를 같은 Tibero DB 의 FILM_CMN_USER 로, 직접 조건·비우고 넣기·없으면 만들기.</summary>
+    private static Fixture FilmFixture(bool create, bool targetHasTable = false) => new(
+        Dbms.Tibero, Dbms.Tibero, WipStock("FILM_USER"), create: create, targetHasTable: targetHasTable,
+        rule: new TableRule("TB_MCM_WIP_STOCK", RuleKind.Custom, TargetAction.DeleteAllInsert)
+        {
+            CustomWhere = "STK_DD BETWEEN :FROM_DT AND :TO_DT",
+            CreateIfMissing = create,
+        },
+        sourceOwner: "FILM_USER", targetOwner: "FILM_CMN_USER", sameDatabase: "TIBDB",
+        options: new CopyOptions { BatchSize = 5000, Commit = CommitMode.PerTable, DisableTriggersByDefault = false, MaxFailedRows = 100 });
+
+    private static TableInfo WipStock(string owner) =>
+        new(new DbObjectRef(owner, "TB_MCM_WIP_STOCK", "TABLE"),
+        [
+            // Tibero 카탈로그 모양: 문자 열 형식 이름은 VARCHAR(VARCHAR2 아님), 길이는 글자 수(char_length).
+            new ColumnInfo("WIP_QTY", 1, "NUMBER") { Precision = 15, Scale = 3, IsNullable = false, DefaultValue = "0" },
+            new ColumnInfo("STK_DD", 2, "VARCHAR") { Length = 8 },
+        ])
+        {
+            Indexes = [new IndexInfo("IX_WIP_STOCK_DD", false, ["STK_DD"]) { IndexType = "NORMAL" }],
+        };
+
+    [Fact]
+    public async Task Tibero_to_tibero_create_if_missing_in_another_account_of_the_same_database_is_not_blocked_and_previews_the_create()
+    {
+        var f = FilmFixture(create: true);
+
+        var report = await f.PrecheckAsync();
+
+        Assert.DoesNotContain(report.Items, i => i.Code == CopyCheckCodes.CreateBlocked);
+        Assert.DoesNotContain(report.Items, i => i.Level == CheckLevel.Error);
+        Assert.False(report.HasErrors);
+        Assert.Equal(CheckLevel.Confirm, Assert.Single(report.Items, i => i.Code == "NoPrimaryKey").Level);
+        Assert.Equal(CheckLevel.Confirm, Assert.Single(report.Items, i => i.Code == CopyCheckCodes.CreateTable).Level);
+        Assert.Equal(CheckLevel.Pass, Assert.Single(report.Items, i => i.Code == "ReadConsistency").Level);
+        Assert.All(report.Items, i => Assert.Contains(i.Code, new[] { "NoPrimaryKey", CopyCheckCodes.CreateTable, "ReadConsistency" }));
+
+        Assert.Contains(report.Preview, p => p.Side == PreviewSide.Source
+                                             && p.Sql.Contains("FROM \"FILM_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal)
+                                             && p.Sql.Contains("BETWEEN :FROM_DT AND :TO_DT", StringComparison.Ordinal));
+        var create = Assert.Single(report.Preview, p => p.Sql.StartsWith("CREATE TABLE", StringComparison.Ordinal));
+        Assert.Equal(PreviewSide.Target, create.Side);
+        Assert.Contains("CREATE TABLE \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\"", create.Sql, StringComparison.Ordinal);
+        Assert.Contains("\"WIP_QTY\" NUMBER(15,3) DEFAULT 0 NOT NULL", create.Sql, StringComparison.Ordinal);
+        Assert.Contains("\"STK_DD\" VARCHAR2(8 CHAR)", create.Sql, StringComparison.Ordinal);
+        Assert.Contains(report.Preview, p => p.Sql == "CREATE INDEX \"FILM_CMN_USER\".\"IX_WIP_STOCK_DD\" ON \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\" (\"STK_DD\")");
+        Assert.Contains(report.Preview, p => p.Sql == "DROP TABLE \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\" PURGE"); // 적재 실패 때 지우는 문장도 미리 보인다
+
+        // 새 표라 대상을 지우지 않는다. 같은 규칙으로 대상 표가 이미 있으면 비우는 DELETE 가 미리 보기에 있다(대조).
+        Assert.DoesNotContain(report.Preview, p => p.Sql.StartsWith("DELETE FROM", StringComparison.Ordinal));
+        var existing = await FilmFixture(create: true, targetHasTable: true).PrecheckAsync();
+        Assert.DoesNotContain(existing.Items, i => i.Code == CopyCheckCodes.CreateTable);
+        Assert.Contains(existing.Preview, p => p.Sql.StartsWith("DELETE FROM \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Tibero_to_tibero_runner_creates_the_table_before_loading_and_skips_the_delete_of_delete_all_insert_for_it()
+    {
+        var f = FilmFixture(create: true);
+        var report = await f.PrecheckAsync();
+        Assert.False(report.HasErrors);
+
+        var result = await f.RunAsync(report);
+
+        var texts = f.Execution.Calls.Select(c => c.Statement.Text).ToList();
+        Assert.Contains(texts, t => t.StartsWith("CREATE TABLE \"FILM_CMN_USER\".\"TB_MCM_WIP_STOCK\"", StringComparison.Ordinal));
+        Assert.DoesNotContain(texts, t => t.StartsWith("DELETE FROM", StringComparison.Ordinal)); // 새 표: AppendOnly 처럼 지우지 않는다
+        Assert.NotEqual(CopyOutcome.Failed, result.Outcome);
+    }
+
     // ---- 도우미 ----
 
     /// <summary>PK 열이 Tibero VARCHAR2(5000)(Oracle 에서 CLOB 이 됨)인 표.</summary>
@@ -517,21 +589,31 @@ public sealed class CrossCreateTableTests
     {
         public Fixture(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TargetAction action = TargetAction.DeleteAllInsert, bool create = true,
                        bool targetHasTable = false, FakeCodec? sourceCodec = null, FakeCodec? targetCodec = null, ICopyPrecheckDialect? targetDialect = null,
-                       ICopyPrecheckDialect? runnerDialect = null, IReadOnlyList<(string Parent, string Ddl, string? Name)>? sourceForeignKeys = null)
+                       ICopyPrecheckDialect? runnerDialect = null, IReadOnlyList<(string Parent, string Ddl, string? Name)>? sourceForeignKeys = null,
+                       TableRule? rule = null, string sourceOwner = "SRC", string targetOwner = "DST", string? sameDatabase = null, CopyOptions? options = null)
         {
-            Rule = new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = create };
+            SourceOwner = sourceOwner;
+            TargetOwner = targetOwner;
+            Rule = rule ?? new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = create };
             Job = new CopyJob
             {
-                Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
-                SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==", Tables = [Rule],
+                Id = "1", Name = "n", Source = new ConnectionRef("s", sourceOwner), Target = new ConnectionRef("t", targetOwner),
+                SourceOwner = sourceOwner, TargetOwner = targetOwner, MaskSalt = "AA==", Tables = [Rule], Options = options ?? new CopyOptions(),
             };
-            Source = new FakeSession(TestData.Profile(readOnly: true) with { Dbms = sourceDbms }, TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" };
-            Target = new FakeSession(TestData.Profile(ConnectionEnvironment.Development) with { Name = "dev", Dbms = targetDbms }, TestData.Server()) { DbKey = "DSTDB/PDB1/DST" };
+            // 같은 DB 의 다른 계정(DbKey 의 DB 마디가 같다)이면 sameDatabase 로 그 DB 이름을 준다.
+            Source = new FakeSession(TestData.Profile(readOnly: true) with { Dbms = sourceDbms }, TestData.Server())
+            {
+                DbKey = sameDatabase is null ? "SRCDB/PDB1/" + sourceOwner : $"{sameDatabase}/{sameDatabase}/{sourceOwner}",
+            };
+            Target = new FakeSession(TestData.Profile(ConnectionEnvironment.Development) with { Name = "dev", Dbms = targetDbms }, TestData.Server())
+            {
+                DbKey = sameDatabase is null ? "DSTDB/PDB1/" + targetOwner : $"{sameDatabase}/{sameDatabase}/{targetOwner}",
+            };
             var metadata = new FakeMetadataProvider();
-            metadata.Tables[new DbObjectRef("SRC", "ORDERS", "TABLE")] = source;
+            metadata.Tables[new DbObjectRef(sourceOwner, Rule.Table, "TABLE")] = source;
             if (targetHasTable)
             {
-                metadata.Tables[new DbObjectRef("DST", "ORDERS", "TABLE")] = source with { Table = new DbObjectRef("DST", "ORDERS", "TABLE") };
+                metadata.Tables[new DbObjectRef(targetOwner, Rule.Table, "TABLE")] = source with { Table = new DbObjectRef(targetOwner, Rule.Table, "TABLE") };
             }
 
             Bulk = new FakeBulk(this, targetHasTable);
@@ -546,6 +628,10 @@ public sealed class CrossCreateTableTests
         }
 
         public TableRule Rule { get; }
+
+        public string SourceOwner { get; }
+
+        public string TargetOwner { get; }
 
         public CopyJob Job { get; }
 
@@ -613,7 +699,7 @@ public sealed class CrossCreateTableTests
 
             object?[][] rows = query.Text switch
             {
-                "copy.session_user" => [[isTarget ? "DST" : "SRC"]],
+                "copy.session_user" => [[isTarget ? fixture.TargetOwner : fixture.SourceOwner]],
                 "copy.session_privs" when isTarget => [["CREATE TABLE"]],
                 "copy.target_is_table" => [[targetHasTable ? 1L : 0L]],
                 "copy.object_exists" => [[0L]],

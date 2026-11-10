@@ -44,10 +44,12 @@ internal sealed class TiberoCopyPrecheckDialect : ICopyPrecheckDialect
         "Tibero 의 테이블 다시 만들기는 아직 지원하지 않습니다(트리거 컴파일 오류·지연 FK·큰 바이트 길이 열을 다시 만드는 경로가 서버에서 확인되지 않음)";
 
     /// <summary>
-    /// 「없으면 만들기」도 아직 막는다(<see cref="RecreateBlockedReason"/> 와 같은 글). 새 표 만들기만 따로 풀 수 있게 갈라 둔 자리다:
-    /// 교차 복사 IT(XC10)가 양방향 만들기를 통과한 뒤 null 로 바꾼다(D11). 만든 표 정리(<c>DROP … PURGE</c>)의 Tibero 글은 XC5 실측으로 확인한다.
+    /// 「없으면 만들기」는 막지 않는다(null, xdb-copy XC8b 2026-11-10, D11 변경). Tibero→Tibero 와 Oracle→Tibero 모두 대상이 Tibero 면 새 표를 만든다.
+    /// 근거는 XC5 DDL 실측(D19): CHAR/BYTE 길이·DEFAULT·CHECK·일반/UNIQUE 인덱스·COMMENT 가 모두 만들어지고, <c>DROP TABLE … PURGE</c> 는 휴지통에 남기지 않으며,
+    /// CREATE TABLE 은 앞 트랜잭션을 묵시 커밋하므로 대상 쓰기 트랜잭션을 열기 전에 만든다(<c>CopyRunner.CreateMissingTablesAsync</c>).
+    /// 「테이블 다시 만들기」는 그대로 막는다(<see cref="RecreateBlockedReason"/>): 지우고 되살리는 경로는 아직 서버에서 확인되지 않았다.
     /// </summary>
-    public string? CreateBlockedReason(ISession target) => RecreateBlocked;
+    public string? CreateBlockedReason(ISession target) => null;
 
     /// <summary>
     /// 문자열 길이 한도가 같은 Tibero 끼리뿐 아니라 Oracle 원본도 막을 것이 없다: 교차 복사는 이 함수에 원본을 Tibero 로 옮긴 구조(<c>CrossTableMap</c>)를 넘기고,
