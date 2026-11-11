@@ -373,9 +373,17 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
             Assert.Equal("새 행 'q'", db.Text($"select name from {t} where id = 4"));
             Assert.Equal("0", db.Text($"select count(*) from {t} where id = 3"));
 
+            // 모두 반영되면 같은 질의를 편집 모드로 다시 읽어 결과 탭과 편집 세션이 새로 생긴다. 이후 편집은 새 세션에 한다.
+            var reread = Assert.Single(((ResultTabsViewModel)tab.ResultPane!).Tabs);
+            s = reread.EditSession!;
+            Assert.Same(GridEditCommands.Active, s);
+            await reread.Pane!.Model!.LoadFirstPageAsync();
+
             // 반영만(커밋 안 함): 다른 세션에는 안 보이고, 커밋 명령 뒤에 보인다.
             Assert.True(s.SetCell(1, 1, "미커밋 B"));
+            Assert.True(s.IsDirty);
             await RunGrid("oranda.grid.edit.apply");
+            Assert.False(s.IsDirty); // 반영됐다(반영되지 않으면 바뀐 값이 남는다)
             Assert.Equal("B", db.Text($"select name from {t} where id = 2"));
             await HeadlessHost.WaitUntil(() => rig.Session.HasPendingTransaction);
             await rig.Run("oranda.txn.commit");

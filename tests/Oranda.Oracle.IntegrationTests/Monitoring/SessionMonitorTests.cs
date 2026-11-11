@@ -118,7 +118,8 @@ public sealed class SessionMonitorTests : IAsyncLifetime
 
     private async Task<ISession> OpenMonitorAsync(string user, string password)
     {
-        var profile = new ConnectionProfile("free-" + user, user, _db.DataSource);
+        // 테스트 접속: 개발 접속은 실행 확인을 묻지 않아(D-065) Kill 의 위험 명령 확인을 볼 수 없다.
+        var profile = new ConnectionProfile("free-" + user, user, _db.DataSource, Environment: ConnectionEnvironment.Test);
         using var cred = new SecureCredential(password);
         return await _manager.OpenAsync(profile, cred, SessionPurpose.Monitor, default);
     }
@@ -228,6 +229,8 @@ public sealed class SessionMonitorTests : IAsyncLifetime
         }
         finally
         {
+            // 끊긴 보유자 세션의 잠금은 서버가 그 세션을 정리할 때 풀린다. 그때까지 DROP 이 기다리게 한다(ORA-00054 대신).
+            await ExecAsync(setup, "ALTER SESSION SET DDL_LOCK_TIMEOUT = 30");
             await ExecAsync(setup, $"DROP TABLE {table} PURGE");
         }
     }
