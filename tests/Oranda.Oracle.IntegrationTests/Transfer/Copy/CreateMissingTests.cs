@@ -294,6 +294,47 @@ public sealed class CreateMissingTests
     private static OracleExecutionService NewExecution(CopyDbScope scope)
         => new(new ExecutionPolicy(), scope.Ui, scope.Bus, null, pageSize: 500);
 
+    /// <summary>
+    /// 「대상에 열 추가」(PC1, 결정 D-066): 대상에 없는 원본 열에 처리 두 개(빼고 복사·열 추가)가 붙고, 열 추가를 고르면 점검은 문장만 미리 보기에 두고(대상에 DDL 을 보내지 않음)
+    /// 실행이 대상 정리 전에 <c>ALTER TABLE … ADD</c> 를 보낸 뒤 그 열까지 넣는다. 더한 열은 NULL 허용·기본값 없음이다.
+    /// </summary>
+    [Fact]
+    public async Task Adds_the_missing_target_column_at_run_time_when_the_add_column_fix_is_applied()
+    {
+        await using var scope = await CopyDbScope.CreateAsync(_db, CopyDbScope.NewTag());
+        var dst = scope.DstUser;
+        await scope.ExecSourceAsync("CREATE TABLE PC1_AC (ID NUMBER PRIMARY KEY, NAME VARCHAR2(30), NOTE VARCHAR2(40) DEFAULT 'n' NOT NULL)");
+        await scope.ExecSourceAsync(Block("INSERT INTO PC1_AC VALUES (1, 'one', 'first')", "INSERT INTO PC1_AC VALUES (2, 'two', 'second')"));
+        await scope.ExecTargetAsync("CREATE TABLE PC1_AC (ID NUMBER PRIMARY KEY, NAME VARCHAR2(30))");
+        await scope.ExecTargetAsync(Block("INSERT INTO PC1_AC VALUES (9, 'old')"));
+
+        var job = scope.Job(new TableRule("PC1_AC", RuleKind.All, TargetAction.DeleteAllInsert));
+        var sessions = await scope.OpenSessionsAsync(env: ConnectionEnvironment.Development);
+        var first = await PrecheckAsync(scope, sessions, job);
+
+        var missing = Assert.Single(first.Items, i => i.Code == "ColumnNotInTarget");
+        Assert.Equal([CopyFixKind.SkipColumn, CopyFixKind.AddColumn], missing.Fixes.Select(f => f.Kind));
+        var alter = $"ALTER TABLE \"{dst}\".\"PC1_AC\" ADD (\"NOTE\" VARCHAR2(40 CHAR))";
+        Assert.Equal(alter, missing.Fixes[1].Preview);
+        Assert.Equal(0, await CountAsync($"SELECT COUNT(*) FROM DBA_TAB_COLUMNS WHERE OWNER = '{dst}' AND TABLE_NAME = 'PC1_AC' AND COLUMN_NAME = 'NOTE'")); // 점검은 DDL 을 보내지 않는다
+
+        var fixedJob = CopyPrecheckFixes.Apply(job, [missing.Fixes[1]]);
+        Assert.Equal(["NOTE"], fixedJob.Tables[0].AddColumns);
+        var report = await PrecheckAsync(scope, sessions, fixedJob);
+        Assert.Single(report.Items, i => i.Code == CopyCheckCodes.AddColumn);
+        Assert.Contains(report.Preview, p => p.Sql == alter);
+        Assert.Equal(0, await CountAsync($"SELECT COUNT(*) FROM DBA_TAB_COLUMNS WHERE OWNER = '{dst}' AND TABLE_NAME = 'PC1_AC' AND COLUMN_NAME = 'NOTE'"));
+
+        var result = await RunAsync(scope, sessions, fixedJob, report);
+
+        Assert.True(result.Outcome == CopyOutcome.Succeeded && result.FailedRows.Count == 0, Describe(result));
+        Assert.Empty(scope.Ui.Confirms); // 미리 보기의 글과 실행기가 보낸 글이 같다
+        Assert.Equal("VARCHAR2:40:Y", await ScalarAsync(
+            $"SELECT DATA_TYPE || ':' || CHAR_LENGTH || ':' || NULLABLE FROM DBA_TAB_COLUMNS"
+            + $" WHERE OWNER = '{dst}' AND TABLE_NAME = 'PC1_AC' AND COLUMN_NAME = 'NOTE'"));
+        Assert.Equal("1:first,2:second", await ListAsync($"SELECT ID || ':' || NOTE FROM {dst}.PC1_AC ORDER BY ID"));
+    }
+
     private static async Task<PrecheckReport> PrecheckAsync(CopyDbScope scope, CopySessions sessions, CopyJob job)
     {
         var report = await scope.Precheck().RunAsync(sessions, job, NoPeriod, null, CancellationToken.None);

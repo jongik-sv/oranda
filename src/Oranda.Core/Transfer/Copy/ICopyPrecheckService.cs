@@ -124,6 +124,15 @@ public static class CopyCheckCodes
 
     /// <summary>통과(테이블마다 한 항목): 적재 방식을 외부 도구로 골랐지만 기본 방식으로 넣는다 — 그 이유(도구 없음·버전·키로 맞추기·커밋 방식·열 형식·인증 방식).</summary>
     public const string ExternalLoadFallback = "ExternalLoadFallback";
+
+    /// <summary>
+    /// 확인 필요(열마다 한 항목, PC1 결정 D-066): 규칙의 「대상에 열 추가」(<see cref="TableRule.AddColumns"/>)로 대상에 없는 열을 적재 전에 더한다(<c>ALTER TABLE … ADD</c>, 원본 형식을 대상 DBMS 로 옮긴 형식, NULL 허용·기본값 없음).
+    /// 문장은 미리 보기에 있고 실행할 때 보낸다(점검은 대상에 DDL 을 보내지 않는다). 적재가 실패해도 더한 열은 남긴다.
+    /// </summary>
+    public const string AddColumn = "AddColumn";
+
+    /// <summary>오류(열마다 한 항목): 「대상에 열 추가」를 쓸 수 없다 — 개발 접속이 아님·대상 소유자 계정이 아니고 ALTER ANY TABLE 도 없음·옮길 형식이 없는 열. 「그 열 빼고 복사」로 고칠 수 있다.</summary>
+    public const string AddColumnBlocked = "AddColumnBlocked";
 }
 
 public enum CheckChoice { DisableTriggers, DisableForeignKeys, SkipColumn, ProceedSequenceGap, SwitchToMerge }
@@ -136,6 +145,12 @@ public sealed record CheckItem(string? Table, string Code, CheckLevel Level, str
 
     /// <summary>시퀀스 후보 항목일 때 후보 시퀀스 이름. 화면이 「연결」 체크로 작업에 저장한다.</summary>
     public string? Sequence { get; init; }
+
+    /// <summary>
+    /// 이 항목을 그 자리에서 고칠 수 있는 처리(PC1, <see cref="CopyPrecheckFixes"/>). 둘 이상이면 하나만 고르는 대안이다. 고칠 것이 없으면 빈 목록.
+    /// 처리는 규칙 값·실행 결정만 바꾼다(점검은 대상에 DDL 을 보내지 않는다).
+    /// </summary>
+    public IReadOnlyList<CopyPrecheckFix> Fixes { get; init; } = [];
 }
 
 public sealed record CopyTablePlan(TableRule Rule, TableInfo Source, TableInfo Target,
@@ -166,6 +181,12 @@ public sealed record CopyTablePlan(TableRule Rule, TableInfo Source, TableInfo T
     /// 실제 적재 방식(사전 점검이 정한 것, <see cref="CopyLoad"/>). 외부 도구로 골랐어도 못 쓰면 <see cref="LoadMethod.Standard"/>(<see cref="CopyCheckCodes.ExternalLoadFallback"/> 알림).
     /// </summary>
     public LoadMethod Load { get; init; }
+
+    /// <summary>
+    /// 적재 전에 대상 테이블에 더하는 열의 문장(<c>ALTER TABLE … ADD</c>, <see cref="TableRule.AddColumns"/>, <see cref="CopyCheckCodes.AddColumn"/>). 미리 보기에 같은 글이 있다.
+    /// 더할 열은 <see cref="Target"/> 에 이미 들어 있어(NULL 허용) 복사 열이 그 열을 쓴다. 더하지 않는 표는 비어 있다.
+    /// </summary>
+    public IReadOnlyList<string> AddColumns { get; init; } = [];
 
     public bool CanDisableTriggers { get; init; }
     public IReadOnlyList<string> Triggers { get; init; } = [];

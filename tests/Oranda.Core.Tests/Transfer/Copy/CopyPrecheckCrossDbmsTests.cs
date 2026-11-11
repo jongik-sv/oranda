@@ -999,6 +999,83 @@ public sealed class CopyPrecheckCrossDbmsTests
         }
     }
 
+    // ---- 그 자리에서 고치기(PC1): 대상에 열 추가 ----
+
+    [Fact]
+    public async Task Column_not_in_the_target_gets_skip_and_add_column_fixes_without_any_ddl_sent_by_the_precheck()
+    {
+        var p = new Fixture(Dbms.Oracle, Dbms.Oracle,
+            source: Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false }, new ColumnInfo("NOTE", 2, "VARCHAR2") { Length = 40 }),
+            target: Table("DST", new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false }));
+
+        var report = await p.RunAsync();
+
+        var item = Assert.Single(report.Items, i => i.Code == "ColumnNotInTarget");
+        Assert.Equal([CopyFixKind.SkipColumn, CopyFixKind.AddColumn], item.Fixes.Select(f => f.Kind));
+        Assert.Equal("ALTER TABLE \"DST\".\"ORDERS\" ADD (\"NOTE\" VARCHAR2(40 CHAR))", item.Fixes[1].Preview);
+        Assert.Empty(Assert.Single(report.Order).AddColumns); // 고르기 전에는 더하지 않는다
+        Assert.DoesNotContain(report.Preview, x => x.Sql.StartsWith("ALTER TABLE", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Add_column_rule_plans_the_alter_puts_it_in_the_preview_and_copies_the_column()
+    {
+        const string Alter = "ALTER TABLE \"DST\".\"ORDERS\" ADD (\"NOTE\" VARCHAR2(40 CHAR))";
+        var p = new Fixture(Dbms.Oracle, Dbms.Oracle,
+            source: Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false },
+                new ColumnInfo("NOTE", 2, "VARCHAR2") { Length = 40, IsNullable = false, DefaultValue = "'x'" }),
+            target: Table("DST", new ColumnInfo("ID", 1, "NUMBER") { Precision = 10, Scale = 0, IsNullable = false }),
+            addColumns: ["NOTE"]);
+
+        var report = await p.RunAsync();
+
+        Assert.DoesNotContain(report.Items, i => i.Code == "ColumnNotInTarget");
+        var item = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.AddColumn);
+        Assert.Equal(CheckLevel.Confirm, item.Level);
+        Assert.Equal("NOTE", item.Column);
+        Assert.Contains("NULL 허용·기본값 없음", item.Message, StringComparison.Ordinal);
+        var plan = Assert.Single(report.Order);
+        Assert.Equal([Alter], plan.AddColumns);
+        Assert.Contains("NOTE", plan.Columns);
+        var added = Assert.Single(plan.Target.Columns, c => c.Name == "NOTE");
+        Assert.True(added.IsNullable);
+        Assert.Null(added.DefaultValue);
+        Assert.Contains(report.Preview, x => x.Side == PreviewSide.Target && x.Sql == Alter);
+        Assert.Contains(report.Preview, x => x.Side == PreviewSide.Source && x.Sql.Contains("\"NOTE\"", StringComparison.Ordinal)); // 원본 SELECT 가 그 열을 읽는다
+        Assert.False(report.HasErrors);
+    }
+
+    [Fact]
+    public async Task Add_column_on_a_non_development_target_is_an_error_whose_fix_is_to_skip_the_column()
+    {
+        var p = new Fixture(Dbms.Oracle, Dbms.Oracle,
+            source: Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("NOTE", 2, "VARCHAR2") { Length = 40 }),
+            target: Table("DST", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }),
+            addColumns: ["NOTE"], environment: ConnectionEnvironment.Test);
+
+        var report = await p.RunAsync();
+
+        var blocked = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.AddColumnBlocked);
+        Assert.Equal(CheckLevel.Error, blocked.Level);
+        Assert.Contains("개발 접속이 아니라", blocked.Message, StringComparison.Ordinal);
+        Assert.Equal([CopyFixKind.SkipColumn], blocked.Fixes.Select(f => f.Kind));
+        Assert.Empty(Assert.Single(report.Order).AddColumns);
+        Assert.DoesNotContain(report.Preview, x => x.Sql.StartsWith("ALTER TABLE", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Add_column_to_a_tibero_target_from_an_oracle_source_uses_the_mapped_type()
+    {
+        var p = new Fixture(Dbms.Oracle, Dbms.Tibero,
+            source: Table("SRC", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("PHOTO", 2, "RAW") { Length = 3000 }),
+            target: Table("DST", new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }),
+            addColumns: ["PHOTO"]);
+
+        var report = await p.RunAsync();
+
+        Assert.Equal(["ALTER TABLE \"DST\".\"ORDERS\" ADD (\"PHOTO\" BLOB)"], Assert.Single(report.Order).AddColumns);
+    }
+
     // ---- 도우미 ----
 
     private static TableInfo Table(string owner, params ColumnInfo[] columns) =>
@@ -1019,17 +1096,18 @@ public sealed class CopyPrecheckCrossDbmsTests
         public Fixture(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TableInfo? target, string[]? unsupportedBySource = null,
                        string[]? unsupportedByTarget = null, string[]? crossWritableByTarget = null, bool createMissing = false, string[]? targetSequences = null, string? targetVersion = null,
                        SequenceAnswers? sequences = null, TargetAction action = TargetAction.DeleteAllInsert, CompanionAnswers? companions = null,
-                       IReadOnlyList<SequenceRule>? sequenceRules = null)
+                       IReadOnlyList<SequenceRule>? sequenceRules = null, IReadOnlyList<string>? addColumns = null,
+                       ConnectionEnvironment environment = ConnectionEnvironment.Development)
         {
             Job = new CopyJob
             {
                 Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
                 SourceOwner = "SRC", TargetOwner = "DST", MaskSalt = "AA==",
-                Tables = [new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = createMissing }],
+                Tables = [new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = createMissing, AddColumns = addColumns }],
                 Sequences = sequenceRules ?? [],
             };
             Source = new FakeSession(TestData.Profile(readOnly: true), TestData.Server()) { DbKey = "SRCDB/PDB1/SRC" };
-            Target = new FakeSession(TestData.Profile(ConnectionEnvironment.Development) with { Name = "dev" }, targetVersion is null ? TestData.Server() : TestData.Server() with { Version = targetVersion }) { DbKey = "DSTDB/PDB1/DST" };
+            Target = new FakeSession(TestData.Profile(environment) with { Name = "dev" }, targetVersion is null ? TestData.Server() : TestData.Server() with { Version = targetVersion }) { DbKey = "DSTDB/PDB1/DST" };
             var metadata = new FakeMetadataProvider();
             metadata.Tables[new DbObjectRef("SRC", "ORDERS", "TABLE")] = source;
             if (target is not null)

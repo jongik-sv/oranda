@@ -50,7 +50,12 @@ public partial class DataCopyWindow : Window
         AddTableBox.GotFocus += async (_, _) => await RunUiAsync(ct => Vm?.PrepareTableCandidatesAsync(ct) ?? Task.CompletedTask).ConfigureAwait(true);
         RemoveRuleButton.Click += (_, _) => _ = RemovePickedRulesAsync();
         ToPrecheckButton.Click += async (_, _) => await RunUiAsync(ct => Vm!.GoToPrecheckAsync(ct)).ConfigureAwait(true);
-        RecheckButton.Click += async (_, _) => await RunUiAsync(ct => Vm!.GoToPrecheckAsync(ct)).ConfigureAwait(true);
+        RecheckButton.Click += async (_, _) => await RunUiAsync(ct => Vm!.RecheckAsync(ct)).ConfigureAwait(true);
+        StaleRecheckButton.Click += async (_, _) => await RunUiAsync(ct => Vm!.RecheckAsync(ct)).ConfigureAwait(true);
+        ShowCheckButton.Click += (_, _) => Vm?.ShowPrecheckResult();
+        SelectAllFixesButton.Click += (_, _) => Vm?.Precheck.SelectAllFixes();
+        ClearFixesButton.Click += (_, _) => Vm?.Precheck.ClearFixSelection();
+        ApplyFixesButton.Click += async (_, _) => await RunUiAsync(ct => Vm!.ApplySelectedFixesAsync(ct)).ConfigureAwait(true);
         CancelCheckButton.Click += (_, _) => Vm?.Precheck.Cancel();
         BackToRulesButton.Click += (_, _) => Vm?.BackToRuleEdit();
         BackFromRunButton.Click += (_, _) => Vm?.BackToRuleEdit();

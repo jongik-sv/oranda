@@ -224,6 +224,10 @@
               <Button x:Name="ToPrecheckButton" DockPanel.Dock="Right" Classes="accent" Content="사전 점검 ›" IsEnabled="{Binding CanGoToPrecheck}"
                       Padding="14,0" MinHeight="24" Margin="0,1,2,1"
                       ToolTip.Tip="작업을 저장하고 원본·대상 세션을 열어 사전 점검을 시작합니다" />
+              <Button x:Name="ShowCheckButton" DockPanel.Dock="Right" Content="점검 결과 보기" IsVisible="{Binding HasPrecheckResult}"
+                      MinHeight="24" Margin="0,1,6,1"
+                      ToolTip.Tip="남은 사전 점검 결과를 다시 점검하지 않고 봅니다. 규칙을 고쳤으면 다시 점검해야 복사를 실행할 수 있습니다."
+                      AutomationProperties.Name="점검 결과 보기" />
               <Button x:Name="SaveJobButton" DockPanel.Dock="Right" Content="저장" icons:ButtonIcon.Key="save"
                       MinHeight="24" Margin="0,1,6,1" IsEnabled="{Binding HasJob}"
                       ToolTip.Tip="지금까지 편집한 작업을 저장합니다 (Ctrl+S). 다른 작업을 열거나 창을 닫을 때도 저장합니다."
@@ -656,6 +660,19 @@
                           <ComboBox x:Name="AddMaskBox" Classes="compact" HorizontalAlignment="Stretch" PlaceholderText="마스킹할 열 추가…" AutomationProperties.Name="마스킹할 열 추가" />
                         </StackPanel>
 
+                        <!-- 대상에 추가할 열(사전 점검의 「대상에 열 추가」, 체크를 풀면 더하지 않는다) -->
+                        <StackPanel x:Name="AddColumnsPanel" Spacing="0" IsVisible="{Binding HasAddColumns}">
+                          <TextBlock Classes="section-label" Text="대상에 추가할 열" Margin="0,4,0,2" />
+                          <ItemsControl ItemsSource="{Binding AddColumns}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="dc:AddColumnViewModel">
+                                <CheckBox Classes="compact" IsChecked="{Binding IsAdded}" AutomationProperties.Name="대상에 추가할 열"
+                                          ToolTip.Tip="복사 전에 대상 테이블에 이 열을 더합니다(ALTER TABLE … ADD, 개발 접속만). 체크를 풀면 더하지 않습니다."><TextBlock Text="{Binding Column}" Classes="mono" /></CheckBox>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+
                         <!-- 건너뛸 열 -->
                         <StackPanel Spacing="0" IsVisible="{Binding HasColumns}">
                           <TextBlock Classes="section-label" Text="건너뛸 열" Margin="0,4,0,2" />
@@ -696,8 +713,20 @@
                 <Button x:Name="SaveScriptButton" Classes="toolbar" Focusable="False" Content="SQL 스크립트로 저장" icons:ButtonIcon.Key="save" icons:ButtonIcon.IconOnly="True"
                         ToolTip.Tip="SQL 스크립트로 저장" />
                 <TextBlock Text="{Binding Precheck.ProgressText}" VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.75" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                <TextBlock x:Name="CheckedAgoText" Text="{Binding Precheck.CheckedAgoText}" VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.6"
+                           FontSize="{DynamicResource OrandaFontSizeSmall}" AutomationProperties.Name="점검한 때" />
               </StackPanel>
             </DockPanel>
+          </Border>
+          <!-- 점검한 뒤 규칙을 고쳤다: 결과는 남기되 다시 점검할 때까지 실행을 막는다 -->
+          <Border x:Name="StaleBanner" DockPanel.Dock="Top" IsVisible="{Binding Precheck.IsStale}" Padding="8,5"
+                  Background="{DynamicResource OrandaToolbarBackgroundBrush}" BorderBrush="{DynamicResource OrandaIconAmberBrush}" BorderThickness="0,0,0,2">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ContentControl Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Precheck.StaleText}" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold" />
+              <Button x:Name="StaleRecheckButton" Classes="tool" Content="다시 점검" icons:ButtonIcon.Key="refresh" IsEnabled="{Binding CanGoToPrecheck}"
+                      ToolTip.Tip="지금 규칙으로 사전 점검을 다시 합니다" />
+            </StackPanel>
           </Border>
           <Border DockPanel.Dock="Bottom" Classes="panel-status" IsVisible="{Binding Precheck.NeedsRetype}">
             <!-- 테이블 다시 만들기 등 DROP 이 있으면: 입력할 대상 접속 이름을 그대로 보이고, 안 맞으면 「복사 실행」이 꺼진 이유를 옆에 보인다. -->
@@ -715,7 +744,7 @@
           </Border>
           <Grid ColumnDefinitions="*,4,*" Margin="8,6,8,8">
             <!-- 점검 결과: 그리드 + 고른 항목 상세(문장 전체·고를 거리) -->
-            <Grid RowDefinitions="Auto,Auto,*,4,Auto">
+            <Grid RowDefinitions="Auto,Auto,Auto,*,4,Auto">
               <TextBlock Classes="section-label" Text="점검 결과" Margin="0,0,0,3" />
               <!-- 작업에 이미 연결된 시퀀스: 체크를 끄면 연결이 풀린다 -->
               <Border x:Name="LinkedSequencesBorder" Grid.Row="1" Classes="group" Margin="0,0,0,6" IsVisible="{Binding Precheck.HasLinkedSequences}">
@@ -735,11 +764,51 @@
                   </ItemsControl>
                 </StackPanel>
               </Border>
-              <Border Grid.Row="2" Classes="grid-frame">
+              <!-- 그 자리에서 고칠 수 있는 항목(PC1): 체크한 뒤 「선택한 것 처리」 → 규칙 값을 바꾸고 다시 점검 -->
+              <Border x:Name="FixPanel" Grid.Row="2" Classes="group" Margin="0,0,0,6" IsVisible="{Binding Precheck.HasFixes}">
+                <StackPanel Spacing="3">
+                  <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+                      <Button x:Name="SelectAllFixesButton" Classes="tool" Content="모두 선택" ToolTip.Tip="고칠 수 있는 항목을 모두 고릅니다" />
+                      <Button x:Name="ClearFixesButton" Classes="tool" Content="선택 해제" ToolTip.Tip="고른 항목을 모두 풉니다" />
+                      <Button x:Name="ApplyFixesButton" Classes="accent" Content="선택한 것 처리" IsEnabled="{Binding Precheck.CanApplyFixes}" Padding="10,0" MinHeight="22"
+                              ToolTip.Tip="고른 처리를 규칙에 적용하고 사전 점검을 다시 합니다. 대상에는 아무 문장도 보내지 않습니다(테이블 만들기·열 추가는 복사를 실행할 때 미리 보기의 문장으로 합니다)." />
+                    </StackPanel>
+                    <TextBlock Classes="section-label" Text="{Binding Precheck.FixHeaderText}" VerticalAlignment="Center" />
+                  </DockPanel>
+                  <TextBlock x:Name="FixSummaryText" Text="{Binding Precheck.FixSummary}" IsVisible="{Binding Precheck.HasFixSummary}" FontWeight="SemiBold"
+                             AutomationProperties.Name="처리 결과" />
+                  <ScrollViewer MaxHeight="150" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Precheck.Fixes}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="dc:FixRowViewModel">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <CheckBox Classes="compact" IsChecked="{Binding IsSelected}" AutomationProperties.Name="이 항목 처리" VerticalAlignment="Center">
+                              <TextBlock Text="{Binding HeaderText}" Classes="mono" />
+                            </CheckBox>
+                            <TextBlock Text="{Binding SingleTitle}" IsVisible="{Binding HasSingle}" VerticalAlignment="Center" />
+                            <ComboBox Classes="compact" ItemsSource="{Binding Options}" SelectedItem="{Binding Chosen}" IsVisible="{Binding HasAlternatives}"
+                                      AutomationProperties.Name="처리 고르기">
+                              <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="dc:FixOptionViewModel">
+                                  <TextBlock Text="{Binding Title}" />
+                                </DataTemplate>
+                              </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="{Binding PreviewText}" IsVisible="{Binding HasPreview}" Classes="mono dim" VerticalAlignment="Center"
+                                       FontSize="{DynamicResource OrandaFontSizeSmall}" TextTrimming="CharacterEllipsis" MaxWidth="420" />
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </StackPanel>
+              </Border>
+              <Border Grid.Row="3" Classes="grid-frame">
                 <sm:MonitorGrid x:Name="CheckGrid" AutomationProperties.Name="점검 결과" />
               </Border>
-              <GridSplitter Grid.Row="3" ResizeDirection="Rows" Background="Transparent" />
-              <Border Grid.Row="4" Classes="group" MinHeight="70" DataContext="{Binding Precheck.SelectedItem}" x:DataType="dc:CheckItemViewModel">
+              <GridSplitter Grid.Row="4" ResizeDirection="Rows" Background="Transparent" />
+              <Border Grid.Row="5" Classes="group" MinHeight="70" DataContext="{Binding Precheck.SelectedItem}" x:DataType="dc:CheckItemViewModel">
                 <Panel>
                   <TextBlock Text="항목을 고르면 내용과 고를 거리가 여기에 보입니다." Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}"
                              IsVisible="{Binding ., Converter={x:Static ObjectConverters.IsNull}}" />
@@ -754,8 +823,30 @@
                                    ToolTip.Tip="점검 항목 코드" AutomationProperties.Name="점검 항목 코드" />
                       </StackPanel>
                       <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                      <!-- 고칠 수 있는 항목: 위 목록과 같은 줄(체크·대안·실행 문장) -->
+                      <ContentControl Content="{Binding Fix}" IsVisible="{Binding HasFix}">
+                        <ContentControl.ContentTemplate>
+                          <DataTemplate x:DataType="dc:FixRowViewModel">
+                            <StackPanel Spacing="2">
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <CheckBox Classes="compact" IsChecked="{Binding IsSelected}" Content="처리할 것으로 고르기" AutomationProperties.Name="이 항목 처리" />
+                                <TextBlock Text="{Binding SingleTitle}" IsVisible="{Binding HasSingle}" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                <ComboBox Classes="compact" ItemsSource="{Binding Options}" SelectedItem="{Binding Chosen}" IsVisible="{Binding HasAlternatives}"
+                                          AutomationProperties.Name="처리 고르기">
+                                  <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="dc:FixOptionViewModel">
+                                      <TextBlock Text="{Binding Title}" />
+                                    </DataTemplate>
+                                  </ComboBox.ItemTemplate>
+                                </ComboBox>
+                              </StackPanel>
+                              <SelectableTextBlock Text="{Binding PreviewText}" IsVisible="{Binding HasPreview}" Classes="mono" TextWrapping="Wrap" />
+                            </StackPanel>
+                          </DataTemplate>
+                        </ContentControl.ContentTemplate>
+                      </ContentControl>
                       <!-- 시퀀스 후보: 켜면 작업에 연결해 저장하고 다시 점검한다 -->
-                      <ContentControl Content="{Binding SequenceLink}" IsVisible="{Binding HasSequenceLink}">
+                      <ContentControl Content="{Binding SequenceLink}" IsVisible="{Binding ShowsSequenceLink}">
                         <ContentControl.ContentTemplate>
                           <DataTemplate x:DataType="dc:SequenceLinkViewModel">
                             <CheckBox Classes="compact" IsChecked="{Binding IsLinked}" Click="OnSequenceLinkClick" AutomationProperties.Name="시퀀스 연결"
@@ -768,7 +859,7 @@
                           </DataTemplate>
                         </ContentControl.ContentTemplate>
                       </ContentControl>
-                      <ItemsControl ItemsSource="{Binding Choices}">
+                      <ItemsControl ItemsSource="{Binding Choices}" IsVisible="{Binding ShowsChoices}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="dc:CheckChoiceViewModel">
                             <CheckBox Classes="compact" IsChecked="{Binding IsChosen}" IsVisible="{Binding IsVisible}"

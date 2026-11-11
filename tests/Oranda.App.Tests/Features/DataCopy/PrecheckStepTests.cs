@@ -667,7 +667,7 @@ public sealed class PrecheckStepTests
         var vm = await PrecheckedAsync(h);
         var gate = new TaskCompletionSource();
         h.Precheck.Gate = gate; // 두 번째 점검이 끝나지 않는다
-        var recheck = vm.GoToPrecheckAsync();
+        var recheck = vm.RecheckAsync();
         await Task.Delay(100);
 
         Assert.True(vm.IsBusy);
@@ -792,7 +792,7 @@ public sealed class PrecheckStepTests
         var link = vm.Precheck.Items.Single().SequenceLink!;
         var gate = new TaskCompletionSource();
         h.Precheck.Gate = gate;
-        var recheck = vm.GoToPrecheckAsync(); // 점검이 도는 중
+        var recheck = vm.RecheckAsync(); // 점검이 도는 중
         await Task.Delay(100);
 
         link.IsLinked = true;

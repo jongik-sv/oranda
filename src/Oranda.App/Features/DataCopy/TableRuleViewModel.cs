@@ -60,6 +60,15 @@ public sealed partial class SkipColumnViewModel(string column, bool skipped) : V
     public string Column { get; } = column;
 }
 
+/// <summary>대상에 추가할 열 한 줄(사전 점검의 「대상에 열 추가」, <see cref="TableRule.AddColumns"/>). 체크를 풀면 더하지 않는다.</summary>
+public sealed partial class AddColumnViewModel(string column) : ViewModelBase
+{
+    [ObservableProperty]
+    private bool _isAdded = true;
+
+    public string Column { get; } = column;
+}
+
 /// <summary>
 /// 규칙 표의 한 줄(테이블 하나)과 오른쪽 패널이 편집하는 내용. 기간 열 후보·문자열 형식·부모 키·마스킹 규칙을 다룬다.
 /// 열 정보(<see cref="TableInfo"/>)는 원본 접속에서 읽어 <see cref="SetSource"/> 로 넣는다. 아직 못 읽었으면 저장된 규칙 값만 보인다.
@@ -186,6 +195,11 @@ public sealed partial class TableRuleViewModel : ViewModelBase
         SavedPeriodColumns = rule.PeriodColumns;
         SavedMasks = rule.Masks;
         SavedSkips = rule.SkipColumns;
+        foreach (var column in rule.AddColumns ?? [])
+        {
+            AddColumns.Add(new AddColumnViewModel(column));
+        }
+
         RestorePeriodColumns();
         RestoreParent();
     }
@@ -421,6 +435,11 @@ public sealed partial class TableRuleViewModel : ViewModelBase
     public ObservableCollection<MaskRowViewModel> Masks { get; } = [];
 
     public ObservableCollection<SkipColumnViewModel> Skips { get; } = [];
+
+    /// <summary>대상에 추가할 열(사전 점검에서 고른 「대상에 열 추가」). 열 정보를 읽지 않아도 저장된 값을 보이고, 체크를 풀어 되돌린다.</summary>
+    public ObservableCollection<AddColumnViewModel> AddColumns { get; } = [];
+
+    public bool HasAddColumns => AddColumns.Count > 0;
 
     /// <summary>부모 키 규칙에 쓸 수 있는 원본 FK 목록(자동 연결 후보).</summary>
     public ObservableCollection<ParentLink> ParentCandidates { get; } = [];
@@ -730,6 +749,7 @@ public sealed partial class TableRuleViewModel : ViewModelBase
             ExtraWhere = Kind == RuleKind.Period ? EmptyToNull(ExtraWhere)?.Trim() : null,
             Masks = masks,
             SkipColumns = skips,
+            AddColumns = AddColumns.Where(a => a.IsAdded).Select(a => a.Column).ToList() is { Count: > 0 } added ? added : null,
             CreateIfMissing = CreateIfMissing && CanCreateIfMissing,
             Overrides = Overrides,
             Load = Load switch

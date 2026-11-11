@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.Localization;
 using Oranda.App.ViewModels;
 using Oranda.Core.Execution;
 using Oranda.Core.Transfer.Copy;
@@ -52,6 +54,74 @@ public sealed partial class SequenceLinkViewModel(SequenceRule rule, bool isLink
 
     /// <summary>연결된 규칙은 「연결됨」, 후보는 빈 글자.</summary>
     public string StateText => IsLinked ? "연결됨" : string.Empty;
+}
+
+/// <summary>처리 대안 하나(콤보 상자 한 줄). 글은 처리 종류마다 고정이라 영어 화면은 문구 표가 바꾼다.</summary>
+public sealed class FixOptionViewModel(CopyPrecheckFix fix)
+{
+    public CopyPrecheckFix Fix { get; } = fix;
+
+    public string Title => DataCopyText.L(Fix.Title);
+
+    /// <summary>실행 때 보낼 문장(「대상에 열 추가」). 없으면 빈 글자.</summary>
+    public string PreviewText => Fix.Preview ?? string.Empty;
+
+    public override string ToString() => Title;
+}
+
+/// <summary>
+/// 그 자리에서 고칠 수 있는 점검 항목 한 줄(PC1, 결정 D-066): 체크(<see cref="IsSelected"/>)하고 「선택한 것 처리」를 누르면 고른 처리(<see cref="Chosen"/>)를 적용한다.
+/// 대안이 둘 이상이면(대상에 없는 열: 그 열 빼고 복사 / 대상에 열 추가) 콤보 상자로 하나를 고른다.
+/// </summary>
+public sealed partial class FixRowViewModel : ViewModelBase
+{
+    [ObservableProperty]
+    private bool _isSelected;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreviewText), nameof(HasPreview))]
+    private FixOptionViewModel _chosen;
+
+    public FixRowViewModel(CheckItemViewModel owner, IReadOnlyList<CopyPrecheckFix> fixes)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(fixes);
+        if (fixes.Count == 0)
+        {
+            throw new ArgumentException("처리가 없다.", nameof(fixes));
+        }
+
+        Owner = owner;
+        Options = [.. fixes.Select(f => new FixOptionViewModel(f))];
+        _chosen = Options[0];
+    }
+
+    /// <summary>이 처리가 달린 점검 항목.</summary>
+    public CheckItemViewModel Owner { get; }
+
+    public IReadOnlyList<FixOptionViewModel> Options { get; }
+
+    public bool HasAlternatives => Options.Count > 1;
+
+    public bool HasSingle => Options.Count == 1;
+
+    /// <summary>대안이 하나일 때 그 글(콤보 상자 대신 보인다).</summary>
+    public string SingleTitle => Options[0].Title;
+
+    /// <summary>줄 머리: 테이블(열) · 항목 이름.</summary>
+    public string HeaderText
+    {
+        get
+        {
+            var where = Owner.Item.Column is { } column && Owner.TableText.Length > 0 ? Owner.TableText + "." + column : Owner.TableText;
+            return where.Length > 0 ? where + " · " + DataCopyText.L(Owner.CodeText) : DataCopyText.L(Owner.CodeText);
+        }
+    }
+
+    /// <summary>고른 처리의 실행 문장(없으면 빈 글자).</summary>
+    public string PreviewText => Chosen.PreviewText;
+
+    public bool HasPreview => PreviewText.Length > 0;
 }
 
 /// <summary>점검 결과 한 줄.</summary>
@@ -109,6 +179,8 @@ public sealed class CheckItemViewModel
         [CopyCheckCodes.CompanionObjects] = "함께 만드는 객체",
         [CopyCheckCodes.ExternalLoad] = "외부 도구로 적재",
         [CopyCheckCodes.ExternalLoadFallback] = "기본 방식으로 적재",
+        [CopyCheckCodes.AddColumn] = "대상에 열 추가",
+        [CopyCheckCodes.AddColumnBlocked] = "열 추가 막힘",
     };
 
     public CheckItemViewModel(CheckItem item, IReadOnlyList<CheckChoiceViewModel> choices, string? tableText = null)
@@ -120,7 +192,20 @@ public sealed class CheckItemViewModel
         {
             choice.Owner = this;
         }
+
+        Fix = item.Fixes.Count > 0 ? new FixRowViewModel(this, item.Fixes) : null;
     }
+
+    /// <summary>그 자리에서 고칠 수 있으면 처리 줄(PC1). 없으면 null.</summary>
+    public FixRowViewModel? Fix { get; }
+
+    public bool HasFix => Fix is not null;
+
+    /// <summary>처리가 없을 때만 예전 선택지·시퀀스 연결 체크를 상세 칸에 보인다(처리 줄이 같은 일을 한다).</summary>
+    public bool ShowsChoices => Fix is null;
+
+    /// <summary>그리드 「처리」 칸: 고칠 수 있는 처리 글(대안은 「/」로 잇는다). 없으면 빈 글자.</summary>
+    public string FixText => Fix is null ? string.Empty : string.Join(" / ", Fix.Options.Select(o => o.Title));
 
     /// <summary>점검 항목 코드 → 한국어 이름 표. 시험이 문구 표(영어)와 맞는지 본다.</summary>
     public static IReadOnlyDictionary<string, string> CodeNameTable => CodeNames;
@@ -149,6 +234,9 @@ public sealed class CheckItemViewModel
     public SequenceLinkViewModel? SequenceLink { get; internal set; }
 
     public bool HasSequenceLink => SequenceLink is not null;
+
+    /// <summary>상세 칸에 「연결」 체크를 보이는지(처리 줄이 있으면 그것을 쓴다).</summary>
+    public bool ShowsSequenceLink => SequenceLink is not null && Fix is null;
 
     /// <summary>수준별 아이콘 키(오류 = 빨강, 확인 필요 = 주황·노랑, 통과 = 초록 계열 색은 아이콘 톤이 정한다).</summary>
     public string IconKey => Level switch
@@ -197,8 +285,26 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanRun), nameof(CanCancel))]
+    [NotifyPropertyChangedFor(nameof(CanRun), nameof(CanCancel), nameof(CanApplyFixes))]
     private bool _isRunning;
+
+    /// <summary>
+    /// 보이는 결과가 지금 규칙과 다르다(점검한 뒤 규칙 편집에서 고쳤다): 결과는 남기되 「복사 실행」·「선택한 것 처리」를 막고 다시 점검하게 한다.
+    /// 창(<see cref="DataCopyViewModel"/>)이 규칙 지문을 점검 때와 비교해 정한다. 새 점검·결과 지우기에서 거짓으로 돌아간다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRun), nameof(CanApplyFixes), nameof(StaleText))]
+    private bool _isStale;
+
+    /// <summary>「선택한 것 처리」 뒤 한 줄 요약(「3건 처리 — 사전 점검을 다시 했습니다」). 새 점검을 시작하면 빈 글자.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFixSummary))]
+    private string _fixSummary = string.Empty;
+
+    /// <summary>마지막 점검을 마친 때(UTC). 결과가 없으면 null.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CheckedAgoText))]
+    private DateTimeOffset? _checkedAt;
 
     [ObservableProperty]
     private string _progressText = string.Empty;
@@ -240,6 +346,110 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
 
     public bool HasLinkedSequences => LinkedSequences.Count > 0;
 
+    /// <summary>그 자리에서 고칠 수 있는 점검 항목(PC1). 점검 결과 순서(오류 → 확인 필요 → 통과) 그대로.</summary>
+    public ObservableCollection<FixRowViewModel> Fixes { get; } = [];
+
+    public bool HasFixes => Fixes.Count > 0;
+
+    public bool HasFixSummary => FixSummary.Length > 0;
+
+    /// <summary>고칠 것 목록 머리 글(「그 자리에서 고칠 수 있는 항목 3건 · 고른 것 1건」).</summary>
+    public string FixHeaderText
+    {
+        get
+        {
+            var total = Fixes.Count.ToString(CultureInfo.InvariantCulture);
+            var picked = Fixes.Count(f => f.IsSelected).ToString(CultureInfo.InvariantCulture);
+            return LiteralTranslator.IsEnglish
+                ? $"Fixable here: {total} · selected: {picked}"
+                : $"그 자리에서 고칠 수 있는 항목 {total}건 · 고른 것 {picked}건";
+        }
+    }
+
+    /// <summary>「선택한 것 처리」를 누를 수 있는지: 점검이 돌지 않고, 결과가 지금 규칙과 같으며, 고른 항목이 있을 때.</summary>
+    public bool CanApplyFixes => !IsRunning && !IsStale && Report is not null && Fixes.Any(f => f.IsSelected);
+
+    /// <summary>규칙을 고쳐 결과가 옛것일 때 보이는 글. 아니면 빈 글자.</summary>
+    public string StaleText => IsStale ? DataCopyText.L(DataCopyText.PrecheckStale) : string.Empty;
+
+    /// <summary>점검한 때를 「n분 전 점검」으로(결과가 없으면 빈 글자). 단계로 돌아올 때 <see cref="RefreshCheckedAgo"/> 로 다시 계산한다.</summary>
+    public string CheckedAgoText
+    {
+        get
+        {
+            if (CheckedAt is not { } at)
+            {
+                return string.Empty;
+            }
+
+            var minutes = (int)Math.Max(0, Math.Floor((services.Time.GetUtcNow() - at).TotalMinutes));
+            var english = LiteralTranslator.IsEnglish;
+            var n = minutes.ToString(CultureInfo.InvariantCulture);
+            var hours = (minutes / 60).ToString(CultureInfo.InvariantCulture);
+            var rest = (minutes % 60).ToString(CultureInfo.InvariantCulture);
+            return minutes switch
+            {
+                < 1 => english ? "checked just now" : "방금 점검",
+                < 60 => english ? $"checked {n} min ago" : $"{n}분 전 점검",
+                _ => english ? $"checked {hours} h {rest} min ago" : $"{hours}시간 {rest}분 전 점검",
+            };
+        }
+    }
+
+    /// <summary>「n분 전 점검」 글을 지금 시각으로 다시 계산한다.</summary>
+    public void RefreshCheckedAgo() => OnPropertyChanged(nameof(CheckedAgoText));
+
+    /// <summary>모든 처리 줄을 고른다(「모두 선택」).</summary>
+    public void SelectAllFixes()
+    {
+        foreach (var fix in Fixes)
+        {
+            fix.IsSelected = true;
+        }
+    }
+
+    /// <summary>모든 처리 줄의 선택을 푼다(「선택 해제」).</summary>
+    public void ClearFixSelection()
+    {
+        foreach (var fix in Fixes)
+        {
+            fix.IsSelected = false;
+        }
+    }
+
+    /// <summary>고른 처리 줄마다 고른 대안 하나(점검 결과 순서).</summary>
+    public IReadOnlyList<CopyPrecheckFix> SelectedFixes() => [.. Fixes.Where(f => f.IsSelected).Select(f => f.Chosen.Fix)];
+
+    /// <summary>
+    /// 실행 결정 처리(트리거·자식 FK 끄기, 시퀀스 보정 진행)를 그 항목의 선택지로 고른다. 고른 선택지는 다시 점검해도 남는다(<see cref="KeepChoices"/>).
+    /// 고른 선택지 수를 돌려준다(보이지 않는 선택지 — 끌 권한이 없음 — 는 고르지 않는다).
+    /// </summary>
+    public int ChooseDecisions(IEnumerable<CopyPrecheckFix> fixes)
+    {
+        ArgumentNullException.ThrowIfNull(fixes);
+        var count = 0;
+        foreach (var fix in fixes)
+        {
+            if (fix.Decision is not { } decision)
+            {
+                continue;
+            }
+
+            foreach (var choice in Items.Where(i => i.Item.Fixes.Any(f => f.Id == fix.Id))
+                         .SelectMany(i => i.Choices).Where(c => c.Choice == decision && c.IsVisible))
+            {
+                choice.IsChosen = true;
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    // 다시 점검해도 남길 실행 결정(테이블·선택지). 결과를 지울 때 지금 고른 것을 받아 두고, 같은 작업을 다시 채울 때 되살린다. 다른 작업을 열면 지운다.
+    private HashSet<(string? Table, CheckChoice Choice)>? _keptChoices;
+    private string? _keptJobId;
+
     /// <summary>새 SQL 탭으로 열기(창이 연결한다). 연결이 없으면 아무 일도 하지 않는다.</summary>
     public Func<string, Task>? OpenInEditor { get; set; }
 
@@ -268,8 +478,8 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
 
     public bool CanCancel => IsRunning;
 
-    /// <summary>점검을 마쳤고 오류·거부된 문장이 없으며, DROP 확인이 끝났을 때만 실행할 수 있다.</summary>
-    public bool CanRun => !IsRunning && Report is not null && !Report.HasErrors && !HasDenied && RetypeSatisfied;
+    /// <summary>점검을 마쳤고 오류·거부된 문장이 없으며, DROP 확인이 끝났고, 점검한 뒤 규칙을 고치지 않았을 때만 실행할 수 있다.</summary>
+    public bool CanRun => !IsRunning && !IsStale && Report is not null && !Report.HasErrors && !HasDenied && RetypeSatisfied;
 
     /// <summary>대상에서 실행할 문장과 원본 조회 조건을 한 스크립트로 만든다(원본 문장은 주석).</summary>
     public string ScriptText
@@ -315,6 +525,7 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         _cts = cts;
         IsRunning = true;
         Notice = string.Empty;
+        FixSummary = string.Empty;
         ProgressText = "점검 중…";
         try
         {
@@ -348,14 +559,24 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
     {
         Cancel();
         ClearResult();
+        _keptChoices = null;
+        _keptJobId = null;
         _picked = null;
+        FixSummary = string.Empty;
         ProgressText = string.Empty;
         Notice = string.Empty;
     }
 
     private void ClearResult()
     {
+        KeepChoices();
         Report = null;
+        IsStale = false;
+        CheckedAt = null;
+        Fixes.Clear();
+        OnPropertyChanged(nameof(HasFixes));
+        OnPropertyChanged(nameof(FixHeaderText));
+        OnPropertyChanged(nameof(CanApplyFixes));
         SelectedItem = null;
         SelectedPreview = null;
         Items.Clear();
@@ -369,6 +590,18 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         OnPropertyChanged(nameof(RetypeState));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(ScriptText));
+    }
+
+    // 지금 고른 실행 결정을 받아 둔다(결과가 비어 있으면 앞서 받아 둔 것을 그대로 둔다).
+    private void KeepChoices()
+    {
+        if (Items.Count == 0 || _job is null)
+        {
+            return;
+        }
+
+        _keptJobId = _job.Id;
+        _keptChoices = [.. Items.SelectMany(i => i.Choices).Where(c => c.IsVisible && c.IsChosen).Select(c => (c.Table, c.Choice))];
     }
 
     /// <summary>예상 건수 세기까지 포함한 점검을 멈춘다.</summary>
@@ -399,7 +632,9 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
             LinkedSequences.Add(new SequenceLinkViewModel(rule, isLinked: true));
         }
 
+        var kept = _keptChoices is not null && string.Equals(_keptJobId, job.Id, StringComparison.Ordinal) ? _keptChoices : null;
         _job = job;
+        Fixes.Clear();
         var plans = PlansByKey(job, report);
         foreach (var item in report.Items.OrderBy(i => i.Level switch { CheckLevel.Error => 0, CheckLevel.Confirm => 1, _ => 2 }))
         {
@@ -413,7 +648,10 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
                     CheckChoice.DisableForeignKeys => plan is { DisablableForeignKeys.Count: > 0 },
                     _ => true,
                 };
-                var chosen = choice == CheckChoice.DisableTriggers && visible && job.Options.DisableTriggersByDefault;
+                // 다시 점검한 결과면 앞서 고른 것을 되살린다(처리 적용·규칙 선택지로 다시 점검해도 트리거 끄기 등이 풀리지 않게). 처음이면 작업 기본값.
+                var chosen = visible && (kept is not null
+                    ? kept.Contains((item.Table, choice))
+                    : choice == CheckChoice.DisableTriggers && job.Options.DisableTriggersByDefault);
                 choices.Add(new CheckChoiceViewModel(choice, item.Table, visible, chosen));
             }
 
@@ -424,6 +662,11 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
             }
 
             Items.Add(row);
+            if (row.Fix is { } fix)
+            {
+                fix.PropertyChanged += OnFixChanged;
+                Fixes.Add(fix);
+            }
         }
 
         foreach (var statement in report.Preview)
@@ -437,6 +680,10 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
                 : null)
             ?? Items.FirstOrDefault(i => i.IsConfirm) ?? Items.FirstOrDefault();
         Report = report;
+        CheckedAt = services.Time.GetUtcNow();
+        OnPropertyChanged(nameof(HasFixes));
+        OnPropertyChanged(nameof(FixHeaderText));
+        OnPropertyChanged(nameof(CanApplyFixes));
         OnPropertyChanged(nameof(HasLinkedSequences));
         OnPropertyChanged(nameof(HasDenied));
         OnPropertyChanged(nameof(NeedsRetype));
@@ -444,6 +691,15 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         OnPropertyChanged(nameof(RetypeState));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(ScriptText));
+    }
+
+    private void OnFixChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(FixRowViewModel.IsSelected))
+        {
+            OnPropertyChanged(nameof(CanApplyFixes));
+            OnPropertyChanged(nameof(FixHeaderText));
+        }
     }
 
     /// <summary>
@@ -515,19 +771,23 @@ public sealed partial class PrecheckViewModel(DataCopyServices services) : ViewM
         return key is null ? string.Empty : CopyOwners.Find(job, key) is { } rule ? CopyOwners.SourceName(job, rule) : key;
     }
 
-    /// <summary>작업 규칙을 바꾸는 선택지를 적용한다. 바뀐 작업을 돌려주고, 호출한 쪽이 점검을 다시 한다.</summary>
+    /// <summary>
+    /// 작업 규칙을 바꾸는 선택지를 적용한다. 바뀐 작업을 돌려주고, 호출한 쪽이 점검을 다시 한다. 처리(<see cref="CopyPrecheckFixes.Apply"/>)와 같은 규칙으로 바꾼다
+    /// (MERGE 로 바꾸면 대상 처리를 따로 바꾼 항목으로 표시해 전체 기본값을 바꿔도 되돌아가지 않는다).
+    /// </summary>
     public static CopyJob? ApplyJobChoice(CopyJob job, CheckItemViewModel item, CheckChoice choice)
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(item);
-        var tables = job.Tables.Select(rule => CopyOwners.Key(job, rule) != item.Table ? rule : choice switch
+        CopyFixKind? kind = choice switch
         {
-            CheckChoice.SkipColumn when item.Item.Column is { } column && !rule.SkipColumns.Contains(column, StringComparer.OrdinalIgnoreCase)
-                => rule with { SkipColumns = [.. rule.SkipColumns, column] },
-            CheckChoice.SwitchToMerge => rule with { Action = TargetAction.MergeByPk },
-            _ => rule,
-        }).ToList();
-        return job with { Tables = tables };
+            CheckChoice.SkipColumn when item.Item.Column is not null => CopyFixKind.SkipColumn,
+            CheckChoice.SwitchToMerge => CopyFixKind.SwitchToMerge,
+            _ => null,
+        };
+        return kind is { } k
+            ? CopyPrecheckFixes.Apply(job, [new CopyPrecheckFix(item.Code + ":" + choice, CopyPrecheckFixes.TitleOf(k), item.Table, k) { Column = item.Item.Column }])
+            : job;
     }
 
     /// <summary>

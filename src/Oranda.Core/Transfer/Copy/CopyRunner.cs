@@ -141,6 +141,7 @@ public partial class CopyRunner : ICopyRunner
         EnsureReportMatchesJob(job, report, period);
         EnsureRecreateAllowed(sessions, job);
         EnsureCreateAllowed(sessions, job, report);
+        EnsureAddColumnsAllowed(sessions, report);
         EnsureDistinct(sessions, job);
         EnsureWorkers(sessions);
         var run = new RunState(sessions, job, report, period, decisions.PreConfirmedSql, progress);
@@ -184,6 +185,12 @@ public partial class CopyRunner : ICopyRunner
                 // Tibero 의 CREATE TABLE 도 앞선 트랜잭션을 묵시 커밋한다(실측): 대상 쓰기 트랜잭션을 여는 DeleteTargetsAsync·LoadAllAsync 앞이라 대기 중인 DML 이 없다.
                 // 만든 표 정리(DROP … PURGE)는 대상 트랜잭션을 끝낸 뒤에만 한다(PurgeUnloadedNewTablesAsync).
                 await CreateMissingTablesAsync(run, ct);
+            }
+
+            if (!run.Aborted)
+            {
+                // 「대상에 열 추가」(PC1)도 DDL 이라 DELETE·적재보다 먼저 한다.
+                await AddColumnsAsync(run, ct);
             }
 
             if (!run.Aborted)
@@ -389,6 +396,7 @@ public partial class CopyRunner : ICopyRunner
         && a.PeriodColumns.SequenceEqual(b.PeriodColumns)
         && a.Masks.SequenceEqual(b.Masks)
         && a.SkipColumns.SequenceEqual(b.SkipColumns, StringComparer.Ordinal)
+        && (a.AddColumns ?? []).SequenceEqual(b.AddColumns ?? [], StringComparer.Ordinal)
         && (a.Parent is null) == (b.Parent is null)
         && (a.Parent is null || (a.Parent.ParentTable == b.Parent!.ParentTable
                                  && a.Parent.ChildColumns.SequenceEqual(b.Parent.ChildColumns, StringComparer.Ordinal)
@@ -635,6 +643,11 @@ public partial class CopyRunner : ICopyRunner
             }
 
             var table = run.Table(plan);
+            if (table.Outcome == CopyOutcome.Failed)
+            {
+                continue; // 정리 전에 실패한 표(열 추가 실패 등)는 적재하지 않으므로 지우지도 않는다
+            }
+
             run.Progress(table.Name, 0, null, PhaseDelete);
             var deleteStarted = Stopwatch.GetTimestamp();
             (PumpEnd End, ExecutionResult? Result, SideWatch Side) watched;

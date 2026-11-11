@@ -78,6 +78,62 @@ public sealed class CopyCreateMissingTests
         Assert.DoesNotContain(f.All, x => x.Contains("PURGE", StringComparison.Ordinal));
     }
 
+    // ---- 실행기: 대상에 열 추가(PC1) ----
+
+    private const string AddNameText = "ALTER TABLE \"DST\".\"ORDERS\" ADD (\"NAME\" VARCHAR2(20 CHAR))";
+
+    [Fact]
+    public async Task Added_column_is_altered_in_before_the_delete_and_the_load()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: false, addColumns: [AddNameText]);
+
+        var result = await f.RunAsync();
+
+        Assert.Equal("EXEC " + AddNameText, f.Order[0]); // DDL(묵시 커밋)은 대상 정리·적재 전
+        Assert.Equal("EXEC DELETE FROM \"DST\".\"ORDERS\"", f.Order[1]);
+        Assert.StartsWith("BULK INSERT INTO \"DST\".\"ORDERS\" (\"ID\", \"NAME\")", f.Order[2], StringComparison.Ordinal);
+        var table = Assert.Single(result.Tables);
+        Assert.Equal(CopyOutcome.Succeeded, table.Outcome);
+        Assert.Contains("대상에 열을 더했습니다", table.Message, StringComparison.Ordinal);
+        Assert.Contains(AddNameText, f.RunRecord.Statements);
+    }
+
+    [Fact]
+    public async Task Failed_alter_fails_only_that_table_and_neither_deletes_nor_loads_it()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: false, addColumns: [AddNameText]);
+        f.FailExecution = text => text == AddNameText ? new DbError("ORA-01430", "column being added already exists in table") : null;
+
+        var result = await f.RunAsync();
+
+        Assert.Equal(["EXEC " + AddNameText], f.Order);
+        Assert.DoesNotContain(f.All, x => x.Contains("DELETE", StringComparison.Ordinal) || x.StartsWith("BULK INSERT", StringComparison.Ordinal));
+        var table = Assert.Single(result.Tables);
+        Assert.Equal(CopyOutcome.Failed, table.Outcome);
+        Assert.Contains("대상에 열을 더하지 못해", table.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Added_column_is_refused_on_a_non_development_target_before_anything_is_sent()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: false, environment: ConnectionEnvironment.Test, addColumns: [AddNameText]);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => f.RunAsync());
+
+        Assert.Contains("「대상에 열 추가」", error.Message, StringComparison.Ordinal);
+        Assert.Empty(f.All);
+    }
+
+    [Fact]
+    public async Task Changing_the_add_columns_after_the_precheck_refuses_the_run()
+    {
+        var f = new Fixture(TargetAction.DeleteAllInsert, createMissing: false, addColumns: [AddNameText]);
+        var changed = f.Job with { Tables = [f.Rule with { AddColumns = null }] };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.RunAsync(changed));
+        Assert.Empty(f.All);
+    }
+
     // ---- 실행기: 적재 실패 → 만든 표 지우기 ----
 
     [Fact]
@@ -858,9 +914,10 @@ public sealed class CopyCreateMissingTests
         public Fixture(TargetAction action, bool createMissing, ConnectionEnvironment environment = ConnectionEnvironment.Development,
                        string targetUser = "DST", CopyDbmsParts? sourceParts = null, CopyDbmsParts? targetParts = null,
                        IReadOnlyList<MaskRule>? masks = null, bool sourcePrimaryKey = false,
-                       IReadOnlyList<CopySequencePlan>? sequences = null, string? idDefault = null, CompanionDdl? companions = null)
+                       IReadOnlyList<CopySequencePlan>? sequences = null, string? idDefault = null, CompanionDdl? companions = null,
+                       IReadOnlyList<string>? addColumns = null)
         {
-            Rule = new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = createMissing, Masks = masks ?? [] };
+            Rule = new TableRule("ORDERS", RuleKind.All, action) { CreateIfMissing = createMissing, Masks = masks ?? [], AddColumns = addColumns is null ? null : ["NAME"] };
             Job = new CopyJob
             {
                 Id = "1", Name = "n", Source = new ConnectionRef("s", "SRC"), Target = new ConnectionRef("t", "DST"),
@@ -872,8 +929,10 @@ public sealed class CopyCreateMissingTests
                 CreateMissing = createMissing,
                 CreateSequences = sequences ?? [],
                 Companions = companions ?? CompanionDdl.Empty, // 사전 점검이 정한 딸린 객체(SQ2)
+                AddColumns = addColumns ?? [], // 사전 점검이 정한 「대상에 열 추가」 문장(PC1)
             };
             var preview = new List<PreviewStatement>();
+            preview.AddRange((addColumns ?? []).Select(a => new PreviewStatement(a, PreviewSide.Target, PolicyDecisionKind.Allow, null, null)));
             if (!createMissing)
             {
                 // 사전 점검이 낼 미리 보기처럼: 있는 표의 대상 DELETE.
@@ -934,7 +993,9 @@ public sealed class CopyCreateMissingTests
         /// <summary>트랜잭션 제어를 뺀 문장.</summary>
         public List<string> Order => [.. All.Where(x => !x.StartsWith("CTL ", StringComparison.Ordinal))];
 
-        public Task<CopyRunResult> RunAsync() => Runner.RunAsync(new CopySessions(Source, Target), Job, Report,
+        public Task<CopyRunResult> RunAsync() => RunAsync(Job);
+
+        public Task<CopyRunResult> RunAsync(CopyJob job) => Runner.RunAsync(new CopySessions(Source, Target), job, Report,
             new CopyDecisions(new HashSet<string>(), new HashSet<ForeignKeyRef>(), new HashSet<string>(), false),
             new ResolvedPeriod(null, null), null, new CopyRunControl(), CancellationToken.None);
 

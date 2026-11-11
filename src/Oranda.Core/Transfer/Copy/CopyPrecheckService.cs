@@ -65,9 +65,13 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
 
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(target);
-        return await new Run(bulk, metadata, policy, source, target.Dbms, target.Catalog, CopyErrors.Combine(target.Errors, source.Errors), target.PrecheckDialect,
+        var report = await new Run(bulk, metadata, policy, source, target.Dbms, target.Catalog, CopyErrors.Combine(target.Errors, source.Errors), target.PrecheckDialect,
                              target.Dialect, target.Codec, sessions, job, period, progress)
             .ExecuteAsync(ct).ConfigureAwait(false);
+
+        // 항목마다 그 자리에서 고칠 처리(PC1, 순수 함수 — DB 를 부르지 않는다).
+        return CopyPrecheckFixes.Attach(job, report,
+            new CopyFixContext(source.Dbms, target.Dbms, CopyTargetGuard.CanRecreate(sessions.Target.Profile)) { SourceCodec = source.Codec });
     }
 
     /// <summary>
@@ -156,8 +160,10 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
             order = await CheckSequencesAsync(plans, order, ct).ConfigureAwait(false);
             order = await CheckExternalLoadAsync(order, ct).ConfigureAwait(false);
             await CheckReadConsistencyAsync(ct).ConfigureAwait(false);
+            order = WithAddColumnPlans(order); // 「대상에 열 추가」(PC1)
             var preview = await BuildPreviewAsync(order, ct).ConfigureAwait(false);
-            return new PrecheckReport(_items, order, [.. preview, .. ExternalLoadPreview(order)], _estimated) { Stages = _stages, ExternalTool = _externalTool };
+            var addColumns = await AddColumnPreviewAsync(order, ct).ConfigureAwait(false);
+            return new PrecheckReport(_items, order, [.. addColumns, .. preview, .. ExternalLoadPreview(order)], _estimated) { Stages = _stages, ExternalTool = _externalTool };
         }
 
         // ---- 표 구조 ----
@@ -229,7 +235,7 @@ public partial class CopyPrecheckService(IBulkExecutionService bulk, IMetadataPr
                 // 다시 만들 표는 적재할 때 원본 구조다: 열·키·문장을 옛 대상 구조가 아니라 다시 만든 구조로 정한다.
                 _targetTables[key] = IsRecreate(rule) && CanRecreate
                     ? PrecheckRules.AsRecreated(source, targetOwner)
-                    : await AdjustIdentityAsync(target, targetOwner, ct).ConfigureAwait(false);
+                    : WithAddedColumns(rule, key, source, await AdjustIdentityAsync(target, targetOwner, ct).ConfigureAwait(false));
             }
         }
 

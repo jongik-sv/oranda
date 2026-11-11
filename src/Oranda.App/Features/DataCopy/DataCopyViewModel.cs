@@ -90,6 +90,11 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             {
                 OnPropertyChanged(nameof(CanStartRun));
             }
+
+            if (e.PropertyName == nameof(PrecheckViewModel.Report))
+            {
+                OnPropertyChanged(nameof(HasPrecheckResult));
+            }
         };
         Run.PropertyChanged += (_, e) =>
         {
@@ -115,6 +120,14 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>점검을 시작할 수 있는지: 열린 작업이 있고, 다른 점검·세션 열기·실행이 도는 중이 아니며, 대상이 읽기 전용이 아니고, 새 버전 작업이 아닐 때.</summary>
     public bool CanGoToPrecheck => HasJob && !IsBusy && !Run.IsRunning && !Editor.HasTargetReadOnlyNotice && !Editor.HasUnsupportedPairNotice && !IsReadOnlyJob;
+
+    /// <summary>
+    /// 규칙 편집에서 「점검 결과 보기」를 보일지: 보일 점검 결과가 있고(규칙 편집으로 돌아와도 결과를 버리지 않는다) 그 결과로 아직 실행하지 않았을 때.
+    /// </summary>
+    public bool HasPrecheckResult => Precheck.Report is not null && !_checkUsedByRun;
+
+    // 마지막 점검 결과로 복사를 실행했다: 대상이 바뀌었을 수 있어(만든 테이블·더한 열) 그 결과를 다시 쓰지 않는다(다시 점검한다).
+    private bool _checkUsedByRun;
 
     /// <summary>「복사 실행」: 점검이 통과했고 다른 점검·세션 열기·실행이 도는 중이 아니며, 새 버전 작업이 아닐 때.</summary>
     public bool CanStartRun => Precheck.CanRun && !IsBusy && !Run.IsRunning && !IsReadOnlyJob;
@@ -285,6 +298,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         Precheck.Reset();
         Run.Reset();
         _checkedPeriod = null;
+        _checkUsedByRun = false;
         IsReadOnlyJob = IsReadOnlyEntry(job);
         Run.SaveLastRun = !IsReadOnlyJob;
         var source = ConnectionRelinker.Resolve(job.Source, _profiles, isTarget: false);
@@ -900,8 +914,109 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         return true;
     }
 
-    /// <summary>1단계 → 2단계: 입력을 확인하고 작업을 저장한 뒤 세션을 열어 사전 점검을 돌린다.</summary>
-    public async Task GoToPrecheckAsync(CancellationToken ct = default)
+    /// <summary>
+    /// 1단계 → 2단계: 입력을 확인하고 작업을 저장한 뒤 세션을 열어 사전 점검을 돌린다. 점검 결과가 남아 있고 그 뒤 규칙(작업 내용 지문)·기간·접속이
+    /// 그대로면 다시 점검하지 않고 그 결과로 돌아간다(「n분 전 점검」, <see cref="MatchesCheck"/>). 바뀌었으면 다시 점검한다.
+    /// </summary>
+    public Task GoToPrecheckAsync(CancellationToken ct = default) => GoToPrecheckCoreAsync(recheck: false, ct);
+
+    /// <summary>「다시 점검」: 남은 결과와 상관없이 지금 규칙으로 사전 점검을 다시 한다.</summary>
+    public Task RecheckAsync(CancellationToken ct = default) => GoToPrecheckCoreAsync(recheck: true, ct);
+
+    /// <summary>
+    /// 규칙 편집의 「점검 결과 보기」: 남은 점검 결과를 다시 점검하지 않고 보인다. 점검한 뒤 규칙을 고쳤으면 결과는 그대로 보이되
+    /// 「규칙이 바뀌어 다시 점검이 필요합니다」를 띄우고 「복사 실행」·「선택한 것 처리」를 막는다(<see cref="PrecheckViewModel.IsStale"/>).
+    /// </summary>
+    public void ShowPrecheckResult()
+    {
+        if (!HasPrecheckResult || IsBusy || Run.IsRunning || Precheck.IsRunning)
+        {
+            return;
+        }
+
+        CopyJob? job = null;
+        try
+        {
+            job = Editor.BuildJob();
+        }
+        catch (InvalidOperationException)
+        {
+            // 지금 규칙으로 작업을 만들 수 없다: 결과는 옛것이다
+        }
+
+        var same = job is not null && MatchesCheck(job);
+        if (same)
+        {
+            CurrentJob = _checkedJob; // 내용이 같다: 실행 직전 확인(같은 객체인지)이 점검한 작업을 보게 한다
+        }
+
+        Precheck.IsStale = !same;
+        Precheck.RefreshCheckedAgo();
+        Step = DataCopyStep.Precheck;
+        Say(same ? DataCopyText.PrecheckReused(Precheck.CheckedAgoText) : DataCopyText.PrecheckStale, error: !same);
+    }
+
+    /// <summary>
+    /// 지금 규칙으로 만든 작업이 남은 점검 결과를 그대로 쓸 수 있는가: 작업 내용 지문(저장 파일과 같은 JSON, 마지막 실행 요약 제외)·기간 경계·원본/대상 접속이
+    /// 점검 때와 같고, 점검 세션이 그 접속으로 열려 있으며, 그 결과로 아직 실행하지 않았다.
+    /// </summary>
+    private bool MatchesCheck(CopyJob job)
+    {
+        if (Precheck.Report is null || _checkUsedByRun || _checkedJob is not { } checkedJob || _checkedPeriod is not { } period || _sessions is not { } sessions
+            || _checkedSource is not { } checkedSource || _checkedTarget is not { } checkedTarget
+            || Editor.Source?.Profile is not { } source || Editor.Target?.Profile is not { } target)
+        {
+            return false;
+        }
+
+        return string.Equals(Fingerprint(job), Fingerprint(checkedJob), StringComparison.Ordinal)
+               && Editor.ResolvePeriod() == period
+               && SameSnapshot(source, checkedSource) && SameSnapshot(target, checkedTarget)
+               && SameConnection(sessions.Source, source, readOnlySource: true) && SameConnection(sessions.Target, target);
+    }
+
+    // 작업 내용 지문: 저장 파일과 같은 JSON(마지막 실행 요약은 뺀다 — 실행할 때마다 바뀌고 무엇을 복사하는지와 상관없다).
+    private static string Fingerprint(CopyJob job) =>
+        System.Text.Json.JsonSerializer.Serialize(job with { LastRun = null }, CopyJobJsonContext.Default.CopyJob);
+
+    // 규칙을 고치지 않았으면 남은 점검 결과로 돌아간다(다시 점검하지 않는다). 돌아갔으면 참.
+    private async Task<bool> TryReuseCheckAsync(CancellationToken ct)
+    {
+        if (Precheck.Report is null || Precheck.IsRunning || _checkUsedByRun || _checkedJob is null)
+        {
+            return false;
+        }
+
+        await RefreshProfilesAsync(ct).ConfigureAwait(true); // 접속의 환경 라벨은 열어 둔 사이에 바뀔 수 있다
+        if (Editor.Validate() is not null)
+        {
+            return false;
+        }
+
+        CopyJob job;
+        try
+        {
+            job = Editor.BuildJob();
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+
+        if (!MatchesCheck(job))
+        {
+            return false;
+        }
+
+        CurrentJob = _checkedJob; // 내용이 같다: 실행 직전 확인(같은 객체인지)이 점검한 작업을 보게 한다
+        Precheck.IsStale = false;
+        Precheck.RefreshCheckedAgo();
+        Step = DataCopyStep.Precheck;
+        Say(DataCopyText.PrecheckReused(Precheck.CheckedAgoText));
+        return true;
+    }
+
+    private async Task GoToPrecheckCoreAsync(bool recheck, CancellationToken ct)
     {
         if (CurrentJob is null || IsBusy || Run.IsRunning || ReadOnlyJobBlocked())
         {
@@ -911,7 +1026,14 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         IsBusy = true;
         try
         {
+            if (!recheck && await TryReuseCheckAsync(ct).ConfigureAwait(true))
+            {
+                return;
+            }
+
             Precheck.Invalidate(); // 입력 확인이 실패해 일찍 끝나도 옛 점검 결과로는 실행할 수 없다
+            _checkUsedByRun = false;
+            OnPropertyChanged(nameof(HasPrecheckResult));
             _checkedJob = null;
             await RefreshProfilesAsync(ct).ConfigureAwait(true); // 접속의 환경 라벨은 열어 둔 사이에 바뀔 수 있다
             if (Editor.Validate() is { } problem)
@@ -1140,7 +1262,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     /// </summary>
     public async Task ApplyChoiceAsync(CheckItemViewModel item, CheckChoice choice, CancellationToken ct = default)
     {
-        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Run.IsRunning || IsReadOnlyJob
+        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Precheck.IsStale || Run.IsRunning || IsReadOnlyJob
             || PrecheckViewModel.ApplyJobChoice(CurrentJob, item, choice) is not { } changed)
         {
             return;
@@ -1150,13 +1272,51 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>
+    /// 「선택한 것 처리」(PC1, 결정 D-066): 고른 처리 가운데 실행 결정(트리거·자식 FK 끄기 등)은 그 선택지를 고르고, 규칙을 바꾸는 처리는 작업 규칙 값
+    /// (테이블별로 따로 바꾼 값)을 바꿔 저장한 뒤 사전 점검을 다시 한다. 끝나면 한 줄 요약을 남긴다(「3건 처리 — 사전 점검을 다시 했습니다」).
+    /// 점검은 대상에 DDL 을 보내지 않는다 — 표 만들기·열 추가는 실행할 때 미리 보기의 문장 그대로 보낸다. 바꾼 규칙은 규칙 편집에서 되돌릴 수 있다.
+    /// 결과가 옛것이면(규칙을 고친 뒤) 하지 않는다: 지금 편집 중인 규칙을 점검한 작업으로 덮어쓰게 된다.
+    /// </summary>
+    public async Task ApplySelectedFixesAsync(CancellationToken ct = default)
+    {
+        var picked = Precheck.SelectedFixes();
+        if (picked.Count == 0 || CurrentJob is not { } job || _sessions is null || IsBusy || Precheck.IsRunning || Precheck.IsStale || Run.IsRunning || IsReadOnlyJob
+            || Precheck.Report is null)
+        {
+            return;
+        }
+
+        Precheck.ChooseDecisions(picked.Where(f => !f.ChangesJob));
+        var changed = CopyPrecheckFixes.Apply(job, picked);
+        string summary;
+        if (ReferenceEquals(changed, job))
+        {
+            Precheck.ClearFixSelection();
+            summary = DataCopyText.FixesApplied(picked.Count, rechecked: false);
+        }
+        else
+        {
+            await ApplyJobChangeAsync(changed, ct).ConfigureAwait(true);
+            if (Precheck.Report is null)
+            {
+                return; // 저장·점검을 마치지 못했다(이유는 상태 줄에 있다)
+            }
+
+            summary = DataCopyText.FixesApplied(picked.Count, rechecked: true);
+        }
+
+        Precheck.FixSummary = summary;
+        Say(summary);
+    }
+
+    /// <summary>
     /// 「연결」 체크: 시퀀스 규칙을 작업에 넣거나 빼고 저장한 뒤 점검을 다시 한다(연결한 규칙은 점검의 시퀀스 점검 대상이 된다).
     /// 지금 바꿀 수 없는 상태(점검·실행이 도는 중, 세션 없음)면 체크를 원래대로 돌린다.
     /// </summary>
     public async Task SetSequenceLinkAsync(SequenceLinkViewModel link, bool linked, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(link);
-        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Run.IsRunning || IsReadOnlyJob
+        if (CurrentJob is null || _sessions is null || IsBusy || Precheck.IsRunning || Precheck.IsStale || Run.IsRunning || IsReadOnlyJob
             || PrecheckViewModel.ApplySequenceLink(CurrentJob, link.Rule, linked) is not { } changed)
         {
             link.IsLinked = !linked;
@@ -1196,6 +1356,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
             _checkedPeriod = Editor.ResolvePeriod();
             _checkedJob = changed;
+            _checkUsedByRun = false;
             await Precheck.RunAsync(_sessions, changed, _checkedPeriod, ct).ConfigureAwait(true);
         }
         finally
@@ -1344,6 +1505,8 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var decisions = Precheck.BuildDecisions();
+        _checkUsedByRun = true; // 실행하면 대상이 바뀐다(만든 테이블·더한 열): 이 결과로 돌아가지 않고 다시 점검한다
+        OnPropertyChanged(nameof(HasPrecheckResult));
         Step = DataCopyStep.Run;
         Say("복사하는 중…");
         await Run.StartAsync(sessions, job, report, decisions, period, ct).ConfigureAwait(true);

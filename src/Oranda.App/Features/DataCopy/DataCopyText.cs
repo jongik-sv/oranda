@@ -119,6 +119,27 @@ internal static class DataCopyText
     public static string SourceNotFound(string name) => $"원본 접속 「{name}」 을(를) 이 PC 에서 찾지 못했습니다. 접속을 다시 고르세요.";
 
     public static string TargetNotFound(string name) => $"대상 접속 「{name}」 을(를) 이 PC 에서 찾지 못했습니다. 접속을 다시 고르세요.";
+
+    /// <summary>점검한 뒤 규칙을 고쳐 보이는 점검 결과가 옛것일 때(결과는 남기되 실행을 막는다).</summary>
+    public const string PrecheckStale = "규칙이 바뀌어 다시 점검이 필요합니다. 다시 점검하기 전에는 「복사 실행」을 할 수 없습니다.";
+
+    /// <summary>「선택한 것 처리」 뒤 요약(PC1). <paramref name="rechecked"/> 면 규칙을 바꿔 다시 점검했고, 아니면 실행 결정만 골랐다.</summary>
+    public static string FixesApplied(int count, bool rechecked)
+    {
+        var n = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (Localization.LiteralTranslator.IsEnglish)
+        {
+            return rechecked ? $"{n} fixed — the precheck was run again" : $"{n} fixed — applied when the copy runs";
+        }
+
+        return rechecked ? $"{n}건 처리 — 사전 점검을 다시 했습니다" : $"{n}건 처리 — 실행할 때 적용합니다";
+    }
+
+    /// <summary>규칙을 고치지 않고 사전 점검 단계로 돌아왔을 때(다시 점검하지 않고 이전 결과를 보인다).</summary>
+    public static string PrecheckReused(string checkedAgo) =>
+        Localization.LiteralTranslator.IsEnglish
+            ? $"Showing the previous precheck result ({checkedAgo}). The rules did not change. Click Recheck to check again."
+            : $"이전 사전 점검 결과입니다({checkedAgo}). 규칙이 바뀌지 않았습니다. 다시 점검하려면 「다시 점검」을 누르세요.";
 }
 
 /// <summary>
