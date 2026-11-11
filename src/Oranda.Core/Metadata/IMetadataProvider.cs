@@ -245,4 +245,7 @@ public sealed record ObjectDetail(DbObjectRef Target, IReadOnlyList<DetailSectio
 public sealed record CompileError(int Line, int Column, string Message, bool IsWarning)
 {
     public int MessageNumber { get; init; }
+
+    /// <summary>오류가 난 단위의 유형(<c>PACKAGE</c>·<c>PACKAGE BODY</c> 등). 명세와 본문을 한 탭에 보일 때 어느 쪽 오류인지 가른다. 모르면 null.</summary>
+    public string? ObjectType { get; init; }
 }

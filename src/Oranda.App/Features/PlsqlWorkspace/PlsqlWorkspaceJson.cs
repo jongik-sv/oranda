@@ -10,8 +10,11 @@ namespace Oranda.App.Features.PlsqlWorkspace;
 /// </summary>
 public sealed record PlsqlWorkspaceFile
 {
-    /// <summary>이 형식의 판. 더 큰 판(새 버전 앱이 쓴 파일)은 읽기만 한다.</summary>
-    public const int CurrentVersion = 1;
+    /// <summary>
+    /// 이 형식의 판. 더 큰 판(새 버전 앱이 쓴 파일)은 읽기만 한다.
+    /// 2 = 패키지·타입 탭이 본문 쪽(<see cref="PlsqlTabFile.Body"/>)을 함께 담는다(PKG1). 1 판 파일도 그대로 읽는다.
+    /// </summary>
+    public const int CurrentVersion = 2;
 
     public int SchemaVersion { get; init; } = CurrentVersion;
 
@@ -62,12 +65,27 @@ public sealed record PlsqlTabFile
 
     /// <summary>서버 소스 첫 줄에 앞에 붙인 글만큼의 열 차이(컴파일 오류 열 맞추기).</summary>
     public int Line1Shift { get; init; }
+
+    /// <summary>
+    /// 패키지·타입 탭의 본문 쪽(PKG1, D-067). 겉의 필드는 명세 쪽이고, 본문 쪽 글·기준은 여기에 같은 모양으로 담는다. 본문을 읽지 않았거나 쌍이 없는 유형이면 null.
+    /// 예전 파일(명세 탭·본문 탭이 따로)은 읽을 때 <see cref="PlsqlTabMerge.Merge"/> 가 한 탭으로 묶는다.
+    /// </summary>
+    public PlsqlTabFile? Body { get; init; }
+
+    /// <summary>보이던 쪽(<see cref="BodySide"/> = 본문). 없으면 겉의 쪽.</summary>
+    public string? Side { get; init; }
+
+    /// <summary><see cref="Side"/> 의 본문 값.</summary>
+    public const string BodySide = "body";
 }
 
 /// <summary>열린 작업 공간 색인(<c>open.json</c>): 다음 시작 때 이 차례로 연다. 설정 파일은 건드리지 않는다(결정 71).</summary>
 public sealed record PlsqlWorkspaceIndex
 {
-    public int SchemaVersion { get; init; } = PlsqlWorkspaceFile.CurrentVersion;
+    /// <summary>색인 형식의 판. 작업 공간 파일 판(<see cref="PlsqlWorkspaceFile.CurrentVersion"/>)과 따로 센다(PKG1 은 색인 모양을 바꾸지 않았다).</summary>
+    public const int CurrentVersion = 1;
+
+    public int SchemaVersion { get; init; } = CurrentVersion;
 
     public IReadOnlyList<string> OpenIds { get; init; } = [];
 

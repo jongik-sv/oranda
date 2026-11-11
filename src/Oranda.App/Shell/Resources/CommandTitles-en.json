@@ -304,5 +304,6 @@
   "Cmd.oranda.tuning.planControls": "Plan Management (Profiles, Baselines, Patches)",
   "Cmd.oranda.tuning.recommend": "Tuning Recommendations (Rule-based)",
   "Cmd.oranda.tuning.tuningAdvisorScript": "Tuning Advisor Script",
-  "Cmd.oranda.tuning.baselineScript": "Baseline Fix Script (DBMS_SPM)"
+  "Cmd.oranda.tuning.baselineScript": "Baseline Fix Script (DBMS_SPM)",
+  "Cmd.oranda.plsql.compileSpecAndBody": "Compile Spec and Body"
 }

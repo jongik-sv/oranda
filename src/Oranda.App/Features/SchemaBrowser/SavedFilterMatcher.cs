@@ -33,8 +33,9 @@ public sealed class SavedFilterMatcher
         _logonUser = logonUser;
         _schemasWithObjects = schemasWithObjects;
         _selected = new HashSet<string>(filter.Schemas, StringComparer.OrdinalIgnoreCase);
-        _hidden = new HashSet<string>(filter.HiddenTypes, StringComparer.Ordinal);
-        _patterns = filter.NamePatterns.ToDictionary(
+        var folded = FoldBodies(filter);
+        _hidden = new HashSet<string>(folded.HiddenTypes, StringComparer.Ordinal);
+        _patterns = folded.NamePatterns.ToDictionary(
             kv => kv.Key,
             kv => ToRegex(kv.Value, filter.UnderscoreIsWildcard, filter.WrapWithPercent),
             StringComparer.Ordinal);
@@ -117,13 +118,46 @@ public sealed class SavedFilterMatcher
         }
     }
 
-    public bool ShowsType(string objectType) => !_hidden.Contains(objectType);
+    /// <summary>유형을 보인다. 본문(PACKAGE BODY·TYPE BODY)은 명세 범주의 규칙을 따른다(PKG1: 명세와 본문이 한 노드).</summary>
+    public bool ShowsType(string objectType) => !_hidden.Contains(SchemaPairs.CategoryOf(objectType));
 
     public bool Shows(DbObjectRef obj)
     {
         ArgumentNullException.ThrowIfNull(obj);
         return ShowsType(obj.ObjectType)
-            && (!_patterns.TryGetValue(obj.ObjectType, out var regex) || regex is null || regex.IsMatch(obj.Name));
+            && (!_patterns.TryGetValue(SchemaPairs.CategoryOf(obj.ObjectType), out var regex) || regex is null || regex.IsMatch(obj.Name));
+    }
+
+    /// <summary>
+    /// 예전 저장 필터의 본문 유형(<c>PACKAGE BODY</c>·<c>TYPE BODY</c>)을 명세 범주로 옮긴다(PKG1: 본문 범주가 없어졌다).
+    /// 이름 패턴: 명세 범주에 패턴이 없으면 본문 패턴을 쓴다. 숨김: 명세 범주를 숨겼을 때만 숨긴다 — 본문만 숨긴 필터는 예전에도 명세를 보였으므로
+    /// 패키지 노드를 그대로 보인다. 본문 유형이 없으면 받은 필터를 그대로 돌려준다.
+    /// </summary>
+    public static SchemaBrowserFilter FoldBodies(SchemaBrowserFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        if (!filter.HiddenTypes.Any(IsBody) && !filter.NamePatterns.Keys.Any(IsBody))
+        {
+            return filter;
+        }
+
+        var patterns = filter.NamePatterns.Where(kv => !IsBody(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+        foreach (var (type, pattern) in filter.NamePatterns.Where(kv => IsBody(kv.Key)))
+        {
+            var spec = SchemaPairs.CategoryOf(type);
+            if (!patterns.TryGetValue(spec, out var own) || string.IsNullOrWhiteSpace(own))
+            {
+                patterns[spec] = pattern;
+            }
+        }
+
+        return filter with
+        {
+            HiddenTypes = [.. filter.HiddenTypes.Where(t => !IsBody(t))],
+            NamePatterns = patterns,
+        };
+
+        static bool IsBody(string type) => Oranda.App.Features.PlsqlEditor.PlsqlSourceText.IsBodyType(type);
     }
 
     /// <summary>

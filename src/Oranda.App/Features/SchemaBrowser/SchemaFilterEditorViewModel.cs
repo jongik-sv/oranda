@@ -328,7 +328,8 @@ public sealed partial class FilterDraft : ObservableObject
             d.Schemas.Add(s);
         }
 
-        // 트리 범주 순서대로, 그 뒤에 범주에 없는 유형(이 필터에만 적힌 것).
+        // 트리 범주 순서대로, 그 뒤에 범주에 없는 유형(이 필터에만 적힌 것). 예전 필터의 본문 유형은 명세 범주로 옮긴다(PKG1).
+        filter = SavedFilterMatcher.FoldBodies(filter);
         var known = SchemaBrowserViewModel.CategoryTitles;
         var extra = filter.HiddenTypes.Concat(filter.NamePatterns.Keys)
             .Where(t => known.All(k => k.Type != t))

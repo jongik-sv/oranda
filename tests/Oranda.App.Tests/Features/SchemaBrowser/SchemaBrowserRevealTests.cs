@@ -130,9 +130,10 @@ public class SchemaBrowserRevealTests
         var h = new NavBrowserHarness();
         await h.Vm.SetSessionAsync(h.Session);
 
-        // 본문 범주가 있으면 본문, 없으면 명세 노드를 고른다.
+        // 본문은 명세와 한 노드다(PKG1): 본문을 찾으면 그 패키지 노드를 고른다.
         Assert.True(await h.Vm.RevealAsync(new DbObjectRef("SCOTT", "EMP_PKG", "PACKAGE BODY")));
-        Assert.Equal("PACKAGE BODY", h.Vm.SelectedNode!.Ref!.ObjectType);
+        Assert.Equal(new DbObjectRef("SCOTT", "EMP_PKG", "PACKAGE"), h.Vm.SelectedNode!.Ref);
+        Assert.NotEqual(SchemaPartState.None, h.Vm.SelectedNode.BodyState); // 본문 상태 표가 있다
         Assert.True(await h.Vm.RevealAsync(new DbObjectRef("HR", "EMP_API", "PACKAGE BODY")));
         Assert.Equal(new DbObjectRef("HR", "EMP_API", "PACKAGE"), h.Vm.SelectedNode!.Ref);
 

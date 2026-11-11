@@ -285,6 +285,7 @@
 | `oranda.view.history` | `Alt+5`, `F8` | `Alt+5`, `F8` | `Alt+5`, `Ctrl+E` | `Alt+5`, `F8` |
 | `oranda.view.zoomOut` | `Ctrl+-` | - | `Ctrl+-` | `Ctrl+-` |
 | `oranda.plsql.compile` | `F5` | `F5` | `F8` | `Ctrl+Shift+F9` |
+| `oranda.plsql.compileSpecAndBody` | `Shift+F5` | `Shift+F5` | `Shift+F8` | - |
 
 ### 6.2 확인 필요 (TSK-04-07)
 
@@ -547,10 +548,13 @@
 | `oranda.plsql.openSource` | PL/SQL 소스 열기 | - | `schemaFocus` | `plsqlNodeSelected` | TSK-08-01 |
 | `oranda.journal.showForObject` | 변경 일지 보기 | - | `schemaFocus` | `schemaNodeSelected` | TSK-13-07 |
 | `oranda.plsql.compile` | 컴파일(저장) | `F5` | `plsqlEditorFocus` | `hasSession && !sessionBusy && !readOnlySession` | TSK-08-01 |
+| `oranda.plsql.compileSpecAndBody` | 명세+본문 컴파일 | `Shift+F5` | `plsqlEditorFocus` | `isPackageDoc && hasSession && !sessionBusy && !readOnlySession` | PKG1 |
 | `oranda.plsql.toggleSpecBody` | 명세/본문 전환 | `Ctrl+Shift+B` | `plsqlEditorFocus` | `isPackageDoc` | TSK-08-01 |
 | `oranda.plsql.showServerDiff` | 서버 소스와 차이 보기 | - | `plsqlEditorFocus` | `serverSourceChanged` | TSK-08-01 |
 | `oranda.plsql.run` | PL/SQL 실행 대화상자 | `Ctrl+Enter` | `plsqlEditorFocus` | `hasSession && !sessionBusy && plsqlRunnable` | TSK-08-02 |
 | `oranda.plsql.runFromBrowser` | 프로시저·함수 실행 | - | `schemaFocus` | `plsqlNodeSelected && hasSession` | TSK-08-02 |
+
+- 패키지·타입(D-067, PKG1): 명세와 본문은 PL/SQL 탭 하나다. `oranda.plsql.compile`(F5)은 보이는 쪽만(도구줄 「이 쪽만 컴파일」), `oranda.plsql.compileSpecAndBody`(Shift+F5)는 명세를 먼저 컴파일하고 명세가 막히면(충돌·정책·실패) 본문은 보내지 않는다. `oranda.plsql.toggleSpecBody`(Ctrl+Shift+B, 키 그대로)는 같은 탭 안의 「명세 | 본문」을 바꾼다(새 탭을 열지 않는다).
 
 ### 모니터
 

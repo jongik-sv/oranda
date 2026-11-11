@@ -204,7 +204,7 @@ public sealed partial class PlsqlWorkspaceStore
         }
 
         var version = VersionOf(text);
-        if (version > PlsqlWorkspaceFile.CurrentVersion)
+        if (version > (typeof(T) == typeof(PlsqlWorkspaceIndex) ? PlsqlWorkspaceIndex.CurrentVersion : PlsqlWorkspaceFile.CurrentVersion))
         {
             return (TryDeserialize(text, type, valid), true);
         }

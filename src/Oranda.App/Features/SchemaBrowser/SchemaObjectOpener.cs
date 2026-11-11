@@ -21,14 +21,14 @@ using Oranda.Core.Sessions;
 namespace Oranda.App.Features.SchemaBrowser;
 
 /// <summary>
-/// 스키마 브라우저의 객체를 「해당 편집기」로 연다(SCH-01). PL/SQL 단위(프로시저·함수·패키지·패키지 본문·트리거·타입·타입 본문)는
+/// 스키마 브라우저의 객체를 「해당 편집기」로 연다(SCH-01). PL/SQL 단위(프로시저·함수·패키지·트리거·타입, 패키지·타입은 명세와 본문이 한 탭)는
 /// PL/SQL 작업 공간의 편집 탭(서버 소스, <see cref="PlsqlWorkspaceRouter"/>), 그 밖(테이블·뷰·머티리얼라이즈드 뷰·시퀀스·시노님·인덱스 …)은 객체 상세 문서(표·뷰는 「열」 구역이 먼저)다.
 /// 종류 나누기는 DB 객체로 이동과 같은 규칙(<see cref="ObjectNavigationCommandHandler.OpenCommandFor"/>)을 쓴다.
 /// <list type="bullet">
 /// <item>미리보기(VS Code 방식): 미리보기 탭 하나를 돌려 쓴다. 다음 객체는 그 자리에서 새 탭으로 바뀐다(<see cref="DockWorkspace.OpenPreviewDocument"/>).
 /// PL/SQL 미리보기는 작업 공간 안 탭이고, 미리보기는 둘을 합쳐 하나다: PL/SQL 미리보기를 열면 고치지 않은 객체 상세 미리보기 문서를 닫고, 반대도 같다.</item>
 /// <item>미리보기를 고치기 시작하면(PL/SQL 글 고침, 데이터 탭 편집 켬) 고정 탭이 된다. 고친 내용이 남은 미리보기는 바꿔 끼우지 않는다.</item>
-/// <item>같은 접속의 같은 객체(소유자·이름·유형)가 이미 열려 있으면 새로 열지 않고 그 탭을 앞으로 낸다.</item>
+/// <item>같은 접속의 같은 객체(소유자·이름·유형, 명세와 본문은 한 객체)가 이미 열려 있으면 새로 열지 않고 그 탭을 앞으로 낸다.</item>
 /// <item>PL/SQL 편집기 기능이 꺼져 있으면(D-007) PL/SQL 단위는 서버 소스를 일반 SQL 탭에 읽기 전용으로 연다(<see cref="OpenReadOnlySourceAsync"/>).
 /// DB 객체로 이동·객체 검색·<c>oranda.plsql.openSource</c> 처리기도 이 분기를 부른다(정의로 이동은 원래 읽기 전용 SQL 탭이다).</item>
 /// </list>
@@ -127,7 +127,8 @@ public sealed class SchemaObjectOpener
     }
 
     /// <summary>
-    /// PL/SQL 단위를 작업 공간 탭으로 연다. 어느 작업 공간에든 열려 있으면 그 탭을 앞으로(고정 열기면 고정한다). 미리보기면 고치지 않은 객체 상세 미리보기 문서를 닫는다
+    /// PL/SQL 단위를 작업 공간 탭으로 연다. 패키지·타입은 명세와 본문이 한 탭이고 연 쪽(본문 참조면 본문)을 보인다(PKG1).
+    /// 어느 작업 공간에든 열려 있으면 그 탭을 앞으로(고정 열기면 고정한다). 미리보기면 고치지 않은 객체 상세 미리보기 문서를 닫는다
     /// (고친 것은 고정). 읽는 중에 탭이 빠지거나(다음 미리보기로 바뀜·닫음) 작업 공간이 닫히면 읽기를 멈춘다.
     /// </summary>
     private async Task<PanelDocument?> OpenPlsqlAsync(DockWorkspace docking, DbObjectRef target, ISession session, bool preview, bool focus, CancellationToken ct)
@@ -141,6 +142,7 @@ public sealed class SchemaObjectOpener
             }
 
             router.Show(open.Workspace, open.Tab, focus);
+            await open.Tab.RevealSideAsync(target, ct).ConfigureAwait(true); // 명세와 본문은 한 탭: 본문 노드·본문 참조면 본문 쪽을 보인다(PKG1)
             return router.DocumentOf(open.Workspace);
         }
 
@@ -390,7 +392,7 @@ public sealed class SchemaObjectOpener
             Same(Target, null, other, session) && string.Equals(dbKey, session.DbKey, StringComparison.Ordinal);
     }
 
-    /// <summary>같은 접속(DbKey)의 같은 객체를 보이는 문서. PACKAGE 와 PACKAGE BODY 는 다른 객체다.</summary>
+    /// <summary>같은 접속(DbKey)의 같은 객체를 보이는 객체 상세 문서(상세는 명세와 본문을 따로 보인다 — PL/SQL 탭은 <see cref="PlsqlWorkspaceRouter.FindOpen"/>).</summary>
     private static PanelDocument? FindOpen(DockWorkspace docking, string panelId, DbObjectRef target, ISession session) =>
         docking.Documents.FirstOrDefault(d => d.Definition.Id == panelId && d.Panel is ObjectDetailViewModel o && Same(o.Target, o.Session, target, session));
 

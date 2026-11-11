@@ -27,7 +27,9 @@ public sealed class PlsqlEditorTests : IDisposable
 
     public void Dispose() => PlsqlEditorViewModel.Active = null;
 
-    private const string BodySource = "PACKAGE BODY pk AS\n  PROCEDURE a IS BEGIN\n    NULL;\n  END;\nEND pk;\n";
+    internal const string BodySource = "PACKAGE BODY pk AS\n  PROCEDURE a IS BEGIN\n    NULL;\n  END;\nEND pk;\n";
+
+    internal const string SpecSource = "PACKAGE pk AS\n  PROCEDURE a;\nEND pk;\n";
 
     [Fact]
     public void Frame_exists()
@@ -157,13 +159,13 @@ public sealed class PlsqlEditorTests : IDisposable
     [Fact]
     public async Task Open_fills_editor_with_create_or_replace_and_reads_errors()
     {
-        var meta = new FakeMeta { Source = BodySource, Errors = [new CompileError(3, 5, "PLS-00103: x", false)] };
+        var meta = new FakeMeta { Source = BodySource, Errors = [new CompileError(3, 5, "PLS-00103: x", false)], ErrorsOnlyFor = "PACKAGE BODY" };
         var vm = new PlsqlEditorViewModel(meta, new FakeExec());
 
         Assert.True(await vm.OpenAsync(new FakeSession(), Body));
 
         Assert.StartsWith("CREATE OR REPLACE PACKAGE BODY \"SCOTT\".pk AS", vm.Editor.Text);
-        Assert.Equal("SCOTT.PK (본문)", vm.Title);
+        Assert.Equal("SCOTT.PK", vm.Title); // 명세와 본문이 한 탭이라 「(본문)」을 붙이지 않는다(PKG1)
         Assert.False(vm.Editor.IsDirty);
         Assert.True(vm.IsPackageDoc);
         Assert.Single(vm.Errors);
@@ -434,7 +436,7 @@ public sealed class PlsqlEditorTests : IDisposable
     public async Task Error_list_shows_errors_of_last_compiled_tab_and_navigates_on_select()
     {
         var errorsVm = new CompileErrorsViewModel();
-        var meta = new FakeMeta { Source = BodySource, Errors = [new CompileError(3, 5, "PLS-00103: x", false)] };
+        var meta = new FakeMeta { Source = BodySource, Errors = [new CompileError(3, 5, "PLS-00103: x", false)], ErrorsOnlyFor = "PACKAGE BODY" };
         var vm = new PlsqlEditorViewModel(meta, new FakeExec());
         await vm.OpenAsync(new FakeSession(), Body);
 
@@ -450,7 +452,7 @@ public sealed class PlsqlEditorTests : IDisposable
     public async Task Error_list_counts_errors_and_warnings_and_picks_the_header_icon()
     {
         var errorsVm = new CompileErrorsViewModel();
-        var meta = new FakeMeta { Source = BodySource, Errors = [new CompileError(3, 5, "PLS-00103: x", false), new CompileError(4, 1, "PLW-06009: y", true)] };
+        var meta = new FakeMeta { Source = BodySource, Errors = [new CompileError(3, 5, "PLS-00103: x", false), new CompileError(4, 1, "PLW-06009: y", true)], ErrorsOnlyFor = "PACKAGE BODY" };
         var vm = new PlsqlEditorViewModel(meta, new FakeExec());
         await vm.OpenAsync(new FakeSession(), Body);
 
@@ -483,9 +485,10 @@ public sealed class PlsqlEditorTests : IDisposable
     }
 
     [Fact]
-    public async Task Toggle_opens_the_other_half_in_a_new_tab_and_keeps_this_one()
+    public async Task Toggle_switches_to_the_other_side_in_the_same_tab_and_keeps_each_sides_text()
     {
         var meta = new FakeMeta { Source = BodySource };
+        meta.Sources["PACKAGE"] = SpecSource;
         var vm = new PlsqlEditorViewModel(meta, new FakeExec());
         var opened = new List<PlsqlEditorViewModel>();
         vm.OpenDocument = (v, _) =>
@@ -496,27 +499,34 @@ public sealed class PlsqlEditorTests : IDisposable
         await vm.OpenAsync(new FakeSession(), Body);
         vm.Editor.LoadText("edited", dirty: true);
 
-        var sibling = await vm.OpenSiblingAsync();
+        Assert.True(await vm.SwitchSideAsync());
 
-        Assert.NotNull(sibling);
-        Assert.Equal("PACKAGE", sibling.Target?.ObjectType);
-        Assert.Same(sibling, Assert.Single(opened));
-        Assert.Equal("edited", vm.Editor.Text);
+        Assert.Empty(opened); // 새 탭을 만들지 않는다(PKG1)
+        Assert.Equal(PlsqlSide.Spec, vm.Side);
+        Assert.Equal("PACKAGE", vm.Target?.ObjectType);
+        Assert.StartsWith("CREATE OR REPLACE PACKAGE \"SCOTT\".pk AS", vm.Editor.Text);
+        Assert.Equal("edited", vm.BodyPart!.Editor.Text);
+        Assert.True(vm.BodyPart.IsDirty);
+        Assert.False(vm.SpecPart!.IsDirty);
     }
 
     [Fact]
-    public async Task Toggle_does_nothing_for_standalone_procedure_and_missing_half_leaves_status()
+    public async Task Toggle_does_nothing_for_standalone_procedure_and_missing_half_shows_an_empty_side()
     {
         var meta = new FakeMeta { Source = BodySource };
         var vm = new PlsqlEditorViewModel(meta, new FakeExec());
         await vm.OpenAsync(new FakeSession(), new DbObjectRef("SCOTT", "P", "PROCEDURE"));
-        Assert.Null(await vm.OpenSiblingAsync());
+        Assert.False(await vm.SwitchSideAsync());
+        Assert.False(vm.HasSides);
 
+        meta.FailTypes.Add("PACKAGE");
         var pkg = new PlsqlEditorViewModel(meta, new FakeExec()) { OpenDocument = (_, _) => true };
-        await pkg.OpenAsync(new FakeSession(), Body);
-        meta.SourceFails = true;
-        Assert.Null(await pkg.OpenSiblingAsync());
-        Assert.Contains("소스가 없다", pkg.StatusText);
+        Assert.True(await pkg.OpenAsync(new FakeSession(), Body));
+        Assert.True(await pkg.SwitchSideAsync());
+        Assert.Equal(PlsqlSide.Spec, pkg.Side);
+        Assert.True(pkg.SpecPart!.Missing);
+        Assert.Equal(string.Empty, pkg.Editor.Text);
+        Assert.Contains("서버에 아직 없다", pkg.StatusText);
     }
 
     // ---- 명령 처리기 ----
@@ -691,7 +701,7 @@ public sealed class PlsqlEditorTests : IDisposable
         var saved = new PlsqlTabFile
         {
             Owner = Body.Owner, Name = Body.Name, Type = Body.ObjectType, ConnectionProfileId = session.Profile.Id,
-            LastDdlTime = meta.LastDdl.AddMinutes(-5), Title = "SCOTT.PK (본문)", Text = "CREATE OR REPLACE PACKAGE BODY mine", IsDirty = true, Caret = 7, Line1Shift = 3,
+            LastDdlTime = meta.LastDdl.AddMinutes(-5), Title = "SCOTT.PK", Text = "CREATE OR REPLACE PACKAGE BODY mine", IsDirty = true, Caret = 7, Line1Shift = 3,
         };
         var vm = new PlsqlEditorViewModel(meta, new FakeExec());
 
@@ -951,15 +961,33 @@ public sealed class PlsqlEditorTests : IDisposable
 
         public IReadOnlyList<CompileError> Errors { get; set; } = [];
 
+        /// <summary>유형별 소스(명세·본문을 따로 줄 때). 없는 유형은 <see cref="Source"/>.</summary>
+        public Dictionary<string, string> Sources { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>유형별 오류. 없는 유형은 <see cref="Errors"/>(단, <see cref="ErrorsOnlyFor"/> 가 있으면 그 유형만).</summary>
+        public Dictionary<string, IReadOnlyList<CompileError>> ErrorsByType { get; } = new(StringComparer.Ordinal);
+
+        /// <summary><see cref="Errors"/> 를 이 유형에만 준다(명세·본문을 함께 읽을 때 오류가 두 번 보이지 않게). null 이면 모든 유형.</summary>
+        public string? ErrorsOnlyFor { get; set; }
+
+        /// <summary>읽은 소스 유형(차례대로).</summary>
+        public List<string> SourceReads { get; } = [];
+
         /// <summary>이 유형의 소스는 읽지 못한다(패키지 본문만 없는 경우 등).</summary>
         public HashSet<string> FailTypes { get; } = [];
 
         public Task<string> GetSourceAsync(ISession s, DbObjectRef obj, CancellationToken ct)
-            => FailTypes.Contains(obj.ObjectType) ? Task.FromException<string>(new InvalidOperationException("none"))
+        {
+            SourceReads.Add(obj.ObjectType);
+            return FailTypes.Contains(obj.ObjectType) ? Task.FromException<string>(new InvalidOperationException("none"))
                 : SourceError is not null ? Task.FromException<string>(SourceError)
-                : SourceFails ? Task.FromException<string>(new InvalidOperationException("none")) : Task.FromResult(Source);
+                : SourceFails ? Task.FromException<string>(new InvalidOperationException("none"))
+                : Task.FromResult(Sources.TryGetValue(obj.ObjectType, out var own) ? own : Source);
+        }
 
-        public Task<IReadOnlyList<CompileError>> GetCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct) => Task.FromResult(Errors);
+        public Task<IReadOnlyList<CompileError>> GetCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct)
+            => Task.FromResult(ErrorsByType.TryGetValue(obj.ObjectType, out var own) ? own
+                : ErrorsOnlyFor is null || ErrorsOnlyFor == obj.ObjectType ? Errors : []);
 
         public Task<Oranda.Core.Metadata.ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct)
             => Task.FromResult(new Oranda.Core.Metadata.ObjectDetail(obj, [new DetailSection("일반", ["항목", "값"], [["유형", obj.ObjectType], ["마지막 DDL", LastDdl]])]));

@@ -46,6 +46,21 @@ public enum SchemaInsertMode
     Columns,
 }
 
+/// <summary>패키지·타입 노드의 한 쪽(명세·본문) 상태 표(PKG1). <see cref="None"/> = 표를 보이지 않는다(쌍이 없는 유형·모름).</summary>
+public enum SchemaPartState
+{
+    None,
+    Valid,
+    Invalid,
+    Missing,
+}
+
+/// <summary>
+/// 패키지·타입 한 줄이 묶은 명세·본문(PKG1). <see cref="Ref"/> 는 노드의 대표(명세가 있으면 명세, 본문만 있으면 본문 — 이름은 같다).
+/// 쌍이 없는 유형은 쓰지 않는다.
+/// </summary>
+public sealed record SchemaPair(DbObjectRef Ref, DbObjectRef? Spec, DbObjectRef? Body);
+
 /// <summary>트리 노드. 펼치면 소유 ViewModel 이 자식을 지연 로딩한다.</summary>
 public sealed partial class SchemaNode : ObservableObject
 {
@@ -90,6 +105,47 @@ public sealed partial class SchemaNode : ObservableObject
 
     /// <summary>범주 노드: 아직 화면에 올리지 않은 전체 항목.</summary>
     internal IReadOnlyList<DbObjectRef> Items { get; set; } = [];
+
+    /// <summary>패키지·타입 범주 노드: 항목(대표 참조)마다 묶은 명세·본문. 쌍이 없는 범주면 null.</summary>
+    internal IReadOnlyDictionary<DbObjectRef, SchemaPair>? Pairs { get; set; }
+
+    /// <summary>패키지·타입 노드: 묶은 명세·본문(즐겨찾기·INVALID 가 두 쪽 열쇠를 함께 본다). 다른 노드는 null.</summary>
+    internal SchemaPair? Pair { get; init; }
+
+    /// <summary>패키지·타입 노드의 명세 상태(「명세 정상」·「명세 오류」). 다른 노드는 <see cref="SchemaPartState.None"/>.</summary>
+    public SchemaPartState SpecState { get; internal init; }
+
+    /// <summary>패키지·타입 노드의 본문 상태(「본문 정상」·「본문 오류」·「본문 없음」). 다른 노드는 <see cref="SchemaPartState.None"/>.</summary>
+    public SchemaPartState BodyState { get; internal init; }
+
+    public string? SpecBadge => SpecState switch
+    {
+        SchemaPartState.Valid => Oranda.App.Features.Localization.UiText.Get("Shell.schemaBrowser.specValid", "명세 정상"),
+        SchemaPartState.Invalid => Oranda.App.Features.Localization.UiText.Get("Shell.schemaBrowser.specInvalid", "명세 오류"),
+        SchemaPartState.Missing => Oranda.App.Features.Localization.UiText.Get("Shell.schemaBrowser.specMissing", "명세 없음"),
+        _ => null,
+    };
+
+    public string? BodyBadge => BodyState switch
+    {
+        SchemaPartState.Valid => Oranda.App.Features.Localization.UiText.Get("Shell.schemaBrowser.bodyValid", "본문 정상"),
+        SchemaPartState.Invalid => Oranda.App.Features.Localization.UiText.Get("Shell.schemaBrowser.bodyInvalid", "본문 오류"),
+        SchemaPartState.Missing => Oranda.App.Features.Localization.UiText.Get("Shell.schemaBrowser.bodyMissing", "본문 없음"),
+        _ => null,
+    };
+
+    public bool HasSpecBadge => SpecState != SchemaPartState.None;
+
+    public bool HasBodyBadge => BodyState != SchemaPartState.None;
+
+    public bool SpecBadgeInvalid => SpecState == SchemaPartState.Invalid;
+
+    public bool BodyBadgeInvalid => BodyState == SchemaPartState.Invalid;
+
+    /// <summary>이 노드의 즐겨찾기 열쇠들(패키지·타입은 명세·본문 둘 다 — 예전에 본문을 즐겨찾기한 것도 이 노드로 보인다).</summary>
+    internal IEnumerable<string> FavoriteKeys => Ref is not { } r ? []
+        : Pair is { } p ? new[] { p.Spec, p.Body }.OfType<DbObjectRef>().Select(SchemaSql.FavoriteKey).Append(SchemaSql.FavoriteKey(r)).Distinct(StringComparer.Ordinal)
+        : [SchemaSql.FavoriteKey(r)];
 
     internal int Shown { get; set; }
 
@@ -186,6 +242,7 @@ public sealed partial class SchemaNode : ObservableObject
         Children.Clear();
         Loaded = false;
         Items = [];
+        Pairs = null;
         Shown = 0;
         TableLoad = null;
         if (HasChildrenToLoad)

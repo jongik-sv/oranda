@@ -29,6 +29,8 @@ namespace Oranda.App.Features.PlsqlEditor;
     Placements = ["menu:file/workspace/savePlsqlWorkspace@500"])]
 [OrandaCommand("oranda.plsql.compile", CommandCategory.Database, Title = "컴파일(저장)", When = "plsqlEditorFocus", Enablement = "hasSession && !sessionBusy && !readOnlySession",
     Placements = ["menu:sql/plsql/compile@30"])]
+[OrandaCommand("oranda.plsql.compileSpecAndBody", CommandCategory.Database, Title = "명세+본문 컴파일", When = "plsqlEditorFocus",
+    Enablement = "isPackageDoc && hasSession && !sessionBusy && !readOnlySession", Placements = ["menu:sql/plsql/compileSpecAndBody@31"])]
 [OrandaCommand("oranda.plsql.toggleSpecBody", CommandCategory.Database, Title = "명세/본문 전환", When = "plsqlEditorFocus", Enablement = "isPackageDoc",
     Placements = ["menu:sql/plsql/toggleSpecBody@130"])]
 [OrandaCommand("oranda.plsql.showServerDiff", CommandCategory.Database, Title = "서버 소스와 차이 보기", When = "plsqlEditorFocus", Enablement = "serverSourceChanged",
@@ -107,10 +109,21 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
                 }
 
                 break;
+            case "oranda.plsql.compileSpecAndBody":
+                if (CurrentActive() is { } pair)
+                {
+                    var outcome = await pair.CompileBothAsync(force: false, cancellationToken).ConfigureAwait(true);
+                    if (outcome.Status is PlsqlCompileStatus.Compiled or PlsqlCompileStatus.CompiledWithErrors)
+                    {
+                        ShowErrors();
+                    }
+                }
+
+                break;
             case "oranda.plsql.toggleSpecBody":
                 if (CurrentActive() is { } doc)
                 {
-                    await doc.OpenSiblingAsync(cancellationToken).ConfigureAwait(true);
+                    await doc.SwitchSideAsync(null, cancellationToken).ConfigureAwait(true);
                 }
 
                 break;
@@ -137,7 +150,7 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
 
     /// <summary>
     /// 「PL/SQL 작업 공간에 추가」: 스키마 브라우저에서 고른 객체를 고정 탭으로 넣는다(활성 → 최근 → 새 작업 공간). 포커스는 스키마 브라우저에 남는다.
-    /// 이미 어느 작업 공간에 열려 있으면 새로 넣지 않고 그 탭을 앞으로 낸다. 패키지(명세·본문)는 둘 다 같은 작업 공간에 넣고, 짝을 읽지 못하면 그 탭만 뺀다.
+    /// 이미 어느 작업 공간에 열려 있으면 새로 넣지 않고 그 탭을 앞으로 낸다. 패키지·타입은 명세·본문이 한 탭이다(PKG1, 누른 쪽을 보인다).
     /// </summary>
     private async Task AddToWorkspaceAsync(object? parameter, CancellationToken ct)
     {
@@ -155,48 +168,22 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
             return;
         }
 
-        var types = target.ObjectType is "PACKAGE" or "PACKAGE BODY" ? new[] { "PACKAGE", "PACKAGE BODY" } : [target.ObjectType];
-        // 짝(명세·본문) 중 이미 열린 쪽이 있으면 그 작업 공간에 같이 넣는다(아직 안 열린 쪽이 먼저 와도).
-        PlsqlWorkspaceViewModel? near = types.Select(t => router.FindOpen(target with { ObjectType = t }, session)?.Workspace).FirstOrDefault(w => w is not null);
-        (PlsqlWorkspaceViewModel Workspace, PlsqlEditorViewModel Tab)? clicked = null;
-        foreach (var type in types)
+        // 명세와 본문은 한 탭이다(PKG1): 이미 열려 있으면 그 탭을 고정하고 누른 쪽(본문이면 본문)을 보인다.
+        if (router.FindOpen(target, session) is { } open)
         {
-            var isClicked = type == target.ObjectType;
-            var item = target with { ObjectType = type };
-            if (router.FindOpen(item, session) is { } open)
-            {
-                open.Workspace.Pin(open.Tab); // 미리보기로 열려 있으면 고정한다
-                router.Show(open.Workspace, open.Tab, focus: false);
-                near ??= open.Workspace;
-                clicked = isClicked ? open : clicked;
-                continue;
-            }
-
-            var vm = NewViewModel();
-            if (router.Place(vm, near, preview: false, focus: false) is null)
-            {
-                continue;
-            }
-
-            var workspace = router.WorkspaceOf(vm);
-            var loaded = await router.LoadAsync(vm, token => vm.OpenAsync(session, item, token), ct).ConfigureAwait(true);
-            if (!loaded && !isClicked && workspace is not null)
-            {
-                workspace.Remove(vm); // 짝을 읽지 못하면 그 탭은 뺀다
-                continue;
-            }
-
-            if (workspace is not null)
-            {
-                near ??= workspace;
-                clicked = isClicked ? (workspace, vm) : clicked;
-            }
+            open.Workspace.Pin(open.Tab); // 미리보기로 열려 있으면 고정한다
+            router.Show(open.Workspace, open.Tab, focus: false);
+            await open.Tab.RevealSideAsync(target, ct).ConfigureAwait(true);
+            return;
         }
 
-        if (clicked is { } shown && shown.Workspace.Tabs.Contains(shown.Tab))
+        var vm = NewViewModel();
+        if (router.Place(vm, preview: false, focus: false) is null)
         {
-            router.Show(shown.Workspace, shown.Tab, focus: false); // 누른 객체의 탭이 보이게
+            return;
         }
+
+        await router.LoadAsync(vm, token => vm.OpenAsync(session, target, token), ct).ConfigureAwait(true);
     }
 
     /// <summary>보이는 PL/SQL 작업 공간(활성 문서). 활성 문서가 PL/SQL 작업 공간이 아니면 활성 PL/SQL 탭이 든 작업 공간.</summary>
@@ -224,6 +211,18 @@ public sealed class PlsqlEditorCommandHandler : ICommandHandler
         {
             var line = parameter is PlsqlSourceLocation { Line: > 0 } at ? at.Line : 0;
             await SchemaObjectOpener.OpenReadOnlySourceAsync(_services, target, session, line, preview: false, Notify, ct).ConfigureAwait(true);
+            return;
+        }
+
+        // 같은 객체(명세와 본문은 한 객체)가 열려 있으면 새 탭을 만들지 않고 그 탭의 그 쪽·그 줄로 간다(PKG1).
+        if (OpenDocument is null && PlsqlWorkspaceRouter.Of(_services) is { } shown && shown.FindOpen(target, session) is { } open)
+        {
+            shown.Show(open.Workspace, open.Tab, focus: true);
+            if (await open.Tab.RevealSideAsync(target, ct).ConfigureAwait(true) && parameter is PlsqlSourceLocation { Line: > 0 } at)
+            {
+                open.Tab.GoToServerLine(at.Line);
+            }
+
             return;
         }
 

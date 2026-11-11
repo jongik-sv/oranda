@@ -1842,5 +1842,18 @@
   "시간이 걸려도 시퀀스 보정": "Adjust the sequence even if it takes long",
   "열 추가 막힘": "Add column blocked",
   "열 추가": "Adding columns",
-  "규칙이 바뀌어 다시 점검이 필요합니다. 다시 점검하기 전에는 「복사 실행」을 할 수 없습니다.": "The rules changed, so the precheck must run again. You cannot run the copy until you recheck."
+  "규칙이 바뀌어 다시 점검이 필요합니다. 다시 점검하기 전에는 「복사 실행」을 할 수 없습니다.": "The rules changed, so the precheck must run again. You cannot run the copy until you recheck.",
+  "이 쪽만 컴파일": "Compile This Side",
+  "보이는 쪽(명세 또는 본문)만 컴파일합니다(F5).": "Compiles only the side you see (spec or body) (F5).",
+  "명세+본문 컴파일": "Compile Spec and Body",
+  "명세를 먼저, 이어서 본문을 컴파일합니다. 명세가 막히면 본문은 보내지 않습니다.": "Compiles the spec first, then the body. If the spec is blocked, the body is not sent.",
+  "명세 본문 전환": "Switch spec and body",
+  "명세와 본문을 바꿔 봅니다(Ctrl+Shift+B). 쪽마다 글·되돌리기·고침 표시가 따로입니다.": "Switches between spec and body (Ctrl+Shift+B). Each side keeps its own text, undo and changed mark.",
+  "명세": "Spec",
+  "구성원": "Members",
+  "명세·본문의 프로시저·함수·타입·커서. 누르면 그 자리로 갑니다(한쪽에만 있으면 그 쪽으로 바꿉니다).": "Procedures, functions, types and cursors of the spec and body. Click to go there (switches sides when it is only on the other side).",
+  "구성원 목록": "Member list",
+  "서버에 본문이 아직 없습니다.": "There is no body on the server yet.",
+  "본문 만들기": "Create Body",
+  "명세의 프로시저·함수마다 빈 구현을 둔 본문 뼈대를 넣습니다. 컴파일하면 서버에 만듭니다.": "Inserts a body skeleton with an empty implementation for each procedure and function in the spec. Compile to create it on the server."
 }

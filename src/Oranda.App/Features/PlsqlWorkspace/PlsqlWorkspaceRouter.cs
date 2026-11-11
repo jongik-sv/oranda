@@ -74,7 +74,10 @@ public sealed class PlsqlWorkspaceRouter
     /// <summary>탭이 든 작업 공간. 없으면 null.</summary>
     public PlsqlWorkspaceViewModel? WorkspaceOf(PlsqlEditorViewModel tab) => Workspaces.FirstOrDefault(w => w.Tabs.Contains(tab));
 
-    /// <summary>같은 접속(DbKey)의 같은 객체(소유자·이름·유형)를 보이는 탭. PACKAGE 와 PACKAGE BODY 는 다른 객체다.</summary>
+    /// <summary>
+    /// 같은 접속(DbKey)의 같은 객체(소유자·이름·유형)를 보이는 탭. 명세와 본문(PACKAGE·PACKAGE BODY, TYPE·TYPE BODY)은 한 객체다(PKG1):
+    /// 본문을 찾아도 그 패키지 탭이 나온다(그 쪽을 보이는 일은 <see cref="PlsqlEditorViewModel.RevealSideAsync"/>).
+    /// </summary>
     public (PlsqlWorkspaceViewModel Workspace, PlsqlEditorViewModel Tab)? FindOpen(DbObjectRef target, ISession session)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -111,16 +114,18 @@ public sealed class PlsqlWorkspaceRouter
             SourcePath = file.SourcePath,
             SourceName = file.SourceName ?? (name != file.Name ? file.Name : null), // 이름이 겹쳐 바뀌어도 파일에는 원래 이름으로 다시 쓴다
         };
-        foreach (var saved in file.Tabs)
+        // 예전 파일의 명세 탭·본문 탭은 한 탭으로 묶는다(PKG1).
+        var (tabs, active) = PlsqlTabMerge.Merge(file.Tabs, file.ActiveTab);
+        foreach (var saved in tabs)
         {
             var tab = _services is not null ? new PlsqlEditorViewModel(_services) : new PlsqlEditorViewModel();
             tab.Restore(saved);
             workspace.Add(tab);
         }
 
-        if (file.ActiveTab >= 0 && file.ActiveTab < workspace.Tabs.Count)
+        if (active >= 0 && active < workspace.Tabs.Count)
         {
-            workspace.ActiveTab = workspace.Tabs[file.ActiveTab];
+            workspace.ActiveTab = workspace.Tabs[active];
         }
 
         var before = _docking.ActiveDocument;
@@ -232,7 +237,7 @@ public sealed class PlsqlWorkspaceRouter
                 continue;
             }
 
-            if (preview.Editor.IsDirty)
+            if (preview.IsDirty)
             {
                 w.Pin(preview);
                 continue;
@@ -458,7 +463,7 @@ public sealed class PlsqlWorkspaceRouter
         tab.Target is { } open
         && string.Equals(open.Owner, target.Owner, StringComparison.Ordinal)
         && string.Equals(open.Name, target.Name, StringComparison.Ordinal)
-        && string.Equals(open.ObjectType, target.ObjectType, StringComparison.Ordinal)
+        && string.Equals(PlsqlSourceText.SpecTypeOf(open.ObjectType), PlsqlSourceText.SpecTypeOf(target.ObjectType), StringComparison.Ordinal)
         && (tab.Session is { } own
             ? string.Equals(own.DbKey, session.DbKey, StringComparison.Ordinal)
             : tab.RestoredProfileId is not { } waiting || waiting == session.Profile.Id); // 접속을 기다리는 복원 탭은 저장한 접속만

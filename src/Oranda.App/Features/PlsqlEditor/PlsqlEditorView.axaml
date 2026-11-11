@@ -7,13 +7,51 @@
              xmlns:diff="using:Oranda.App.Features.MyBatisWorkspace.Save"
              x:Class="Oranda.App.Features.PlsqlEditor.PlsqlEditorView"
              x:DataType="vm:PlsqlEditorViewModel">
-  <!-- 위: 저장 도구줄·충돌 알림 / 본문: SQL 편집기 + 오른쪽 차이 보기(열렸을 때) / 맨 아래: 상태 -->
+  <UserControl.Styles>
+    <!-- 「구성원」 목록 줄: 종류(흐리게) · 이름 · 있는 곳(작은 표) -->
+    <Style Selector="TextBlock.member-kind">
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+    </Style>
+    <Style Selector="Border.member-where">
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+    </Style>
+    <Style Selector="TextBlock.side-dirty">
+      <Setter Property="Margin" Value="2,0,0,0" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
+  <!-- 위: 저장 도구줄·충돌 알림 / 본문: 구성원 목록(패키지·타입) | SQL 편집기(명세·본문 쪽마다 하나) + 오른쪽 차이 보기(열렸을 때) / 맨 아래: 상태 -->
   <DockPanel>
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <StackPanel Orientation="Horizontal" Spacing="2">
-        <Button x:Name="CompileButton" Classes="tool" Content="컴파일(저장)" IsEnabled="{Binding !IsBusy}" icons:ButtonIcon.Key="compile" />
+        <Button x:Name="CompileButton" Classes="tool" Content="컴파일(저장)" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding !HasSides}" icons:ButtonIcon.Key="compile" />
+        <!-- 패키지·타입: 보이는 쪽만 / 명세 다음 본문 -->
+        <Button x:Name="CompileSideButton" Classes="tool" Content="이 쪽만 컴파일" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding HasSides}" icons:ButtonIcon.Key="compile"
+                ToolTip.Tip="보이는 쪽(명세 또는 본문)만 컴파일합니다(F5)." />
+        <Button x:Name="CompileBothButton" Classes="tool" Content="명세+본문 컴파일" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding HasSides}" icons:ButtonIcon.Key="compile"
+                ToolTip.Tip="명세를 먼저, 이어서 본문을 컴파일합니다. 명세가 막히면 본문은 보내지 않습니다." />
         <Button x:Name="DiffButton" Classes="tool" Content="서버와 차이" icons:ButtonIcon.Key="diff" />
-        <Button x:Name="SiblingButton" Classes="tool" Content="명세/본문" IsVisible="{Binding IsPackageDoc}" icons:ButtonIcon.Key="swap" />
+        <!-- 명세 | 본문(Ctrl+Shift+B). 고친 쪽에는 * 가 붙는다. -->
+        <ListBox x:Name="SideSwitch" Classes="segmented" Margin="6,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasSides}"
+                 SelectedIndex="{Binding SideIndex, Mode=TwoWay}" AutomationProperties.Name="명세 본문 전환"
+                 ToolTip.Tip="명세와 본문을 바꿔 봅니다(Ctrl+Shift+B). 쪽마다 글·되돌리기·고침 표시가 따로입니다.">
+          <ListBoxItem>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="명세" VerticalAlignment="Center" />
+              <TextBlock Classes="side-dirty" Text="*" IsVisible="{Binding SpecPart.IsDirty, FallbackValue=False}" VerticalAlignment="Center" />
+            </StackPanel>
+          </ListBoxItem>
+          <ListBoxItem>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="본문" VerticalAlignment="Center" />
+              <TextBlock Classes="side-dirty" Text="*" IsVisible="{Binding BodyPart.IsDirty, FallbackValue=False}" VerticalAlignment="Center" />
+            </StackPanel>
+          </ListBoxItem>
+        </ListBox>
       </StackPanel>
     </Border>
     <Border DockPanel.Dock="Top" Padding="6,4" IsVisible="{Binding HasConflictBanner}"
@@ -29,12 +67,44 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
-    <!-- 편집기 | 끌어 옮기는 세로 경계 | 차이 보기(열렸을 때만, 왼쪽 = 서버·오른쪽 = 내 소스 나란히). 칸 너비는 코드에서 연다·닫는다. -->
-    <Grid x:Name="BodyGrid" ColumnDefinitions="*,Auto,0">
-      <se:SqlEditorView x:Name="EditorView" keymaps:FocusSlot.Name="plsql" />
-      <GridSplitter x:Name="DiffSplitter" Grid.Column="1" Width="4" ResizeDirection="Columns" IsVisible="False"
+    <!-- 구성원(패키지·타입) | 편집기 | 끌어 옮기는 세로 경계 | 차이 보기(열렸을 때만, 왼쪽 = 서버·오른쪽 = 내 소스 나란히). 차이 칸 너비는 코드에서 연다·닫는다. -->
+    <Grid x:Name="BodyGrid" ColumnDefinitions="Auto,*,Auto,0">
+      <Border x:Name="MembersPane" Grid.Column="0" IsVisible="{Binding HasSides}" BorderThickness="0,0,1,0"
+              BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+        <DockPanel>
+          <ToggleButton x:Name="MembersToggle" DockPanel.Dock="Top" Classes="toolbar" Content="구성원" IsChecked="{Binding MembersExpanded}"
+                        HorizontalAlignment="Stretch" ToolTip.Tip="명세·본문의 프로시저·함수·타입·커서. 누르면 그 자리로 갑니다(한쪽에만 있으면 그 쪽으로 바꿉니다)." />
+          <ListBox x:Name="MembersList" Width="220" IsVisible="{Binding MembersExpanded}" ItemsSource="{Binding Members}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="구성원 목록">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:PlsqlMemberEntry">
+                <Grid ColumnDefinitions="Auto,*,Auto" Background="Transparent">
+                  <TextBlock Grid.Column="0" Classes="member-kind" Text="{Binding KindText}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  <Border Grid.Column="2" Classes="member-where" Margin="6,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding WhereText}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                  </Border>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+      <Panel x:Name="EditorStack" Grid.Column="1">
+        <se:SqlEditorView x:Name="EditorView" keymaps:FocusSlot.Name="plsql" />
+        <!-- 서버에 본문이 없고 본문 쪽이 비었을 때 -->
+        <Border x:Name="CreateBodyHint" IsVisible="{Binding ShowCreateBodyHint}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Padding="12,8" CornerRadius="4" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+          <StackPanel Spacing="6" HorizontalAlignment="Center">
+            <TextBlock Text="서버에 본문이 아직 없습니다." HorizontalAlignment="Center" />
+            <Button x:Name="CreateBodyButton" Classes="tool" Content="본문 만들기" HorizontalAlignment="Center" icons:ButtonIcon.Key="add"
+                    ToolTip.Tip="명세의 프로시저·함수마다 빈 구현을 둔 본문 뼈대를 넣습니다. 컴파일하면 서버에 만듭니다." />
+          </StackPanel>
+        </Border>
+      </Panel>
+      <GridSplitter x:Name="DiffSplitter" Grid.Column="2" Width="4" ResizeDirection="Columns" IsVisible="False"
                     Background="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-      <DockPanel x:Name="DiffPanel" Grid.Column="2" IsVisible="False">
+      <DockPanel x:Name="DiffPanel" Grid.Column="3" IsVisible="False">
         <!-- 머리 글자는 나란히 보기 두 반쪽 위에(MyBatis 「차이 보고 고르기」 창과 같은 들여쓰기) -->
         <Panel DockPanel.Dock="Top">
           <Grid x:Name="DiffHeads" ColumnDefinitions="*,*" Margin="46,0,0,0">

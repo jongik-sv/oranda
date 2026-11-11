@@ -720,6 +720,9 @@ public class SchemaBrowserTests
         /// <summary>닫아 두면 객체 목록 조회가 열릴 때까지 끝나지 않는다.</summary>
         public TaskCompletionSource? ObjectsGate { get; set; }
 
+        /// <summary>INVALID 객체. 정하면 「INVALID 만」 조회가 이것만 돌려준다(null = 예전처럼 모두).</summary>
+        public HashSet<DbObjectRef>? Invalid { get; set; }
+
         public async Task<IReadOnlyList<string>> ListSchemasAsync(ISession s, CancellationToken ct)
         {
             if (SchemasGate is { } gate)
@@ -741,6 +744,7 @@ public class SchemaBrowserTests
 
             var like = q.NamePattern is null ? null : LikeToRegex(q.NamePattern);
             return [.. Objects
+                .Where(o => !q.InvalidOnly || Invalid is null || Invalid.Contains(o))
                 .Where(o => q.Owner is null || o.Owner == q.Owner)
                 .Where(o => q.ObjectTypes.Count == 0 || q.ObjectTypes.Contains(o.ObjectType))
                 .Where(o => like is null || like.IsMatch(o.Name))];

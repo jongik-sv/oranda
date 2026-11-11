@@ -8,12 +8,13 @@ public sealed partial class SchemaBrowserViewModel
     private void LoadFavorites(SchemaNode node)
     {
         node.Children.Clear();
-        foreach (var key in _favorites.OrderBy(k => k, StringComparer.Ordinal))
+        var refs = _favorites.OrderBy(k => k, StringComparer.Ordinal).Select(TryParseKey).OfType<DbObjectRef>().ToList();
+
+        // 패키지·타입은 명세와 본문 즐겨찾기를 한 줄로(PKG1, 명세가 대표).
+        var pairs = SchemaPairs.Pair(refs.Where(r => SchemaPairs.IsPairType(r.ObjectType))).ToDictionary(p => p.Ref);
+        foreach (var r in refs.Where(r => !SchemaPairs.IsPairType(r.ObjectType) || pairs.ContainsKey(r)))
         {
-            if (TryParseKey(key) is { } r)
-            {
-                node.Children.Add(MakeObject(r, node));
-            }
+            node.Children.Add(MakeObject(r, node, pair: pairs.GetValueOrDefault(r)));
         }
 
         if (node.Children.Count == 0)
@@ -44,13 +45,26 @@ public sealed partial class SchemaBrowserViewModel
             return;
         }
 
+        // 패키지·타입 노드는 명세·본문 두 열쇠를 함께 본다(예전에 본문을 즐겨찾기했으면 그것도 끈다).
         var key = SchemaSql.FavoriteKey(r);
-        var on = !_favorites.Contains(key);
-        await _favoriteStore.SetAsync(session.Profile.Id, key, on, ct);
-        _favorites = await _favoriteStore.LoadAsync(session.Profile.Id, ct);
-        foreach (var n in Flatten(Roots).Where(n => n.Ref is { } rr && SchemaSql.FavoriteKey(rr) == key))
+        var keys = node.FavoriteKeys.ToHashSet(StringComparer.Ordinal);
+        var on = !keys.Any(_favorites.Contains);
+        if (on)
         {
-            n.IsFavorite = on;
+            await _favoriteStore.SetAsync(session.Profile.Id, key, true, ct);
+        }
+        else
+        {
+            foreach (var k in keys.Where(_favorites.Contains))
+            {
+                await _favoriteStore.SetAsync(session.Profile.Id, k, false, ct);
+            }
+        }
+
+        _favorites = await _favoriteStore.LoadAsync(session.Profile.Id, ct);
+        foreach (var n in Flatten(Roots).Where(n => n.Ref is not null && n.FavoriteKeys.Any(keys.Contains)))
+        {
+            n.IsFavorite = n.FavoriteKeys.Any(_favorites.Contains);
         }
 
         if (_favoritesNode is { } fav)

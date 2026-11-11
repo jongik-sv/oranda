@@ -89,8 +89,8 @@ public sealed class PlsqlWorkspaceStoreTests : IDisposable
     }
 
     [Theory]
-    [InlineData("{\"schemaVersion\":2,\"id\":\"d4\",\"name\":\"future\",\"tabs\":[],\"newField\":true}", true)]
-    [InlineData("{\"schemaVersion\":2,\"id\":\"d4\",\"title\":{\"ko\":\"future\"}}", false)] // 모양이 바뀐 새 판
+    [InlineData("{\"schemaVersion\":3,\"id\":\"d4\",\"name\":\"future\",\"tabs\":[],\"newField\":true}", true)]
+    [InlineData("{\"schemaVersion\":3,\"id\":\"d4\",\"title\":{\"ko\":\"future\"}}", false)] // 모양이 바뀐 새 판
     public async Task A_file_written_by_a_newer_version_is_never_moved_or_overwritten(string json, bool readable)
     {
         Directory.CreateDirectory(Folder);
@@ -263,7 +263,7 @@ public sealed class PlsqlWorkspacePersistenceTests
     });
 
     [Theory]
-    [InlineData("{\"schemaVersion\":2,\"openIds\":[\"old1\"],\"lastId\":\"old1\"}", true)] // 새 버전 앱의 목록: 아무것도 쓰지 않는다
+    [InlineData("{\"schemaVersion\":3,\"openIds\":[\"old1\"],\"lastId\":\"old1\"}", true)] // 새 버전 앱의 목록: 아무것도 쓰지 않는다
     [InlineData("{\"schemaVersion\":1,\"openIds\":null}", false)] // 손상: 옮기고 우리 목록을 쓴다
     public Task A_newer_index_blocks_every_write_and_a_corrupt_one_does_not(string earlier, bool newer) => HeadlessHost.Run(async () =>
     {
@@ -382,10 +382,12 @@ public sealed class PlsqlWorkspacePersistenceTests
                 Assert.Equal(body.Editor.Text, restored.Editor.Text);
                 Assert.Equal(body.BaselineDdlTime, restored.BaselineDdlTime);
 
-                // 접속이 아직 없다: 패키지 본문인데도 명세/본문 전환·실행 키가 꺼져 있다.
+                // 접속이 아직 없다: 실행 키는 꺼져 있다. 명세·본문 두 쪽 글을 함께 저장했으므로 명세/본문 전환은 접속 없이도 된다(PKG1).
                 Assert.Same(restored, PlsqlEditorViewModel.Active);
                 Assert.True(restored.AwaitingSession);
-                Assert.False(keys.Evaluate("isPackageDoc"));
+                Assert.Equal(PlsqlSide.Body, restored.Side);
+                Assert.True(restored.SpecPart!.Loaded);
+                Assert.True(keys.Evaluate("isPackageDoc"));
                 Assert.False(keys.Evaluate("plsqlRunnable"));
                 Assert.NotNull(docking.CloseConfirm!(doc)); // 고친 채 저장한 탭은 닫을 때 묻는다
                 h.Window.UpdateLayout();
@@ -458,9 +460,9 @@ public sealed class PlsqlWorkspacePersistenceTests
         var folder = persistence.Store.Folder;
         await persistence.Store.SaveAsync(new PlsqlWorkspaceFile { Id = "fine", Name = "PL/SQL 1" });
         await File.WriteAllTextAsync(Path.Combine(folder, "bad.json"), "{");
-        const string newer = "{\"schemaVersion\":2,\"id\":\"newer\",\"name\":\"future\",\"tabs\":[]}";
+        const string newer = "{\"schemaVersion\":3,\"id\":\"newer\",\"name\":\"future\",\"tabs\":[]}";
         await File.WriteAllTextAsync(Path.Combine(folder, "newer.json"), newer);
-        await File.WriteAllTextAsync(Path.Combine(folder, "reshaped.json"), "{\"schemaVersion\":2,\"id\":\"reshaped\"}"); // 이 판으로는 읽히지 않는 새 판
+        await File.WriteAllTextAsync(Path.Combine(folder, "reshaped.json"), "{\"schemaVersion\":3,\"id\":\"reshaped\"}"); // 이 판으로는 읽히지 않는 새 판
         await persistence.Store.SaveIndexAsync(new PlsqlWorkspaceIndex { OpenIds = ["gone", "bad", "newer", "reshaped", "fine", "Bad Id"], LastId = "gone" });
         try
         {
@@ -553,6 +555,58 @@ public sealed class PlsqlWorkspacePersistenceTests
 
             Assert.True(File.Exists(Path.Combine(persistence.Store.Folder, keptId + ".json")));
             Assert.Equal([keptId], (await persistence.Store.LoadIndexAsync())!.OpenIds.ToArray());
+        }
+        finally
+        {
+            PlsqlEditorViewModel.Active = null;
+        }
+    });
+
+    [Fact]
+    public Task An_old_workspace_file_with_separate_spec_and_body_tabs_opens_as_one_package_tab_and_is_saved_in_the_new_shape() => HeadlessHost.Run(async () =>
+    {
+        using var h = new ShellHarness();
+        var docking = h.Get<DockWorkspace>();
+        var persistence = Persistence(h);
+        var folder = persistence.Store.Folder;
+        Directory.CreateDirectory(folder);
+        var profile = Guid.NewGuid();
+
+        // 1 판(PKG1 앞) 파일: 명세 탭과 본문 탭이 따로이고, 보이던 탭은 본문이다.
+        var old = $$"""
+            {"schemaVersion":1,"id":"old","name":"PL/SQL 1","activeTab":2,"tabs":[
+              {"title":"새 PL/SQL","text":"-- 메모\n"},
+              {"owner":"SCOTT","name":"PK","type":"PACKAGE","connectionProfileId":"{{profile}}","title":"SCOTT.PK","text":"CREATE OR REPLACE PACKAGE pk AS\nEND;\n"},
+              {"owner":"SCOTT","name":"PK","type":"PACKAGE BODY","connectionProfileId":"{{profile}}","title":"SCOTT.PK (본문)","text":"CREATE OR REPLACE PACKAGE BODY pk AS\nEND;\n","isDirty":true}]}
+            """;
+        await File.WriteAllTextAsync(Path.Combine(folder, "old.json"), old);
+        await persistence.Store.SaveIndexAsync(new PlsqlWorkspaceIndex { OpenIds = ["old"], LastId = "old" });
+        try
+        {
+            await persistence.RestoreAsync(default);
+            Dispatcher.UIThread.RunJobs();
+
+            var workspace = Assert.IsType<PlsqlWorkspaceViewModel>(Assert.Single(docking.Documents).Panel);
+            Assert.Equal(2, workspace.Tabs.Count);
+            var tab = workspace.Tabs[1];
+            Assert.Same(tab, workspace.ActiveTab);
+            Assert.True(tab.HasSides);
+            Assert.Equal(PlsqlSide.Body, tab.Side);
+            Assert.Equal("SCOTT.PK", tab.Title);
+            Assert.StartsWith("CREATE OR REPLACE PACKAGE pk AS", tab.SpecPart!.Editor.Text, StringComparison.Ordinal);
+            Assert.StartsWith("CREATE OR REPLACE PACKAGE BODY pk AS", tab.BodyPart!.Editor.Text, StringComparison.Ordinal);
+            Assert.True(tab.BodyPart.IsDirty);
+            Assert.False(tab.SpecPart.IsDirty);
+
+            tab.SpecPart.Editor.Document.Insert(0, "-- 고침\n");
+            await persistence.SaveChangedAsync(default);
+            var saved = await persistence.Store.LoadAsync("old");
+            Assert.Equal(PlsqlWorkspaceFile.CurrentVersion, saved!.SchemaVersion);
+            Assert.Equal(2, saved.Tabs.Count);
+            Assert.Equal("PACKAGE", saved.Tabs[1].Type);
+            Assert.Equal("PACKAGE BODY", saved.Tabs[1].Body!.Type);
+            Assert.Equal(PlsqlTabFile.BodySide, saved.Tabs[1].Side);
+            Assert.Equal(1, saved.ActiveTab);
         }
         finally
         {

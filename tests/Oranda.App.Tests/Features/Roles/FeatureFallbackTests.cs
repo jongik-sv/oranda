@@ -36,12 +36,13 @@ public sealed partial class FeatureFallbackTests
     {
         using var f = await PlsqlFixture.StartAsync(new FakeFeatureGate().Disable(FeatureIds.PlsqlEditor, FeatureIds.PlsqlWorkspace));
 
-        f.Vm.SchedulePreview(await f.NodeAsync("PACKAGE BODY", "EMP_PKG"));
-        var body = await f.WaitReadOnlyAsync("[읽기 전용] SCOTT.EMP_PKG BODY");
+        // 트리에는 패키지 한 노드뿐이다(PKG1): 읽기 전용 탭은 명세를 연다(본문은 소스 열기 명령 시험이 본다).
+        f.Vm.SchedulePreview(await f.NodeAsync("PACKAGE", "EMP_PKG"));
+        var body = await f.WaitReadOnlyAsync("[읽기 전용] SCOTT.EMP_PKG");
         Assert.True(body.IsReadOnly);
         Assert.False(body.IsDirty);
         Assert.Null(body.FilePath);
-        Assert.Contains("pkg body", body.Text, StringComparison.Ordinal);
+        Assert.Contains("pkg spec", body.Text, StringComparison.Ordinal);
         Assert.Equal(f.Session.Profile.Id, body.ConnectionProfileId);
         Assert.DoesNotContain(f.Ws.Documents, d => d.Panel is PlsqlWorkspaceViewModel); // PL/SQL 작업 공간을 만들지 않는다
         Assert.Contains(f.Ws.Documents, d => d.Panel is SqlWorkspaceViewModel ws && ws.Tabs.Contains(body));
@@ -81,7 +82,7 @@ public sealed partial class FeatureFallbackTests
 
         // 미리보기를 고정으로 다시 열면 그 탭이 고정된다: 다음 미리보기는 또 새 탭.
         Assert.True(await f.Vm.OpenPinnedAsync(await f.NodeAsync("PROCEDURE", "PROC1")));
-        f.Vm.SchedulePreview(await f.NodeAsync("PACKAGE BODY", "EMP_PKG"));
+        Assert.NotNull(await f.Vm.Opener.OpenAsync(new DbObjectRef("SCOTT", "EMP_PKG", "PACKAGE BODY"), f.Session, preview: true, focus: false)); // 본문 참조(읽기 전용은 명세와 따로)
         await f.WaitReadOnlyAsync("[읽기 전용] SCOTT.EMP_PKG BODY");
         Assert.Equal(3, f.Host.Tabs.Count(t => SchemaObjectOpener.ReadOnlySourceOf(t) is not null));
         Assert.Contains("proc1 body", preview.Text, StringComparison.Ordinal);

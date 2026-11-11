@@ -210,6 +210,7 @@
     {"id": "oranda.plan.runActual", "page": "plan/execution-plan"},
     {"id": "oranda.plsql.addToWorkspace", "page": "schema/plsql"},
     {"id": "oranda.plsql.compile", "page": "schema/plsql"},
+    {"id": "oranda.plsql.compileSpecAndBody", "page": "schema/plsql"},
     {"id": "oranda.plsql.openSource", "page": "schema/plsql"},
     {"id": "oranda.plsql.run", "page": "schema/plsql"},
     {"id": "oranda.plsql.runFromBrowser", "page": "schema/plsql"},

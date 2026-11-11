@@ -111,13 +111,13 @@ public sealed class RoleFallbackFlowTests
         Assert.True(rig.App.Gate.IsEnabled(FeatureIds.PlsqlEditor) == false);
         Assert.True(SchemaObjectOpener.IsPlsqlEditorOff(rig.App.Services));
 
-        rig.Vm.SchedulePreview(await rig.NodeAsync("PACKAGE BODY", "EMP_PKG"));
-        var tab = await rig.WaitReadOnlyAsync("[읽기 전용] SCOTT.EMP_PKG BODY");
+        rig.Vm.SchedulePreview(await rig.NodeAsync("PACKAGE", "EMP_PKG")); // 패키지는 명세·본문 한 노드(PKG1)
+        var tab = await rig.WaitReadOnlyAsync("[읽기 전용] SCOTT.EMP_PKG");
 
         Assert.True(tab.IsReadOnly);
         Assert.False(tab.IsDirty);
         Assert.Null(tab.FilePath);
-        Assert.Contains("pkg body", tab.Text, StringComparison.Ordinal);
+        Assert.Contains("pkg spec", tab.Text, StringComparison.Ordinal);
         Assert.Equal(PlsqlOffNotice, rig.Vm.StatusText);
         Assert.DoesNotContain(rig.Ws.Documents, d => d.Panel is PlsqlWorkspaceViewModel); // PL/SQL 작업 공간 문서를 만들지 않는다
         Assert.Contains(rig.Ws.Documents, d => d.Panel is SqlWorkspaceViewModel ws && ws.Tabs.Contains(tab));

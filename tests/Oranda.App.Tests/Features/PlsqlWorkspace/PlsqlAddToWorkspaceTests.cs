@@ -32,24 +32,26 @@ public sealed class PlsqlAddToWorkspaceTests
     });
 
     [Fact]
-    public Task A_package_node_adds_spec_and_body_to_one_workspace_and_shows_the_clicked_one() => HeadlessHost.Run(async () =>
+    public Task A_package_node_adds_one_tab_with_spec_and_body_and_shows_the_clicked_side() => HeadlessHost.Run(async () =>
     {
         using var f = new Fixture();
 
         await f.AddAsync(new DbObjectRef("SCOTT", "PK", "PACKAGE BODY"));
 
         var workspace = Assert.Single(f.Workspaces);
-        Assert.Equal(["PACKAGE", "PACKAGE BODY"], workspace.Tabs.Select(t => t.Target!.ObjectType));
-        Assert.Equal("PACKAGE BODY", workspace.ActiveTab!.Target!.ObjectType);
-        Assert.All(workspace.Tabs, t => Assert.False(t.IsPreviewTab));
+        var tab = Assert.Single(workspace.Tabs); // 명세와 본문은 한 탭(PKG1)
+        Assert.Equal(PlsqlSide.Body, tab.Side);
+        Assert.Equal("PACKAGE BODY", tab.Target!.ObjectType);
+        Assert.True(tab.SpecPart!.Loaded);
+        Assert.False(tab.IsPreviewTab);
 
-        await f.AddAsync(new DbObjectRef("SCOTT", "PK", "PACKAGE")); // 이미 열려 있다: 새 탭 없이 명세를 앞으로
-        Assert.Equal(2, workspace.Tabs.Count);
-        Assert.Equal("PACKAGE", workspace.ActiveTab!.Target!.ObjectType);
+        await f.AddAsync(new DbObjectRef("SCOTT", "PK", "PACKAGE")); // 이미 열려 있다: 새 탭 없이 명세 쪽을 보인다
+        Assert.Same(tab, Assert.Single(workspace.Tabs));
+        Assert.Equal(PlsqlSide.Spec, tab.Side);
     });
 
     [Fact]
-    public Task A_body_that_cannot_be_read_is_dropped_and_only_the_spec_stays() => HeadlessHost.Run(async () =>
+    public Task A_package_without_a_body_opens_with_an_empty_body_side_and_the_create_body_hint() => HeadlessHost.Run(async () =>
     {
         using var f = new Fixture();
         f.Meta.FailTypes.Add("PACKAGE BODY");
@@ -59,6 +61,10 @@ public sealed class PlsqlAddToWorkspaceTests
         var workspace = Assert.Single(f.Workspaces);
         var tab = Assert.Single(workspace.Tabs);
         Assert.Equal("PACKAGE", tab.Target!.ObjectType);
+        Assert.True(tab.BodyPart!.Missing);
+        Assert.False(tab.ShowCreateBodyHint); // 명세 쪽을 보는 동안은 안내가 없다
+        Assert.True(await tab.SwitchSideAsync(PlsqlSide.Body));
+        Assert.True(tab.ShowCreateBodyHint);
     });
 
     [Fact]
@@ -82,7 +88,7 @@ public sealed class PlsqlAddToWorkspaceTests
     });
 
     [Fact]
-    public Task The_missing_half_of_a_package_joins_the_workspace_where_the_other_half_is_open() => HeadlessHost.Run(async () =>
+    public Task The_other_half_of_an_open_package_shows_that_tab_instead_of_a_new_one() => HeadlessHost.Run(async () =>
     {
         using var f = new Fixture();
         var docking = f.H.Get<DockWorkspace>();
@@ -96,7 +102,8 @@ public sealed class PlsqlAddToWorkspaceTests
 
         await f.AddAsync(new DbObjectRef("SCOTT", "PK", "PACKAGE"));
 
-        Assert.Equal(["PACKAGE BODY", "PACKAGE"], home.Tabs.Select(t => t.Target!.ObjectType));
+        Assert.Same(body, Assert.Single(home.Tabs));
+        Assert.Equal(PlsqlSide.Spec, body.Side);
         Assert.Empty(other.Tabs);
     });
 

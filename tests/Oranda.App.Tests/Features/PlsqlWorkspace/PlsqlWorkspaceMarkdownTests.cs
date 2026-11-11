@@ -134,7 +134,7 @@ public sealed class PlsqlWorkspaceMarkdownTests : IDisposable
         var loaded = await store.LoadAsync(workspace.Id);
 
         Assert.Equal("/x/w.plsql-workspace.md", loaded!.SourcePath);
-        Assert.Equal(1, loaded.SchemaVersion);
+        Assert.Equal(PlsqlWorkspaceFile.CurrentVersion, loaded.SchemaVersion);
     }
 
     [Fact]

@@ -46,6 +46,39 @@ public static class PlsqlSourceText
         _ => null,
     };
 
+    /// <summary>명세/본문 쌍의 명세 유형(<c>PACKAGE BODY</c> → <c>PACKAGE</c>, <c>TYPE BODY</c> → <c>TYPE</c>). 그 밖의 유형은 그대로. 명세와 본문은 한 객체로 본다(PKG1).</summary>
+    public static string SpecTypeOf(string objectType) => objectType switch
+    {
+        "PACKAGE BODY" => "PACKAGE",
+        "TYPE BODY" => "TYPE",
+        _ => objectType,
+    };
+
+    /// <summary>본문 유형(<c>PACKAGE BODY</c>·<c>TYPE BODY</c>)이다.</summary>
+    public static bool IsBodyType(string? objectType) => objectType is "PACKAGE BODY" or "TYPE BODY";
+
+    /// <summary>
+    /// 서버에 아직 본문이 없을 때 「본문 만들기」가 넣는 뼈대. <paramref name="specText"/> 의 프로시저·함수 선언마다 빈 구현을 둔다
+    /// (선언 머리는 명세 글 그대로 옮긴다). 명세를 읽지 못하면 빈 본문.
+    /// </summary>
+    public static string BodySkeleton(string specType, string owner, string name, string? specText = null)
+    {
+        var bodyType = SiblingType(SpecTypeOf(specType)) ?? "PACKAGE BODY";
+        var qualified = "\"" + owner.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"." + name;
+        var sb = new StringBuilder();
+        sb.Append(CreatePrefix).Append(bodyType).Append(' ').Append(qualified).Append(" AS\n");
+        foreach (var member in specText is null ? [] : PlsqlMemberScanner.Subprograms(specText))
+        {
+            var statement = member.Kind == PlsqlMemberKind.Procedure ? "NULL;"
+                : member.Head.StartsWith("CONSTRUCTOR", StringComparison.OrdinalIgnoreCase) ? "RETURN;"
+                : "RETURN NULL;";
+            sb.Append("\n  ").Append(member.Head).Append(" IS\n  BEGIN\n    ").Append(statement).Append("\n  END;\n");
+        }
+
+        sb.Append("\nEND").Append(bodyType.StartsWith("PACKAGE", StringComparison.Ordinal) ? " " + name : string.Empty).Append(";\n");
+        return sb.ToString();
+    }
+
     private static readonly Regex StoredHeader = new(
         @"^(?<type>PACKAGE\s+BODY|PACKAGE|PROCEDURE|FUNCTION|TRIGGER|TYPE\s+BODY|TYPE)(?<ws>\s+)(?<name>""[^""]+""|(?>[\w$#]+))(?!\s*\.)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);

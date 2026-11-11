@@ -37,11 +37,9 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         ("SYNONYM", "시노님"),
         ("PROCEDURE", "프로시저"),
         ("FUNCTION", "함수"),
-        ("PACKAGE", "패키지"),
-        ("PACKAGE BODY", "패키지 본문"),
+        ("PACKAGE", "패키지"), // 명세와 본문을 한 줄로(PKG1): 「패키지 본문」 범주는 없다
         ("TRIGGER", "트리거"),
-        ("TYPE", "타입"),
-        ("TYPE BODY", "타입 본문"),
+        ("TYPE", "타입"), // 타입 본문도 같은 줄
         ("DATABASE LINK", "DB 링크"),
         ("JOB", "스케줄러 잡"),
         ("DIRECTORY", "디렉터리"),
@@ -52,7 +50,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         ("JAVA RESOURCE", "Java 리소스"),
     ];
 
-    /// <summary>범주 순서에 있는 객체 유형(필터 콤보 목록).</summary>
+    /// <summary>범주 순서에 있는 객체 유형(필터 콤보 목록). 본문(PACKAGE BODY·TYPE BODY)은 명세 범주에 묶여 따로 없다(PKG1).</summary>
     public static IReadOnlyList<string> KnownTypes { get; } = [.. Categories.Select(c => c.Type)];
 
     /// <summary>범주 순서의 (객체 유형, 트리 제목). 저장 필터 편집의 객체 탭 줄.</summary>

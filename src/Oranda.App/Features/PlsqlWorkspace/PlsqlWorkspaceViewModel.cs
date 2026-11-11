@@ -158,7 +158,7 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
         PlsqlEditorViewModel? replaced = null;
         if (preview && PreviewTab is { } old)
         {
-            if (old.Editor.IsDirty)
+            if (old.IsDirty)
             {
                 Pin(old);
             }
@@ -182,7 +182,7 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
         {
             PreviewTab = tab;
             tab.IsPreviewTab = true;
-            tab.Editor.PropertyChanged += OnPreviewEdited;
+            tab.PropertyChanged += OnPreviewEdited;
         }
         else
         {
@@ -207,7 +207,7 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
             return;
         }
 
-        tab.Editor.PropertyChanged -= OnPreviewEdited;
+        tab.PropertyChanged -= OnPreviewEdited;
         tab.IsPreviewTab = false;
         PreviewTab = null;
         IsTransient = false;
@@ -363,17 +363,17 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
         tab.PropertyChanged -= OnTabPropertyChanged;
         if (ReferenceEquals(PreviewTab, tab))
         {
-            tab.Editor.PropertyChanged -= OnPreviewEdited;
+            tab.PropertyChanged -= OnPreviewEdited;
             PreviewTab = null;
         }
 
         tab.IsPreviewTab = false;
     }
 
-    /// <summary>미리보기 탭에서 글을 고치기 시작하면 고정한다(소스를 읽어 채운 것은 고침이 아니다).</summary>
+    /// <summary>미리보기 탭에서 글을 고치기 시작하면(명세·본문 어느 쪽이든) 고정한다(소스를 읽어 채운 것은 고침이 아니다).</summary>
     private void OnPreviewEdited(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SqlEditorViewModel.IsDirty) && PreviewTab is { Editor.IsDirty: true } tab && ReferenceEquals(sender, tab.Editor))
+        if (e.PropertyName == nameof(PlsqlEditorViewModel.IsDirty) && PreviewTab is { IsDirty: true } tab && ReferenceEquals(sender, tab))
         {
             Pin(tab);
         }
@@ -391,21 +391,21 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
         MixedConnections = Tabs.Select(t => t.Session?.Profile.Id).Where(id => id is not null).Distinct().Skip(1).Any();
 
     /// <summary>PL/SQL 탭 하나라도 실행 중이다(실행 창이 그 탭에서 블록을 돌린다, TSK-14-13). 문서 탭 머리의 실행 중 스피너이 따른다.</summary>
-    public bool HasRunningTab => Tabs.Any(t => t.Editor.Run.IsRunning);
+    public bool HasRunningTab => Tabs.Any(t => t.Run.IsRunning);
 
     /// <summary>실행 중인 PL/SQL 탭마다 「이름 실행 중 · 경과 n초」.</summary>
-    public string RunTip => RunningTabs.Describe(Tabs.Select(t => (t.Title, t.Editor.Run)));
+    public string RunTip => RunningTabs.Describe(Tabs.Select(t => (t.Title, t.Run)));
 
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         foreach (var t in e.OldItems?.OfType<PlsqlEditorViewModel>() ?? [])
         {
-            t.Editor.Run.PropertyChanged -= OnTabRunChanged;
+            t.Run.PropertyChanged -= OnTabRunChanged;
         }
 
         foreach (var t in e.NewItems?.OfType<PlsqlEditorViewModel>() ?? [])
         {
-            t.Editor.Run.PropertyChanged += OnTabRunChanged;
+            t.Run.PropertyChanged += OnTabRunChanged;
         }
 
         OnPropertyChanged(nameof(IsEmpty));

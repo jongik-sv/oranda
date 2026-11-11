@@ -13,6 +13,11 @@ public sealed record CompileErrorItem(CompileError Error)
 {
     public string Kind => Error.IsWarning ? "경고" : "오류";
 
+    /// <summary>오류가 난 쪽(「명세」·「본문」). 패키지·타입 탭만, 그 밖은 null.</summary>
+    public string? Side { get; init; }
+
+    public bool HasSide => Side is not null;
+
     /// <summary>앞 아이콘 키(오류 = 빨간 원, 경고 = 노란 삼각형).</summary>
     public string IconKey => Error.IsWarning ? "warn" : "error";
 
@@ -23,6 +28,7 @@ public sealed record CompileErrorItem(CompileError Error)
 
 /// <summary>
 /// <c>oranda.panel.compileErrors</c> — 마지막으로 컴파일한(또는 연) PL/SQL 탭, 또는 SQL 편집기에서 만든 PL/SQL 객체의 오류·경고 목록. 줄을 고르면 그 탭의 그 줄로 간다(TSK-08-01, TSK-13-28).
+/// 패키지·타입 탭은 줄마다 「명세」·「본문」을 붙이고, 고르면 그 쪽으로 바꿔 그 줄로 간다(PKG1).
 /// </summary>
 [OrandaToolPanel("oranda.panel.compileErrors", ToolPanelKind.Tool, DockLocation.Bottom, Order = 50)]
 public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
@@ -135,7 +141,7 @@ public sealed partial class CompileErrorsViewModel : ToolPanelViewModelBase
 
         foreach (var e in Source.Errors)
         {
-            Items.Add(new CompileErrorItem(e));
+            Items.Add(new CompileErrorItem(e) { Side = Source.SideLabel(e) });
         }
 
         var errors = 0;

@@ -57,7 +57,8 @@ public sealed partial class SchemaBrowserViewModel
             return null;
         }
 
-        return SchemaBrowserSettings.SplitTypes(joined);
+        // 예전에 고른 「패키지 본문」·「타입 본문」은 명세 범주로(PKG1: 본문 범주는 없다).
+        return [.. SchemaBrowserSettings.SplitTypes(joined).Select(SchemaPairs.CategoryOf).Distinct(StringComparer.Ordinal)];
     }
 
     /// <summary>지금 유형 선택을 이 접속의 선택으로 적는다(모든 유형이면 설정에서 지운다).</summary>

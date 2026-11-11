@@ -439,7 +439,7 @@ public sealed partial class SchemaBrowserViewModel
         var query = new ObjectQuery
         {
             Owner = node.Owner,
-            ObjectTypes = f.Types,
+            ObjectTypes = SchemaPairs.WithBodies(f.Types), // 패키지를 고르면 본문도(상태 표)
             NamePattern = SchemaFilter.ToLikePattern(f.Text),
             InvalidOnly = f.InvalidOnly,
         };
@@ -487,22 +487,29 @@ public sealed partial class SchemaBrowserViewModel
         var javaNames = new Dictionary<DbObjectRef, string>(_javaNames);
         var favorites = _favorites;
         var matcher = _matcher;
-        var groups = await Task.Run(
+        var (groups, pairs) = await Task.Run(
             () =>
             {
                 IEnumerable<DbObjectRef> src = objects;
-                if (f.FavoritesOnly)
-                {
-                    src = src.Where(o => favorites.Contains(SchemaSql.FavoriteKey(o)));
-                }
-
                 if (matcher is not null)
                 {
-                    src = src.Where(matcher.Shows); // 저장 필터: 숨긴 유형·유형별 이름 패턴
+                    src = src.Where(matcher.Shows); // 저장 필터: 숨긴 유형·유형별 이름 패턴(본문은 명세 유형 규칙을 따른다)
                 }
 
-                return src.GroupBy(o => o.ObjectType, StringComparer.Ordinal)
+                // 패키지·타입은 명세와 본문을 한 줄로 묶는다(PKG1). 즐겨찾기만 보기는 두 쪽 중 하나라도 즐겨찾기면 보인다.
+                var list = src.ToList();
+                var paired = SchemaPairs.Pair(list.Where(o => SchemaPairs.IsPairType(o.ObjectType)));
+                IEnumerable<DbObjectRef> rest = list.Where(o => !SchemaPairs.IsPairType(o.ObjectType));
+                if (f.FavoritesOnly)
+                {
+                    rest = rest.Where(o => favorites.Contains(SchemaSql.FavoriteKey(o)));
+                    paired = [.. paired.Where(p => new[] { p.Spec, p.Body }.OfType<DbObjectRef>().Any(o => favorites.Contains(SchemaSql.FavoriteKey(o))))];
+                }
+
+                var byRef = paired.ToDictionary(p => p.Ref);
+                var grouped = rest.Concat(paired.Select(p => p.Ref)).GroupBy(o => SchemaPairs.CategoryOf(o.ObjectType), StringComparer.Ordinal)
                     .ToDictionary(g => g.Key, g => (IReadOnlyList<DbObjectRef>)[.. g.OrderBy(o => javaNames.GetValueOrDefault(o, o.Name), StringComparer.Ordinal)], StringComparer.Ordinal);
+                return (grouped, byRef);
             },
             ct);
         if (gen != _generation)
@@ -527,6 +534,7 @@ public sealed partial class SchemaBrowserViewModel
                 CategoryType = type,
                 Parent = node,
                 Items = items,
+                Pairs = SchemaPairs.IsPairType(type) ? items.Where(pairs.ContainsKey).ToDictionary(i => i, i => pairs[i]) : null,
             };
             cat.Children.Add(new SchemaNode(null, SchemaNodeKind.Placeholder, "…"));
             node.Children.Add(cat);
@@ -610,10 +618,12 @@ public sealed partial class SchemaBrowserViewModel
     {
         var invalid = category.Owner is { } owner && _invalidByOwner.TryGetValue(owner, out var set) ? set : null;
         var next = category.Items.Skip(category.Shown).Take(PageSize).ToList();
+        bool IsInvalid(DbObjectRef r) => _filter.InvalidOnly || (invalid?.Contains(SchemaSql.FavoriteKey(r)) ?? false);
         foreach (var r in next)
         {
-            var status = _filter.InvalidOnly || (invalid?.Contains(SchemaSql.FavoriteKey(r)) ?? false) ? "INVALID" : null;
-            category.Children.Add(MakeObject(r, category, status));
+            var pair = category.Pairs?.GetValueOrDefault(r);
+            var status = (pair is null ? IsInvalid(r) : new[] { pair.Spec, pair.Body }.OfType<DbObjectRef>().Any(IsInvalid)) ? "INVALID" : null;
+            category.Children.Add(MakeObject(r, category, status, pair: pair, isInvalid: IsInvalid));
         }
 
         category.Shown += next.Count;
@@ -623,8 +633,12 @@ public sealed partial class SchemaBrowserViewModel
         }
     }
 
-    private SchemaNode MakeObject(DbObjectRef r, SchemaNode? parent, string? status = null, string? detail = null)
+    /// <param name="pair">패키지·타입 노드가 묶은 명세·본문(상태 표). 다른 유형은 null.</param>
+    /// <param name="isInvalid">쪽마다 INVALID 인지(상태 표). 없으면 표를 보이지 않는다(즐겨찾기 줄 — 상태를 읽지 않았다).</param>
+    private SchemaNode MakeObject(DbObjectRef r, SchemaNode? parent, string? status = null, string? detail = null, SchemaPair? pair = null,
+        Func<DbObjectRef, bool>? isInvalid = null)
     {
+        var badges = pair is not null && isInvalid is not null;
         var n = new SchemaNode(this, SchemaNodeKind.Item, DisplayName(r))
         {
             Ref = r,
@@ -633,8 +647,11 @@ public sealed partial class SchemaBrowserViewModel
             Status = status,
             Detail = detail,
             Comment = CommentOf(r),
-            IsFavorite = _favorites.Contains(SchemaSql.FavoriteKey(r)),
+            Pair = pair,
+            SpecState = badges ? SchemaPairs.StateOf(pair!.Spec, isInvalid!, _filter.InvalidOnly) : SchemaPartState.None,
+            BodyState = badges ? SchemaPairs.StateOf(pair!.Body, isInvalid!, _filter.InvalidOnly) : SchemaPartState.None,
         };
+        n.IsFavorite = n.FavoriteKeys.Any(_favorites.Contains);
         n.ResetChildren();
         return n;
     }

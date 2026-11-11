@@ -21,7 +21,7 @@ public class MenuGroupingTests
     private static readonly string[] ViewDuplicates =
         ["oranda.view.outline", "oranda.view.output", "oranda.view.messages", "oranda.view.plan", "oranda.view.rowView", "oranda.view.compileErrors", "oranda.view.templates"];
 
-    private static readonly string[] PlsqlCommands = ["oranda.plsql.compile", "oranda.plsql.run", "oranda.plsql.toggleSpecBody", "oranda.plsql.showServerDiff"];
+    private static readonly string[] PlsqlCommands = ["oranda.plsql.compile", "oranda.plsql.compileSpecAndBody", "oranda.plsql.run", "oranda.plsql.toggleSpecBody", "oranda.plsql.showServerDiff"];
 
     private static readonly string[] MyBatisDocOnly =
         ["oranda.mybatis.save", "oranda.mybatis.formatAll", "oranda.mybatis.undoFormatAll", "oranda.mybatis.checkCombinations", "oranda.mybatis.explainScenario"];
@@ -257,12 +257,12 @@ public class MenuGroupingTests
     // ---- SQL > PL/SQL ▸ ------------------------------------------------------------------
 
     [Fact]
-    public void Sql_menu_has_a_plsql_submenu_with_four_commands_shown_only_for_a_plsql_editor()
+    public void Sql_menu_has_a_plsql_submenu_with_five_commands_shown_only_for_a_plsql_editor()
     {
         var sql = Top("sql");
         var plsql = Sub(sql, "Menu.sql.plsql");
         Assert.Equal("PL/SQL", plsql.Title);
-        Assert.Equal(["oranda.plsql.compile", "oranda.plsql.run", "oranda.plsql.toggleSpecBody", "oranda.plsql.showServerDiff"], Ids(plsql));
+        Assert.Equal(["oranda.plsql.compile", "oranda.plsql.compileSpecAndBody", "oranda.plsql.run", "oranda.plsql.toggleSpecBody", "oranda.plsql.showServerDiff"], Ids(plsql));
         Assert.Equal(1, plsql.Children.Count(c => c.Kind == MenuNodeKind.Separator)); // 컴파일·실행 | 명세/본문·서버 차이
 
         var inPlsql = VisibleIds(sql, Keys("plsqlDocActive", "plsqlEditorFocus"));

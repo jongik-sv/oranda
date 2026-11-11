@@ -71,7 +71,7 @@ public static class PlsqlWorkspaceMarkdown
         var sb = new StringBuilder();
         sb.Append("# ").Append(OneLine(file.Name)).Append('\n').Append('\n');
         sb.Append("<!-- ").Append(MarkerName).Append(' ').Append(CurrentVersion.ToString(CultureInfo.InvariantCulture)).Append(" -->\n");
-        foreach (var tab in file.Tabs)
+        foreach (var tab in PlsqlTabMerge.Split(file.Tabs)) // 패키지·타입 탭은 명세·본문 두 절로(읽을 때 다시 묶는다)
         {
             var isFile = !string.IsNullOrEmpty(tab.FilePath);
             sb.Append('\n').Append("## ").Append(Heading(tab, isFile)).Append('\n').Append('\n');
