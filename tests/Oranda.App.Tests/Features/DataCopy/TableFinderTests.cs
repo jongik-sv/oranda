@@ -336,6 +336,20 @@ public sealed class TableFinderTests : IDisposable
     }
 
     [Fact]
+    public async Task Finder_defaults_to_the_saved_user_when_the_session_reports_a_proxy_user()
+    {
+        // 세션 관리자는 프록시 접속을 드라이버용 proxy[user] 로 바꿔 세션에 둔다. 기본 원본 계정은 저장된 사용자(접속한 스키마)여야 한다.
+        var h = FinderHarness();
+        h.SessionProfile = p => p with { User = "app_proxy[" + p.User + "]", ProxyUser = null };
+        var vm = await h.OpenAsync(TestJobs.Job("프록시 찾기") with { SourceOwner = string.Empty });
+
+        var finder = await vm.CreateTableFinderAsync();
+
+        Assert.NotNull(finder);
+        Assert.Equal("SRC_USER", finder.SelectedOwner);
+    }
+
+    [Fact]
     public async Task Finder_is_not_made_without_a_source_session()
     {
         var h = new DataCopyHarness { RefuseOpen = _ => true };

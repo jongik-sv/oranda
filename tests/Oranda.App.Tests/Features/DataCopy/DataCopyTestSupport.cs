@@ -247,6 +247,12 @@ internal sealed class DataCopyHarness
     /// <summary>참이면 그 접속은 열지 않는다(비밀번호 입력 취소·접속 실패처럼 null). 연 시도는 <see cref="Opened"/> 에 남는다.</summary>
     public Func<ConnectionProfile, bool>? RefuseOpen { get; set; }
 
+    /// <summary>
+    /// 연 세션이 보이는 프로필을 바꿔 쓴다. 실제 세션 관리자는 저장된 프로필을 드라이버용으로 바꿔 세션에 둔다
+    /// (TNS 별칭을 기술자로 펼치고 프록시는 proxy[user] 로, OracleDriverProfile.From). 없으면 받은 프로필 그대로다.
+    /// </summary>
+    public Func<ConnectionProfile, ConnectionProfile>? SessionProfile { get; set; }
+
     /// <summary>DBMS 쌍 판정을 바꿔 쓴다(교차 부품이 등록되지 않은 조립 시험). 없으면 서비스 선택기 없이 쌍 규칙만 본다.</summary>
     public Func<Dbms, Dbms, bool>? PairSupport { get; set; }
 
@@ -270,7 +276,7 @@ internal sealed class DataCopyHarness
                 return Task.FromResult<ISession?>(null);
             }
 
-            var session = new FakeSession(profile);
+            var session = new FakeSession(SessionProfile?.Invoke(profile) ?? profile);
             OpenedSessions.Add(session);
             return Task.FromResult<ISession?>(session);
         },

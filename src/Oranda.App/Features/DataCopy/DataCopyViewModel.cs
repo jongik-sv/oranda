@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.ViewModels;
 using Oranda.Core.Connection;
@@ -42,6 +43,10 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     public string? ClosingWarning { get; private set; }
 
     private readonly SemaphoreSlim _sessionGate = new(1, 1);
+
+    // 이 창이 연 세션마다 열 때 넘긴 저장 프로필(SameConnection 의 비교 기준). 세션이 닫혀 버려지면 함께 사라진다.
+    private readonly ConditionalWeakTable<ISession, ConnectionProfile> _openedWith = new();
+
     private bool _disposed;
     private ResolvedPeriod? _checkedPeriod;
     private CopyJob? _checkedJob;
@@ -406,7 +411,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             var reuse = _sessions is { } pair && SameConnection(pair.Target, target) ? pair.Target : null;
-            var session = reuse ?? await _services.OpenSessionAsync(target, ct).ConfigureAwait(true);
+            var session = reuse ?? await OpenSessionAsync(target, ct).ConfigureAwait(true);
             if (session is null)
             {
                 Say(DataCopyText.SessionsNotOpened, error: true);
@@ -502,7 +507,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             owners = [];
         }
 
-        var defaultOwner = Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : session.Profile.User.ToUpperInvariant();
+        var defaultOwner = Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : OpenedWith(session).User.ToUpperInvariant();
         return new TableFinderViewModel(owners, defaultOwner,
             async (owner, token) =>
             {
@@ -593,7 +598,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var resolution = await CopyTableInput.ResolveAsync((o, n) => metadata.GetNameStepAsync(session, o, n, ct),
-            CopyTableInput.Format(table.Owner, table.Name), Editor.SourceOwner, session.Profile.User.ToUpperInvariant()).ConfigureAwait(true);
+            CopyTableInput.Format(table.Owner, table.Name), Editor.SourceOwner, OpenedWith(session).User.ToUpperInvariant()).ConfigureAwait(true);
         await AddResolutionAsync(resolution, session, ct).ConfigureAwait(true);
     }
 
@@ -615,7 +620,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         {
             input = await MatchNameCaseAsync(input, session, metadata, ct).ConfigureAwait(true);
             var resolution = await CopyTableInput.ResolveAsync((o, n) => metadata.GetNameStepAsync(session, o, n, ct),
-                input, Editor.SourceOwner, session.Profile.User.ToUpperInvariant()).ConfigureAwait(true);
+                input, Editor.SourceOwner, OpenedWith(session).User.ToUpperInvariant()).ConfigureAwait(true);
             await AddResolutionAsync(resolution, session, ct).ConfigureAwait(true);
             return;
         }
@@ -675,7 +680,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         }
 
         // 기본 원본 계정의 후보를 미리 읽기 시작한다(첫 글자를 칠 때 이미 읽고 있거나 끝나 있게). 기다리지 않는다.
-        var owner = Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : session?.Profile.User.ToUpperInvariant() ?? string.Empty;
+        var owner = Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : (session is null ? string.Empty : OpenedWith(session).User.ToUpperInvariant());
         if (session is not null && _services.Metadata is { } metadata && owner.Length > 0)
         {
             _ = OwnerTableNamesAsync(session, metadata, owner, CancellationToken.None);
@@ -696,7 +701,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var dot = typed.IndexOf('.', StringComparison.Ordinal);
-        var owner = dot >= 0 ? typed[..dot].ToUpperInvariant() : (Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : session.Profile.User.ToUpperInvariant());
+        var owner = dot >= 0 ? typed[..dot].ToUpperInvariant() : (Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : OpenedWith(session).User.ToUpperInvariant());
         var prefix = dot >= 0 ? typed[(dot + 1)..] : typed;
         if (owner.Length == 0)
         {
@@ -722,7 +727,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             return input;
         }
 
-        var lookIn = owner ?? (Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : session.Profile.User.ToUpperInvariant());
+        var lookIn = owner ?? (Editor.SourceOwner.Length > 0 ? Editor.SourceOwner : OpenedWith(session).User.ToUpperInvariant());
         var names = await OwnerTableNamesAsync(session, metadata, lookIn, ct).ConfigureAwait(true);
         if (names.Contains(name, StringComparer.Ordinal))
         {
@@ -1118,7 +1123,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
                     return Task.FromResult<ISession?>(reuse);
                 }
 
-                return _services.OpenSessionAsync(profile, token);
+                return OpenSessionAsync(profile, token);
             }
 
             CopySessions? opened;
@@ -1163,13 +1168,33 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>
     /// 열린 세션이 이 프로필로 연 것인지. 접속 ID·이름뿐 아니라 사용자·주소·환경 라벨·읽기 전용까지 같아야 한다
     /// (정책 관문은 세션이 열릴 때 받은 프로필 스냅숏으로 판단하므로, 바뀐 프로필에 옛 세션을 쓰지 않는다). 원본 세션은 늘 읽기 전용으로 연다.
+    /// 비교 기준은 이 창이 세션을 열 때 넘긴 저장 프로필이다(<see cref="OpenedWith"/>): 세션 관리자는 드라이버용으로 바꾼 프로필
+    /// (TNS 별칭 → 기술자, 프록시 → proxy[user])을 세션에 두므로, 세션이 보이는 값과 비교하면 TNS·프록시 접속은 늘 「바뀌었다」가 된다.
     /// </summary>
-    private static bool SameConnection(ISession session, ConnectionProfile profile, bool readOnlySource = false) =>
-        session.Profile.Id == profile.Id && string.Equals(session.Profile.Name, profile.Name, StringComparison.Ordinal)
-        && string.Equals(session.Profile.User, profile.User, StringComparison.Ordinal)
-        && string.Equals(session.Profile.DataSource, profile.DataSource, StringComparison.Ordinal)
-        && session.Profile.Environment == profile.Environment
-        && session.Profile.ReadOnly == (readOnlySource || profile.ReadOnly);
+    private bool SameConnection(ISession session, ConnectionProfile profile, bool readOnlySource = false)
+    {
+        var opened = OpenedWith(session);
+        return opened.Id == profile.Id && string.Equals(opened.Name, profile.Name, StringComparison.Ordinal)
+               && string.Equals(opened.User, profile.User, StringComparison.Ordinal)
+               && string.Equals(opened.DataSource, profile.DataSource, StringComparison.Ordinal)
+               && opened.Environment == profile.Environment
+               && opened.ReadOnly == (readOnlySource || profile.ReadOnly);
+    }
+
+    /// <summary>이 창이 <paramref name="session"/> 을 열 때 넘긴 저장 프로필. 이 창이 연 세션이 아니면 세션이 보이는 프로필.</summary>
+    private ConnectionProfile OpenedWith(ISession session) => _openedWith.TryGetValue(session, out var profile) ? profile : session.Profile;
+
+    /// <summary>세션을 열고 넘긴 저장 프로필을 기억한다(<see cref="SameConnection"/> 의 비교 기준).</summary>
+    private async Task<ISession?> OpenSessionAsync(ConnectionProfile profile, CancellationToken ct)
+    {
+        var session = await _services.OpenSessionAsync(profile, ct).ConfigureAwait(true);
+        if (session is not null)
+        {
+            _openedWith.AddOrUpdate(session, profile);
+        }
+
+        return session;
+    }
 
     private static bool SameSnapshot(ConnectionProfile a, ConnectionProfile b) =>
         a.Id == b.Id && string.Equals(a.Name, b.Name, StringComparison.Ordinal) && string.Equals(a.User, b.User, StringComparison.Ordinal)
@@ -1207,7 +1232,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
             ISession? opened = null;
             try
             {
-                opened = await _services.OpenSessionAsync(source.Profile with { ReadOnly = true }, ct).ConfigureAwait(true);
+                opened = await OpenSessionAsync(source.Profile with { ReadOnly = true }, ct).ConfigureAwait(true);
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
@@ -1251,7 +1276,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         }
 
         // 규칙마다 원본 계정이 다를 수 있다(시노님으로 더한 다른 계정의 표).
-        var owner = Editor.EffectiveSource(rule) is { Length: > 0 } ruleOwner ? ruleOwner : session.Profile.User.ToUpperInvariant();
+        var owner = Editor.EffectiveSource(rule) is { Length: > 0 } ruleOwner ? ruleOwner : OpenedWith(session).User.ToUpperInvariant();
         await Editor.LoadColumnsAsync(rule, new DbObjectRef(owner, rule.Table, "TABLE"), session, ct).ConfigureAwait(true);
         Say(Editor.Notice.Length > 0 ? Editor.Notice : $"{owner}.{rule.Table} 의 열 정보를 읽었습니다.", Editor.Notice.Length > 0);
     }
@@ -1457,7 +1482,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
         // 대상 계정이 둘 이상이거나 접속 계정이 아닌 계정에 쓰면 계정별 지울 표를 보이고 묻는다(결정 B-2 a, 기본 단추 취소).
         // 먼저 묻고 그 뒤에 직전 확인(PreflightAsync)을 한다: 대화상자가 떠 있는 사이에 접속 설정이 바뀌어도 바뀐 접속으로 실행하지 않는다.
         var job = CurrentJob;
-        var sessionUser = (_checkedTarget?.User ?? _sessions?.Target.Profile.User ?? string.Empty).ToUpperInvariant();
+        var sessionUser = (_checkedTarget?.User ?? (_sessions is { } pair ? OpenedWith(pair.Target).User : string.Empty)).ToUpperInvariant();
         if (RunConfirmation.For(job, sessionUser) is { } confirmation)
         {
             if (ConfirmRun is not { } ask)
@@ -1496,7 +1521,7 @@ public sealed partial class DataCopyViewModel : ViewModelBase, IAsyncDisposable
 
         // 확인한 작업·대상 접속 계정 그대로인지 한 번 더 본다(직전 확인이 점검한 것과 같은지 봤지만, 물은 내용과도 같아야 한다).
         if (!ReferenceEquals(job, CurrentJob)
-            || !string.Equals(sessions.Target.Profile.User.ToUpperInvariant(), sessionUser, StringComparison.Ordinal))
+            || !string.Equals(OpenedWith(sessions.Target).User.ToUpperInvariant(), sessionUser, StringComparison.Ordinal))
         {
             Precheck.Invalidate();
             _checkedJob = null;

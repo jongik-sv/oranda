@@ -291,6 +291,47 @@ public sealed class PrecheckStepTests
         Assert.Equal(["SRC", "TGT", "SRC", "SRC"], h.Opened.Select(p => p.Name));
     }
 
+    // 세션 관리자는 저장된 프로필을 드라이버용으로 바꿔 세션에 둔다(TNS 별칭 → 기술자, 프록시 → proxy[user]).
+    // 같은 접속인지는 세션을 열 때 넘긴 저장 프로필로 판단해야 한다: 세션이 보이는 값과 비교하면 늘 「바뀌었다」가 된다.
+    private static ConnectionProfile DriverForm(ConnectionProfile p) => p with
+    {
+        DataSource = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=db.example)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=" + p.Name + ")))",
+        TnsAdmin = null,
+        User = "proxy[" + p.User + "]",
+        ProxyUser = null,
+    };
+
+    [Fact]
+    public async Task Run_starts_when_sessions_report_the_driver_form_of_a_tns_or_proxy_profile()
+    {
+        var h = new DataCopyHarness { SessionProfile = DriverForm };
+        var vm = await h.OpenAsync(TestJobs.Job("TNS 별칭", rules: TestJobs.Rule("ORDERS")));
+
+        await vm.GoToPrecheckAsync();
+        Assert.True(vm.Precheck.CanRun);
+        await vm.StartRunAsync();
+
+        Assert.False(vm.StatusIsError, vm.StatusText);
+        Assert.Equal(1, h.Runner.Calls);
+        Assert.Equal(DataCopyStep.Run, vm.Step);
+        Assert.Equal(["SRC", "TGT"], h.Opened.Select(p => p.Name)); // 실행 직전 확인이 세션을 닫고 다시 열지 않는다
+    }
+
+    [Fact]
+    public async Task Precheck_again_keeps_sessions_that_report_the_driver_form()
+    {
+        var h = new DataCopyHarness { SessionProfile = DriverForm };
+        h.Metadata.Tables[new DbObjectRef("APP", "ORDERS", "TABLE")] = TestJobs.Table("ORDERS", TestJobs.Column("ORDER_ID", "NUMBER", 1));
+        var vm = await h.OpenAsync(TestJobs.Job("TNS 다시 점검", rules: TestJobs.Rule("ORDERS")));
+
+        await vm.LoadColumnsAsync(vm.Editor.Rules[0]); // 열 정보용 원본 세션을 점검 쌍이 넘겨 쓴다
+        await vm.GoToPrecheckAsync();
+        await vm.GoToPrecheckAsync();
+
+        Assert.Equal(["SRC", "TGT"], h.Opened.Select(p => p.Name)); // 비밀번호를 다시 묻지 않는다
+        Assert.All(h.OpenedSessions, s => Assert.Equal(0, s.DisposeCount));
+    }
+
     [Fact]
     public async Task Precheck_reuses_the_source_session_opened_for_column_info_and_closes_each_session_once()
     {
