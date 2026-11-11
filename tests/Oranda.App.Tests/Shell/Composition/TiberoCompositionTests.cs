@@ -9,6 +9,7 @@ using Oranda.Tibero;
 namespace Oranda.App.Tests.Shell.Composition;
 
 // 소유: tb-skel S3(D-046). 앱 조립이 Oranda.Tibero 를 늦게 읽어 Dbms.Tibero 키 구현을 DBMS 표에 올린다.
+[Collection(TiberoDriverEnvironment.Name)]
 public class TiberoCompositionTests
 {
     private static ServiceContainer Compose() =>
@@ -85,14 +86,35 @@ public class TiberoCompositionTests
             return; // 드라이버 있는 빌드는 실제 접속을 시도하므로 여기서는 다루지 않는다.
         }
 
-        using var c = Compose();
-        var probe = c.GetRequiredService<IDbmsServiceSelector>().Get<IConnectionProbe>(Dbms.Tibero);
-        var profile = new ConnectionProfile("t", "u", "h:8629/d", Dbms: Dbms.Tibero);
+        // 드라이버 탐색은 환경 변수가 설정보다 먼저다(제품 규칙). 이 PC 의 ORANDA_TIBERO_DRIVER 가 진짜 드라이버를 가리키면
+        // 실제 접속 오류가 나오므로, 변수를 비워(설정 경로도 임시 데이터 폴더라 비어 있다) 「드라이버 지정 없음」을 시험이 직접 만든다. 끝나면 원래 값으로 되돌린다.
+        var previous = Environment.GetEnvironmentVariable(TiberoDriverEnvironment.Variable);
+        Environment.SetEnvironmentVariable(TiberoDriverEnvironment.Variable, null);
+        ServerProbeResult result;
+        try
+        {
+            using var c = Compose();
+            var probe = c.GetRequiredService<IDbmsServiceSelector>().Get<IConnectionProbe>(Dbms.Tibero);
+            var profile = new ConnectionProfile("t", "u", "h:8629/d", Dbms: Dbms.Tibero);
 
-        var result = await probe.ProbeAsync(profile, "pw", CancellationToken.None);
+            result = await probe.ProbeAsync(profile, "pw", CancellationToken.None);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(TiberoDriverEnvironment.Variable, previous);
+        }
 
         Assert.False(result.Succeeded);
         Assert.Contains("Tibero", result.Message, StringComparison.Ordinal);
         Assert.Contains("드라이버", result.Message, StringComparison.Ordinal);
     }
+}
+
+/// <summary>프로세스 전역 환경 변수 ORANDA_TIBERO_DRIVER 를 건드리는 시험은 다른 시험과 겹치지 않게 차례로 돈다.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class TiberoDriverEnvironment
+{
+    public const string Name = "TiberoDriverEnvironment";
+
+    public const string Variable = "ORANDA_TIBERO_DRIVER";
 }
