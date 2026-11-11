@@ -38,11 +38,11 @@ public class ExternalProcessRunnerTests
             return;
         }
 
-        // sort 는 표준 입력이 닫혀야 끝난다.
-        var result = await new ExternalProcessRunner().RunAsync(CmdStart("sort", input: "b\na\n"), CancellationToken.None);
+        // findstr 는 표준 입력이 닫혀야(EOF) 끝나고 ASCII 줄을 그대로 내보낸다(sort 는 콘솔 코드 페이지에 따라 출력이 깨진다).
+        var result = await new ExternalProcessRunner().RunAsync(CmdStart("findstr .", input: "b\r\na\r\n"), CancellationToken.None);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Equal(["a", "b"], result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        Assert.Equal(["b", "a"], result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     [Fact]
