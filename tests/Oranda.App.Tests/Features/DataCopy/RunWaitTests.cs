@@ -76,9 +76,11 @@ public sealed class RunWaitTests
     });
 
     [Fact]
-    public async Task A_result_with_abandoned_sessions_closes_the_session_pair_blocks_retry_and_asks_for_a_new_precheck()
+    public Task A_result_with_abandoned_sessions_closes_the_session_pair_blocks_retry_and_asks_for_a_new_precheck() => HeadlessHost.Run(async () =>
     {
         // 리뷰 PF1-3: 실행기가 돌아오지 않는 명령 때문에 세션을 버렸다 → 앱이 그 세션 쌍을 닫는다(다음 점검이 새로 연다).
+        // 상태 글은 화면 언어(LiteralTranslator, 프로세스에 하나)로 번역된다. 이 시험이 xunit 스레드에서 돌면 같은 때 UI 스레드에서
+        // 영어로 묶는 다른 시험과 겹쳐 영어 글을 받는다. 다른 Headless 시험처럼 UI 스레드에서 한국어로 다시 묶은 뒤 돈다.
         var h = new DataCopyHarness();
         var failed = new FailedRow("ORDERS", new Dictionary<string, string?> { ["ID"] = "1" }, "ORA-00001");
         h.Runner.Behavior = _ => Task.FromResult(TestJobs.Result(CopyOutcome.Failed, failed) with { TargetAbandoned = true });
@@ -95,7 +97,7 @@ public sealed class RunWaitTests
         Assert.False(vm.Run.CanRetry); // 버린 세션으로 실패 행을 다시 넣지 않는다
         Assert.False(vm.Precheck.CanRun); // 다시 점검해야 실행할 수 있다
         Assert.Equal(DataCopyText.SessionsAbandoned, vm.StatusText);
-    }
+    });
 
     [Fact]
     public void Overlap_and_wait_limit_options_load_and_save()

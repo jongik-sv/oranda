@@ -25,11 +25,15 @@ public class ExternalToolProbeTests
         {
             var prefix = searchPattern.TrimEnd('*');
             return Directories
-                .Where(d => string.Equals(Path.GetDirectoryName(d), path.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)
-                            || (path.EndsWith('\\') && string.Equals(Path.GetDirectoryName(d), path, StringComparison.OrdinalIgnoreCase)))
-                .Where(d => Path.GetFileName(d).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Where(d => string.Equals(Parent(d), path.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                .Where(d => Name(d).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }
+
+        // 가짜 폴더 경로는 Windows 꼴(C:\x\y)이다. System.IO.Path 는 macOS·Linux 에서 '\\' 를 구분자로 보지 않으므로 직접 나눈다.
+        private static string Parent(string path) => path[..Math.Max(path.LastIndexOfAny(['\\', '/']), 0)];
+
+        private static string Name(string path) => path[(path.LastIndexOfAny(['\\', '/']) + 1)..];
     }
 
     private sealed class FakeRunner(Func<ExternalProcessStart, ExternalProcessResult> run) : IExternalProcessRunner
@@ -124,11 +128,11 @@ public class ExternalToolProbeTests
     {
         var env = new FakeEnvironment { IsWindows = false };
         env.Variables["PATH"] = "/usr/bin:/opt/oracle/ic";
-        env.Files.Add(Path.Combine("/opt/oracle/ic", "sqlldr"));
+        env.Files.Add("/opt/oracle/ic/sqlldr");
 
         var location = new ExternalToolProbe(Output(string.Empty), env).Locate(ExternalLoaderKind.SqlLoader, null);
 
-        Assert.Equal(Path.Combine("/opt/oracle/ic", "sqlldr"), location.Path);
+        Assert.Equal("/opt/oracle/ic/sqlldr", location.Path);
     }
 
     [Theory]

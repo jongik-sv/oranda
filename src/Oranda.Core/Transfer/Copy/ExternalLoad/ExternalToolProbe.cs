@@ -88,7 +88,7 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
             }
 
             searched.Add(directory);
-            var path = Path.Combine(directory, exe);
+            var path = Combine(directory, exe);
             if (_environment.FileExists(path))
             {
                 return new ExternalToolLocation(kind, path, FromSettings: false, searched);
@@ -215,7 +215,7 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
 
         if (_environment.DirectoryExists(configured))
         {
-            foreach (var candidate in new[] { Path.Combine(configured, exe), Path.Combine(configured, "bin", exe) })
+            foreach (var candidate in new[] { Combine(configured, exe), Combine(configured, "bin", exe) })
             {
                 if (_environment.FileExists(candidate))
                 {
@@ -239,8 +239,8 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
         {
             if (Variable("TB_HOME") is { } tbHome)
             {
-                yield return Path.Combine(tbHome, "client", "bin");
-                yield return Path.Combine(tbHome, "bin");
+                yield return Combine(tbHome, "client", "bin");
+                yield return Combine(tbHome, "bin");
             }
 
             yield break;
@@ -248,7 +248,7 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
 
         if (Variable("ORACLE_HOME") is { } oracleHome)
         {
-            yield return Path.Combine(oracleHome, "bin");
+            yield return Combine(oracleHome, "bin");
             yield return oracleHome; // Instant Client 를 ORACLE_HOME 으로 둔 경우
         }
 
@@ -272,7 +272,7 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
 
             if (Variable("LOCALAPPDATA") is { } localAppData)
             {
-                roots.Add(Path.Combine(localAppData, "Programs"));
+                roots.Add(Combine(localAppData, "Programs"));
             }
         }
         else
@@ -289,7 +289,7 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
         var library = _environment.IsWindows ? "oci.dll" : "libclntsh.so";
         foreach (var directory in pathDirectories)
         {
-            if (_environment.FileExists(Path.Combine(directory, library)) && Path.GetDirectoryName(directory.TrimEnd('\\', '/')) is { Length: > 0 } parent)
+            if (_environment.FileExists(Combine(directory, library)) && Parent(directory) is { Length: > 0 } parent)
             {
                 roots.Add(parent);
             }
@@ -298,7 +298,7 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
         var found = new List<string>();
         foreach (var root in roots)
         {
-            found.AddRange(_environment.GetDirectories(root, "instantclient*").OrderByDescending(VersionKey, VersionKeyComparer.Instance));
+            found.AddRange(_environment.GetDirectories(root, "instantclient*").OrderByDescending(d => VersionKey(FileName(d)), VersionKeyComparer.Instance));
         }
 
         return found;
@@ -320,6 +320,85 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
     }
 
     private string? Variable(string name) => _environment.GetVariable(name) is { } v && !string.IsNullOrWhiteSpace(v) ? v.Trim() : null;
+
+    // 경로 조합·분해는 실행 중인 OS 가 아니라 환경(IsWindows)의 규칙을 따른다. 환경이 이 OS 와 같은 규칙이면(실제 환경은 늘 그렇다)
+    // System.IO.Path 를 그대로 쓰고, 다른 OS 를 흉내 낸 환경(예: macOS·Linux 에서 도는 Windows 가짜 환경)일 때만 그 OS 의 구분자로 직접 나눈다.
+    private bool NativeRules => _environment.IsWindows == OperatingSystem.IsWindows();
+
+    private char Separator => _environment.IsWindows ? '\\' : '/';
+
+    private bool IsSeparator(char c) => c == '/' || (_environment.IsWindows && c == '\\');
+
+    /// <summary><see cref="Path.Combine(string[])"/> 와 같게 잇는다(앞 조각이 구분자·드라이브 콜론으로 끝나면 덧붙이지 않는다). 뒤 조각은 상대 이름만 온다.</summary>
+    private string Combine(string first, params string[] rest)
+    {
+        if (NativeRules)
+        {
+            return Path.Combine([first, .. rest]);
+        }
+
+        var result = first;
+        foreach (var part in rest)
+        {
+            var joined = result.Length == 0 || IsSeparator(result[^1]) || (_environment.IsWindows && result[^1] == ':');
+            result = joined ? result + part : result + Separator + part;
+        }
+
+        return result;
+    }
+
+    /// <summary>끝 구분자를 뗀 경로의 부모(<see cref="Path.GetDirectoryName(string)"/> 처럼 <c>C:\x</c> → <c>C:\</c>, <c>/x</c> → <c>/</c>). 없으면 null.</summary>
+    private string? Parent(string path)
+    {
+        var trimmed = TrimEndSeparators(path);
+        if (NativeRules)
+        {
+            return Path.GetDirectoryName(trimmed);
+        }
+
+        var index = LastSeparator(trimmed);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        var parent = trimmed[..index];
+        return parent.Length == 0 || (_environment.IsWindows && parent.Length == 2 && parent[1] == ':') ? parent + trimmed[index] : parent;
+    }
+
+    /// <summary>끝 구분자를 뗀 경로의 마지막 이름.</summary>
+    private string FileName(string path)
+    {
+        var trimmed = TrimEndSeparators(path);
+        return NativeRules ? Path.GetFileName(trimmed) : trimmed[(LastSeparator(trimmed) + 1)..];
+    }
+
+    /// <summary>끝 구분자를 뗀다(예전 <c>TrimEnd('\\', '/')</c> 와 같되, 그 OS 의 구분자만).</summary>
+    private string TrimEndSeparators(string path) => NativeRules ? path.TrimEnd('\\', '/') : TrimForeign(path);
+
+    private string TrimForeign(string path)
+    {
+        var end = path.Length;
+        while (end > 0 && IsSeparator(path[end - 1]))
+        {
+            end--;
+        }
+
+        return path[..end];
+    }
+
+    private int LastSeparator(string path)
+    {
+        for (var i = path.Length - 1; i >= 0; i--)
+        {
+            if (IsSeparator(path[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     private static string NotFoundProblem(ExternalToolLocation location)
     {
@@ -354,8 +433,8 @@ public sealed partial class ExternalToolProbe(IExternalProcessRunner runner, IEx
         int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : null;
 
     /// <summary>폴더 이름의 수 목록(<c>instantclient_23_4</c> → [23, 4]).</summary>
-    private static int[] VersionKey(string directory) =>
-        FirstInteger().Matches(Path.GetFileName(directory.TrimEnd('\\', '/')))
+    private static int[] VersionKey(string name) =>
+        FirstInteger().Matches(name)
             .Select(m => int.TryParse(m.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : 0)
             .ToArray();
 

@@ -14,7 +14,10 @@ namespace Oranda.App.Tests.Features.Tuning;
 /// <summary>
 /// TSK-06-07 「튜닝 보고서 만들기」 대화 상자(Headless): 상태마다(준비·운영·팩 있음·접속 없음·만드는 중·오류) 창이 뜨고 단추가 맞게 켜진다.
 /// <c>ORANDA_RENDER_DIR</c> 이 있으면 라이트·다크 PNG 와 보고서 예시(sample-report.html)를 남긴다.
+/// 영어 창 시험(<see cref="English_dialog_has_no_korean_left"/>)이 프로세스에 하나인 화면 글자 조회를 영어로 묶으므로, 그동안 병렬로 한국어 글을
+/// 단정하는 시험(예: RunWaitTests)이 영어 글을 받지 않게 언어 묶음(병렬 시험이 다 끝난 뒤 따로 돈다)에 넣는다.
 /// </summary>
+[Collection("UiLanguage")]
 public sealed class TuningReportHeadlessTests
 {
     private static void Pump()
