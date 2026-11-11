@@ -474,6 +474,8 @@ public static class PrecheckRules
     /// 교차 복사로 Oracle CHAR 열을 Tibero 에 넣을 때의 안내(<see cref="CopyCheckCodes.CharPadDiffers"/>, 통과 항목, 표마다 하나).
     /// Oracle 은 CHAR 를 바이트로 채우고 Tibero CHAR(n CHAR) 는 글자 수로 채워, 여러 바이트 글자가 든 값은 뒤 공백 수가 달라진다.
     /// 복사 열(<paramref name="columns"/>) 가운데 원본·대상이 모두 CHAR 인 열이 있을 때만 낸다. 교차가 아니거나 방향이 Oracle → Tibero 가 아니면 null.
+    /// 대상 열이 바이트 단위로 남는 큰 CHAR(<see cref="CrossTableMap.TiberoByteKeptColumns"/>, TR1 위험 2: 예 Oracle <c>CHAR(2000 CHAR)</c> → Tibero <c>CHAR(2000 BYTE)</c>)는
+    /// Tibero 도 바이트로 채워 공백 수가 같으므로 뺀다(TR1b, win144 W2 에서 값 같음 확인).
     /// </summary>
     public static CheckItem? CrossCharPadNote(Dbms sourceDbms, Dbms targetDbms, TableInfo source, TableInfo target, IReadOnlyList<string> columns, string table)
     {
@@ -486,12 +488,14 @@ public static class PrecheckRules
         }
 
         var targetColumns = target.Columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
+        var byteKept = CrossTableMap.TiberoByteKeptColumns(targetDbms, target).Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
         var chars = source.Columns
             .Where(c => !c.IsVirtual
                         && columns.Contains(c.Name, StringComparer.Ordinal)
                         && CrossTypeMap.Normalize(c.DataType) == "CHAR"
                         && targetColumns.TryGetValue(c.Name, out var t)
-                        && CrossTypeMap.Normalize(t.DataType) == "CHAR")
+                        && CrossTypeMap.Normalize(t.DataType) == "CHAR"
+                        && !byteKept.Contains(c.Name))
             .Select(c => c.Name)
             .ToList();
         return chars.Count == 0

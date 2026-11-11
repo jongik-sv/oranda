@@ -377,6 +377,31 @@ public sealed class CopyPrecheckCrossDbmsTests
         Assert.DoesNotContain(same.Items, i => i.Code == CopyCheckCodes.CharPadDiffers);
     }
 
+    /// <summary>
+    /// TR1b: 바이트 길이가 글자 길이와 같은 큰 CHAR(Oracle <c>CHAR(2000 CHAR)</c> 는 2000바이트 한도에 걸려 DATA_LENGTH = CHAR_LENGTH = 2000)는 Tibero 에
+    /// <c>CHAR(2000 BYTE)</c> 로 만들어져(<see cref="CrossTableMap.TiberoByteKeptColumns"/>) 바이트로 채우므로 공백 안내를 내지 않는다. 작은 CHAR 는 그대로 안내한다.
+    /// </summary>
+    [Fact]
+    public async Task A_large_char_kept_in_bytes_for_tibero_gets_no_trailing_space_note_but_a_small_char_still_does()
+    {
+        ColumnInfo[] Columns() =>
+        [
+            new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false },
+            new ColumnInfo("BIG", 2, "CHAR") { Length = 2000, ByteLength = 2000 },
+            new ColumnInfo("SMALL", 3, "CHAR") { Length = 10, ByteLength = 40 },
+        ];
+
+        var report = await new Fixture(Dbms.Oracle, Dbms.Tibero, source: Table("SRC", Columns()), target: Table("DST", Columns())).RunAsync();
+
+        var note = Assert.Single(report.Items, i => i.Code == CopyCheckCodes.CharPadDiffers);
+        Assert.Contains("CHAR(n CHAR) 열 SMALL ", note.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("BIG", note.Message, StringComparison.Ordinal);
+
+        ColumnInfo[] OnlyBig() => [new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, new ColumnInfo("BIG", 2, "CHAR") { Length = 2000, ByteLength = 2000 }];
+        var bigOnly = await new Fixture(Dbms.Oracle, Dbms.Tibero, source: Table("SRC", OnlyBig()), target: Table("DST", OnlyBig())).RunAsync();
+        Assert.DoesNotContain(bigOnly.Items, i => i.Code == CopyCheckCodes.CharPadDiffers);
+    }
+
     [Theory]
     [InlineData(Dbms.Tibero, Dbms.Oracle, "SEQ_ORD.NEXTVAL", "\"ID\" NUMBER DEFAULT SEQ_ORD.NEXTVAL NOT NULL")]
     [InlineData(Dbms.Oracle, Dbms.Tibero, "\"SRC\".\"SEQ_ORD\".\"NEXTVAL\"", "\"ID\" NUMBER DEFAULT \"DST\".\"SEQ_ORD\".\"NEXTVAL\" NOT NULL")]

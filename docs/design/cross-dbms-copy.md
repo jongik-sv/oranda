@@ -135,7 +135,7 @@
 
 ### 3.5 주의 (실서버 시험 XC10)
 
-- Oracle `CHAR(n CHAR)` → Tibero: Oracle 은 CHAR 를 바이트로, Tibero 는 글자 수로 공백을 채워 뒤 공백 수가 달라질 수 있다(점검 `CharPadDiffers`, 통과 안내).
+- Oracle `CHAR(n CHAR)` → Tibero: Oracle 은 CHAR 를 바이트로, Tibero 는 글자 수로 공백을 채워 뒤 공백 수가 달라질 수 있다(점검 `CharPadDiffers`, 통과 안내). 단 바이트 한도에 걸린 큰 CHAR(예 `CHAR(2000 CHAR)`, 사전 DATA_LENGTH = CHAR_LENGTH)는 TR1 이후 Tibero 에 `CHAR(n BYTE)` 로 만들어져(`CrossTableMap.TiberoByteKeptColumns`) 바이트로 채우므로 값·길이가 같고 안내를 내지 않는다(TR1b, win144 W2 확인).
 - Tibero `VARCHAR(n CHAR)` → Oracle: DDL 은 `VARCHAR2(n CHAR)` 그대로이나 Oracle 은 4000바이트를 넘는 값을 받지 못해 그 행이 실패한다(ORA-12899). 점검 `CrossStringBytes`(확인): 복사 열의 짧은 쪽 길이 × 4바이트(UTF-8 최대) > 4000 인 VARCHAR2 열을 알린다(MAX_STRING_SIZE 는 읽지 않고 STANDARD 로 봄).
 - 기본값 `시퀀스.NEXTVAL`(양방향 테이블 만들기, 같은 DBMS 포함 — 조정 결정 76 이 결정 50 을 대신함): 원본 테이블에 연결된 시퀀스(열 DEFAULT + 「없으면 만들기」 표는 그 표 트리거가 참조하는 시퀀스, `copy.trigger_sequences`)를 대상 스키마 `ALL_SEQUENCES` 에서 찾아 없으면 테이블보다 먼저 원본 속성(`copy.sequence_attrs`)으로 만든다(점검 `SequenceCreated`, 계획 `CopyTablePlan.CreateSequences`, 문장 `CopySequenceDdl`). 만들 수 없으면(CREATE SEQUENCE 권한 없음·속성 못 읽음·다른 계정 시퀀스) 그 열의 DEFAULT 만 빼고 만든다(`SequenceDefaultDropped`). 대상에 이미 있으면 건드리지 않고 다음 값이 원본 키 최댓값 이하면 `SequenceBehind`. 실행기는 적재 뒤 키 최댓값이 START WITH 이상이면 `ALTER SEQUENCE … INCREMENT BY` 로 맞추고(DROP 없음), 쓰는 표를 모두 지우면 `DROP SEQUENCE`(미리 보기에 있음). 미리 보기·실행 DDL 은 같은 계획 구조에서 나온다. 같은 DBMS 복사는 바꾸지 않는다. 대상이 Oracle 11g(주 버전 11 이하)이면 시퀀스가 있어도 DEFAULT 시퀀스.NEXTVAL 을 쓸 수 없어(12c 부터, ORA-00984) 모든 시퀀스 기본값을 빼고 같은 항목(`SequenceDefaultDropped`)으로 알린다(XC8e).
 
@@ -164,7 +164,7 @@
 ## 7. XC10 실측으로 정한 것 (win144 #137, Oracle 26ai + Tibero 6.2.15)
 
 - **Tibero VARCHAR(n CHAR) 다바이트 값 → Oracle 4000B 초과**: 만든 열은 `VARCHAR2(n CHAR)` 그대로이고 4000바이트를 넘는 행은 ORA-12899 로 그 행만 실패한다(PartiallyFailed). 결정(xc-core XC8d): 열은 그대로 두고 사전 점검 안내를 낸다.
-- **Oracle CHAR(n CHAR) → Tibero**: Oracle 은 바이트로, Tibero 는 글자로 채워 뒤 공백 수가 다르다(값은 같음). 결정: 안내 + 문서(값을 맞추지 않음).
+- **Oracle CHAR(n CHAR) → Tibero**: Oracle 은 바이트로, Tibero 는 글자로 채워 뒤 공백 수가 다르다(값은 같음). 결정: 안내 + 문서(값을 맞추지 않음). TR1(D-064) 이후 `CHAR(2000 CHAR)` 처럼 글자 단위로 쓰면 Tibero CHAR 한도(2000바이트)를 넘을 수 있는 열은 `CHAR(2000 BYTE)` 로 만들어 공백 수까지 같다(TR1b, win144 W2: 3행 값 같음, 열 CHAR|2000|2000|B).
 - **Tibero DEFAULT seq.NEXTVAL → Oracle**: 카탈로그 저장 모양은 `이름.NEXTVAL`(소유자·따옴표 없음) → Oracle 대상 스키마의 같은 이름 시퀀스를 가리킨다. 대상에 시퀀스가 없으면 CREATE 가 ORA-02289 로 실패하고 점검 안내도 없었다. 결정: 그 DEFAULT 를 빼고 테이블을 만들고 안내한다. 뒤의 결정 76(SQ1): 시퀀스를 먼저 만들고 DEFAULT 는 그대로 둔다(만들 수 없을 때만 뺀다).
 - **새 테이블에 딸린 객체(SQ2, 결정 78)**: 적재 뒤 함수 기반 인덱스(`ICopyRecreateStep.IndexColumnsAsync` = 객체 상세의 인덱스 열 조회)·원본 트리거·원본 권한(「없으면 만들기」만, 원본 세션 `CaptureAsync`)·작업 밖 부모 FK(대상에 부모가 있을 때, NOVALIDATE 로 바꾸지 않음)를 만든다(`CompanionDdl`, 점검 `CompanionObjects`). 못 만든 것은 부분 실패 알림.
 - **외부 적재 도구(XL1·XL2, 결정 88·89)**: 적재 방식 `LoadMethod`(전체 기본값 `TableDefaults.Load` + 테이블 `TableRule.Load`, null = 기본값 따름, 스키마 버전 그대로). 판정 `CopyLoad`(사전 점검 `ExternalLoad`/`ExternalLoadFallback`), 실행 `CopyRunner.External.cs`: 대상 커밋 → 원본 → 이식 값 → 데이터 파일(`LoaderDataWriter`, 레코드 끝 0x1E 0x0A, LOB 은 값마다 파일) → 제어 파일 → 도구(만든 테이블 = direct path, 이미 있는 테이블 = 일반 경로) → 로그·거절 행(키는 `keys.txt`) → 실패면 정리 뒤 기본 방식. MERGE 로 넣는 테이블·「모두 끝난 뒤 한 번」·기본 인증 아님 = 기본 방식. 비밀번호 = 표준 입력(차선 = 현재 사용자만 읽는 임시 parfile, SQL*Loader). tbLoader 는 parfile 이 없어 표준 입력만, 접속 별칭은 작업 폴더 `tbdsn.tbr` + `TBDSN_FILE`(실측 필요). 도구 실행은 Platform `ExternalProcessRunner`(취소 = 프로세스 트리 끝냄).

@@ -298,9 +298,12 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
     /// 측정: Oracle <c>VARCHAR2(n CHAR)</c>·<c>CHAR(n CHAR)</c> 원본을 Tibero 에 만들 때 Tibero 바이트 한도에 걸리는지 —
     /// EXTENDED <c>VARCHAR2(32767 CHAR)</c>(Oracle 이 STANDARD 면 원본을 못 만들어 건너뜀 줄), <c>CHAR(2000 CHAR)</c>, <c>VARCHAR2(4000 CHAR)</c>.
     /// 만들어졌는지(만든 문장·Tibero 사전의 길이), 한 바이트 글자·한글로 꽉 채운 값이 들어갔는지(LENGTH/LENGTHB·값 비교)를 관찰 줄로 남기고,
-    /// win144 #137 에서 관찰한 결과를 단언한다: <c>VARCHAR2(4000 CHAR)</c> = 3행 모두 들어가고 값 같음, <c>CHAR(2000 CHAR)</c> = 3행 모두 들어가나
-    /// Tibero 가 2000 글자로 채워 뒤 공백 수가 달라짐, <c>VARCHAR2(32767 CHAR)</c> = STANDARD Oracle 은 원본을 못 만들어(ORA-00910) 건너뜀.
-    /// EXTENDED Oracle 에서 32767 CHAR 원본을 만든 경우는 아직 관찰하지 않아 관찰 줄만 남긴다.
+    /// 단언(win144 #137, TR1b 에서 고침): <c>VARCHAR2(4000 CHAR)</c> = 3행 모두 들어가고 값 같음(4000 × 4 = 16000 ≤ 65532 라 Tibero 에도 글자 단위).
+    /// <c>CHAR(2000 CHAR)</c> = Oracle 이 2000바이트 한도에 걸려 사전 DATA_LENGTH = CHAR_LENGTH = 2000 이고, 글자 단위로 쓰면 Tibero CHAR 한도(2000바이트)를 넘을 수 있어
+    /// <c>CrossTableMap.TiberoByteKeptColumns</c>(TR1 위험 2)가 <c>CHAR(2000 BYTE)</c> 로 만든다 — 3행 모두 들어가고 Tibero 도 바이트로 채워 LENGTH·값이 원본과 같으며,
+    /// 공백 안내(<c>CharPadDiffers</c>)는 나오지 않고 바이트 유지 안내가 나온다(TR1 전에는 <c>CHAR(2000 CHAR)</c> 로 만들어 2000글자로 채워 뒤 공백 수가 달랐다).
+    /// <c>VARCHAR2(32767 CHAR)</c> = STANDARD Oracle 은 원본을 못 만들어(ORA-00910) 건너뜀. EXTENDED Oracle 에서 만든 경우는 같은 규칙으로 <c>VARCHAR2(32767 BYTE)</c> 가
+    /// 될 것이나(32767 × 4 > 65532, Oracle 이 32767바이트 한도에 걸림) 아직 관찰하지 않아 관찰 줄만 남긴다.
     /// </summary>
     [CrossDbmsTheory]
     [InlineData("varchar2_32767_char")]
@@ -324,8 +327,7 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         };
         var item = "char_length." + label;
         var t = CrossDbmsItEnvironment.Name("XC10_CL_" + suffix);
-        Note(env, item + ".oracle_max_string_size", await TryTextAsync(env, async () =>
-            Text(await env.QueryAsync(source, "SELECT VALUE FROM V$PARAMETER WHERE NAME = 'max_string_size'"))));
+        Note(env, item + ".oracle_max_string_size", await MaxStringSizeAsync(env, source));
 
         var createSource = await TryTextAsync(env, async () =>
         {
@@ -359,8 +361,11 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         var ctx = await PrecheckAsync(env, source, target, [new TableRule(t, RuleKind.All, TargetAction.AppendOnly) { CreateIfMissing = true }], requireNoErrors: false, label: item);
         if (label == "char_2000_char")
         {
-            // XC8d: Oracle CHAR(n CHAR) → Tibero 는 뒤 공백 수가 달라질 수 있어 통과 안내를 낸다.
-            Assert.Contains(ctx.Report.Items, i => i.Table == t && i.Code == CopyCheckCodes.CharPadDiffers && i.Level == CheckLevel.Pass);
+            // TR1 위험 2(TR1b): CHAR(2000 CHAR) 는 바이트 단위(CHAR(2000 BYTE))로 만들어 Tibero 도 바이트로 채운다 — 공백 안내 대신 바이트 유지 안내.
+            Assert.DoesNotContain(ctx.Report.Items, i => i.Table == t && i.Code == CopyCheckCodes.CharPadDiffers);
+            Assert.Contains(ctx.Report.Items, i => i.Table == t && i.Code == CopyCheckCodes.CreateTable
+                                                   && i.Message.Contains("큰 문자 열 V(2000 BYTE)", StringComparison.Ordinal));
+            Assert.Contains(ctx.Report.Preview, p => p.Sql.Contains("\"V\" CHAR(2000 BYTE)", StringComparison.Ordinal));
         }
 
         if (ctx.Report.HasErrors)
@@ -389,21 +394,19 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
             return;
         }
 
-        // 세 행(한 바이트 글자로 꽉 채운 값·한글로 꽉 채운 값·짧은 값)이 모두 들어간다: Tibero 문자 단위 열은 바이트 한도에 걸리지 않는다.
+        // 세 행(한 바이트 글자로 꽉 채운 값·한글로 꽉 채운 값·짧은 값)이 모두 들어가고 값이 원본과 같다.
         var entry = Assert.Single(result.Tables);
         Assert.Equal(CopyOutcome.Succeeded, entry.Outcome);
         Assert.Empty(result.FailedRows);
         Assert.Equal(3, await env.CountAsync(target, t));
+        Assert.Equal("값 같음(행 3)", values);
         if (label == "char_2000_char")
         {
-            // Oracle CHAR(2000 CHAR) 는 2000바이트까지 채우고 Tibero 는 2000글자까지 채운다: 모든 행이 2000글자이고, 한글·짧은 값은 뒤 공백 수가 달라진다.
-            Assert.Equal(3, await env.CountAsync(target, t, "LENGTH(V) = 2000"));
-            Assert.False(values.StartsWith("값 같음", StringComparison.Ordinal), env.Scrub(item + ": trailing blanks were expected to differ: " + values));
-            Assert.False(values.StartsWith("오류:", StringComparison.Ordinal), env.Scrub(item + ": " + values));
-        }
-        else
-        {
-            Assert.Equal("값 같음(행 3)", values);
+            // CHAR(2000 BYTE): 열 정의는 CHAR·2000바이트·바이트 단위이고, Tibero 도 2000바이트로 채워 행마다 LENGTH·LENGTHB 가 원본과 같다(한글 행은 2000글자가 아니다).
+            Assert.Equal("CHAR|2000|2000|B", Text(await env.QueryAsync(target,
+                $"SELECT DATA_TYPE, DATA_LENGTH, CHAR_LENGTH, CHAR_USED FROM USER_TAB_COLUMNS WHERE TABLE_NAME = '{t}' AND COLUMN_NAME = 'V'")));
+            var lengths = $"SELECT ID, LENGTH(V), LENGTHB(V) FROM {t} ORDER BY ID";
+            Assert.Equal(Text(await env.QueryAsync(source, lengths)), Text(await env.QueryAsync(target, lengths)));
         }
     }
 
@@ -604,8 +607,7 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
         Note(env, item + ".tibero_column", Text(await env.QueryAsync(source,
             $"SELECT DATA_TYPE, DATA_LENGTH, CHAR_LENGTH, CHAR_USED FROM USER_TAB_COLUMNS WHERE TABLE_NAME = '{t}' AND COLUMN_NAME = 'V'")));
         Note(env, item + ".tibero_lengths", Text(await env.QueryAsync(source, $"SELECT ID, LENGTH(V), LENGTHB(V) FROM {t} ORDER BY ID")));
-        Note(env, item + ".oracle_max_string_size", await TryTextAsync(env, async () =>
-            Text(await env.QueryAsync(target, "SELECT VALUE FROM V$PARAMETER WHERE NAME = 'max_string_size'"))));
+        Note(env, item + ".oracle_max_string_size", await MaxStringSizeAsync(env, target));
         // 임시 사용자는 V$PARAMETER 를 못 읽으므로 VARCHAR2(5000) 을 만들 수 있는지로 EXTENDED 인지 가린다(만들 수 있으면 4000바이트 한도가 없다).
         var extended = await TryTextAsync(env, async () =>
         {
@@ -686,6 +688,18 @@ public class CrossDbmsCopyCreateIt(ITestOutputHelper output)
     /// <summary>조회 결과를 한 줄 글로(행은 <c>; </c>, 칸은 <c>|</c>, NULL 은 <c>&lt;null&gt;</c>).</summary>
     private static string Text(List<string?[]> rows) =>
         rows.Count == 0 ? "(0행)" : string.Join("; ", rows.Select(r => string.Join("|", r.Select(v => v ?? "<null>"))));
+
+    /// <summary>
+    /// Oracle <c>MAX_STRING_SIZE</c>(관찰 줄). 시험 임시 사용자는 <c>V$PARAMETER</c> 를 볼 권한이 없어 ORA-00942 가 나는 것이 보통이라
+    /// 그때는 오류 줄 대신 중립 글 「읽을 수 없음」 을 돌려준다(시험 실패가 아니다). 그 밖의 오류는 <see cref="TryTextAsync"/> 그대로.
+    /// </summary>
+    private static async Task<string> MaxStringSizeAsync(CrossDbmsItEnvironment env, Dbms oracle)
+    {
+        var text = await TryTextAsync(env, async () => Text(await env.QueryAsync(oracle, "SELECT VALUE FROM V$PARAMETER WHERE NAME = 'max_string_size'")));
+        return text.StartsWith("오류:", StringComparison.Ordinal) && text.Contains("ORA-00942", StringComparison.Ordinal)
+            ? "읽을 수 없음(시험 사용자에게 V$PARAMETER 권한 없음)"
+            : text;
+    }
 
     /// <summary>준비·관찰 동작 하나를 하고 그 결과 글을 돌려준다. 실패하면 <c>오류: …</c>(앞부분만).</summary>
     private static async Task<string> TryTextAsync(CrossDbmsItEnvironment env, Func<Task<string>> action)
