@@ -67,7 +67,7 @@ AI가 받는 정보는 두 가지입니다. 하나는 Oranda가 요청에 실어
 |---|---|---|
 | 끔 | 아무것도 보내지 않습니다. | 없음 |
 | 메타데이터 | 객체 이름, 형, 주석, PK/FK, 인덱스, PL/SQL 원문, 편집기 SQL 글 | `describe_object` |
-| 계획 | 위에 더해 실행 계획, 표와 열 통계, 자식 커서. 바인드 값은 가립니다. | 위에 더해 `get_index_info`, `get_table_stats`, `get_histogram`, `get_cursor_plan`, `explain_plan`, `get_sql_stats`, `get_tuning_context` |
+| 계획 | 위에 더해 실행 계획, 테이블과 열 통계, 자식 커서. 바인드 값은 가립니다. | 위에 더해 `get_index_info`, `get_table_stats`, `get_histogram`, `get_cursor_plan`, `explain_plan`, `get_sql_stats`, `get_tuning_context` |
 | 조회 실행 | 위에 더해 SELECT를 실행해 잰 시간, 읽기량, 행 수. 행 값은 보내지 않습니다. | 위에 더해 `benchmark_queries` |
 | 조회 + 행 값 | 위에 더해 행 값과 히스토그램 끝값. 민감 컬럼은 가린 뒤에 보냅니다. | 새 도구는 없습니다. 위 도구의 결과에 행 값이 들어갑니다. |
 

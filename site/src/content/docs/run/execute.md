@@ -341,7 +341,7 @@ Oranda는 위험한 문장을 실행하기 전에 「실행 확인」 창으로 
 | `SET SERVEROUTPUT ON [SIZE n]`, `OFF` | DBMS_OUTPUT을 켜거나 끕니다. SIZE는 2000에서 1,000,000 사이로 맞춥니다. |
 | `SET STATISTICS ON`, `OFF` | `@파일` 실행의 통계를 켜거나 끕니다. |
 | `DEFINE`, `DEFINE 이름 = 값`, `UNDEFINE` | 치환 변수의 값을 정하고, 보고, 지웁니다. |
-| `DESC`, `DESCRIBE 이름` | 표의 열을 「이름 / NULL? / 형식」 표로 보입니다. 메시지 창에 나옵니다. |
+| `DESC`, `DESCRIBE 이름` | 테이블의 열을 「이름 / NULL? / 형식」 표로 보입니다. 메시지 창에 나옵니다. |
 | `PROMPT 글` | 글을 메시지 창에 보입니다. 글 안의 `&이름`은 DEFINE 값으로 바꿉니다. |
 | `SPOOL 파일`, `SPOOL OFF` | DBMS_OUTPUT, 오류, 처리 행 수를 파일에 이어 씁니다. 확장자가 없으면 `.lst`를 붙입니다. |
 | `WHENEVER SQLERROR EXIT [COMMIT, ROLLBACK]`, `CONTINUE` | 오류가 났을 때 스크립트를 멈출지 정합니다. |
@@ -566,7 +566,7 @@ PL/SQL이 `DBMS_OUTPUT.PUT_LINE`으로 쓴 글을 보는 창입니다. **보기 
 2. `Ctrl+Enter`를 누르세요.
 3. 「실행 확인」 창의 안내 글 「WHERE 절이 없는 UPDATE 입니다. 테이블의 모든 행이 바뀝니다.」를 읽으세요.
 4. 실행하지 않으려면 「취소」를 누르세요.
-5. 대상 이름을 다시 입력하는 창을 보려면 `DROP TABLE no_such_table`을 같은 방법으로 실행하세요. 이 표는 없으므로 실행해도 오류만 납니다.
+5. 대상 이름을 다시 입력하는 창을 보려면 `DROP TABLE no_such_table`을 같은 방법으로 실행하세요. 이 테이블은 없으므로 실행해도 오류만 납니다.
 
 ### 실행을 멈추기
 
