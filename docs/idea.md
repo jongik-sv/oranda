@@ -4,12 +4,10 @@
 
 - 
 
-- mcp, cli 를 통해 LLM에서 쿼리 작성 및 튜닝 수행 후 오란다 에디터에 추가, 수정 되도록 
 - 테이블 파티셔닝에 대한 지원
+- 에디터가 vim 키맵으로 설정 가능하도록
 
-- 명령 팔레트 기능 이상
-
-
+ 
 
 처음 적은 세 가지(파티션 테이블 관리, 계산 컬럼 지정, 컬럼 순서 바꾸기)를 출발점으로 넓힌 목록이다.
 PRD 6장에 이미 있는 기능은 뺐고, PRD 기능과 겹치거나 PRD 기능을 넓히는 항목은 괄호에 PRD 번호를 적었다.
@@ -173,8 +171,7 @@ PRD 6장에 이미 있는 기능은 뺐고, PRD 기능과 겹치거나 PRD 기�
 - SQL 계획 고정(SPM) \[EE\]\[확인\]: 계획 화면에서 「이 계획 고정」을 누르면 `DBMS_SPM.LOAD_PLANS_FROM_CURSOR_CACHE`로 baseline을 만든다.
   - baseline 목록(`DBA_SQL_PLAN_BASELINES`)에서 켜기·끄기·고정·삭제를 한다.
   - 23ai의 Real-Time SPM이 자동으로 만든 baseline도 같은 목록에 표시한다.
-- 잠금 대기 설정 표시: 19c `MAX_IDLE_BLOCKER_TIME`(잠금을 잡은 채 놀고 있는 세션을 끊는 시간)을 블로킹 트리와 「내 세션이 남을 막고 있음 알림」에 함께 보인다.
-  - 「N분 뒤에 이 세션은 서버가 끊음」처럼 알린다.
+- 잠금 대기 설정 표시: 19c `MAX_IDLE_BLOCKER_TIME`(잠금을 잡은 채 놀고 있는 세션을 끊는 시간)을 블로킹 트리에도 보인다.
 - 실시간 통계 표시 \[Exadata·ADB\]: `DBA_TAB_STATISTICS.NOTES = 'STATS_ON_CONVENTIONAL_DML'`인 통계를 통계 관리 화면에서 구분해 보인다.
 - 자동 인덱스·SQL 격리 보기 \[Exadata·ADB\]: `DBA_AUTO_INDEX_CONFIG`·`DBMS_AUTO_INDEX.REPORT_ACTIVITY`와 `DBA_SQL_QUARANTINE`을 읽기 전용으로 보인다.
   - 인덱스 점검에서 자동 인덱스를 따로 표시한다.
