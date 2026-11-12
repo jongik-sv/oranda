@@ -133,6 +133,7 @@ Oranda의 모든 명령은 단축키로 부르거나 명령 팔레트에서 이�
 | 스키마 브라우저 새로 고침 | 스키마 브라우저 | `F5` |
 | 스키마 브라우저 이름 필터 | 스키마 브라우저 | `Ctrl+F`(macOS `Cmd+F`) |
 | 컴파일 | PL/SQL 편집기 | `F5` |
+| 명세+본문 컴파일 | PL/SQL 편집기(패키지, 타입 탭) | `Shift+F5` |
 | 명세/본문 전환 | PL/SQL 편집기 | `Ctrl+Shift+B`(macOS `Cmd+Shift+B`) |
 | PL/SQL 실행 | PL/SQL 편집기 | `Ctrl+Enter`(macOS `Cmd+Enter`) |
 | 모니터 새로 고침 | 모니터 창 | `F5` |
@@ -150,6 +151,14 @@ Oranda의 모든 명령은 단축키로 부르거나 명령 팔레트에서 이�
 - SQL Developer
 
 **도구 > 단축키 프리셋**에서 하나를 고르면 바로 바뀝니다. 위 표는 「기본」 프리셋 기준입니다. 다른 프리셋은 일부 키가 다릅니다. 프리셋에서도 `F1`은 사용자 문서이고 `Ctrl+Shift+P`는 명령 팔레트입니다.
+
+PL/SQL 컴파일 키는 프리셋마다 다음과 같습니다. macOS에서도 같은 키이고, SQL Developer의 `Ctrl`만 `Cmd`로 바뀝니다.
+
+| 프리셋 | 컴파일 | 명세+본문 컴파일 |
+|---|---|---|
+| 기본, Orange 5 | `F5` | `Shift+F5` |
+| PL/SQL Developer | `F8` | `Shift+F8` |
+| SQL Developer | `Ctrl+Shift+F9` | 없음 |
 
 ## 단축키 바꾸기
 
