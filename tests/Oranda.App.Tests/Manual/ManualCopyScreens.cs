@@ -202,7 +202,7 @@ public sealed class ManualCopyScreens : IDisposable
         }
 
         var h = new DataCopyHarness();
-        var (window, _, overlay) = await OpenWindowAsync(h, height: 1000);
+        var (window, _, overlay) = await OpenWindowAsync(h, height: 1080);
         try
         {
             ManualCapture.SaveOverlaid(window, overlay, "data-copy-rules",
