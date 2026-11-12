@@ -474,7 +474,7 @@
                   </StackPanel>
                 </DockPanel>
                 <!-- 전체 기본값: 테이블을 더할 때 채우고, 바꾸면 따로 바꾸지 않은 테이블에만 반영한다. 테이블마다 따로 바꾸면 그 값이 우선(행 메뉴 「전체 값으로」로 되돌림). -->
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,3">
+                <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" ItemSpacing="6" LineSpacing="3" Margin="0,0,0,3">
                   <TextBlock Text="전체 기본값" Classes="dim" VerticalAlignment="Center"
                              ToolTip.Tip="테이블을 추가할 때 이 값으로 채웁니다. 값을 바꾸면 따로 바꾸지 않은 테이블에만 반영됩니다." />
                   <TextBlock Text="규칙" VerticalAlignment="Center" />
@@ -487,7 +487,7 @@
                             ToolTip.Tip="대상에 같은 이름의 테이블이 없으면 원본 구조로 만든 뒤 넣습니다. 대상에 이미 있는 테이블과 만들 수 없는 테이블에는 켜지 않습니다." />
                   <CheckBox x:Name="DefaultExternalLoadBox" Classes="compact" IsChecked="{Binding DefaultExternalLoad}" Content="외부 도구로 적재" AutomationProperties.Name="전체 기본 외부 도구로 적재"
                             ToolTip.Tip="대상 DBMS 의 적재 도구(Oracle SQL*Loader, Tibero tbLoader)로 넣습니다. 도구 경로는 설정의 드라이버 탭 「외부 적재 도구」에서 정합니다. 키로 맞추기(MERGE)·「모두 끝난 뒤 한 번」 커밋·도구가 없는 경우는 기본 방식으로 넣습니다. tbLoader(Tibero 대상)는 실험 기능입니다(실제 DB 시험 전)." />
-                </StackPanel>
+                </WrapPanel>
                 <Border Classes="grid-frame">
                   <!-- 조회 결과와 같은 그리드(MonitorGrid). 행은 코드(MonitorGridBinder)가 Rules 에서 채운다. -->
                   <sm:MonitorGrid x:Name="RuleGrid" AutomationProperties.Name="테이블 규칙" />
