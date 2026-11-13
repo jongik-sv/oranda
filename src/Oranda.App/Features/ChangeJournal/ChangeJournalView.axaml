@@ -17,6 +17,13 @@
       <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+    <!-- 묶음 안 문장 줄은 시간 칸을 들여 쓴다 -->
+    <Style Selector="TextBlock.time">
+      <Setter Property="Padding" Value="6,0" />
+    </Style>
+    <Style Selector="TextBlock.time.child">
+      <Setter Property="Padding" Value="20,0,6,0" />
+    </Style>
   </UserControl.Styles>
   <DockPanel>
     <!-- 툴바 한 줄: 검색 · 이 접속만 · 보관된 것만 · (대상 칩) | 새로 고침 · 새 편집기에 열기 -->
@@ -40,41 +47,62 @@
                     ToolTip.Tip="대상 거르기 해제" />
           </StackPanel>
         </Border>
+        <ComboBox x:Name="CauseBox" Classes="compact" MinWidth="110" Margin="0,0,6,0" VerticalAlignment="Center"
+                  ItemsSource="{Binding CauseChoices}" SelectedItem="{Binding SelectedCause, Mode=TwoWay}" AutomationProperties.Name="원인 거르기">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:JournalCauseChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
         <Separator Classes="toolbar" />
         <Button Classes="toolbar" x:Name="RefreshButton" Content="새로 고침" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" />
         <Button Classes="toolbar" x:Name="OpenButton" Content="이 DDL 을 새 편집기에 열기" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True" />
+        <!-- 되돌리기 지점 설계 11.1: 커밋 묶음을 고르면 켜진다. 원복 스크립트 탭(RB-43)·화면 3(RB-32)은 명령 id 로만 부른다. -->
+        <Button Classes="toolbar" x:Name="OpenScriptButton" Content="원복 스크립트 열기" icons:ButtonIcon.Key="fileSql" IsEnabled="{Binding CanOpenScript}"
+                ToolTip.Tip="고른 커밋 묶음의 원복 스크립트를 새 탭에 엽니다(자동으로 실행하지 않습니다)" />
+        <Button Classes="toolbar" x:Name="CompareButton" Content="이 실행 전과 비교…" icons:ButtonIcon.Key="diff" IsEnabled="{Binding CanCompare}"
+                ToolTip.Tip="기록한 실행 직전 시점과 지금 데이터를 비교해 되돌립니다" />
       </WrapPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
     </Border>
     <Grid RowDefinitions="*,5,*">
-      <!-- 표: 아이콘 | 시간 | 객체 | 종류 | 원인 | 접속 | 요약 -->
+      <!-- 표(되돌리기 지점 설계 11.1): 접기·아이콘 | 시간 | 객체 | 원인 | 요약 | 영향 행 | 시점 | 원복 스크립트.
+           DDL 보관본·커밋 묶음·묶음 안 문장 줄이 같은 열을 쓴다(IJournalRow). -->
       <DockPanel Grid.Row="0">
         <Border DockPanel.Dock="Top" Classes="grid-header">
-          <Grid x:Name="JournalHeader" ColumnDefinitions="28,124,220,120,84,120,*">
+          <Grid x:Name="JournalHeader" ColumnDefinitions="44,124,200,92,*,76,200,170">
             <TextBlock Grid.Column="1" Padding="6,0" Text="시간" />
             <TextBlock Grid.Column="2" Padding="6,0" Text="객체" />
-            <TextBlock Grid.Column="3" Padding="6,0" Text="종류" />
-            <TextBlock Grid.Column="4" Padding="6,0" Text="원인" />
-            <TextBlock Grid.Column="5" Padding="6,0" Text="접속" />
-            <TextBlock Grid.Column="6" Padding="6,0" Text="요약" />
+            <TextBlock Grid.Column="3" Padding="6,0" Text="원인" />
+            <TextBlock Grid.Column="4" Padding="6,0" Text="요약" />
+            <TextBlock Grid.Column="5" Padding="6,0" Text="영향 행" HorizontalAlignment="Right" />
+            <TextBlock Grid.Column="6" Padding="6,0" Text="시점" />
+            <TextBlock Grid.Column="7" Padding="6,0" Text="원복 스크립트" />
           </Grid>
         </Border>
-        <ListBox x:Name="List" Classes="table" ItemsSource="{Binding Items}" SelectionMode="Multiple"
+        <ListBox x:Name="List" Classes="table" ItemsSource="{Binding Rows}" SelectionMode="Multiple"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="변경 일지">
           <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:JournalItem">
-              <Grid ColumnDefinitions="28,124,220,120,84,120,*" ToolTip.Tip="{Binding SummaryText}">
-                <ContentControl Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
-                <TextBlock Grid.Column="1" Padding="6,0" VerticalAlignment="Center" Classes="mono dim" Text="{Binding TimeText}" />
+            <DataTemplate x:DataType="vm:IJournalRow">
+              <Grid ColumnDefinitions="44,124,200,92,*,76,200,170" ToolTip.Tip="{Binding SummaryText}">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Width="12" Classes="dim" Text="{Binding ExpandGlyph}" VerticalAlignment="Center" />
+                  <ContentControl VerticalAlignment="Center" IsVisible="{Binding !IsChild}"
+                                  Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" Classes="mono dim time" Text="{Binding TimeText}"
+                           Classes.child="{Binding IsChild}" />
                 <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" Text="{Binding ObjectText}" />
-                <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="dim" Text="{Binding TypeText}" />
-                <TextBlock Grid.Column="4" Padding="6,0" VerticalAlignment="Center" Text="{Binding CauseText}" />
-                <TextBlock Grid.Column="5" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="dim" Text="{Binding ProfileName}" />
-                <TextBlock Grid.Column="6" Padding="6,0,10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono"
+                <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" Text="{Binding CauseText}" />
+                <TextBlock Grid.Column="4" Padding="6,0,10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono"
                            Classes.danger-text="{Binding IsFailure}" Text="{Binding SummaryText}" />
+                <TextBlock Grid.Column="5" Padding="6,0" VerticalAlignment="Center" HorizontalAlignment="Right" Classes="mono" Text="{Binding RowsText}" />
+                <TextBlock Grid.Column="6" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono dim" Text="{Binding PointText}" />
+                <TextBlock Grid.Column="7" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           Classes.warning-text="{Binding IsScriptWarning}" Text="{Binding ScriptText}" />
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>

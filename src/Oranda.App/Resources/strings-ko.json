@@ -1032,5 +1032,8 @@
   "Shell.settings.rollback.clearYes": "지우기",
   "Shell.settings.rollback.clearNo": "취소",
   "Shell.settings.rollback.cleared": "보관 중인 묶음을 지웠습니다.",
-  "Shell.settings.rollback.clearFailed": "지우지 못했습니다: {0}"
+  "Shell.settings.rollback.clearFailed": "지우지 못했습니다: {0}",
+  "Cmd.oranda.rollback.openScript": "원복 스크립트 열기",
+  "Cmd.oranda.rollback.runScript": "원복 실행 (커밋 안 함)",
+  "Panel.oranda.panel.rollbackScript": "원복 스크립트"
 }

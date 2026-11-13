@@ -1855,5 +1855,20 @@
   "구성원 목록": "Member list",
   "서버에 본문이 아직 없습니다.": "There is no body on the server yet.",
   "본문 만들기": "Create Body",
-  "명세의 프로시저·함수마다 빈 구현을 둔 본문 뼈대를 넣습니다. 컴파일하면 서버에 만듭니다.": "Inserts a body skeleton with an empty implementation for each procedure and function in the spec. Compile to create it on the server."
+  "명세의 프로시저·함수마다 빈 구현을 둔 본문 뼈대를 넣습니다. 컴파일하면 서버에 만듭니다.": "Inserts a body skeleton with an empty implementation for each procedure and function in the spec. Compile to create it on the server.",
+  "고른 커밋 묶음의 원복 스크립트를 새 탭에 엽니다(자동으로 실행하지 않습니다)": "Opens the rollback script of the selected commit group in a new tab (it is not run automatically)",
+  "기록한 실행 직전 시점과 지금 데이터를 비교해 되돌립니다": "Compares the point recorded just before the run with the current data and reverts it",
+  "시점": "Point",
+  "영향 행": "Rows",
+  "원복 스크립트": "Rollback script",
+  "원복 스크립트 열기": "Open rollback script",
+  "이 실행 전과 비교…": "Compare with before this run…",
+  "원인 거르기": "Cause filter",
+  "문장마다 영향 행 수가 1인지 확인하며 실행합니다. 커밋하지 않습니다": "Runs each statement checking that it affects one row. Does not commit",
+  "원복 실행 (커밋 안 함)": "Run rollback (no commit)",
+  "일반 SQL 탭으로 복사": "Copy to a regular SQL tab",
+  "파일로 내보내기…": "Export to file…",
+  "멈추기": "Stop",
+  "지금 문장이 끝나면 멈춥니다. 이미 실행한 문장은 커밋하지 않은 채 남습니다": "Stops after the current statement. Statements already run stay uncommitted",
+  "원복 실행 결과": "Rollback run results"
 }

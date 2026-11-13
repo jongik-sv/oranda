@@ -1032,5 +1032,8 @@
   "Shell.settings.rollback.clearYes": "Delete",
   "Shell.settings.rollback.clearNo": "Cancel",
   "Shell.settings.rollback.cleared": "Deleted the stored groups.",
-  "Shell.settings.rollback.clearFailed": "Could not delete: {0}"
+  "Shell.settings.rollback.clearFailed": "Could not delete: {0}",
+  "Cmd.oranda.rollback.openScript": "Open Rollback Script",
+  "Cmd.oranda.rollback.runScript": "Run Rollback (No Commit)",
+  "Panel.oranda.panel.rollbackScript": "Rollback Script"
 }

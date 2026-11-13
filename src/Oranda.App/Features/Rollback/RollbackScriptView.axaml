@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:sqled="using:Oranda.App.Features.SqlEditor"
+             xmlns:vm="using:Oranda.App.Features.Rollback"
+             x:Class="Oranda.App.Features.Rollback.RollbackScriptView"
+             x:DataType="vm:RollbackScriptViewModel">
+  <!-- 원복 스크립트 탭(되돌리기 지점 설계 11.3, 화면 2): 도구 모음 · 읽기 전용 글 · 실행 결과 · 상태 줄. 자동으로 실행하지 않는다. -->
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <WrapPanel>
+        <Button Classes="toolbar" x:Name="RunButton" Content="원복 실행 (커밋 안 함)" icons:ButtonIcon.Key="run" IsEnabled="{Binding CanRun}"
+                ToolTip.Tip="문장마다 영향 행 수가 1인지 확인하며 실행합니다. 커밋하지 않습니다" />
+        <Button Classes="toolbar" x:Name="CancelRunButton" Content="멈추기" icons:ButtonIcon.Key="stop" IsVisible="{Binding IsRunning}"
+                ToolTip.Tip="지금 문장이 끝나면 멈춥니다. 이미 실행한 문장은 커밋하지 않은 채 남습니다" />
+        <TextBlock x:Name="ProgressLabel" Classes="dim" VerticalAlignment="Center" Margin="6,0" Text="{Binding ProgressText}" IsVisible="{Binding IsRunning}" />
+        <Button Classes="toolbar" x:Name="CopyButton" Content="일반 SQL 탭으로 복사" icons:ButtonIcon.Key="copy" />
+        <Button Classes="toolbar" x:Name="ExportButton" Content="파일로 내보내기…" icons:ButtonIcon.Key="exportFile" />
+      </WrapPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock x:Name="StatusText" Text="{Binding StatusLine}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <TextBlock DockPanel.Dock="Bottom" x:Name="MessageText" Margin="8,4" TextWrapping="Wrap" Text="{Binding Message}"
+               IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+               Classes.warning-text="{Binding MessageIsWarning}" />
+    <!-- 살펴볼 줄만(0행·충돌·오류): 몇 번째 문장의 어느 원복 문장인지와 이유 -->
+    <ListBox DockPanel.Dock="Bottom" x:Name="ResultList" ItemsSource="{Binding Results}" MaxHeight="160" Margin="8,0"
+             AutomationProperties.Name="원복 실행 결과">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:RollbackStepResult">
+          <TextBlock Classes="mono" TextTrimming="CharacterEllipsis" Text="{Binding Line}" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <sqled:SqlCodeView x:Name="ScriptBox" Text="{Binding Text, Mode=OneWay}"
+                       Background="{DynamicResource OrandaCodeBackgroundBrush}" AutomationProperties.Name="원복 스크립트" />
+  </DockPanel>
+</UserControl>

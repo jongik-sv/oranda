@@ -275,17 +275,21 @@
               <TextBlock x:Name="RollbackNoStoreText" Classes="hint" Margin="28,0,0,0" TextWrapping="Wrap" Foreground="{DynamicResource OrandaWarningForegroundBrush}"
                          IsVisible="{Binding Rollback.NoSecureStore}" Text="{Binding Strings[rollback.noSecureStore]}" />
             </StackPanel>
-            <Grid Classes="form" ColumnDefinitions="Auto,Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="10">
+            <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="10">
               <TextBlock Grid.Row="0" Text="{Binding Strings[rollback.maxRows]}" />
-              <NumericUpDown x:Name="RollbackMaxRowsBox" Grid.Row="0" Grid.Column="1" MinWidth="140" Increment="1000" FormatString="0"
-                             Minimum="1" Maximum="1000000" Value="{Binding Rollback.MaxRowsPerStatement}"
-                             AutomationProperties.Name="{Binding Strings[rollback.maxRows]}" />
-              <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Strings[rollback.maxRowsUnit]}" />
+              <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <NumericUpDown x:Name="RollbackMaxRowsBox" MinWidth="140" Increment="1000" FormatString="0"
+                               Minimum="1" Maximum="1000000" Value="{Binding Rollback.MaxRowsPerStatement}"
+                               AutomationProperties.Name="{Binding Strings[rollback.maxRows]}" />
+                <TextBlock VerticalAlignment="Center" Text="{Binding Strings[rollback.maxRowsUnit]}" />
+              </StackPanel>
               <TextBlock Grid.Row="1" Text="{Binding Strings[rollback.retention]}" />
-              <NumericUpDown x:Name="RollbackRetentionBox" Grid.Row="1" Grid.Column="1" MinWidth="140" Increment="1" FormatString="0"
-                             Minimum="1" Maximum="365" Value="{Binding Rollback.RetentionDays}"
-                             AutomationProperties.Name="{Binding Strings[rollback.retention]}" />
-              <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Strings[rollback.retentionUnit]}" />
+              <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <NumericUpDown x:Name="RollbackRetentionBox" MinWidth="140" Increment="1" FormatString="0"
+                               Minimum="1" Maximum="365" Value="{Binding Rollback.RetentionDays}"
+                               AutomationProperties.Name="{Binding Strings[rollback.retention]}" />
+                <TextBlock VerticalAlignment="Center" Text="{Binding Strings[rollback.retentionUnit]}" />
+              </StackPanel>
             </Grid>
             <TextBlock x:Name="RollbackRetentionNotice" Classes="hint" TextWrapping="Wrap" Foreground="{DynamicResource OrandaWarningForegroundBrush}"
                        IsVisible="{Binding Rollback.HasRetentionNotice}" Text="{Binding Rollback.RetentionNotice}" />

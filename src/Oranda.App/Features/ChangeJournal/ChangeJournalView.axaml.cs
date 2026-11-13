@@ -12,11 +12,25 @@ public partial class ChangeJournalView : UserControl
         {
             if (DataContext is ChangeJournalViewModel vm)
             {
-                await vm.SetSelectionAsync([.. List.SelectedItems?.OfType<JournalItem>() ?? []]);
+                await vm.SetRowSelectionAsync([.. List.SelectedItems?.OfType<IJournalRow>() ?? []]);
             }
         };
-        List.DoubleTapped += (_, _) => OpenSelected();
+        List.DoubleTapped += (_, e) => Activate((e.Source as Avalonia.StyledElement)?.DataContext as IJournalRow);
         OpenButton.Click += (_, _) => OpenSelected();
+        OpenScriptButton.Click += async (_, _) =>
+        {
+            if (DataContext is ChangeJournalViewModel vm)
+            {
+                await vm.OpenScriptAsync();
+            }
+        };
+        CompareButton.Click += async (_, _) =>
+        {
+            if (DataContext is ChangeJournalViewModel vm)
+            {
+                await vm.CompareAsync();
+            }
+        };
         RefreshButton.Click += async (_, _) =>
         {
             if (DataContext is ChangeJournalViewModel vm)
@@ -32,6 +46,25 @@ public partial class ChangeJournalView : UserControl
                 await vm.ReloadAsync();
             }
         };
+    }
+
+    /// <summary>두 번 누른 그 줄: 묶음 줄은 접고 펴고, DDL 보관본은 새 편집기에 연다. 문장 줄은 아무것도 하지 않는다.</summary>
+    private void Activate(IJournalRow? row)
+    {
+        if (DataContext is not ChangeJournalViewModel vm)
+        {
+            return;
+        }
+
+        switch (row)
+        {
+            case RollbackGroupItem group:
+                vm.ToggleExpand(group);
+                break;
+            case JournalItem item:
+                vm.OpenInEditor(item);
+                break;
+        }
     }
 
     private void OpenSelected()

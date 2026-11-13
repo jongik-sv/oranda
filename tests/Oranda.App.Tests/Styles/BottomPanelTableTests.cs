@@ -119,7 +119,7 @@ public class BottomPanelTableTests
     public Task Change_journal_has_a_column_header_and_icon_only_actions() => HeadlessHost.Run(() =>
     {
         var vm = new ChangeJournalViewModel();
-        vm.Items.Add(new JournalItem(new JournalEntry { Owner = "S", Name = "T", ObjectType = "TABLE", Cause = JournalCause.Ddl, StatementSummary = "ALTER TABLE t ADD c NUMBER" }));
+        vm.Rows.Add(new JournalItem(new JournalEntry { Owner = "S", Name = "T", ObjectType = "TABLE", Cause = JournalCause.Ddl, StatementSummary = "ALTER TABLE t ADD c NUMBER" }));
         var view = new ChangeJournalView { DataContext = vm };
         var window = new Window { Content = view, Width = 1200, Height = 500 };
         window.Show();

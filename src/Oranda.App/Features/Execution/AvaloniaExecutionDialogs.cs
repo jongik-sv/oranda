@@ -83,6 +83,14 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 
     private async Task<ConfirmAnswer> ConfirmCoreAsync(ConfirmDialogModel model)
     {
+        var (dialog, answer) = CreateConfirmDialog(model);
+        await ShowAsync(dialog).ConfigureAwait(true);
+        return answer();
+    }
+
+    /// <summary>실행 확인 창을 만든다(띄우지는 않는다). 닫힌 뒤 두 번째 값이 답을 준다. 매뉴얼 그림 시험도 이것으로 그린다.</summary>
+    internal static (Window Dialog, Func<ConfirmAnswer> Answer) CreateConfirmDialog(ConfirmDialogModel model)
+    {
         var dialog = NewWindow("실행 확인");
         var header = new Border { Padding = new Thickness(16, 10) };
         // 운영: 머리 띠 빨강 + 접속 이름·사용자·서비스 크게(ui-shell.md 4.2). 그 밖은 접속 관리자 목록과 같은 색 규칙(EnvironmentColors).
@@ -168,8 +176,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         dialog.Content = new StackPanel { Children = { header, body } };
         // 이름 재입력이 있으면 그 칸에서 시작한다(바로 칠 수 있게). 없으면 기본 단추 「취소」.
         dialog.Opened += (_, _) => (retype as Control ?? cancel).Focus();
-        await ShowAsync(dialog).ConfigureAwait(true);
-        return model.Answer(accepted, rollback.Script?.IsChecked == true, rollback.Backup?.IsChecked == true, rollback.BackupName?.Text);
+        return (dialog, () => model.Answer(accepted, rollback.Script?.IsChecked == true, rollback.Backup?.IsChecked == true, rollback.BackupName?.Text));
     }
 
     /// <summary>백업 테이블을 고르지 않았거나 이름이 쓸 수 있는 이름이다.</summary>
