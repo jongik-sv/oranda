@@ -1,6 +1,7 @@
 using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Composition;
 using Oranda.Core.Events;
+using Oranda.Core.Rollback;
 using Oranda.Core.Serialization;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
@@ -199,6 +200,7 @@ internal sealed class SettingsStore : ISettingsStore, IAiSettingsResetSignal, ID
         Monitor = s.Monitor with { RefreshSeconds = Math.Clamp(s.Monitor.RefreshSeconds, 2, 60) },
         Workspace = s.Workspace with { AutosaveSeconds = Math.Clamp(s.Workspace.AutosaveSeconds, 1, 10) },
         Features = NormalizeFeatures(s.Features),
+        Rollback = s.Rollback.Normalized(),
     };
 
     /// <summary>
@@ -246,6 +248,7 @@ internal sealed class SettingsStore : ISettingsStore, IAiSettingsResetSignal, ID
         Add(before.Workspace != after.Workspace, "workspace");
         Add(before.SchemaBrowser != after.SchemaBrowser, "schemaBrowser");
         Add(before.Features != after.Features, FeaturesSettings.SectionName);
+        Add(before.Rollback != after.Rollback, RollbackSettings.SectionName);
         return list;
     }
 }
