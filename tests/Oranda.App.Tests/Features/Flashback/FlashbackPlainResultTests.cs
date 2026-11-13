@@ -155,6 +155,23 @@ public sealed class FlashbackPlainResultTests
     }
 
     [Fact]
+    public async Task Versions_result_with_alias_after_the_clause_targets_the_table_without_pseudo_columns()
+    {
+        // fb-w1 FB-02: 별칭은 플래시백 절 뒤에 온다(FROM emp VERSIONS BETWEEN … e). 가상 열 VERSIONS_OPERATION 은 목표 값에서 뺀다.
+        var cols = Cols(("VERSIONS_OPERATION", ColumnDataKind.Text), ("EMPNO", ColumnDataKind.Number), ("ENAME", ColumnDataKind.Text));
+        var (target, reason) = await PlainAsync("SELECT versions_operation, e.* FROM emp VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE e", cols);
+
+        Assert.Equal(string.Empty, reason);
+        Assert.NotNull(target);
+        Assert.Equal(["EMPNO"], target.KeyNames);
+        var row = FlashbackRowRestore.TargetOf(target, [.. target.Ordinals.Select(o => (object?)(o switch { 0 => "D", 1 => 7369m, _ => "SMITH" }))]);
+        Assert.Equal(7369m, row.Values["EMPNO"]);
+        Assert.Equal("SMITH", row.Values["ENAME"]);
+        Assert.DoesNotContain(row.Values.Keys, FlashbackRowRestore.IsPseudoColumn);
+        Assert.Equal(0, FlashbackRowRestore.OperationOrdinal(cols));
+    }
+
+    [Fact]
     public void Track_command_is_gone_and_history_remains()
     {
         var registry = ShellTestHelpers.CreateCommandRegistry();
@@ -163,6 +180,7 @@ public sealed class FlashbackPlainResultTests
         Assert.NotNull(registry.Find("oranda.grid.flashback.history"));
         Assert.NotNull(registry.Find("oranda.grid.flashback.asOf"));
         Assert.NotNull(registry.Find("oranda.grid.flashback.restore"));
+        Assert.NotNull(registry.Find(FlashbackCommandHandler.RestoreRowId));
     }
 
     private sealed class OneTableMetadata(TableInfo table) : IMetadataProvider

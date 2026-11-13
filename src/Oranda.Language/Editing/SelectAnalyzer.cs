@@ -21,6 +21,27 @@ public sealed record SelectTableRef(string? Owner, string? Name, string? Alias, 
 
     /// <summary>열 한정자로 쓸 원문: 별칭, 없으면 원문 이름.</summary>
     public string? Qualifier => AliasText ?? Text;
+
+    /// <summary>표 이름 뒤 플래시백 절(<c>VERSIONS BETWEEN …</c>·<c>AS OF …</c>) 종류. 없으면 <see cref="FlashbackClauseKind.None"/>.</summary>
+    public FlashbackClauseKind Flashback { get; init; }
+
+    /// <summary>플래시백 절 원문(별칭은 빼고 공백은 하나로). 없으면 null.</summary>
+    public string? FlashbackText { get; init; }
+}
+
+/// <summary>FROM 절 표 뒤의 플래시백 절.</summary>
+public enum FlashbackClauseKind
+{
+    None,
+
+    /// <summary><c>VERSIONS BETWEEN SCN|TIMESTAMP …</c>.</summary>
+    Versions,
+
+    /// <summary><c>AS OF SCN|TIMESTAMP …</c>.</summary>
+    AsOf,
+
+    /// <summary>유효 시간 절(<c>VERSIONS PERIOD FOR …</c>·<c>AS OF PERIOD FOR …</c>).</summary>
+    Period,
 }
 
 /// <summary>SELECT 목록 항목 1개.</summary>
@@ -548,10 +569,72 @@ public static class SelectAnalyzer
                 i += 2;
             }
 
-            tables.Add(new SelectTableRef(owner, name, alias, text[nameStart..nameEnd]) { IsRemote = remote, AliasText = aliasText });
+            // 플래시백 절(표 뒤, 별칭 앞): FROM emp VERSIONS BETWEEN … e · FROM emp AS OF TIMESTAMP … e
+            var flashback = FlashbackClauseKind.None;
+            string? flashbackText = null;
+            if (alias is null && i + 1 < end && (Word(text, toks[i]), Word(text, toks[i + 1])) is ("VERSIONS", "BETWEEN" or "PERIOD") or ("AS", "OF"))
+            {
+                // VERSIONS PERIOD FOR … · AS OF PERIOD FOR … 는 유효 시간 절
+                var period = Word(text, toks[i + 1]) == "PERIOD" || (i + 2 < end && Word(text, toks[i + 2]) == "PERIOD");
+                flashback = period ? FlashbackClauseKind.Period : Word(text, toks[i]) == "VERSIONS" ? FlashbackClauseKind.Versions : FlashbackClauseKind.AsOf;
+                var clauseStart = i;
+                var j = i;
+                while (j < end && !IsPunct(text, toks[j], ',') && !(Word(text, toks[j]) is { } jw && (JoinWords.Contains(jw) || jw is "ON" or "USING")))
+                {
+                    j = IsPunct(text, toks[j], '(') ? MatchParen(text, toks, j, end) + 1 : j + 1;
+                }
+
+                var clauseEnd = j; // 절 다음 토큰 자리
+                if (j - clauseStart >= 4 && IsTrailingAlias(text, toks[j - 1], toks[j - 2]))
+                {
+                    alias = Name(text, toks[j - 1]);
+                    aliasText = text.Substring(toks[j - 1].Start, toks[j - 1].Length);
+                    clauseEnd = j - 1;
+                }
+
+                flashbackText = string.Join(' ', text[toks[clauseStart].Start..toks[clauseEnd - 1].End]
+                    .Split((char[])[' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+                i = j;
+            }
+
+            tables.Add(new SelectTableRef(owner, name, alias, text[nameStart..nameEnd])
+            {
+                IsRemote = remote,
+                AliasText = aliasText,
+                Flashback = flashback,
+                FlashbackText = flashbackText,
+            });
         }
 
         return tables;
+    }
+
+    /// <summary>플래시백 절 끝에서 별칭으로 보지 않는 낱말(시점 식의 끝일 수 있는 것).</summary>
+    private static readonly FrozenSet<string> ClauseTail = new[]
+    {
+        "MINVALUE", "MAXVALUE", "SYSDATE", "SYSTIMESTAMP", "CURRENT_TIMESTAMP", "CURRENT_DATE", "LOCALTIMESTAMP",
+        "SECOND", "MINUTE", "HOUR", "DAY", "MONTH", "YEAR", "SCN", "TIMESTAMP", "AND", "BETWEEN", "OF",
+    }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>플래시백 절 마지막 토큰이 별칭인가: 이름 토큰이고, 시점 식의 끝 낱말이 아니며, 앞이 연산자·<c>.</c>·절 낱말이 아니다.</summary>
+    private static bool IsTrailingAlias(string text, Token last, Token prev)
+    {
+        if (last.Kind is not (TokenKind.Identifier or TokenKind.QuotedIdent or TokenKind.Keyword))
+        {
+            return false;
+        }
+
+        if (last.Kind != TokenKind.QuotedIdent && ClauseTail.Contains(Word(text, last)!))
+        {
+            return false;
+        }
+
+        if (prev.Kind == TokenKind.Operator || IsPunct(text, prev, '.') || IsPunct(text, prev, '('))
+        {
+            return false;
+        }
+
+        return Word(text, prev) is not ("AND" or "BETWEEN" or "OF" or "SCN" or "TIMESTAMP" or "AS" or "INTERVAL" or "FOR");
     }
 
     private static bool IsClauseWord(string text, Token t) =>

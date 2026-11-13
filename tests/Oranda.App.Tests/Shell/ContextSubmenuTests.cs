@@ -130,8 +130,9 @@ public class ContextSubmenuTests
             Assert.Contains(grid, n => n.CommandId == id);
         }
 
-        // 묶기 전 41개 명령이 하나도 빠지지 않는다(행 보기·값 보기·내보내기 2 포함).
-        Assert.Equal(41, Flatten(grid).Count(n => n.Kind == MenuNodeKind.Command));
+        // 묶기 전 42개 명령이 하나도 빠지지 않는다(행 보기·값 보기·내보내기 2 포함).
+        // fb-w1: +1 「이 행 상태로 되돌리기…」(oranda.grid.flashback.restoreRow)
+        Assert.Equal(42, Flatten(grid).Count(n => n.Kind == MenuNodeKind.Command));
         Assert.DoesNotContain(grid, n => n.Kind == MenuNodeKind.Submenu && n.Children.Count == 0);
     }
 
@@ -139,7 +140,7 @@ public class ContextSubmenuTests
     [InlineData("copyAs", new[] { "oranda.grid.copyWithHeaders", "oranda.grid.copyRows", "oranda.grid.copyRowsWithHeaders", "oranda.grid.copyAsCsv", "oranda.grid.copyAsInsert", "oranda.grid.copyAsInList", "oranda.grid.copyAsInListLines" })]
     [InlineData("filter", new[] { "oranda.grid.toggleQuickFilter", "oranda.grid.clearLocalFilters", "oranda.grid.toggleFilterBar", "oranda.grid.filterByValue", "oranda.grid.filterExcludeValue", "oranda.grid.filterNullRows" })]
     [InlineData("edit", new[] { "oranda.grid.edit.addRow", "oranda.grid.edit.duplicateRow", "oranda.grid.edit.pasteRows", "oranda.grid.edit.deleteRow", "oranda.grid.edit.previewDml", "oranda.grid.edit.applyAndCommit", "oranda.grid.edit.apply", "oranda.grid.edit.resetRow", "oranda.grid.edit.resetAll" })]
-    [InlineData("flashback", new[] { "oranda.grid.flashback.asOf", "oranda.grid.flashback.history", "oranda.grid.flashback.restore" })]
+    [InlineData("flashback", new[] { "oranda.grid.flashback.asOf", "oranda.grid.flashback.history", "oranda.grid.flashback.restore", "oranda.grid.flashback.restoreRow" })]
     [InlineData("columns", new[] { "oranda.grid.freezeColumns", "oranda.grid.hideColumn", "oranda.grid.showAllColumns" })]
     public void Grid_submenus_hold_their_commands_in_order(string name, string[] ids)
     {
@@ -162,7 +163,7 @@ public class ContextSubmenuTests
             + " - oranda.grid.countRows oranda.grid.fetchAll oranda.grid.pinResultTab"
             + " - oranda.grid.followForeignKey oranda.grid.showReferencingRows"
             + " - Menu.context.grid.edit[oranda.grid.edit.addRow oranda.grid.edit.duplicateRow oranda.grid.edit.pasteRows oranda.grid.edit.deleteRow - oranda.grid.edit.previewDml oranda.grid.edit.applyAndCommit oranda.grid.edit.apply - oranda.grid.edit.resetRow oranda.grid.edit.resetAll]"
-            + " Menu.context.grid.flashback[oranda.grid.flashback.asOf oranda.grid.flashback.history - oranda.grid.flashback.restore]"
+            + " Menu.context.grid.flashback[oranda.grid.flashback.asOf oranda.grid.flashback.history - oranda.grid.flashback.restore oranda.grid.flashback.restoreRow]"
             + " - oranda.grid.exportExcel oranda.grid.export",
             Shape(Grid()));
     }

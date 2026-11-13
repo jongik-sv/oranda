@@ -150,6 +150,7 @@
   "Cmd.oranda.grid.flashback.asOf": "N분 전 값 보기…",
   "Cmd.oranda.grid.flashback.history": "이 행 변경 이력",
   "Cmd.oranda.grid.flashback.restore": "이전 값으로 되돌리기…",
+  "Cmd.oranda.grid.flashback.restoreRow": "이 행 상태로 되돌리기…",
   "Cmd.oranda.grid.edit.addRow": "행 추가",
   "Cmd.oranda.grid.edit.duplicateRow": "행 복제",
   "Cmd.oranda.grid.edit.duplicateRow.many": "행 {0}개 복제",

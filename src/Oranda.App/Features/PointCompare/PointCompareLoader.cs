@@ -33,6 +33,9 @@ internal sealed record CompareRequest(DbObjectRef Table, long BasePoint)
 
     /// <summary><see cref="Keys"/> 의 열 이름(그리드 순서). <c>ROWID</c> 하나면 ROWID 로 짝짓는다. null 이면 표 PK 순서로 본다.</summary>
     public IReadOnlyList<string>? KeyColumns { get; init; }
+
+    /// <summary>목표 값 행(플래시백 결과 행). 있으면 시점을 읽지 않고 이 행과 지금 행을 견준다(<see cref="Keys"/> 는 이 행들의 키).</summary>
+    public IReadOnlyList<CompareTargetRow>? Targets { get; init; }
 }
 
 /// <summary>불러온 결과. <see cref="Error"/> 가 있으면 <see cref="Plan"/> 은 null.</summary>
@@ -53,6 +56,7 @@ internal static class PointCompareLoader
     public const string RangeWhere = "실행한 문장의 조건";
     public const string RangeTable = "테이블 전체";
     public const string RangeKeys = "고른 행";
+    public const string RangeTargets = "고른 결과 행";
 
     public static async Task<CompareLoad> LoadAsync(IPointCompareDb db, CompareRequest request, DateTimeOffset now, CancellationToken ct)
     {
@@ -86,6 +90,19 @@ internal static class PointCompareLoader
             if (request.Keys is { } gridKeys)
             {
                 request = request with { Keys = [.. gridKeys.Select(k => KeyTexts(table, k))] };
+            }
+
+            if (request.Targets is { } targets)
+            {
+                // 목표 값 = 결과 행(시점 없음): 지금 행만 읽어 견준다. undo·DDL·시점 검사는 시점을 읽을 때의 일이라 하지 않는다.
+                var (nowTargets, unreadable) = await ReadCountingAsync(db, table, null, request.Keys, ct).ConfigureAwait(true);
+                if (unreadable > 0)
+                {
+                    return new CompareLoad(null, "고른 행의 키 값을 리터럴로 쓸 수 없어 지금 행을 읽지 못했습니다(되돌리지 않습니다).");
+                }
+
+                var targetPlan = PointCompareTargets.Plan(table, targets, nowTargets, out var targetNotes);
+                return new CompareLoad(targetPlan, null) { Notes = targetNotes, Range = RangeTargets };
             }
 
             var notes = new List<string>();

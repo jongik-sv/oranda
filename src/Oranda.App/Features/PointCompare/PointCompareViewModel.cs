@@ -30,7 +30,8 @@ public sealed record PointOption(string Label, PointOptionKind Kind)
     public override string ToString() => Label;
 }
 
-public enum PointOptionKind { Group, MinutesAgo, Custom }
+/// <summary>시점 종류. <see cref="ResultRows"/> 는 시점이 아니라 고른 결과 행(플래시백 결과)이 목표 값이다.</summary>
+public enum PointOptionKind { Group, MinutesAgo, Custom, ResultRows }
 
 /// <summary>바뀐 행 표의 한 줄(되돌림은 바뀐 열마다 한 줄).</summary>
 public sealed record CompareRowItem(string Kind, string Key, string Column, string Base, string Commit, string Now)
@@ -125,6 +126,9 @@ public sealed class PointCompareViewModel : INotifyPropertyChanged
     /// <summary>그리드 키 열 이름(키로 열었을 때).</summary>
     public IReadOnlyList<string>? KeyColumns { get; init; }
 
+    /// <summary>목표 값 행(「이 행 상태로 되돌리기」, 플래시백 결과 행). 있으면 시점 대신 이 값으로 되돌리고, 지금 없는 행은 INSERT 로 되살린다.</summary>
+    public IReadOnlyList<CompareTargetRow>? Targets { get; init; }
+
     /// <summary>「스크립트를 새 편집기에 열기」.</summary>
     public Action<string>? OpenEditor { get; init; }
 
@@ -137,7 +141,7 @@ public sealed class PointCompareViewModel : INotifyPropertyChanged
     /// <summary>반영 전 확인(운영 접속). null 이면 묻지 않는다(미리보기를 본 사용자가 「반영」을 눌렀다).</summary>
     public Func<string, CancellationToken, Task<bool>>? ConfirmApply { get; init; }
 
-    public string Title => "이 실행 전과 비교 · " + (_selectedTable is { } t ? Name(t) : string.Empty);
+    public string Title => (Targets is null ? "이 실행 전과 비교 · " : "이 행 상태로 되돌리기 · ") + (_selectedTable is { } t ? Name(t) : string.Empty);
 
     public PointOption? SelectedPoint
     {
@@ -301,6 +305,7 @@ public sealed class PointCompareViewModel : INotifyPropertyChanged
                 Statements = point.Scopes.TryGetValue(table, out var scopes) ? scopes : [],
                 Keys = UsesKeys ? _keys : null,
                 KeyColumns = KeyColumns,
+                Targets = Targets,
             };
             var load = await PointCompareLoader.LoadAsync(_db, request, Now(), ct).ConfigureAwait(true);
             _loaded = point;
@@ -321,7 +326,7 @@ public sealed class PointCompareViewModel : INotifyPropertyChanged
             RangeText = load.Range is { } r ? "범위: " + r : string.Empty;
             _plan = load.Plan;
             _missingThen = 0;
-            if (UsesKeys && _plan is { } keyed)
+            if (Targets is null && UsesKeys && _plan is { } keyed)
             {
                 // 그리드가 고른 행(설계 8.5 G2): 되돌림만 만든다. 그때 없던 행은 지금처럼 건너뜀으로 센다.
                 _missingThen = keyed.Rows.Count(x => x.Kind == CompareKind.Remove);
@@ -503,6 +508,8 @@ public sealed class PointCompareViewModel : INotifyPropertyChanged
         {
             case PointOptionKind.Group when option.BasePoint is not null:
                 return option;
+            case PointOptionKind.ResultRows when Targets is not null:
+                return option with { BasePoint = 0 }; // 시점을 읽지 않는다(목표 값 = 결과 행)
             case PointOptionKind.MinutesAgo when option.Minutes is { } m:
                 {
                     var at = Now().AddMinutes(-m);
@@ -600,7 +607,9 @@ public sealed class PointCompareViewModel : INotifyPropertyChanged
 
         RowsHeader = $"바뀐 행 ({plan.Rows.Count.ToString(CultureInfo.InvariantCulture)}행 중 {changed.Count.ToString(CultureInfo.InvariantCulture)}행"
                      + (Rows.Count < changed.Count ? $", 앞 {MaxShownRows.ToString(CultureInfo.InvariantCulture)}줄 표시)" : ")");
-        CountsText = UsesKeys
+        CountsText = Targets is not null
+            ? $"되돌릴 값 {plan.Count(CompareKind.Revert)} 행 · UPDATE   되살릴 행 {plan.Count(CompareKind.Restore)} · INSERT   같은 값 {plan.Count(CompareKind.Same)}"
+            : UsesKeys
             ? $"되돌릴 값 {plan.Count(CompareKind.Revert)} 행 · UPDATE   충돌 {plan.Count(CompareKind.Conflict)} · " + (_includeConflicts ? "포함" : "제외")
               + $"   건너뜀: 그때 없던 행 {_missingThen}, 같은 값 {plan.Count(CompareKind.Same)}" + (_missingNow > 0 ? $", 지금 없는 행 {_missingNow}" : string.Empty)
             : $"되돌릴 값 {plan.Count(CompareKind.Revert)} 행 · UPDATE   되살릴 행 {plan.Count(CompareKind.Restore)} · INSERT   "
@@ -615,13 +624,13 @@ public sealed class PointCompareViewModel : INotifyPropertyChanged
         }
 
         _script = PointComparePlanner.BuildDml(plan, _db.Dialect, _includeConflicts, PointCompareSql.Quote);
-        var header = $"기준 {PointName} {point.BasePoint?.ToString(CultureInfo.InvariantCulture)}"
+        var header = point.Kind == PointOptionKind.ResultRows ? "목표 값: " + point.Label : $"기준 {PointName} {point.BasePoint?.ToString(CultureInfo.InvariantCulture)}"
                      + (point.BaseAt is { } at ? " (" + at.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture) + ")" : string.Empty)
                      + (point.GroupId is { } g ? " · 커밋 묶음 #" + g.ToString(CultureInfo.InvariantCulture) : string.Empty);
         DmlText = _script.Statements.Count == 0 && _script.Skipped.Count == 0 ? string.Empty : PointComparePlanner.Format(_script, header);
         if (_script.Statements.Count == 0 && ErrorText.Length == 0)
         {
-            StatusText = "되돌릴 차이가 없습니다.";
+            StatusText = Targets is null ? "되돌릴 차이가 없습니다." : "바꿀 것 없음: 지금 값이 고른 행과 같습니다.";
         }
 
         ShowRows(); // 「충돌 포함·제외」 글을 맞춘다

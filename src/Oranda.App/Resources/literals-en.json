@@ -1881,5 +1881,11 @@
   "시각 직접 지정": "Enter time",
   "바뀐 행": "Changed rows",
   "시점 번호 또는 yyyy-MM-dd HH:mm:ss": "Point number or yyyy-MM-dd HH:mm:ss",
-  "이 커밋 묶음 전체 보기": "Show the Whole Commit Group"
+  "이 커밋 묶음 전체 보기": "Show the Whole Commit Group",
+  "「이 행 상태로 되돌리기」는 테이블 하나를 VERSIONS BETWEEN … 또는 AS OF … 로 조회한 결과에서 씁니다.": "Restore This Row State works on a result that queried one table with VERSIONS BETWEEN … or AS OF ….",
+  "여러 테이블이 얽힌 결과에서는 쓸 수 없습니다.": "Not available on a result that involves several tables.",
+  "DB 링크 테이블의 플래시백 결과는 되돌릴 수 없습니다.": "A Flashback result of a database link table cannot be restored.",
+  "유효 시간(PERIOD FOR) 플래시백 결과는 되돌릴 수 없습니다.": "A valid-time (PERIOD FOR) Flashback result cannot be restored.",
+  "바꿀 것 없음: 지금 값이 고른 행과 같습니다.": "Nothing to change: the current values match the chosen row.",
+  "고른 결과 행": "Chosen result row"
 }

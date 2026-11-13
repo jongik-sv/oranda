@@ -33,8 +33,13 @@ namespace Oranda.App.Features.Flashback;
     Placements = ["context:grid/edit/flashback@30"])]
 [OrandaCommand("oranda.grid.flashback.restore", CommandCategory.Result, Title = "이전 값으로 되돌리기…", When = "gridFocus", Enablement = "gridHasSelection && !sessionBusy && !noImplMetadata",
     Placements = ["context:grid/edit/flashback@130"])]
+[OrandaCommand(FlashbackCommandHandler.RestoreRowId, CommandCategory.Result, Title = "이 행 상태로 되돌리기…", When = "gridFocus", Enablement = "gridHasSelection && !sessionBusy && !noImplMetadata",
+    Placements = ["context:grid/edit/flashback@140"])]
 public sealed class FlashbackCommandHandler : ICommandHandler
 {
+    /// <summary>「이 행 상태로 되돌리기」: 플래시백 조회 결과(VERSIONS·AS OF)에서 고른 행의 값을 목표로 지금 행을 되돌린다(화면 3).</summary>
+    public const string RestoreRowId = "oranda.grid.flashback.restoreRow";
+
     private const int DefaultAsOfMinutes = 10;
     private const int MaxRestoreRows = 200;
 
@@ -97,6 +102,9 @@ public sealed class FlashbackCommandHandler : ICommandHandler
                     break;
                 case "oranda.grid.flashback.restore":
                     await RestoreAsync(container, model, source.Target, edit, cancellationToken).ConfigureAwait(true);
+                    break;
+                case RestoreRowId:
+                    await RestoreRowAsync(container, model, source, cancellationToken).ConfigureAwait(true);
                     break;
             }
         }
@@ -321,6 +329,59 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         {
             await rerun(edit.Query, ct).ConfigureAwait(true);
         }
+
+        if (why is not null)
+        {
+            Notify(container, model, why);
+        }
+    }
+
+    /// <summary>
+    /// 「이 행 상태로 되돌리기」(FB-02): 실행한 문장이 단일 표 플래시백 조회(VERSIONS BETWEEN·AS OF)인지 분석기로 보고, 활성 행의 값을 목표로 화면 3 을 연다.
+    /// 지금 있으면 UPDATE, 없으면 INSERT, 같으면 바꿀 것 없음. 반영은 커밋 없이 하고 반대 문장을 기록한다(화면 3 그대로).
+    /// </summary>
+    private static async Task RestoreRowAsync(ServiceContainer container, ResultGridModel model, FlashbackSource source, CancellationToken ct)
+    {
+        var statement = source.Edit?.Query ?? source.Tab.Statement;
+        var shape = statement is null ? null : FlashbackResultAnalyzer.Analyze(statement.Text);
+        if (shape is not { IsPastValues: true })
+        {
+            Notify(container, model, shape?.Reason ?? FlashbackResultAnalyzer.NotFlashback);
+            return;
+        }
+
+        var target = source.Target;
+        if (target.EditablePositions.Count == 0)
+        {
+            model.ReportNotice("되돌릴 수 있는 열이 없습니다.");
+            return;
+        }
+
+        var row = model.Active.Row;
+        var op = FlashbackRowRestore.OperationOrdinal(model.Columns);
+        var read = (await model.ReadRowsAsync(row, row, op >= 0 ? [.. target.Ordinals, op] : target.Ordinals, ct).ConfigureAwait(true)).FirstOrDefault();
+        var values = read?.Take(target.Ordinals.Count).ToArray();
+        if (values is null || target.KeyPositions.Any(p => values[p] is null or DBNull))
+        {
+            model.ReportNotice("키 값이 있는 행을 고르세요.");
+            return;
+        }
+
+        var operation = op >= 0 ? Convert.ToString(read![^1], CultureInfo.InvariantCulture) : null;
+
+        var label = FlashbackRowRestore.Label(shape, operation);
+        var args = new PointCompareArgs(source.Session.Profile.Id, null, target.Table, target.KeyNames, [target.KeyOf(values)], null);
+        var why = await PointCompareLauncher.OpenAsync(container, args, (applied, _) =>
+        {
+            var failures = applied.Failed + applied.Conflicts;
+            var zero = applied.ZeroRows > 0 ? $" 0행 {applied.ZeroRows}개는 그 뒤 다른 사람이 바꾼 행입니다." : string.Empty;
+            var notice = failures == 0
+                ? $"{applied.Applied} 행을 {label} 상태로 되돌렸습니다(커밋 안 함). 커밋하려면 커밋 단추, 되돌리려면 롤백.{zero}"
+                : $"{applied.Applied} 행 반영, {failures} 행 실패: {applied.FirstError}";
+            GridEditCommands.Report?.Invoke(notice);
+            model.ReportNotice(notice);
+            return Task.CompletedTask;
+        }, ct, source.Session, null, [FlashbackRowRestore.TargetOf(target, values)], label).ConfigureAwait(true);
 
         if (why is not null)
         {

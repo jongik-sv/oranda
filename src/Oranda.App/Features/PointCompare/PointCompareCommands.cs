@@ -12,6 +12,7 @@ using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Rollback;
+using Oranda.Core.Rollback.Compare;
 using Oranda.Core.Rollback.Script;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
@@ -63,9 +64,10 @@ internal static class PointCompareLauncher
 
     /// <summary>
     /// 화면 3 을 연다. 열 수 없으면 이유 한 줄. <paramref name="afterApply"/> 는 반영 뒤(그리드 다시 조회 등, RB-33).
+    /// <paramref name="targets"/> 가 있으면 목표 값의 출처가 시점이 아니라 그 결과 행이다(「이 행 상태로 되돌리기」): 시점 목록 대신 <paramref name="targetLabel"/> 한 줄.
     /// </summary>
     public static async Task<string?> OpenAsync(IServiceProvider services, PointCompareArgs args, Func<CompareApplyResult, PointOption, Task>? afterApply, CancellationToken ct,
-                                               ISession? session = null, string? scopeNote = null)
+                                               ISession? session = null, string? scopeNote = null, IReadOnlyList<CompareTargetRow>? targets = null, string? targetLabel = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(args);
@@ -85,7 +87,11 @@ internal static class PointCompareLauncher
         var analyzer = services.GetService(typeof(IDmlAnalyzer)) as IDmlAnalyzer ?? new Oranda.Language.Editing.DmlShapeAnalyzer();
         var points = new List<PointOption>();
         RollbackGroup? group = null;
-        if (args.GroupId is { } id)
+        if (targets is not null)
+        {
+            points.Add(new PointOption(targetLabel ?? PointCompareLoader.RangeTargets, PointOptionKind.ResultRows));
+        }
+        else if (args.GroupId is { } id)
         {
             try
             {
@@ -117,7 +123,7 @@ internal static class PointCompareLauncher
         }
 
         var table = args.Table ?? (group is { Tables.Count: > 0 } g0 ? g0.Tables[0] : null);
-        if (store is not null && table is not null)
+        if (store is not null && table is not null && targets is null)
         {
             // 그 표를 건드린 커밋 묶음(최신순). 범위 근거 문장은 고를 때가 아니라 지금 함께 읽는다(묶음 수가 적다).
             IReadOnlyList<RollbackGroup> found;
@@ -136,7 +142,10 @@ internal static class PointCompareLauncher
             }
         }
 
-        points.Add(new PointOption(CustomLabel, PointOptionKind.Custom));
+        if (targets is null)
+        {
+            points.Add(new PointOption(CustomLabel, PointOptionKind.Custom));
+        }
 
         var catalog = DbmsServices.For<ISqlCatalog>(services, session);
         var db = DbOverride?.Invoke(session, dialect) ?? CreateDb(services, session, dialect, catalog);
@@ -149,6 +158,7 @@ internal static class PointCompareLauncher
         var vm = new PointCompareViewModel(db, connection, table, points, keys)
         {
             KeyColumns = args.KeyColumns,
+            Targets = targets,
             ScopeNote = scopeNote,
             ConfirmApply = session.Profile.Environment == Oranda.Core.Connection.ConnectionEnvironment.Production
                 && Oranda.App.Features.GridEdit.GridEditCommands.ConfirmPreview is { } confirm

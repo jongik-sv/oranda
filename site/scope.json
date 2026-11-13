@@ -131,6 +131,7 @@
     {"id": "oranda.grid.flashback.asOf", "page": "run/grid-edit"},
     {"id": "oranda.grid.flashback.history", "page": "run/grid-edit"},
     {"id": "oranda.grid.flashback.restore", "page": "run/grid-edit"},
+    {"id": "oranda.grid.flashback.restoreRow", "page": "run/grid-edit"},
     {"id": "oranda.grid.followForeignKey", "page": "run/result-grid"},
     {"id": "oranda.grid.freezeColumns", "page": "run/result-grid"},
     {"id": "oranda.grid.hideColumn", "page": "run/result-grid"},
