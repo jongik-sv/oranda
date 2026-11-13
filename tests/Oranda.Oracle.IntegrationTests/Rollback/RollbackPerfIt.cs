@@ -127,7 +127,7 @@ public sealed class RollbackPerfIt(OracleFreeFixture db, ITestOutputHelper outpu
         await PerStatementAsync(prod, 20, ChangeRecording.Normal, firstId: edits * 2 + 1);
         var (plain, _) = await PerStatementAsync(prod, edits, ChangeRecording.None, firstId: 1);
         var (captured, last) = await PerStatementAsync(prod, edits, ChangeRecording.Normal, firstId: edits + 1); // 다른 행: 버퍼 캐시 효과를 나눈다
-        output.WriteLine(Line("grid-row", $"none {Ms(plain)} ms/row, script {Ms(captured)} ms/row, +{Ms(captured - plain)} ms/row ({edits} rows)"));
+        Emit(Line("grid-row", $"none {Ms(plain)} ms/row, script {Ms(captured)} ms/row, +{Ms(captured - plain)} ms/row ({edits} rows)"));
         Assert.Equal(RollbackScriptState.Open, last.Rollback?.State); // 원복 스크립트를 실제로 만들었다
         Assert.Equal(1, last.Rollback?.StepCount);
         Assert.True(captured < TimeSpan.FromSeconds(2), "한 행 반영이 2초를 넘었다");
@@ -142,7 +142,7 @@ public sealed class RollbackPerfIt(OracleFreeFixture db, ITestOutputHelper outpu
         await PerStatementAsync(dev, 20, ChangeRecording.Normal, firstId: statements * 2 + 1);
         var (plain, _) = await PerStatementAsync(dev, statements, ChangeRecording.None, firstId: 1);
         var (point, last) = await PerStatementAsync(dev, statements, ChangeRecording.Normal, firstId: statements + 1); // 개발 접속: 시점(SCN)만
-        output.WriteLine(Line("point-only", $"none {Ms(plain)} ms/stmt, scn {Ms(point)} ms/stmt, +{Ms(point - plain)} ms/stmt ({statements} stmts)"));
+        Emit(Line("point-only", $"none {Ms(plain)} ms/stmt, scn {Ms(point)} ms/stmt, +{Ms(point - plain)} ms/stmt ({statements} stmts)"));
         Assert.Equal(NotCreatedReason.NotProduction, last.Rollback?.Reason); // 원복 스크립트 없이
         Assert.NotNull(last.Rollback?.BeforePoint); // 시점은 읽었다
         Assert.True(point < TimeSpan.FromSeconds(1));
@@ -206,13 +206,20 @@ public sealed class RollbackPerfIt(OracleFreeFixture db, ITestOutputHelper outpu
     private void Report(string what, TimeSpan without, TimeSpan with, TimeSpan save, RollbackGroup group, long json, long cipher)
     {
         var ratio = without.TotalMilliseconds <= 0 ? double.NaN : with.TotalMilliseconds / without.TotalMilliseconds;
-        output.WriteLine(Line(what,
+        Emit(Line(what,
             $"rows {BigRows}, none {Ms(without)} ms, script {Ms(with)} ms, ratio {ratio.ToString("0.00", CultureInfo.InvariantCulture)}, "
             + $"commit(in-memory store, RB-21 뒤 SQLite 로 다시) {Ms(save)} ms, steps {group.StepCount}, json {json / 1024} KiB, "
             + $"encrypted(fake vault) {cipher / 1024} KiB"));
     }
 
     private static string Line(string what, string text) => "[RB-90] " + what + ": " + text;
+
+    /// <summary>시험 출력과 CI 작업 요약(<c>GITHUB_STEP_SUMMARY</c>, 통과한 시험의 출력은 로그에 안 나온다) 둘 다에 남긴다.</summary>
+    private void Emit(string line)
+    {
+        output.WriteLine(line);
+        RollbackCaptureIt.WriteSummary(line);
+    }
 
     private static string Ms(TimeSpan t) => t.TotalMilliseconds.ToString("0.0", CultureInfo.InvariantCulture);
 

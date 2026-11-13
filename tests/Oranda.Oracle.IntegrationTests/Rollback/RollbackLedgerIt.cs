@@ -116,10 +116,14 @@ public sealed class RollbackLedgerIt(OracleFreeFixture db, ITestOutputHelper out
         Assert.Equal(200m, await PriceAsync(2)); // 서버도 되돌렸다
     }
 
+    /// <summary>
+    /// PL/SQL 블록도 원복 없이 시점만 남긴 문장으로 묶음에 들어가므로(RD-20) 커밋으로 판정된 묶음은 「불완전」이다(원장 11.2: 원복이 없는 문장이 섞임).
+    /// 롤백으로 판정되면 「무효」. 판정 자체(끝 종류)가 이 시험의 대상이다.
+    /// </summary>
     [Theory]
-    [InlineData("BEGIN COMMIT; END;", RollbackScriptState.Confirmed)]
-    [InlineData("BEGIN ROLLBACK; END;", RollbackScriptState.Invalid)]
-    public async Task Commit_or_rollback_inside_plsql_is_probed(string block, RollbackScriptState expected)
+    [InlineData("BEGIN COMMIT; END;", TransactionEndKind.Commit, RollbackScriptState.Incomplete)]
+    [InlineData("BEGIN ROLLBACK; END;", TransactionEndKind.Rollback, RollbackScriptState.Invalid)]
+    public async Task Commit_or_rollback_inside_plsql_is_probed(string block, TransactionEndKind kind, RollbackScriptState expected)
     {
         await RunAsync($"UPDATE {_table} SET PRICE = 7 WHERE ID = 3", StatementKind.Dml);
         await RunAsync(block, StatementKind.PlSql);
@@ -127,6 +131,7 @@ public sealed class RollbackLedgerIt(OracleFreeFixture db, ITestOutputHelper out
         var group = await LatestGroupAsync();
         output.WriteLine($"{block} → {group.State} ({group.EndKind}, {group.EndSource})");
         Assert.Equal(TransactionEndSource.PlSql, group.EndSource);
+        Assert.Equal(kind, group.EndKind);
         Assert.Equal(expected, group.State);
     }
 

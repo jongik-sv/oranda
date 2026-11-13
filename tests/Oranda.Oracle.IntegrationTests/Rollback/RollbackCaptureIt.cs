@@ -166,15 +166,60 @@ public sealed class RollbackCaptureIt(OracleFreeFixture db, ITestOutputHelper ou
     [Fact]
     public async Task Versions_xid_matches_the_local_transaction_id_bytes()
     {
-        await ExecAsync(_session, $"UPDATE {_table} SET NAME = 'xid' WHERE ID = 3");
+        await Task.Delay(TimeSpan.FromSeconds(8)); // 표를 만든 직후 SCN 으로는 VERSIONS 를 읽지 못한다(ORA-01466, 대응 간격 몇 초)
+        var before = await ScalarAsync(_session, "SELECT DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER FROM DUAL");
+        // 실행 서비스로 보낸다: 연결의 자동 커밋을 끄므로(드라이버 기본은 문장마다 커밋) 트랜잭션이 열린 채 id 를 읽을 수 있다.
+        var update = await _exec.ExecuteAsync(_session, new SqlStatement($"UPDATE {_table} SET NAME = 'xid' WHERE ID = 3", default, StatementKind.Dml)
+            { Verb = "UPDATE" }, NoBinds, new ExecutionOptions { Recording = ChangeRecording.None }, CancellationToken.None);
+        Assert.Equal(ExecutionStatus.Succeeded, update.Status);
         var local = await ScalarAsync(_session, "SELECT DBMS_TRANSACTION.LOCAL_TRANSACTION_ID FROM DUAL");
         await ExecAsync(_session, "COMMIT");
-        await Task.Delay(TimeSpan.FromSeconds(8)); // VERSIONS 는 표를 만든 직후 SCN 을 못 읽는다(ORA-01466)
+        Assert.False(string.IsNullOrEmpty(local), "커밋 전 LOCAL_TRANSACTION_ID 가 비었다");
 
-        var xid = await ScalarAsync(_session,
-            $"SELECT RAWTOHEX(VERSIONS_XID) FROM {_table} VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE WHERE ID = 3 AND VERSIONS_OPERATION = 'U'");
-        output.WriteLine($"LOCAL_TRANSACTION_ID {local} → VERSIONS_XID {xid}");
+        var versions = await RowsAsync(_session,
+            $"SELECT RAWTOHEX(VERSIONS_XID), VERSIONS_OPERATION FROM {_table} VERSIONS BETWEEN SCN {before} AND MAXVALUE WHERE ID = 3");
+        output.WriteLine($"LOCAL_TRANSACTION_ID {local} → VERSIONS {string.Join(", ", versions)} · 후보(LE) {LittleEndianXid(local!)}");
+        WriteSummary($"[RB-12] xid: LOCAL_TRANSACTION_ID {local} → VERSIONS {string.Join(", ", versions)} · little-endian 후보 {LittleEndianXid(local!)}");
+        var xid = versions.Where(v => v.EndsWith(" U", StringComparison.Ordinal)).Select(v => v[..^2]).Single();
         Assert.Equal(xid, LittleEndianXid(local!));
+    }
+
+    /// <summary>CI 의 작업 요약(<c>GITHUB_STEP_SUMMARY</c>)이 있으면 한 줄 덧붙인다(통과한 시험의 출력은 로그에 나오지 않는다).</summary>
+    internal static void WriteSummary(string line)
+    {
+        if (Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY") is { Length: > 0 } file)
+        {
+            try
+            {
+                File.AppendAllText(file, line + Environment.NewLine);
+            }
+            catch (IOException)
+            {
+                // 요약은 덤이다.
+            }
+        }
+    }
+
+    private static async Task<List<string>> RowsAsync(OracleSession session, string sql)
+    {
+        await session.CommandGate.EnterAsync(CancellationToken.None);
+        try
+        {
+            await using var cmd = session.Connection.CreateCommand();
+            cmd.CommandText = sql;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            var rows = new List<string>();
+            while (await reader.ReadAsync())
+            {
+                rows.Add((reader.IsDBNull(0) ? "-" : reader.GetString(0)) + " " + (reader.IsDBNull(1) ? "-" : reader.GetString(1)));
+            }
+
+            return rows;
+        }
+        finally
+        {
+            session.CommandGate.Release();
+        }
     }
 
     /// <summary>후보 규칙: usn·slot 은 2바이트, sqn 은 4바이트, 각각 little-endian.</summary>
