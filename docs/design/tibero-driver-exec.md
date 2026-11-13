@@ -161,3 +161,46 @@ END;
 - TIMESTAMP WITH (LOCAL) TIME ZONE·BINARY_DOUBLE/FLOAT·INTERVAL OUT 값 = 서버 글자 그대로(tb-result 몫).
 - 가짜 드라이버 `TiberoCommand.Cancel()` 호출 횟수(결정62 허가, 아직 안 넣음) — 넣으면 취소 단위 시험이 「Cancel 이 불렸다」를 단언할 수 있다.
 - Tibero 대량 실행(`IBulkExecutionService`) 없음 — T5.
+
+## 10. 되돌리기 지점 실측(RB-13, 서버 6.2.15, TDP.NET 1.1.35, 2026-11-13 win30)
+
+시험 = `tests/Oranda.Tibero.Tests/Integration/RollbackDialectMeasureIt.cs`(쓰기 IT, `ORB_RB` 표만 만들고 지움). 설계 = `docs/superpowers/specs/2026-11-13-rollback-point-design.md` 6.6·15장. 측정 시험이라 단언 없이 `RB13 …` 줄을 남긴다.
+
+| 항목 | 결과 | 방언 값 |
+|---|---|---|
+| `INSERT … RETURNING ROWID INTO :ORANDA_RID` (실행 서비스, OUT Varchar2 크기 미지정) | 성공, 1행, OUT = 18글자 string, `ROWID = CHARTOROWID(값)` 1행. `RETURNING ROWIDTOCHAR(ROWID)` 도 같음 | `SupportsReturningRowId = true` |
+| 내부 저장점 `SAVEPOINT ORANDA$RB`(`$` 이름) → `SELECT … FOR UPDATE`(3행) → 사용자 문장 실패(TBR-5074) | 실패 뒤에도 다른 세션 `FOR UPDATE NOWAIT` = TBR-12033(잠금 남음). `ROLLBACK TO SAVEPOINT ORANDA$RB` 뒤 NOWAIT 성공(잠금 풀림). 트랜잭션 id 는 남는다(「미커밋 있음」) | 설계 RD-5 그대로 |
+| 같은 이름 저장점 다시 걸기, `ROLLBACK TO ORANDA$RB`(SAVEPOINT 생략) | 됨 | — |
+| 모르는 저장점 `ROLLBACK TO SAVEPOINT x` | TBR-21008(저장점 없음) | 분류 Other |
+| FOR UPDATE 잠근 행 수 = UPDATE 영향 행 수 | 3 = 3 | — |
+| NUMBER `TO_CHAR(c, 'TM9', 'NLS_NUMERIC_CHARACTERS=''.,''')` | 소수 29자리(`12345678901234567890.123456789`)·38자리 정수·음수 소수 모두 그대로, 따옴표 없는 리터럴로 1행 | Oracle 과 같음 |
+| DATE `SYYYY-MM-DD HH24:MI:SS` | 0001-01-01 포함 1행(부호 자리는 공백 없이 `2026-…`) | 같음 |
+| TIMESTAMP(9) `…FF9` | 9자리 그대로 1행 | 같음 |
+| TIMESTAMP(9) WITH TIME ZONE `…FF9 TZR` | 지역 이름(`Asia/Seoul`)·오프셋(`-03:30`) 모두 그대로 읽히고 `TO_TIMESTAMP_TZ(…, 같은 마스크)` 1행 | 같음 |
+| TIMESTAMP WITH LOCAL TIME ZONE: `SYS_EXTRACT_UTC(CAST(c AS TIMESTAMP WITH TIME ZONE))` + `CAST(FROM_TZ(TO_TIMESTAMP(…), 'UTC') AS TIMESTAMP WITH LOCAL TIME ZONE)` | 1행 | 같음 |
+| INTERVAL DAY(9) TO SECOND(9)·YEAR(9) TO MONTH: `TO_CHAR(c)` → `TO_DSINTERVAL`·`TO_YMINTERVAL` | `+000000003 04:05:06.123456789`·`-000000002-03`, 1행 | 같음 |
+| RAW `RAWTOHEX` → `HEXTORAW` | 1행 | 같음 |
+| CHAR·NCHAR | 읽은 값이 끝 공백까지 채워 옴(`'ab   '`), 그 글자 그대로 리터럴 1행 | 같음 |
+| VARCHAR2 작은따옴표 두 번 | 1행 | 같음 |
+| NVARCHAR2·NCHAR `UNISTR('\AC00…')` | 1행. BMP 밖 글자는 서로게이트 쌍 `\D83D\DE00` 이 글자 1개 | 같음 |
+| BINARY_DOUBLE 열 그대로(.NET double) → `TO_BINARY_DOUBLE('R 형식')` | 1행. `TO_CHAR(c)` 글자(`3.3333333333333333E-002`)도 1행 | 같음 |
+| **BINARY_FLOAT** 열 그대로(.NET float `0.1`) | `TO_BINARY_FLOAT('0.1')` = 1행, **`TO_BINARY_DOUBLE('0.1')` = 0행**. `TO_CHAR(c)`(`1.00000001E-001`) + `TO_BINARY_FLOAT` 도 1행 | `TO_BINARY_FLOAT` (설계 6.6 표의 `TO_BINARY_DOUBLE` 은 FLOAT 열에서 0행 — 조정자 보고) |
+| NaN·무한대 상수 `BINARY_DOUBLE_NAN`·`BINARY_FLOAT_INFINITY`·`-BINARY_DOUBLE_INFINITY` | 넣기·`c = 상수` 1행. NaN 의 `TO_CHAR` = `Nan` | 같음 |
+| ROWID `ROWIDTOCHAR(ROWID)` → `CHARTOROWID('…')`, `ROWID IN (…)` | 18글자, 1행 | 같음 |
+| 큰 열 NULL 여부 `CASE WHEN c IS NULL THEN 1 ELSE 0 END` | 됨 | 같음 |
+| 시점 읽기 세 방법 | `GET_SYSTEM_CHANGE_NUMBER` 이 `TIMESTAMP_TO_TSN(SYSTIMESTAMP)` 보다 12 크다(시각→TSN 은 몇 초 늦다). `V$DATABASE.CURRENT_TSN` 은 이 계정에서 됨 | 순서 그대로(정확한 방법 먼저) |
+| `AS OF TSN n`·`AS OF SCN n`(정확한 TSN) | 둘 다 됨 | `AsOf` = `AS OF TSN n` |
+| `AS OF TSN` 이 표를 만들기 전 시점(늦은 `TIMESTAMP_TO_TSN`) 또는 시점 뒤 DDL(`ALTER TABLE ADD`) | **TBR-21003 「Snapshot is too old」** — Oracle 의 ORA-01466(정의 바뀜) 자리에도 이 번호가 나온다 | 21003 → `SnapshotTooOld`. 정의 바뀜 번호는 따로 없다(`DefinitionChangedNumbers` 빈 목록) |
+| `AS OF TSN 1`(아주 옛 시점) | TBR-21034 「지정한 시각에 맞는 스냅숏 없음」(ORA-08180 자리) | 21034 → `SnapshotTooOld` |
+| `AS OF TSN` 미래 값(지금 + 10⁹) | **오류 없음**, 지금 데이터(Oracle 은 ORA-08181) | 잘못된 시점 번호 없음(`InvalidPointNumbers` 빈 목록). 시점 직접 지정은 앱이 지금 TSN 이하인지 먼저 본다 |
+| `AS OF TSN -5` | TBR-5072(NUMBER 변환) | — |
+| `VERSIONS BETWEEN TSN MINVALUE AND MAXVALUE` | TBR-8022(구문) — catalog-map 과 같음 | 화면 3 은 WHERE 범위부터(RD-15) |
+| DDL 암묵 커밋 | 성공 DDL, 의미 오류로 실패한 DDL(TBR-7102 이미 있음·7454 형식 없음·7071 객체 없음)은 앞 INSERT 를 **커밋**(트랜잭션 id NULL, 다른 세션에 보임). 구문 오류(TBR-7001)는 커밋 안 함(id 남음, 안 보임). Oracle 과 같은 모양 | 끝 판정 = 「모름 → 판정」 그대로 |
+| 트랜잭션 id 모양 | `99.99.999999`(usn.slot.sqn) | — |
+| 식별자 최대 길이(ASCII) | 128 바이트 됨, 129 = TBR-23007 | `MaxIdentifierBytes = 128` |
+| `ALL_TRIGGERS`(TABLE_OWNER·TABLE_NAME·STATUS·TRIGGERING_EVENT·TRIGGER_TYPE), `ALL_CONSTRAINTS.DELETE_RULE` | 열 있음 | 부작용 찾기 = Oracle 과 같은 사전 |
+| 가상 열 `GENERATED ALWAYS AS (…) VIRTUAL`·`B AS (…)` | 됨. `ALL_TAB_COLS.VIRTUAL_COLUMN` = **`Y`/`N`**(Oracle `YES`/`NO`), `HIDDEN_COLUMN` 도 `N` | `meta.columns` 가 이미 `YES`/`NO` 로 바꿔 `IsVirtual` 을 채운다 → DELETE 원복 INSERT 가 뺀다 |
+| 숨김 열 `INVISIBLE` | TBR-7001(없음) | `IsInvisible` 늘 거짓 |
+| IDENTITY 열 | 없음(`ALL_TAB_IDENTITY_COLS` TBR-8103, `IDENTITY_COLUMN` 열 TBR-8026 — copy 사전 실측과 같음) | `IsIdentity` 늘 거짓 |
+| 부작용 찾기 `TiberoRollbackValues.SideEffectsSql`(바인드 `:owner`·`:name` 이름 바인드) | 켜진 트리거(`TRIGGER 이름`)와 ON DELETE CASCADE 자식 FK(`FK CASCADE 자식표.FK`)를 찾음 | 그대로 |
+| `AS OF TSN n`(`TiberoRollbackValues.AsOf`, `GET_SYSTEM_CHANGE_NUMBER` 로 읽은 n) | 그 뒤 커밋한 UPDATE 앞 값을 읽음 | 그대로 |

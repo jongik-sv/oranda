@@ -34,6 +34,8 @@ public class TiberoErrorClassifierTests
     [InlineData(12033, DbErrorKind.ResourceBusy)]
     [InlineData(12034, DbErrorKind.ResourceBusy)]
     [InlineData(12022, DbErrorKind.InvalidCredentials)]
+    [InlineData(-21003, DbErrorKind.SnapshotTooOld)] // RB-13 실측: 시점 데이터 잃음·시점 뒤 DDL
+    [InlineData(-21034, DbErrorKind.SnapshotTooOld)] // RB-13 실측: 아주 옛 TSN
     [InlineData(-90603, DbErrorKind.Disconnected)] // 실측: 닫힌 연결에 명령
     [InlineData(-90403, DbErrorKind.Disconnected)]
     [InlineData(-590729, DbErrorKind.Disconnected)]

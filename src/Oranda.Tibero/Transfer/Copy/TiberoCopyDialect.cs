@@ -86,8 +86,9 @@ internal sealed class TiberoCopyDialect : ICopyDialect
     /// <item><c>TIMESTAMP_TO_TSN(SYSTIMESTAMP)</c>: 권한이 필요 없는 SQL 함수. 시각→TSN 대응 간격만큼 앞 TSN 일 수 있다(실측에서는 위와 같은 값). 앞 시점이어도 모든 테이블이 같은 TSN 으로 읽으므로 테이블 사이는 맞는다.</item>
     /// <item><c>V$DATABASE.CURRENT_TSN</c>: 정확하지만 V$ 조회 권한이 필요해 일반 계정은 실패한다(실패마다 작업 로그에 경고가 남으므로 마지막). 위 둘이 다 없는 판에서만 쓰인다.</item>
     /// </list>
-    /// 오류: 권한 없음은 분류기의 TBR-8053(<see cref="DbErrorKind.InsufficientPrivileges"/>)이 안내로 간다. 이전 시점 데이터 잃음·정의 바뀜·잘못된 TSN 의 번호는 실측하지 못해
-    /// 번호를 넣지 않는다 — 메시지에 「snapshot too old」 가 있으면 실행 전체를 멈추고, 그 밖의 모르는 서버 오류는 그 테이블만 실패로 둔다(<see cref="CopyReadPointSupport.UnmappedErrorsFailTable"/>).
+    /// 오류: 권한 없음은 분류기의 TBR-8053(<see cref="DbErrorKind.InsufficientPrivileges"/>)이 안내로 간다. 이전 시점 데이터 잃음은 TBR-21003·21034(RB-13 실측,
+    /// 분류기 <see cref="DbErrorKind.SnapshotTooOld"/>, 메시지 「snapshot too old」 도 같이 본다) → 실행 전체를 멈춘다. 정의 바뀜은 따로 번호가 없고(시점 뒤 DDL 도 21003),
+    /// 미래 TSN 은 오류 없이 지금 데이터를 준다(잘못된 TSN 번호 없음). 그 밖의 모르는 서버 오류는 그 테이블만 실패로 둔다(<see cref="CopyReadPointSupport.UnmappedErrorsFailTable"/>).
     /// 어느 쪽이든 지금 데이터로 바꿔 읽지 않는다. 다른 계정의 테이블에 FLASHBACK 권한이 필요한지는 실측하지 못해 사전 점검은 확인 필요로 둔다(<see cref="CopyReadPointSupport.PrivilegeUnverified"/>).
     /// </summary>
     public CopyReadPointSupport ReadPoint => Point;
@@ -104,7 +105,7 @@ internal sealed class TiberoCopyDialect : ICopyDialect
         "FLASHBACK",
         "FLASHBACK ANY TABLE")
     {
-        SnapshotTooOldErrors = null, // 번호 미실측(SnapshotTooOldErrorName 과 같다)
+        SnapshotTooOldErrors = SnapshotTooOldNumbers, // RB-13 실측(SnapshotTooOldErrorName 과 같다)
         SnapshotTooOldMessages = ["snapshot too old"],
         UnmappedErrorsFailTable = true,
         PrivilegeUnverified = true,
@@ -178,10 +179,14 @@ internal sealed class TiberoCopyDialect : ICopyDialect
     public bool DetachChildForeignKeysBeforeDrop => true;
 
     /// <summary>
-    /// 미실측 → 번호 없음(Tibero 의 이전 시점 읽기 실패 번호를 재지 못했다, <c>TiberoErrorClassifier</c> 도 SnapshotTooOld 를 분류하지 않는다).
-    /// 같은 시점 읽기 + 동시 복사(<see cref="ReadPoint"/>)는 메시지 글(「snapshot too old」)로 알아본다.
+    /// 이전 시점 읽기 실패 번호(되돌리기 지점 실측 RB-13, docs/design/tibero-driver-exec.md 10장): TBR-21003 「Snapshot is too old」(시점 뒤 DDL 에도 이 번호),
+    /// TBR-21034 「지정한 시각에 맞는 스냅숏 없음」. <c>TiberoErrorClassifier</c> 가 둘을 <see cref="DbErrorKind.SnapshotTooOld"/> 로 분류한다.
+    /// 같은 시점 읽기 + 동시 복사(<see cref="ReadPoint"/>)는 메시지 글(「snapshot too old」)로도 알아본다(예전 판 대비).
     /// </summary>
-    public string? SnapshotTooOldErrorName => null;
+    public string? SnapshotTooOldErrorName => SnapshotTooOldNumbers;
+
+    /// <summary><see cref="SnapshotTooOldErrorName"/>·<see cref="CopyReadPointSupport.SnapshotTooOldErrors"/> 의 글.</summary>
+    internal const string SnapshotTooOldNumbers = "TBR-21003·TBR-21034";
 
     /// <summary>
     /// 휴지통 이름은 <c>&lt;계정&gt;_…</c> 꼴(BIN$ 아님, 3.7 실측)이고, 그 이름으로 <c>FLASHBACK … RENAME TO</c> 가 된다. 트리거·인덱스·권한·참조 FK 가 함께 돌아오는지는 미실측이다.

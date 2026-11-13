@@ -10,7 +10,8 @@ namespace Oranda.Tibero.Execution;
 /// <summary>
 /// Tibero 오류 번호(<c>TBR-nnnnn</c>, 드라이버 메시지 머리말은 <c>ODP-nnnnn</c>) → <see cref="DbErrorKind"/> (D-046, docs/design/tibero.md 2장).
 /// 서버 번호표 출처: Tibero 7.2.6 오류 참조 안내서 원문 + 6.2.15 실측(docs/design/tibero-driver-session.md 6장). 드라이버 번호(9xxxx)는
-/// TDP.NET 1.1.35 의 <c>tbcomm.err.TbError</c> 상수 이름에서 가져왔다. 문서·실측에서 찾지 못한 분류(<see cref="DbErrorKind.SnapshotTooOld"/>·
+/// TDP.NET 1.1.35 의 <c>tbcomm.err.TbError</c> 상수 이름에서 가져왔다. 시점 지정 읽기 오류(21003·21034 = <see cref="DbErrorKind.SnapshotTooOld"/>)는
+/// 되돌리기 지점 실측(docs/design/tibero-driver-exec.md 10장)이다. 문서·실측에서 찾지 못한 분류(
 /// <see cref="DbErrorKind.ReadOnly"/>·<see cref="DbErrorKind.AccountLocked"/>·<see cref="DbErrorKind.PasswordExpired"/>·
 /// <see cref="DbErrorKind.CompiledWithErrors"/>)는 번호를 추측해 넣지 않고 <see cref="DbErrorKind.Other"/> 로 둔다.
 /// <para>
@@ -59,6 +60,8 @@ internal sealed partial class TiberoErrorClassifier : IDbErrorClassifier
         [12033] = DbErrorKind.ResourceBusy, // ERROR_LOCKFAIL_IN_NOWAIT
         [12034] = DbErrorKind.ResourceBusy, // ERROR_LOCKFAIL_IN_WAIT_TIMEOUT
         [12022] = DbErrorKind.InvalidCredentials, // ERROR_CLIMSG_AUTH_FAILED
+        [21003] = DbErrorKind.SnapshotTooOld, // Snapshot is too old (실측 RB-13: UNDO 잃음, 그리고 시점 뒤 DDL — Oracle 01466 자리도 이 번호)
+        [21034] = DbErrorKind.SnapshotTooOld, // 지정한 시각에 맞는 스냅숏 없음 (실측 RB-13: 아주 옛 TSN, Oracle 08180 자리)
     };
 
     public Dbms Dbms => Dbms.Tibero;

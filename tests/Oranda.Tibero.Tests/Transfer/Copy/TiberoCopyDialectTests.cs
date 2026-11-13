@@ -106,7 +106,7 @@ public sealed class TiberoCopyDialectTests
 
         Assert.Equal("TBR-7156", dialect.ReferencedByForeignKeysErrorName); // 3.5 실측: 참조되는 부모 DROP
         Assert.Null(dialect.TriggerCompileErrorName); // 미실측: 컴파일 오류 트리거는 오류 없이 INVALID+ENABLED 로 남는다
-        Assert.Null(dialect.SnapshotTooOldErrorName); // 미실측
+        Assert.Equal("TBR-21003·TBR-21034", dialect.SnapshotTooOldErrorName); // RB-13 실측
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class TiberoCopyDialectTests
         Assert.Equal("FLASHBACK ANY TABLE", point.SystemPrivilege);
         Assert.True(point.PrivilegeUnverified); // 다른 계정 테이블 권한은 미실측 → 사전 점검은 확인 필요
         Assert.True(point.UnmappedErrorsFailTable);
-        Assert.Null(point.SnapshotTooOldErrors); // 번호 미실측(추측해 넣지 않는다)
+        Assert.Equal("TBR-21003·TBR-21034", point.SnapshotTooOldErrors); // RB-13 실측
         Assert.Equal(dialect.SnapshotTooOldErrorName, point.SnapshotTooOldErrors);
         Assert.Empty(point.DefinitionChangedNumbers);
         Assert.Empty(point.InvalidPointNumbers);
@@ -229,10 +229,16 @@ public sealed class TiberoCopyDialectTests
         Assert.False(privilege.AbortRun);
         Assert.Contains("TSN 1234 시점으로 읽을 권한(FLASHBACK 또는 FLASHBACK ANY TABLE)이 없습니다(TBR-8053)", privilege.Message, StringComparison.Ordinal);
 
-        // 시점 데이터 잃음: 번호는 모르지만(아래 번호는 가짜) 메시지로 알아본다 → 전체 중단, 받은 코드를 적는다.
-        var old = CopyReadPointErrors.Describe("A", point, Error(-99001, "TBR-99001: Snapshot too old."))!.Value;
-        Assert.True(old.AbortRun);
-        Assert.Contains("원본 TSN 1234 시점의 데이터가 원본 UNDO 에 남아 있지 않아 읽지 못했습니다(TBR-99001)", old.Message, StringComparison.Ordinal);
+        // 시점 데이터 잃음(RB-13 실측 TBR-21003·21034, 분류기 SnapshotTooOld) → 전체 중단, 방언의 번호 글을 적는다.
+        foreach (var number in new[] { -21003, -21034 })
+        {
+            var old = CopyReadPointErrors.Describe("A", point, Error(number, "TBR-" + (-number) + ": snapshot."))!.Value;
+            Assert.True(old.AbortRun);
+            Assert.Contains("원본 TSN 1234 시점의 데이터가 원본 UNDO 에 남아 있지 않아 읽지 못했습니다(TBR-21003·TBR-21034)", old.Message, StringComparison.Ordinal);
+        }
+
+        // 번호가 다른 판(아래 번호는 가짜)이어도 메시지로 알아본다 → 전체 중단.
+        Assert.True(CopyReadPointErrors.Describe("A", point, Error(-99001, "TBR-99001: Snapshot too old."))!.Value.AbortRun);
 
         // 실측하지 못한 번호(정의 바뀜·잘못된 TSN 등): 그 테이블만 실패, 지금 데이터로 바꿔 읽지 않는다.
         var unknown = CopyReadPointErrors.Describe("A", point, Error(-99002, "TBR-99002: invalid flashback point."))!.Value;
