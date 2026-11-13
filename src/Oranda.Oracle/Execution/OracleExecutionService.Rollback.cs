@@ -159,7 +159,9 @@ internal sealed partial class OracleExecutionService
                 hooks.Ledger.MarkSavepoint(session.Id, name);
             }
 
-            if (RollbackFlow.EndAfter(session.Id, stmt, succeeded, pendingBefore, pendingAfter) is { } ended)
+            // 열린 묶음은 이 문장의 기록(Complete) 뒤에 읽는다: 미커밋이 없던 PL/SQL 이 안에서 바꾸고 커밋해도 끝을 놓치지 않는다.
+            var hasOpenGroup = hooks.Ledger.Open(session.Id) is not null;
+            if (RollbackFlow.EndAfter(session.Id, stmt, succeeded, pendingBefore, pendingAfter, hasOpenGroup) is { } ended)
             {
                 await hooks.EndAsync(session, ended.Kind, ended.Source, ended.Savepoint);
             }

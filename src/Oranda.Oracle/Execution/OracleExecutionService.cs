@@ -285,13 +285,11 @@ internal sealed partial class OracleExecutionService : IExecutionService
             capture = await BeginRollbackAsync(session, plan, answer, ct);
             var send = capture?.StatementToSend ?? stmt;
             var sendBinds = capture?.BindsToSend ?? binds;
-            // 바인드 이름 목록이 없는 사용자 문장(바인드 사전의 키로 붙임)에 엔진이 출력 바인드 이름만 더했으면 사전의 키로 모두 붙인다.
-            var bindShape = stmt.BindNames.Count == 0 && binds.Count > 0 ? send with { BindNames = [] } : send;
 
             cmd = conn.CreateCommand();
             cmd.BindByName = true;
             cmd.CommandText = send.Text;
-            var parameters = BindBuilder.Build(cmd, bindShape, sendBinds);
+            var parameters = BindBuilder.Build(cmd, send, sendBinds);
             sent = true;
             var pageSize = CurrentPageSize; // 실행마다 한 번 읽는다: 한 결과 안에서 페이지 크기가 바뀌지 않게
             var lobFetchSize = CurrentLobFetchSize;

@@ -122,7 +122,8 @@ internal sealed partial class OracleExecutionService
 
         // 실패한 CTAS 도 앞에서 커밋했을 수 있다: 미커밋 표시를 다시 읽고(화면의 「미커밋」도 맞춘다) 끝이면 알린다.
         var pendingAfter = await SafeTrackAfterFailureAsync(session, ctas, StatementKind.Ddl);
-        if (RollbackFlow.EndAfter(session.Id, ctas, failed is null, pendingBefore, pendingAfter) is { } ended)
+        var hasOpenGroup = session.Rollback.Ledger.Open(session.Id) is not null;
+        if (RollbackFlow.EndAfter(session.Id, ctas, failed is null, pendingBefore, pendingAfter, hasOpenGroup) is { } ended)
         {
             await session.Rollback.EndAsync(session, ended.Kind, ended.Source, ended.Savepoint);
         }
