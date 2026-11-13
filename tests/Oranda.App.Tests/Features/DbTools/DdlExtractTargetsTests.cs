@@ -75,7 +75,7 @@ public class DdlExtractTargetsTests(ITestOutputHelper output)
         var (window, view) = Show(vm);
         try
         {
-            Oranda.App.Tests.Shell.Controls.TableColumnsProbe.AssertDragMovesHeaderAndRows(
+            Oranda.App.Tests.Shell.Controls.TableColumnsCheck.DragMovesHeaderAndRows(
                 window, view.FindControl<Grid>("TargetHeader")!, view.FindControl<ListBox>("TargetList")!, column: 1);
         }
         finally

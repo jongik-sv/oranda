@@ -148,7 +148,7 @@ public sealed class HistoryScriptsTests : IDisposable
             {
                 Dispatcher.UIThread.RunJobs();
                 var header = view.FindControl<Grid>("HistoryHeader")!;
-                Oranda.App.Tests.Shell.Controls.TableColumnsProbe.AssertDragMovesHeaderAndRows(window, header, view.FindControl<ListBox>("List")!, column: 2);
+                Oranda.App.Tests.Shell.Controls.TableColumnsCheck.DragMovesHeaderAndRows(window, header, view.FindControl<ListBox>("List")!, column: 2);
             }
             finally
             {

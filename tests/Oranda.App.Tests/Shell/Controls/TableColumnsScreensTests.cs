@@ -38,7 +38,7 @@ public sealed class TableColumnsScreensTests
             window.UpdateLayout();
             var header = view.FindControl<Grid>("CompareHeader")!;
             Assert.Equal(420, header.ColumnDefinitions[3].ActualWidth, 1); // 연산 열: XAML 기본 폭(옛 k-op 폭), 남는 폭은 끝 * 열이 받는다
-            TableColumnsProbe.AssertDragMovesHeaderAndRows(window, header, view.FindControl<ListBox>("CompareList")!, column: 3);
+            TableColumnsCheck.DragMovesHeaderAndRows(window, header, view.FindControl<ListBox>("CompareList")!, column: 3);
         }
         finally
         {
@@ -60,7 +60,7 @@ public sealed class TableColumnsScreensTests
         try
         {
             Dispatcher.UIThread.RunJobs();
-            TableColumnsProbe.AssertDragMovesHeaderAndRows(window, view.FindControl<Grid>("ErrorsHeader")!, view.FindControl<ListBox>("ErrorList")!, column: 1);
+            TableColumnsCheck.DragMovesHeaderAndRows(window, view.FindControl<Grid>("ErrorsHeader")!, view.FindControl<ListBox>("ErrorList")!, column: 1);
         }
         finally
         {

@@ -168,7 +168,7 @@ public class DbToolsTests
         {
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             // 세 표(결과·소스 검색·열 검색)는 같은 모양: 보이는 결과 표 하나로 확인한다.
-            Oranda.App.Tests.Shell.Controls.TableColumnsProbe.AssertDragMovesHeaderAndRows(
+            Oranda.App.Tests.Shell.Controls.TableColumnsCheck.DragMovesHeaderAndRows(
                 window, Avalonia.Controls.ControlExtensions.FindControl<Avalonia.Controls.Grid>(view, "ResultHeader")!,
                 Avalonia.Controls.ControlExtensions.FindControl<Avalonia.Controls.ListBox>(view, "ResultList")!, column: 1);
         }
