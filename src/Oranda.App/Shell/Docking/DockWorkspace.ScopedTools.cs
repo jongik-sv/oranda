@@ -567,6 +567,9 @@ public sealed partial class DockWorkspace
             }
         }
 
+        // 핀을 빼 사이드바로 접은 창도 원래 묶음에 적는다(Dock 은 묶음에서 빼되 Owner 는 그 묶음으로 둔다). 다시 지을 때 핀을 다시 뺀다.
+        ids.AddRange(PinnedTools().Where(t => ReferenceEquals(t.Owner, group) && !ids.Contains(t.Id)).Select(t => t.Id));
+
         return (ids, active);
     }
 }

@@ -20,6 +20,10 @@ public sealed class PanelTool : Tool
         Id = definition.Id;
         Title = title;
         CanFloat = true;
+
+        // 도구 창을 문서 탭 자리로 넣지 않는다(탭 메뉴 「Dock as Tabbed Document」·문서 영역으로 끌어 넣기). 넣으면 문서 탭과 섞여
+        // 쓰기 곤란하고, 배치 DTO 에는 문서 영역 안의 도구 창 자리가 없어 다음 실행에 닫힌 창이 된다(2026-11-13 사용자 신고).
+        CanDockAsDocument = false;
     }
 
     public ToolPanelDefinition Definition { get; }

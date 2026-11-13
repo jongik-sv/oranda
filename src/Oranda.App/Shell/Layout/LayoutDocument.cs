@@ -22,6 +22,12 @@ public sealed record LayoutDocument
     public IReadOnlyList<string> HiddenTools { get; init; } = [];
 
     /// <summary>
+    /// 핀을 빼서(자동 숨김) 가장자리 사이드바로 접어 둔 도구 창 ID. 이 창들도 <see cref="Root"/> 의 원래 묶음 자리에 그대로 적혀 있고,
+    /// 배치를 지은 뒤 다시 핀을 뺀다. 닫힌 창이 아니다(<see cref="HiddenTools"/> 와 겹치지 않는다).
+    /// </summary>
+    public IReadOnlyList<string> PinnedTools { get; init; } = [];
+
+    /// <summary>
     /// 이 배치에 이미 적용한 일회성 이주의 이름(예: <see cref="LayoutPlanner.RightToolsOpenMigration"/>). 이름이 있으면 그 이주는 다시 하지 않는다.
     /// null = 이주 표지가 없는 옛 배치.
     /// </summary>

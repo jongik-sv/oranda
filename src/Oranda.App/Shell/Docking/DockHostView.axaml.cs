@@ -62,6 +62,7 @@ public partial class DockHostView : UserControl
     {
         DockRoot.Factory = _workspace!.Factory;
         DockRoot.Layout = _workspace.Layout;
+        _workspace.RestorePins(fromView: true); // Layout 을 넣으면 핀 목록이 비워진다 — 저장된 핀을 다시 뺀다
     }
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)

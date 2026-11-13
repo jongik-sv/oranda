@@ -263,6 +263,7 @@ TRD 4.11 대로 앱 DTO 다(Core 가 아니라 `Oranda.App`). Dock.Avalonia 의 
 | `root.tools` | string[] | ○ | `[]` | `ToolGroup` 만. 도구 창 ID(TSK-02-02) |
 | `root.activeTool` | string | ○ | 첫 항목 | `ToolGroup` 만 |
 | `hiddenTools` | string[] | ○ | `[]` | 닫아 둔 도구 창 ID |
+| `pinnedTools` | string[] | ○ | `[]` | 핀을 빼 가장자리 사이드바로 접어 둔 도구 창 ID. `root` 의 원래 묶음에도 그대로 적고, 배치를 지은 뒤 다시 핀을 뺀다(닫힌 창 아님) |
 | `migrations` | string[] | ○ | null(표지 없음) | 이 배치에 이미 적용한 일회성 이주 이름. `rightToolsOpen` 이 없으면 읽을 때 한 번 바인드 변수·템플릿 창을 열고 표지를 남긴다(TSK-13-16). 기본 배치·되돌림에도 표지가 붙는다 |
 
 - 모르는 도구 ID는 버린다. 필수 도구가 빠졌으면 기본 위치에 다시 넣는다.
@@ -741,7 +742,7 @@ public sealed record ConnectionsDocument
 | `CommentOptions` | `Preserve`(true), `MaxBlankLines`(1) |
 | `Keymap` | `SchemaVersion`(1), `Id`(required), `Name`(required), `BasedOn`(string?), `Bindings`(IReadOnlyList<KeyBinding>=[]) |
 | `KeyBinding` | `Command`(string, required), `Keys`(IReadOnlyList<string>=[]), `When`(string?), `Mac`(IReadOnlyList<string>?) |
-| `LayoutDocument` | `SchemaVersion`(1), `Window`(WindowPlacement?), `Root`(DockNode?), `HiddenTools`(IReadOnlyList<string>=[]) |
+| `LayoutDocument` | `SchemaVersion`(1), `Window`(WindowPlacement?), `Root`(DockNode?), `HiddenTools`(IReadOnlyList<string>=[]), `PinnedTools`(IReadOnlyList<string>=[]) |
 | `WindowPlacement` | `X`, `Y`, `Width`, `Height`(int), `State`(WindowStateKind=Normal), `Screen`(string?) |
 | `DockNode` | `Kind`(DockNodeKind), `Orientation`(DockOrientation=Horizontal), `Proportion`(double?), `Children`(IReadOnlyList<DockNode>=[]), `Tools`(IReadOnlyList<string>=[]), `ActiveTool`(string?) |
 | `Workspace` | `SchemaVersion`(1), `Id`(required), `Name`(required), `SavedAt`(DateTimeOffset), `ActiveTabId`(Guid?), `Tabs`(IReadOnlyList<WorkspaceTab>=[]), `Layout`(string="layout.json") |

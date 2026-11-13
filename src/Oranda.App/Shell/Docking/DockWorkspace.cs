@@ -205,7 +205,7 @@ public sealed partial class DockWorkspace
         }
     }
 
-    /// <summary>보이는 도구 창 ID(트리에 있는 것).</summary>
+    /// <summary>보이는 도구 창 ID(트리에 있는 것). 핀을 빼 사이드바에 접어 둔 창도 넣는다(닫힌 창이 아니다 — 보기 메뉴에 체크로 보인다).</summary>
     public IReadOnlyList<string> VisibleToolIds =>
         Layout is null ? [] : LayoutPlanner.ToolIds(CaptureRoot()).Where(id => !IsScopedHidden(id)).ToList();
 
@@ -296,9 +296,54 @@ public sealed partial class DockWorkspace
         }
 
         Factory.InitLayout(dockRoot);
+        _pendingPins = planned.PinnedTools ?? [];
         ApplyEmptyContent();
-        LayoutRebuilt?.Invoke(this, EventArgs.Empty);
+        LayoutRebuilt?.Invoke(this, EventArgs.Empty); // 보기가 Layout 을 갈아 끼우며 핀을 다시 뺀다(RestorePins)
+        RestorePins(fromView: false); // 보기가 아직 없을 때(시작 직후·시험)
     }
+
+    /// <summary>마지막으로 지은 배치에서 핀을 다시 빼야 할 도구 창 ID. 보기가 그 배치를 화면에 붙이면 비운다.</summary>
+    private IReadOnlyList<string> _pendingPins = [];
+
+    /// <summary>
+    /// 저장된 배치에서 핀을 빼 두었던 도구 창을 다시 사이드바로 접는다. 배치 트리(원래 묶음)에 있는 창만 — 닫았거나 등록에서 빠진 창은 건너뛴다.
+    /// 이것이 없으면 다음 실행·배치 다시 짓기(다른 도구 창 보이기 등)에서 핀이 풀리거나 닫힌 창이 되었다(2026-11-13 사용자 신고).
+    /// <c>DockControl.Layout</c> 을 갈아 끼우면 모델의 핀 목록이 비워지므로, 보기(<see cref="DockHostView"/>)가 Layout 을 넣은 바로 뒤에 다시 부른다(<paramref name="fromView"/>).
+    /// 이미 핀이 빠진 창은 건드리지 않는다(PinDockable 은 핀을 넣고 빼는 토글이다).
+    /// </summary>
+    internal void RestorePins(bool fromView)
+    {
+        var pinnedNow = PinnedTools();
+        foreach (var id in _pendingPins)
+        {
+            if (_tools.TryGetValue(id, out var tool) && !pinnedNow.Contains(tool)
+                && tool.Owner is IToolDock { VisibleDockables: { } tabs } && tabs.Contains(tool))
+            {
+                Factory.PinDockable(tool);
+            }
+        }
+
+        if (fromView)
+        {
+            _pendingPins = [];
+        }
+    }
+
+    /// <summary>핀을 빼 가장자리 사이드바에 접혀 있는 도구 창(메인 배치 트리의 묶음 탭에는 없다).</summary>
+    private List<PanelTool> PinnedTools()
+    {
+        if (Layout is not IRootDock root)
+        {
+            return [];
+        }
+
+        return new[] { root.LeftPinnedDockables, root.RightPinnedDockables, root.TopPinnedDockables, root.BottomPinnedDockables }
+            .SelectMany(list => list ?? [])
+            .OfType<PanelTool>()
+            .ToList();
+    }
+
+    private PanelTool? PinnedTool(string toolId) => PinnedTools().FirstOrDefault(t => t.Id == toolId);
 
     /// <summary>
     /// 사용자가 나눈 문서 칸 전체를 하나의 분할로 돌려준다(DTO 의 Documents 노드 하나와 대응). 나누지 않았으면 null.
@@ -415,7 +460,8 @@ public sealed partial class DockWorkspace
             .Where(p => p.Kind == ToolPanelKind.Tool && !inTree.Contains(p.Id) && !IsScopedHidden(p.Id)) // 잠시 숨긴 창은 닫힌 창이 아니다
             .Select(p => p.Id)
             .ToList();
-        return new LayoutDocument { Window = window, Root = root, HiddenTools = hidden, Migrations = _migrations };
+        var pinned = PinnedTools().Select(t => t.Id).Where(inTree.Contains).ToList();
+        return new LayoutDocument { Window = window, Root = root, HiddenTools = hidden, PinnedTools = pinned, Migrations = _migrations };
     }
 
     public bool IsToolVisible(string toolId) => VisibleToolIds.Contains(toolId);
@@ -438,7 +484,14 @@ public sealed partial class DockWorkspace
         // 메뉴를 다시 만들어 메인 창이 깜박였다(조합 검사·실행 계획을 할 때마다, 2026-10-24 사용자 신고).
         // - 다른 탭 뒤: 그 묶음의 활성 탭만 바꾼다(아래 LayoutPlanner.ShowTool 이 하는 일과 같다).
         // - 떠 있는 창: 그 창 안에서 앞으로 가져오고 그 창을 맨 앞으로 올린다. 배치를 다시 짓지 않는다(보기 메뉴 토글은 예전 길, ToggleTool).
-        // - 자동 숨김(핀으로 접힘)·범위로 잠시 숨김·닫힘: 메인 배치 트리 밖이라 아래 기존 길(배치 재구성)로 펼치거나 보인다.
+        // - 자동 숨김(핀으로 접힘): 사이드바에서 펼쳐 보인다(핀은 그대로).
+        // - 범위로 잠시 숨김·닫힘: 메인 배치 트리 밖이라 아래 기존 길(배치 재구성)로 보인다.
+        if (PinnedTool(toolId) is { } pinned && !IsScopedHidden(toolId))
+        {
+            Factory.PreviewPinnedDockable(pinned);
+            return true;
+        }
+
         if (_tools.TryGetValue(toolId, out var shown) && shown.Owner is IDock owner && !IsScopedHidden(toolId))
         {
             var floating = keepFloating ? FloatingWindowOf(shown) : null;
@@ -497,6 +550,11 @@ public sealed partial class DockWorkspace
         if (IsScopedHidden(toolId))
         {
             RestoreScopedTool(toolId); // 기능이 직접 부르면(컴파일 오류 등) 활성 문서와 상관없이 그 창만 보인다
+        }
+
+        if (PinnedTool(toolId) is not null)
+        {
+            return true; // 핀을 빼 둔 창은 접힌 채 둔다(실행할 때마다 사이드바에서 튀어나오지 않게 — 사용자가 접어 둔 것이다)
         }
 
         if (_tools.TryGetValue(toolId, out var tool) && tool.Owner is IDock owner && IsToolVisible(toolId))
