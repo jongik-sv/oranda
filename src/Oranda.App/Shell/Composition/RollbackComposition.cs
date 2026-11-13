@@ -3,20 +3,24 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.Core.Composition;
+using Oranda.App.Shell.Settings;
+using Oranda.Core.Metadata;
 using Oranda.Core.Rollback;
+using Oranda.Core.Rollback.Capture;
 
 namespace Oranda.App.Shell.Composition;
 
 // 되돌리기 지점 조립(되돌리기 지점 설계 13.1). Core 구현은 스캔 대상이 아니므로 앱 어셈블리(스캔 대상)의 얇은 등록 형식이 Core 구현을 올린다.
-// 지금은 끔 구현(RB-00). RB-02 가 엔진(RollbackCaptureEngine), RB-04 가 원장(RollbackLedger)으로 바꾼다.
+// 엔진은 RB-02 RollbackCaptureEngine. 원장은 지금 끔 구현이고 RB-04 가 RollbackLedger 로 바꾼다.
 // 컨테이너는 같은 서비스의 마지막 등록을 고르므로, 나중에 훑는 Language 의 IDmlAnalyzer(RB-30)가 여기 끔 분석기를 이긴다.
 // 저장소·금고(IRollbackStore·IRollbackVault)는 Platform(RB-20·RB-21)이 올린다. 여기서 대신 등록하지 않는다(앱 어셈블리가 Platform 뒤에 훑여 실구현을 가린다).
 
-/// <summary>원복 캡처 엔진 등록. 지금은 <see cref="RollbackCapture.Disabled"/>.</summary>
+/// <summary>원복 캡처 엔진 등록(RB-02 <see cref="RollbackCaptureEngine"/>). 설정은 실행할 때마다 <see cref="SettingsService.Current"/> 에서 읽는다.</summary>
 [OrandaService(typeof(IRollbackCapture))]
-internal sealed class AppRollbackCapture : IRollbackCapture
+internal sealed class AppRollbackCapture(IRollbackLedger ledger, SettingsService settings, IMetadataProvider metadata, IRollbackStore? store = null)
+    : IRollbackCapture
 {
-    private readonly IRollbackCapture _inner = RollbackCapture.Disabled;
+    private readonly RollbackCaptureEngine _inner = new(ledger, () => settings.Current.Rollback, metadata, store);
 
     public Task<ConfirmExtras> PrepareAsync(RollbackRequest request, IRollbackChannel gatedChannel, IRollbackDialect dialect, CancellationToken ct) =>
         _inner.PrepareAsync(request, gatedChannel, dialect, ct);

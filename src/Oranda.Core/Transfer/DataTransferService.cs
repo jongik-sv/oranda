@@ -364,7 +364,7 @@ public class DataTransferService : IDataTransferService
     {
         var stmt = new SqlStatement(sql, default, StatementKind.Dml) { Verb = "INSERT" };
         return _execution.ExecuteAsync(s, stmt, new Dictionary<string, BindValue>(),
-            new ExecutionOptions { Source = HistorySource.Editor, SkipHistory = true }, ct);
+            new ExecutionOptions { Source = HistorySource.Editor, SkipHistory = true, Recording = Oranda.Core.Rollback.ChangeRecording.PointOnly }, ct); // RD-21
     }
 
     /// <summary>한 행이면 <c>VALUES (…)</c>, 여러 행이면 방언의 한 행 SELECT 절을 <c>UNION ALL</c> 로 이은 한 문장.</summary>
