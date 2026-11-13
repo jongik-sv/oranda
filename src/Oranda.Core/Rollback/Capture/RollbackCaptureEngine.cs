@@ -359,8 +359,9 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
 
     private async Task<LoadedTable?> LoadTableAsync(ISession s, DmlShape shape, IRollbackChannel channel, IRollbackDialect dialect, CancellationToken ct)
     {
-        // 소유자를 적은 직접 참조만 캐시한다: 소유자 없는 이름은 세션의 현재 스키마·시노님에 따라 가리키는 표가 바뀔 수 있다.
-        RollbackTableKey? key = shape.Owner is { } writtenOwner ? new RollbackTableKey(s.Id, writtenOwner, shape.Name!, shape.Verb == DmlVerb.Delete) : null;
+        // 소유자 없는 이름은 늘 그랬듯 세션 사용자의 것으로 본다. 캐시 키도 같은 소유자로 만들고, 시노님을 거쳐 풀린 표는 캐시하지 않는다(아래).
+        var owner = shape.Owner ?? s.Server.SessionUser ?? s.Profile.User;
+        RollbackTableKey? key = new RollbackTableKey(s.Id, owner, shape.Name!, shape.Verb == DmlVerb.Delete);
         if (key is { } hit && _tables is not null && _tables.TryGet(hit, out var cached))
         {
             return cached;
@@ -370,7 +371,6 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
         var noticeGeneration = _sideEffects.Generation;
 
         var metadata = _metadata!;
-        var owner = shape.Owner ?? s.Server.SessionUser ?? s.Profile.User;
         var written = new DbObjectRef(owner, shape.Name!, "TABLE");
         var resolved = await SynonymResolver.ResolveAsync((o, n) => metadata.GetNameStepAsync(s, o, n, ct), written, shape.Owner is not null,
                                                           (name, link) => $"DB 링크 시노님({name}@{link})").ConfigureAwait(false);
@@ -413,7 +413,8 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
         }
 
         var loaded = new LoadedTable(new RollbackTable(table, columns, keys) { SideEffects = sideEffects }, primaryKey?.IsEnabled ?? false);
-        // 시노님을 거쳐 풀린 표와 안내를 찾지 못한 표는 표 캐시에 넣지 않는다(시노님은 다른 곳에서 다시 가리킬 수 있고, 실패한 안내는 다시 찾아야 한다).
+        // 시노님(PUBLIC 시노님 포함)을 거쳐 풀린 표와 안내를 찾지 못한 표는 표 캐시에 넣지 않는다(시노님은 다른 곳에서 다시 가리킬 수 있고,
+        // 실패한 안내는 다시 찾아야 한다). 같은 스키마에 같은 이름의 표와 시노님은 함께 있을 수 없으므로, 바로 풀린 이름은 DDL 전까지 같은 표다.
         var direct = string.Equals(resolved.Owner, written.Owner, StringComparison.Ordinal) && string.Equals(resolved.Name, written.Name, StringComparison.Ordinal);
         if (key is { } tableKey && direct && found is not null)
         {

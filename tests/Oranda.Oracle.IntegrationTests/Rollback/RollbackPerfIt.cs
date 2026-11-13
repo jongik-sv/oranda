@@ -202,7 +202,7 @@ public sealed class RollbackPerfIt(OracleFreeFixture db, ITestOutputHelper outpu
     private async Task<(TimeSpan PerStatement, ExecutionResult Last)> PerStatementAsync(OracleSession session, int count, ChangeRecording recording,
                                                                                        int firstId)
     {
-        var text = $"UPDATE {_table} SET PRICE = PRICE + 1 WHERE ID = :id";
+        var text = $"UPDATE SYSTEM.{_table} SET PRICE = PRICE + 1 WHERE ID = :id"; // 그리드(RowDmlBuilder)처럼 소유자를 붙인다
         ExecutionResult last = null!;
         var sw = Stopwatch.StartNew();
         for (var i = firstId; i < firstId + count; i++)

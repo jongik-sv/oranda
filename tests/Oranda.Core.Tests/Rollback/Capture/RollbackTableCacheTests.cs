@@ -116,20 +116,34 @@ public class RollbackTableCacheTests
     }
 
     [Fact]
-    public async Task Failed_notice_lookup_and_names_without_owner_are_not_cached()
+    public async Task Failed_notice_lookup_is_not_cached()
     {
         var rig = new Rig();
         rig.Channel.Fail("ALL_TRIGGERS", new DbError("ORA-00942", "table or view does not exist") { Kind = DbErrorKind.ObjectNotFound });
 
         await rig.PrepareAsync(GridUpdate);
         await rig.PrepareAsync(GridUpdate);
-        Assert.Equal((2, 2), (rig.Metadata.TableReads, rig.SideEffectQueries)); // 실패를 캐시하면 경고가 사라진다
 
+        Assert.Equal((2, 2), (rig.Metadata.TableReads, rig.SideEffectQueries)); // 실패를 캐시하면 경고가 사라진다
+    }
+
+    [Fact]
+    public async Task Names_without_owner_are_cached_when_they_name_the_table_directly_but_not_through_a_synonym()
+    {
+        var rig = new Rig();
+        var user = rig.Session.Server.SessionUser!;
+        rig.Inner.Tables[new DbObjectRef(user, "PRODUCTS", "TABLE")] = rig.Inner.Tables[Products] with { Table = new DbObjectRef(user, "PRODUCTS", "TABLE") };
         var noOwner = GridUpdate with { Owner = null, TableText = "PRODUCTS" };
-        rig.Inner.Tables[new DbObjectRef(rig.Session.Server.SessionUser!, "PRODUCTS", "TABLE")] = rig.Inner.Tables[Products];
+
         await rig.PrepareAsync(noOwner);
         await rig.PrepareAsync(noOwner);
-        Assert.Equal(4, rig.Metadata.TableReads); // 소유자 없는 이름은 현재 스키마·시노님에 따라 바뀔 수 있다
+        Assert.Equal(1, rig.Metadata.TableReads); // 세션 사용자의 표로 바로 풀렸다
+
+        var viaSynonym = GridUpdate with { Owner = null, Name = "PROD", TableText = "PROD" };
+        rig.Inner.NameSteps[(user, "PROD")] = NameStep.Synonym("SAMPLE", "PRODUCTS");
+        await rig.PrepareAsync(viaSynonym);
+        await rig.PrepareAsync(viaSynonym);
+        Assert.Equal(3, rig.Metadata.TableReads); // 시노님은 다른 곳에서 다시 가리킬 수 있다
     }
 
     [Fact]
