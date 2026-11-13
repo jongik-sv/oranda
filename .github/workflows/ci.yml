@@ -349,6 +349,9 @@ jobs:
           SAMPLER=$!
           trap 'kill $SAMPLER 2>/dev/null || true' EXIT
           dotnet test Oranda.sln -c Release --no-build --filter "Category=Integration" --logger "console;verbosity=normal" --blame-hang-timeout 8m --blame-hang-dump-type none
+      - name: Rollback perf numbers
+        if: always()
+        run: cat "$RUNNER_TEMP/oranda-rb90.txt" || true
       - name: Resource report (after integration tests)
         if: always()
         run: |

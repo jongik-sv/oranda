@@ -184,19 +184,33 @@ public sealed class RollbackCaptureIt(OracleFreeFixture db, ITestOutputHelper ou
         Assert.Equal(xid, LittleEndianXid(local!));
     }
 
-    /// <summary>CI 의 작업 요약(<c>GITHUB_STEP_SUMMARY</c>)이 있으면 한 줄 덧붙인다(통과한 시험의 출력은 로그에 나오지 않는다).</summary>
+    /// <summary>
+    /// CI 에서 한 줄 덧붙인다: 작업 요약(<c>GITHUB_STEP_SUMMARY</c>)과 <c>$RUNNER_TEMP/oranda-rb90.txt</c>(다음 단계가 로그로 출력해 API 로 읽게).
+    /// 통과한 시험의 출력은 로그에 나오지 않는다. 둘 다 없으면(로컬) 아무것도 하지 않는다.
+    /// </summary>
     internal static void WriteSummary(string line)
     {
-        if (Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY") is { Length: > 0 } file)
+        Append(Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY"), line);
+        if (Environment.GetEnvironmentVariable("RUNNER_TEMP") is { Length: > 0 } temp)
         {
-            try
-            {
-                File.AppendAllText(file, line + Environment.NewLine);
-            }
-            catch (IOException)
-            {
-                // 요약은 덤이다.
-            }
+            Append(Path.Combine(temp, "oranda-rb90.txt"), line);
+        }
+    }
+
+    private static void Append(string? file, string line)
+    {
+        if (string.IsNullOrEmpty(file))
+        {
+            return;
+        }
+
+        try
+        {
+            File.AppendAllText(file, line + Environment.NewLine);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 수치 남기기는 덤이다.
         }
     }
 
