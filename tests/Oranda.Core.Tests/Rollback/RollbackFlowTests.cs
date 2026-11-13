@@ -49,17 +49,17 @@ public class RollbackFlowTests
     public void End_after_statement()
     {
         var id = Guid.NewGuid();
-        Assert.Equal(TransactionEndKind.Commit, RollbackFlow.EndAfter(id, Stmt("COMMIT", StatementKind.TransactionControl), true, true, false)!.Kind);
-        Assert.Null(RollbackFlow.EndAfter(id, Stmt("COMMIT", StatementKind.TransactionControl), false, true, true));
-        Assert.Equal("SP1", RollbackFlow.EndAfter(id, Stmt("ROLLBACK TO sp1", StatementKind.TransactionControl), true, true, true)!.Savepoint);
-        Assert.Equal(TransactionEndSource.Ddl, RollbackFlow.EndAfter(id, Stmt("ALTER TABLE T ADD X NUMBER", StatementKind.Ddl), false, true, false)!.Source);
-        Assert.Null(RollbackFlow.EndAfter(id, Stmt("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY'", StatementKind.Ddl), true, true, true));
+        Assert.Equal(TransactionEndKind.Commit, RollbackFlow.EndAfter(id, Stmt("COMMIT", StatementKind.TransactionControl), true, true, false, hasOpenGroup: false)!.Kind);
+        Assert.Null(RollbackFlow.EndAfter(id, Stmt("COMMIT", StatementKind.TransactionControl), false, true, true, hasOpenGroup: false));
+        Assert.Equal("SP1", RollbackFlow.EndAfter(id, Stmt("ROLLBACK TO sp1", StatementKind.TransactionControl), true, true, true, hasOpenGroup: false)!.Savepoint);
+        Assert.Equal(TransactionEndSource.Ddl, RollbackFlow.EndAfter(id, Stmt("ALTER TABLE T ADD X NUMBER", StatementKind.Ddl), false, true, false, hasOpenGroup: false)!.Source);
+        Assert.Null(RollbackFlow.EndAfter(id, Stmt("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY'", StatementKind.Ddl), true, true, true, hasOpenGroup: false));
         Assert.Equal((TransactionEndKind.Unknown, TransactionEndSource.Statement),
-                     RollbackFlow.EndAfter(id, Stmt("COMMIT", StatementKind.TransactionControl), false, true, false) is { } failedCommit
+                     RollbackFlow.EndAfter(id, Stmt("COMMIT", StatementKind.TransactionControl), false, true, false, hasOpenGroup: false) is { } failedCommit
                          ? (failedCommit.Kind, failedCommit.Source) : default);
-        Assert.Equal(TransactionEndSource.PlSql, RollbackFlow.EndAfter(id, Stmt("BEGIN COMMIT; END;", StatementKind.PlSql), true, true, false)!.Source);
-        Assert.Null(RollbackFlow.EndAfter(id, Stmt("BEGIN NULL; END;", StatementKind.PlSql), true, true, true));
-        Assert.Null(RollbackFlow.EndAfter(id, Stmt("SAVEPOINT sp1", StatementKind.TransactionControl), true, true, true));
+        Assert.Equal(TransactionEndSource.PlSql, RollbackFlow.EndAfter(id, Stmt("BEGIN COMMIT; END;", StatementKind.PlSql), true, true, false, hasOpenGroup: false)!.Source);
+        Assert.Null(RollbackFlow.EndAfter(id, Stmt("BEGIN NULL; END;", StatementKind.PlSql), true, true, true, hasOpenGroup: false));
+        Assert.Null(RollbackFlow.EndAfter(id, Stmt("SAVEPOINT sp1", StatementKind.TransactionControl), true, true, true, hasOpenGroup: false));
         Assert.Equal("SP1", RollbackFlow.SavepointMarked(Stmt("SAVEPOINT sp1", StatementKind.TransactionControl), true));
         Assert.Null(RollbackFlow.SavepointMarked(Stmt("SAVEPOINT ORANDA$RB", StatementKind.TransactionControl), true));
     }

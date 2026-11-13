@@ -155,22 +155,6 @@ public static class RollbackFlow
         return lost ? new TransactionEnded(sessionId, TransactionEndKind.Unknown, TransactionEndSource.Statement) : null;
     }
 
-    /// <summary>
-    /// 열린 묶음을 모르는 옛 판(옛 규칙 그대로): DDL 은 보낸 뒤 미커밋이 거짓이면 「모름」, PL/SQL·불확실 문장은 미커밋 참 → 거짓일 때만 「모름」.
-    /// 미커밋이 없던 세션의 PL/SQL 안 COMMIT 을 놓치므로 공급자는 6인자 판
-    /// <see cref="EndAfter(Guid, SqlStatement, bool, bool, bool, bool)"/> 로 옮긴다(공급자 레인이 옮긴 뒤 지운다).
-    /// </summary>
-    public static TransactionEnded? EndAfter(Guid sessionId, SqlStatement stmt, bool succeeded, bool pendingBefore, bool pendingAfter)
-    {
-        ArgumentNullException.ThrowIfNull(stmt);
-        if (stmt.Kind == StatementKind.Ddl)
-        {
-            return pendingAfter ? null : new TransactionEnded(sessionId, TransactionEndKind.Unknown, TransactionEndSource.Ddl);
-        }
-
-        return EndAfter(sessionId, stmt, succeeded, pendingBefore, pendingAfter, hasOpenGroup: false);
-    }
-
     /// <summary>성공한 <c>SAVEPOINT 이름</c> 이면 그 이름(원장 <see cref="IRollbackLedger.MarkSavepoint"/>). 내부 저장점 이름은 null.</summary>
     public static string? SavepointMarked(SqlStatement stmt, bool succeeded, string internalSavepoint = "ORANDA$RB")
     {

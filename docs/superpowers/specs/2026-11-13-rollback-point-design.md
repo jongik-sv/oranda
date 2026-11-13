@@ -212,8 +212,8 @@ UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 4300
 |---|---|---|
 | `OracleSession`·`TiberoSession` 의 `CommitAsync`·`RollbackAsync` | 커밋·롤백 | `SessionApi` |
 | 실행 서비스가 보낸 트랜잭션 제어 문장: `COMMIT [WORK] [COMMENT …] [WRITE …]`, `ROLLBACK [WORK]`, `ROLLBACK [WORK] TO [SAVEPOINT] 이름`, `SAVEPOINT 이름` | 커밋·롤백·저장점까지 롤백·저장점 표시 | `Statement` |
-| 실행 서비스가 보낸 DDL(성공·실패 모두. Oracle 은 DDL 앞에서 암시적으로 커밋한다) 뒤 미커밋 표시가 거짓. 커밋하지 않는 DDL 분류 문장(`ALTER SESSION`, 구문 단계에서 실패한 DDL)은 미커밋이 남으므로 끝이 아니다 **[구현 중 결정 RD-24]** | 모름 → 판정 | `Ddl` |
-| 실행 서비스가 보낸 PL/SQL·불확실 문장 뒤 미커밋 표시가 참 → 거짓 | 모름 → 판정 | `PlSql` |
+| 실행 서비스가 보낸 DDL(성공·실패 모두. Oracle 은 DDL 앞에서 암시적으로 커밋한다) 앞에 미커밋이 있었거나 **원장에 열린 묶음이 있고**, 보낸 뒤 미커밋 표시가 거짓. 둘 다 없으면 끝이 아니다(되돌리기를 끈 세션에서 DDL 마다 끝을 내지 않음). 커밋하지 않는 DDL 분류 문장(`ALTER SESSION`, 구문 단계에서 실패한 DDL)은 미커밋이 남으므로 끝이 아니다 **[구현 중 결정 RD-24]** | 모름 → 판정 | `Ddl` |
+| 실행 서비스가 보낸 PL/SQL·불확실 문장: 보내기 전 미커밋이 참이었거나 **원장에 열린 묶음이 있고**, 보낸 뒤 미커밋 표시가 거짓(미커밋이 없던 세션의 `BEGIN INSERT …; COMMIT; END;` 도 잡는다) **[구현 중 결정 RD-24]** | 모름 → 판정 | `PlSql` |
 | 그 밖의 문장(실패한 COMMIT 의 ORA-02091, 트랜잭션을 되돌리는 오류) 뒤 미커밋 표시가 참 → 거짓 **[구현 중 결정 RD-24]** | 모름 → 판정 | `Statement` |
 | `SessionBroken` | 롤백(서버가 되돌림) | `SessionBroken` |
 | `SessionClosed` 때 열린 묶음이 있음 | 모름(판정 못 함) | `SessionClosed` |
@@ -1019,7 +1019,7 @@ RunAsync(s, stmt, binds, options):
 |---|---|---|---|
 | RD-22 | BINARY_FLOAT 열의 리터럴은 `TO_BINARY_FLOAT('R')`·`BINARY_FLOAT_NAN`·`BINARY_FLOAT_INFINITY`, BINARY_DOUBLE 만 DOUBLE 판(6.6) | Tibero 실측: BINARY_FLOAT 열을 `TO_BINARY_DOUBLE` 로 견주면 0행 | 방언 안 |
 | RD-23 | `TouchedRowIds` 를 PK 없는 표 말고도 ROWID 로 찾는 원복(PK 를 바꾼 UPDATE)과 DELETE 원복에도 채운다(6.3, RD-13) | `UPDATE pk 1→2` 뒤 `DELETE pk=2` 를 역순 실행하면 되살린 행의 ROWID 가 바뀌어 앞 원복이 0행이 된다 | 엔진 한 줄 |
-| RD-24 | DDL 뒤 끝은 미커밋 표시가 거짓일 때만 「모름」. 실패한 COMMIT·트랜잭션을 되돌리는 오류처럼 미커밋이 참 → 거짓이 된 문장은 「모름(Statement)」(7.3) | `ALTER SESSION`·구문 단계에서 실패한 DDL 은 커밋하지 않는데 판정을 돌리면 같은 세션이 자기 미커밋 값을 보아 「커밋」으로 잘못 판정한다. ORA-02091 은 트랜잭션 전체를 되돌린다 | `RollbackFlow.EndAfter` |
+| RD-24 | DDL·PL/SQL·불확실 문장 뒤 끝은 (앞의 미커밋 또는 원장의 열린 묶음) 이 있고 뒤 미커밋 표시가 거짓일 때만 「모름」(`RollbackFlow.EndAfter(…, hasOpenGroup)`). 실패한 COMMIT·트랜잭션을 되돌리는 오류처럼 미커밋이 참 → 거짓이 된 문장은 「모름(Statement)」(7.3) | `ALTER SESSION`·구문 단계에서 실패한 DDL 은 커밋하지 않는데 판정을 돌리면 같은 세션이 자기 미커밋 값을 보아 「커밋」으로 잘못 판정한다. ORA-02091 은 트랜잭션 전체를 되돌린다 | `RollbackFlow.EndAfter` |
 | RD-25 | 원복 문장이 있는 묶음에 원복 문장을 만들지 않은 문장이 섞이면 「불완전」(11.2) | 「확정」으로 두면 스크립트로 묶음을 다 되돌린 줄 안다 | 원장 한 줄 |
 | RD-26 | 통로(`IRollbackChannel`)의 서버 오류는 `RollbackChannelException(DbError)` 로 알린다. 취소는 드라이버 명령 취소(13.2) | 엔진이 권한 없음(`DbErrorKind`)과 다른 실패를 가르고 COUNT(*) 10초 제한을 걸려면 공급자 공통 규칙이 필요하다 | 계약 |
 | RD-27 | Begin 이 저장점을 건 뒤 실패·취소되면 엔진이 스스로 `ROLLBACK TO`, Abandon 은 이번 Begin 이 건 저장점이 있을 때만, 원장 이벤트 구독자는 비동기(13.2) | 공급자는 캡처가 없으면 Abandon 을 못 부른다. 내부 저장점 이름이 문장마다 같아 엉뚱한 때 되돌리면 앞 문장의 성공한 변경이 지워진다. 이벤트는 명령 잠금 안에서 난다 | 계약 주석 |
