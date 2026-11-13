@@ -64,4 +64,7 @@ public sealed record ExecutionResult(SqlStatement Statement, ExecutionStatus Sta
 
     /// <summary>실제 계획 조회용 커서 식별(DISPLAY_CURSOR). 모르면 null.</summary>
     public CursorRef? Cursor { get; init; }
+
+    /// <summary>원복 스크립트·시점 기록 요약(되돌리기 지점 설계 6.1 의 8단계). 기록하지 않은 실행은 null.</summary>
+    public Oranda.Core.Rollback.RollbackStatementSummary? Rollback { get; init; }
 }

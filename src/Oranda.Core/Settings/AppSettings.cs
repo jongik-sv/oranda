@@ -62,6 +62,12 @@ public sealed record AppSettings
 
     // "drivers": null 인 손으로 고친 파일도 기본값으로 받는다.
     private readonly DriverSettings _drivers = new();
+
+    /// <summary>되돌리기 지점(되돌리기 지점 설계 10.4). 새 섹션이라 스키마 버전은 그대로, 키가 없는 옛 파일 = 모두 기본값.</summary>
+    public Oranda.Core.Rollback.RollbackSettings Rollback { get => _rollback; init => _rollback = value ?? new(); }
+
+    // "rollback": null 인 손으로 고친 파일도 기본값으로 받는다.
+    private readonly Oranda.Core.Rollback.RollbackSettings _rollback = new();
 }
 
 /// <summary>

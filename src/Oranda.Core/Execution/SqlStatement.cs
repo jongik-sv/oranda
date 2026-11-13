@@ -50,6 +50,12 @@ public sealed record SqlStatement(string Text, TextRange Range, StatementKind Ki
     /// 문장을 <c>with</c> 로 복사해도(치환 변수 치환 등) 대응이 함께 따라간다.
     /// </summary>
     public IReadOnlyList<StatementPiece>? SourcePieces { get; init; }
+
+    /// <summary>
+    /// 쓰기 문장의 모양(되돌리기 지점 설계 13.3). <c>RowDmlBuilder</c> 처럼 모양을 이미 아는 만든 쪽이 채운다. 모르면 null.
+    /// 공급자는 치환 변수를 처리한 문장이면 이 값을 버리고 다시 분석한다.
+    /// </summary>
+    public Oranda.Core.Rollback.DmlShape? Dml { get; init; }
 }
 
 /// <summary>문장 글 안의 한 조각: 문장 글의 <paramref name="TextOffset"/> 부터 <paramref name="Length"/> 글자가 문서의 <paramref name="DocumentOffset"/> 에 있다.</summary>

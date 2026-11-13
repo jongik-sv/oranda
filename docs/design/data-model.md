@@ -31,7 +31,8 @@
 | `{data}/autosave/{workspaceId}.json` | 복구용 자동 저장(10 s 간격) | JSON | `Workspace` (같은 스키마) | 2.6 |
 | `{data}/copy-jobs/{작업 이름}.json` | 접속 간 데이터 복사 작업(1 파일 = 1 작업) | JSON | `CopyJob` | 2.7 |
 | `{data}/logs/copy-runs/{yyyyMMdd-HHmmss}-{작업 Id}.jsonl` | 데이터 복사 실행 기록(1 파일 = 1 실행) | JSON Lines | — | 2.8 |
-| `{data}/oranda.db` (+ `-wal`, `-shm`) | 실행 이력, 메타데이터 캐시, 변경 일지 | SQLite | — | 3 |
+| `{data}/oranda.db` (+ `-wal`, `-shm`) | 실행 이력, 메타데이터 캐시, 변경 일지, 되돌리기 묶음 | SQLite | — | 3 |
+| `{data}/rollback/{yyyy-MM}/{id:D8}.orb` | 원복 스크립트·문장 글·바인드(묶음 1개 = 1 파일, AES-256-GCM 암호화) | 바이너리(`ORB1` 머리 + 암호문, 평문은 JSON `RollbackScriptDocument`) | `RollbackScriptDocument` | 3.2.2 |
 | `{data}/credentials/{hash}.bin` | **Windows 만**. DPAPI(현재 사용자)로 암호화한 비밀 | 바이너리 | — | 5 |
 | `{data}/logs/` | Serilog 파일(7일 보관) | 텍스트 | — | 범위 밖 |
 | `{data}/backup/` | 마이그레이션 전 백업 | 원본 그대로 | — | 4 |
@@ -109,6 +110,12 @@
 | `update.feedUrl` | string | ○ | `null`(빌드 기본값 `OrandaUpdateFeed`) | http(s) 주소, 폴더·UNC 경로, `https://github.com/<owner>/<repo>`. http 는 설정 화면에 암호화 경고 |
 | `update.skippedVersion` | string | ○ | `null` | 「이 버전 건너뛰기」 한 버전. 시작 확인에서 알리지 않는다 |
 | `update.lastCheckedUtc` | datetime(UTC) | ○ | `null` | 마지막으로 확인을 끝낸 시각. 시작 확인의 24시간 규칙 |
+| `rollback.recordPoint` | bool | ○ | true | 쓰기 문장을 실행할 때 직전 시점(SCN·TSN) 기록(되돌리기 지점 설계 7.1). 새 섹션이라 스키마 버전은 그대로 |
+| `rollback.scriptOnProduction` | bool | ○ | true | 운영 접속에서 원복 스크립트 만들기. 개발·테스트 접속에는 켜는 항목이 없다 |
+| `rollback.maxRowsPerStatement` | int | ○ | 100000 | 1~1,000,000. 넘으면 원복 스크립트 없이 실행 |
+| `rollback.retentionDays` | int | ○ | 30 | 1~365. 3.4 보존 정책 |
+| `rollback.warnRowCountMismatch` | bool | ○ | true | 잠근 행 수와 실행한 행 수가 다르면 커밋 전에 알리기 |
+| `rollback.suggestBackupBeforeDataLossDdl` | bool | ○ | true | TRUNCATE·DROP COLUMN·DROP … PURGE 앞 백업 테이블 권하기 |
 
 ### 2.2 `connections.json` — `ConnectionsDocument`
 
@@ -509,6 +516,70 @@ CREATE INDEX ix_change_journal_time   ON change_journal(captured_at DESC);
 | 한계 | 문장 안 `EXECUTE IMMEDIATE '...'` 로 나가는 DDL(익명 블록)과 대상 이름을 치환 변수(`&t`)로 쓴 문장은 대상을 알 수 없어 보관하지 않는다. 호출하는 쪽이 `SqlStatement.ChangeTarget` 을 직접 채우면 보관된다 |
 | 검색 | `owner`·`name`·`statement_summary`·`previous_ddl` 의 부분 문자열(LIKE) |
 
+### 3.2.2 `rollback_group`·`rollback_statement` (마이그레이션 `0005_rollback.sql`, 되돌리기 지점)
+
+되돌리기 지점 설계(`docs/superpowers/specs/2026-11-13-rollback-point-design.md`) 12장. 마이그레이션 번호 0005 는 이 기능이 쓴다(`0004_agent.sql` 다음). `change_journal` 을 넓히지 않는다: `cause` CHECK 를 바꾸려면 표를 다시 만들어야 하고 보존 기간도 다르다(RD-10).
+
+```sql
+CREATE TABLE IF NOT EXISTS rollback_group (
+  id                 INTEGER PRIMARY KEY,
+  started_at         TEXT NOT NULL,
+  ended_at           TEXT,
+  profile_id         TEXT NOT NULL,
+  profile_name       TEXT NOT NULL,
+  db_key             TEXT NOT NULL,
+  server_name        TEXT,
+  environment        TEXT NOT NULL CHECK (environment IN ('Development','Test','Production')),
+  dbms               TEXT NOT NULL,
+  point_name         TEXT,                 -- SCN | TSN
+  base_point         INTEGER,
+  commit_point       INTEGER,
+  transaction_id     TEXT,
+  end_kind           TEXT,                 -- Commit | Rollback | Unknown | NULL(열림)
+  end_source         TEXT,
+  state              TEXT NOT NULL,        -- RollbackScriptState
+  reason             TEXT,                 -- NotCreatedReason 또는 불완전·확인 필요 이유(가린 글)
+  statement_count    INTEGER NOT NULL,
+  step_count         INTEGER NOT NULL,
+  rows_total         INTEGER NOT NULL,
+  tables             TEXT NOT NULL,        -- 'OWNER.NAME' 을 줄바꿈으로 이은 것
+  origin             TEXT NOT NULL DEFAULT 'Execution',
+  origin_group_id    INTEGER,
+  script_file        TEXT,                 -- {data}/rollback 아래 상대 경로, 없으면 NULL
+  expires_at         TEXT
+);
+CREATE TABLE IF NOT EXISTS rollback_statement (
+  group_id           INTEGER NOT NULL REFERENCES rollback_group(id) ON DELETE CASCADE,
+  seq                INTEGER NOT NULL,
+  executed_at        TEXT NOT NULL,
+  source             TEXT NOT NULL,        -- HistorySource
+  verb               TEXT NOT NULL,        -- DmlVerb
+  owner              TEXT,
+  name               TEXT,
+  summary            TEXT,                 -- 가린 문장 요약 200자
+  rows_affected      INTEGER,
+  locked_rows        INTEGER,
+  before_point       INTEGER,
+  state              TEXT NOT NULL,
+  reason             TEXT,
+  step_count         INTEGER NOT NULL,
+  invalidated        INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (group_id, seq)
+);
+CREATE INDEX IF NOT EXISTS ix_rollback_group_time  ON rollback_group(started_at DESC);
+CREATE INDEX IF NOT EXISTS ix_rollback_group_db    ON rollback_group(db_key, started_at DESC);
+CREATE INDEX IF NOT EXISTS ix_rollback_stmt_object ON rollback_statement(owner, name);
+```
+
+| 항목 | 규칙 |
+|---|---|
+| C# 형식 | `Oranda.Core.Rollback.RollbackGroup`(묶음 행)·`RollbackStatementInfo`(문장 행). 저장소 `IRollbackStore`(Platform `SqliteRollbackStore`) |
+| 행 값 | 이 표에는 행 값·문장 글·바인드를 넣지 않는다. 그것은 암호화 파일 `{data}/rollback/{yyyy-MM}/{id:D8}.orb` 에만 있다(개발·테스트 묶음도 문장 글·바인드가 있으면 파일을 만든다) |
+| 가림 | `summary`·`reason` 은 저장소가 `ISecretRedactor` 로 가린 뒤 쓴다(변경 일지와 같다) |
+| 암호화 파일 | `ORB1`(4바이트) · 판 번호(1바이트, 1) · nonce(12바이트) · tag(16바이트) · 암호문. AES-256-GCM, AAD = `orb1:{id}:{db_key}`. 평문 = UTF-8 JSON `RollbackScriptDocument`(camelCase, `RollbackJsonContext`). 키 = 무작위 32바이트, `ICredentialStore` 의 `oranda:rollback:key:v1`. 임시 파일에 쓴 뒤 이름을 바꾼다 |
+| 휘발 키 저장소 | `VolatileCredentialStore`(정식 지원 밖)면 원복 스크립트를 만들지 않는다(「만들지 않음 · 안전한 저장소 없음」) |
+| 시작 정리 | 「열림」(`end_kind` NULL) 묶음을 「확인 필요」(`AppRestart`)로 바꾸고, 표에 없는 `.orb` 파일을 지운다 |
+
 ### 3.3 `db_key`
 
 `{DB_UNIQUE_NAME}/{CON_NAME}/{SESSION_USER}` 를 대문자로. 비 CDB 는 `CON_NAME` 자리에 `-`.
@@ -523,6 +594,7 @@ CREATE INDEX ix_change_journal_time   ON change_journal(captured_at DESC);
 | `history.sql_text` | 256 KiB(UTF-8 바이트) 넘으면 앞부분만 저장, `sql_truncated=1` | 기록할 때 |
 | `history.enabled=false` | 새 기록 안 함. 기존 이력은 유지(지우기는 이력 창 명령) | |
 | `change_journal` | 3.2.1. 365일 지난 행, 객체당 성공 50버전 초과분을 지움(상수) | 앱 시작 후 백그라운드 1회 + 기록 100건마다 |
+| `rollback_group`·`rollback/*.orb` | 3.2.2. `ended_at`(열림이면 `started_at`)이 `rollback.retentionDays`(기본 30일, 1~365) 지난 묶음의 행과 파일을 지움. 용량 상한 없음 | 앱 시작 직후 1회 + 묶음 저장 100건마다 |
 | `meta_source` | `last_used_at` 이 `metadataCache.retentionDays`(기본 30일) 지나면 행 삭제 → `meta_object` 연쇄 삭제 | 앱 시작 후 백그라운드 1회 |
 | 파일 크기 | 자동 정리 뒤에는 `VACUUM` 하지 않는다(빈 페이지는 SQLite 가 재사용). 사용자가 이력 창에서 「이력 비우기」를 할 때만 백그라운드 `VACUUM` | UI 멈춤 방지 |
 
@@ -607,6 +679,8 @@ connections.json ◀────── credentialRef 문자열만 저장 ("orand
 | SQL 편집기의 `.sql` 파일(사용자 폴더) | 끝 바인드 블록(2.6) | 위와 같은 규칙으로 비밀로 보이는 바인드는 넣지 않는다 | 바인드 저장 시험 |
 | `oranda.db` `history.sql_text` | `IDENTIFIED BY …`, `CONNECT u/p@…` 같은 문장 | 기록 전 5.3 가림 규칙 적용 | 시험 ③ |
 | `oranda.db` `change_journal.previous_ddl`·`statement_summary` | 서버에서 읽은 이전 DDL(USER·DB 링크 DDL 의 `IDENTIFIED BY VALUES`), 실행한 문장 | 기록 전 5.3 가림 규칙 적용. **저장 소스(PACKAGE·PROCEDURE·FUNCTION·TRIGGER·TYPE 와 각 BODY·LIBRARY·JAVA SOURCE)의 본문은 가리지 않는다**: 변수 이름 `password` 같은 코드를 `***` 로 바꾸면 되돌리기 본문이 깨진다. 요약은 항상 가림 | 변경 일지 저장소 시험 |
+| `oranda.db` `rollback_group.reason`·`rollback_statement.summary`·`reason` | 실행한 문장 요약, 불완전 이유 | 기록 전 5.3 가림 규칙 적용. 행 값·문장 글·바인드는 이 표에 넣지 않는다 | 되돌리기 저장소 시험 |
+| `rollback/*.orb` | **원복 문장의 행 값, 문장 글, 바인드 값** | AES-256-GCM 암호화(키는 OS 보안 저장소 `oranda:rollback:key:v1`). 평문 내보내기는 사용자가 확인한 뒤에만(`.sql`) | 금고·저장소 시험 |
 | `oranda.db` `history.binds_json` | 바인드 값 | 기본 끔(`history.saveBindValues=false`). 켜도 이름이 `pass`·`pwd`·`secret`·`token` 을 포함하는 바인드는 `***` | 시험 ③ |
 | `oranda.db` `history.error_message` | 서버 오류문 | 서버가 비밀번호를 오류문에 넣지 않음. 첫 줄·1,000자 제한 | — |
 | `oranda.db` `meta_*` | 서버 메타데이터(소스 코드 일부일 수 있음) | 비밀번호 아님. DB 링크 비밀번호 열(`*_LINKS.PASSWORD`)은 조회 대상에서 뺀다 | — |

@@ -61,6 +61,12 @@ public sealed record ExecutionOptions
     /// 다른 실행 경로(<see cref="IExecutionService"/>·결과 그리드)는 읽지 않는다.
     /// </summary>
     public int? LobPrefetchSize { get; init; }
+
+    /// <summary>
+    /// 이 실행의 되돌리기 지점 기록 방식(되돌리기 지점 설계 7.5, RD-21). 기본 = 원복 스크립트(운영 접속) + 시점 기록.
+    /// LOB 쓰기·데이터 가져오기는 <see cref="Oranda.Core.Rollback.ChangeRecording.PointOnly"/>, 원복 실행·비교 반영은 <see cref="Oranda.Core.Rollback.ChangeRecording.None"/>.
+    /// </summary>
+    public Oranda.Core.Rollback.ChangeRecording Recording { get; init; } = Oranda.Core.Rollback.ChangeRecording.Normal;
 }
 
 /// <summary>스크립트 오류 처리(EXEC-10). 설정 <c>execution.scriptErrorMode</c> 와 같은 형식.</summary>

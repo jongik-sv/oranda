@@ -35,4 +35,7 @@ public interface IAppDataPaths
 
     /// <summary>복사 실행 기록 폴더(<c>logs/copy-runs/</c>).</summary>
     string CopyRunsDirectory { get; }
+
+    /// <summary>원복 스크립트 암호화 파일 폴더(<c>rollback/</c>, 되돌리기 지점 설계 12.2).</summary>
+    string RollbackDirectory => Path.Combine(DataDirectory, "rollback");
 }
