@@ -385,7 +385,13 @@ internal sealed class TiberoSession : ISession
     private async ValueTask CloseAsync(DbConnection connection, DbTransaction? transaction)
     {
         var enter = CommandGate.EnterForCleanupAsync();
-        var held = await Task.WhenAny(enter, Task.Delay(CleanupGateWait)).ConfigureAwait(false) == enter;
+        bool held;
+        using (var delayCancel = new CancellationTokenSource()) // 먼저 잡히면 Delay 타이머를 취소한다(CA2027)
+        {
+            held = await Task.WhenAny(enter, Task.Delay(CleanupGateWait, delayCancel.Token)).ConfigureAwait(false) == enter;
+            await delayCancel.CancelAsync().ConfigureAwait(false);
+        }
+
         if (!held)
         {
             // 늦게 잡히면 바로 놓는다(그 뒤의 정리 작업이 기다리다 막히지 않게).

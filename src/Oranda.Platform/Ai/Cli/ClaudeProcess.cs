@@ -228,7 +228,13 @@ internal sealed class SystemClaudeProcess : IClaudeProcess
     public async ValueTask DisposeAsync()
     {
         Kill();
-        await Task.WhenAny(Task.WhenAll(_stdin, _stderr), Task.Delay(1000)).ConfigureAwait(false);
+        // 먼저 끝나면 기다리던 Delay 타이머를 취소해 남기지 않는다(CA2027).
+        using (var delayCancel = new CancellationTokenSource())
+        {
+            await Task.WhenAny(Task.WhenAll(_stdin, _stderr), Task.Delay(1000, delayCancel.Token)).ConfigureAwait(false);
+            await delayCancel.CancelAsync().ConfigureAwait(false);
+        }
+
         _process.Dispose();
     }
 

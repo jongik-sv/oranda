@@ -150,7 +150,14 @@ public partial class CopyRunner
         _ = abandoned.ContinueWith(_ => watch.Dispose(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
-    private static async Task<bool> CompletesWithin(Task task, TimeSpan within) => await Task.WhenAny(task, Task.Delay(within)) == task;
+    /// <summary><paramref name="task"/> 가 <paramref name="within"/> 안에 끝나는가. 먼저 끝나면 기다리던 Delay 타이머를 취소한다(CA2027).</summary>
+    private static async Task<bool> CompletesWithin(Task task, TimeSpan within)
+    {
+        using var delayCancel = new CancellationTokenSource();
+        var completed = await Task.WhenAny(task, Task.Delay(within, delayCancel.Token)) == task;
+        await delayCancel.CancelAsync();
+        return completed;
+    }
 
     /// <summary>
     /// 대상 명령 하나(대상 정리 DELETE·「테이블마다 커밋」의 COMMIT)를 적재와 같은 멈춤 감시 아래 보낸다(결정 70·73, 리뷰 PF1-4):

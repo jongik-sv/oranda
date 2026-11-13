@@ -167,7 +167,9 @@ internal sealed class ExternalProcessRunner : IExternalProcessRunner
     private static async Task DrainAsync(Task<string> stdout, Task<string> stderr)
     {
         var both = Task.WhenAll(stdout, stderr);
-        await Task.WhenAny(both, Task.Delay(DrainLimit)).ConfigureAwait(false);
+        using var delayCancel = new CancellationTokenSource(); // 먼저 끝나면 Delay 타이머를 취소한다(CA2027)
+        await Task.WhenAny(both, Task.Delay(DrainLimit, delayCancel.Token)).ConfigureAwait(false);
+        await delayCancel.CancelAsync().ConfigureAwait(false);
     }
 
     private static string Completed(Task<string> reader) =>

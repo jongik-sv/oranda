@@ -117,7 +117,7 @@ public static class TuningRows
         foreach (var p in steps)
         {
             text.Append(p.Id.ToString(CultureInfo.InvariantCulture).PadLeft(4)).Append(" | ")
-                .Append(new string(' ', p.Depth)).Append(p.Operation);
+                .Append(' ', p.Depth).Append(p.Operation);
             if (p.Options is { Length: > 0 } o)
             {
                 text.Append(' ').Append(o);

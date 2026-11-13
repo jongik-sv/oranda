@@ -725,9 +725,15 @@ public abstract class CachedMetadataProvider
             }
 
             Trace.TraceInformation("메타데이터 객체 목록 뒤 갱신이 멈춤 ({0}): 세션이 바쁘다. {1}초 뒤 다시 한다({2}번째)", dbKey, Math.Round(delay.TotalSeconds, 1), attempt);
-            if (await Task.WhenAny(Task.Delay(delay), wake) == wake)
+            // 깨우기 신호가 먼저 오면 기다리던 Delay 타이머를 취소해 남기지 않는다(CA2027).
+            using (var delayCancel = new CancellationTokenSource())
             {
-                Trace.TraceInformation("메타데이터 객체 목록 뒤 갱신 기다림을 끝냄 ({0}): 세션이 닫혔거나 끊겼거나 다른 세션으로 넘어왔다", dbKey);
+                var woken = await Task.WhenAny(Task.Delay(delay, delayCancel.Token), wake) == wake;
+                await delayCancel.CancelAsync();
+                if (woken)
+                {
+                    Trace.TraceInformation("메타데이터 객체 목록 뒤 갱신 기다림을 끝냄 ({0}): 세션이 닫혔거나 끊겼거나 다른 세션으로 넘어왔다", dbKey);
+                }
             }
 
             delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, TimeSpan.FromMinutes(1).Ticks));
