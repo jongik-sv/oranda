@@ -226,10 +226,12 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         // 기간은 설정 「변경 추적 기간」(TSK-13-44). 최근 N일이면 표 정의가 마지막으로 바뀐 시각 앞으로는 잡지 않는다(ORA-01466).
         var days = FlashbackTrackSql.DaysFrom(container.GetService<SettingsService>()?.Current.Grid ?? new GridSettings());
         var lastDdl = days is null ? null : await Runner(container).LastDdlAsync(source.Session, CatalogFor(container, source.Session), target.Table, ct).ConfigureAwait(true);
+        // 최근 N일이 undo 보존 기간보다 길면 하한이 undo 밖이라 ORA-30052 가 난다: 보존 기간을 읽을 수 있으면 그 안으로 줄인다(못 읽으면 설정 그대로).
+        var undo = days is null ? null : await UndoRetentionAsync(container, source.Session, ct).ConfigureAwait(true);
         var host = SqlEditorHost.Current;
         var profileId = host.Active?.ConnectionProfileId ?? source.Session.Profile.Id;
         var text = FlashbackTrackSql.BuildFor(container, source.Session, target.Table, target.Names, target.KeyNames, target.KeyOf(row),
-            source.Session.Server.SessionUser ?? source.Session.Profile.User, days, lastDdl);
+            source.Session.Server.SessionUser ?? source.Session.Profile.User, days, lastDdl, undo);
         if (text is null)
         {
             model.ReportNotice(CatalogRouting.Unavailable(source.Session)); // 이 DBMS·버전에 변경 이력 질의 문장이 없다
@@ -238,6 +240,26 @@ public sealed class FlashbackCommandHandler : ICommandHandler
 
         await OpenAndRunAsync(host, text, profileId, token => ExecutionCommands.Resolve(container).RunAsync(RunMode.Statement, ct: token), ct).ConfigureAwait(true);
         model.ReportNotice(string.Empty);
+    }
+
+    /// <summary>undo_retention(초). 이 DBMS·버전 카탈로그가 없거나 읽을 권한이 없거나 읽기에 실패하면 null.</summary>
+    private static async Task<object?> UndoRetentionAsync(ServiceContainer container, ISession session, CancellationToken ct)
+    {
+        try
+        {
+            var runner = Runner(container);
+            return await FlashbackEnvironment.ReadUndoRetentionAsync(CatalogFor(container, session), session.Server, async text =>
+            {
+                var stmt = new SqlStatement(text, default, StatementKind.Query) { Verb = "SELECT" };
+                var rows = await FlashbackRunner.ReadAllAsync(await runner.QueryAsync(session, new FlashbackQuery(stmt, new Dictionary<string, BindValue>()), ct)
+                    .ConfigureAwait(true), ct).ConfigureAwait(true);
+                return rows.Count > 0 ? rows[0][0] : null;
+            }).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null; // 권한 없음(ORA-00942) 등: 설정 기간 그대로
+        }
     }
 
     /// <summary>새 SQL 탭에 <paramref name="text"/> 를 넣고(캐럿은 글 끝, 접속 지정) <paramref name="run"/> 으로 실행한다.</summary>

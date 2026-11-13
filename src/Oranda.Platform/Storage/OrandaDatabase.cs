@@ -16,6 +16,13 @@ internal static class OrandaDatabase
 
     private static readonly Lazy<IReadOnlyList<Script>> Scripts = new(ReadScripts);
 
+    /// <summary>
+    /// 파일마다 점검·마이그레이션을 한 줄로 세운다: 앱 시작 직후 여러 저장소(이력·일지·메타데이터 캐시·되돌리기 시작 정리 …)가 동시에 처음 열면
+    /// 한 저장소가 저널 모드를 바꾸거나 마이그레이션하는 동안 다른 저장소의 점검이 잠금에 걸리고, 같은 스크립트를 함께 돌렸다.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> PrepareGates =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal); // Windows 경로는 대소문자를 가리지 않는다
+
     /// <summary>열기 결과. <see cref="Notice"/> 는 사용자에게 알릴 말(없으면 null).</summary>
     internal sealed record OpenResult(bool Writable, int Version, string? Notice);
 
@@ -53,6 +60,20 @@ internal static class OrandaDatabase
     /// 적용할 스크립트가 있으면 먼저 <c>VACUUM INTO</c> 백업(최근 2개 유지).
     /// </summary>
     public static async Task<OpenResult> PrepareFileAsync(string dbFile, string backupDirectory, CancellationToken ct)
+    {
+        var gate = PrepareGates.GetOrAdd(Path.GetFullPath(dbFile), _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            return await PrepareFileCoreAsync(dbFile, backupDirectory, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private static async Task<OpenResult> PrepareFileCoreAsync(string dbFile, string backupDirectory, CancellationToken ct)
     {
         string? notice = null;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbFile))!);
@@ -109,6 +130,20 @@ internal static class OrandaDatabase
             await ExecAsync(connection, "BEGIN IMMEDIATE", ct);
             try
             {
+                // 쓰기 잠금을 잡은 뒤 다시 본다: 다른 프로세스(두 번째 앱 창)가 그 사이에 이 스크립트를 적용했을 수 있다.
+                var now = await GetVersionAsync(connection, ct);
+                if (now >= script.Version)
+                {
+                    await ExecAsync(connection, "COMMIT", ct);
+                    current = now;
+                    if (current > LatestVersion)
+                    {
+                        return new OpenResult(false, current, $"oranda.db 가 더 새로운 버전(v{current})이라 읽기 전용으로 엽니다.");
+                    }
+
+                    continue;
+                }
+
                 await ExecAsync(connection, script.Sql, ct);
                 await using var cmd = connection.CreateCommand();
                 cmd.CommandText = "INSERT OR IGNORE INTO schema_version(version, applied_at, description) "
@@ -159,9 +194,20 @@ internal static class OrandaDatabase
         {
             await using var connection = new SqliteConnection(FileConnectionString(dbFile));
             await connection.OpenAsync(ct);
+            // 다른 연결·프로세스가 잠시 잠금을 쥔 것(저널 모드 바꾸기·마이그레이션·백업)은 손상이 아니다: 기다리고, 그래도 바쁘면 건강하다고 본다.
+            await using (var wait = connection.CreateCommand())
+            {
+                wait.CommandText = "PRAGMA busy_timeout = 5000";
+                await wait.ExecuteNonQueryAsync(ct);
+            }
+
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = "PRAGMA quick_check";
             return string.Equals(await cmd.ExecuteScalarAsync(ct) as string, "ok", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is SQLitePCL.raw.SQLITE_BUSY or SQLitePCL.raw.SQLITE_LOCKED)
+        {
+            return true; // 손상으로 옮기면 사용자 데이터가 새 파일로 바뀐다. 진짜 손상이면 다음 열기에서 다시 본다
         }
         catch (SqliteException)
         {

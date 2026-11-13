@@ -15,6 +15,41 @@ public sealed class FlashbackTrackTests
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");
 
     [Fact]
+    public void Recent_window_is_cut_to_the_undo_retention_and_says_so()
+    {
+        // undo_retention 3600초(1시간): 기본 1.5일의 하한이 undo 밖이라 ORA-30052. 그 90%(0.0375일 → 0.03일)로 줄인다.
+        var sql = FlashbackTrackSql.Build(Emp, ["EMPNO"], ["EMPNO"], [7369m], undoRetentionSeconds: "3600");
+
+        var lines = sql.Split('\n');
+        Assert.Equal("FROM SCOTT.EMP VERSIONS BETWEEN TIMESTAMP SYSDATE - 0.03 AND MAXVALUE", lines[2]);
+        Assert.Contains("undo_retention 3600초에 맞춰 설정한 1.5일을 0.03일로 줄였습니다", lines[0], StringComparison.Ordinal);
+        Assert.Contains("VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE 로 바꿔", lines[0], StringComparison.Ordinal); // ORA-30052 가 나면 바꾸는 방법
+    }
+
+    [Theory]
+    [InlineData(null)]        // v$parameter 를 읽을 권한 없음: 설정 그대로
+    [InlineData("864000")]    // 10일: 1.5일은 이미 그 안
+    [InlineData("abc")]
+    public void Recent_window_stays_when_the_undo_retention_is_unknown_or_long_enough(string? undo)
+    {
+        var sql = FlashbackTrackSql.Build(Emp, ["EMPNO"], ["EMPNO"], [7369m], undoRetentionSeconds: undo);
+
+        Assert.Equal("FROM SCOTT.EMP VERSIONS BETWEEN TIMESTAMP SYSDATE - 1.5 AND MAXVALUE", sql.Split('\n')[2]);
+        Assert.DoesNotContain("줄였습니다", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Very_short_undo_retention_keeps_the_setting_minimum()
+    {
+        Assert.True(FlashbackTrackSql.TryFitUndo(1.5m, 60, out var fitted, out _, out var atMinimum)); // 1분
+        Assert.Equal((decimal)GridSettings.MinFlashbackTrackDays, fitted);
+        Assert.True(atMinimum); // 하한에 걸려 그래도 undo 밖: 주석이 알린다
+        Assert.Contains("그래도 ORA-30052 가 날 수 있습니다", FlashbackTrackSql.Build(Emp, ["EMPNO"], ["EMPNO"], [7369m], undoRetentionSeconds: 60), StringComparison.Ordinal);
+        Assert.False(FlashbackTrackSql.TryFitUndo(null, 60, out var whole)); // 전체 기간(SCN MINVALUE)은 그대로
+        Assert.Null(whole);
+    }
+
+    [Fact]
     public void Single_primary_key_reads_a_bounded_recent_window_newest_first()
     {
         // 전체 기간(SCN MINVALUE)은 운영 DB 에서 ORA-08180 이 난다. 최근 N일(SYSDATE - N)부터 지금(MAXVALUE: 방금 커밋한 변경까지)을 읽는다.
@@ -27,7 +62,7 @@ public sealed class FlashbackTrackTests
         Assert.Contains("ORA-08180", lines[0], StringComparison.Ordinal);
         Assert.Equal("SELECT VERSIONS_STARTTIME, VERSIONS_ENDTIME, VERSIONS_OPERATION, RAWTOHEX(VERSIONS_XID) AS VERSIONS_XID, EMPNO, ENAME", lines[1]);
         Assert.Equal("FROM SCOTT.EMP VERSIONS BETWEEN TIMESTAMP SYSDATE - 1.5 AND MAXVALUE", lines[2]);
-        Assert.DoesNotContain("MINVALUE", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("MINVALUE", string.Join('\n', lines[1..]), StringComparison.Ordinal); // 질의는 최근 N일(주석의 바꾸는 방법 안내만 MINVALUE)
         Assert.Equal("WHERE EMPNO = 7369", lines[3]);
         Assert.Equal("ORDER BY VERSIONS_STARTSCN DESC NULLS LAST", lines[4]);
         Assert.DoesNotContain(":", string.Join('\n', lines[1..]), StringComparison.Ordinal); // 바인드 없이 리터럴

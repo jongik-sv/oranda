@@ -42,21 +42,62 @@ internal static class FlashbackTrackSql
     /// 최근 N일의 시작을 그 <see cref="DdlMarginSeconds"/>초 뒤보다 앞으로 잡지 않는다.
     /// </summary>
     public static string Build(DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns, IReadOnlyList<object?> keyValues,
-                               string? currentUser = null, decimal? days = DefaultDays, DateTime? lastDdl = null)
+                               string? currentUser = null, decimal? days = DefaultDays, DateTime? lastDdl = null, object? undoRetentionSeconds = null)
         // Oracle 고정 호환 멤버(세션·서비스 공급자 없음) — 운영 경로는 BuildFor.
-        => BuildCore(table, columns, keyColumns, keyValues, currentUser, days, lastDdl, args => CatalogRouting.OracleFixed("dbinfo.flashback_versions", args))!;
+        => BuildCore(table, columns, keyColumns, keyValues, currentUser, days, lastDdl, undoRetentionSeconds,
+            args => CatalogRouting.OracleFixed("dbinfo.flashback_versions", args))!;
 
     /// <summary>
     /// <see cref="Build"/> 와 같되 변경 이력 질의 문장(<c>dbinfo.flashback_versions</c>)을 세션 서버의 DBMS 카탈로그에서 꺼낸다.
     /// 그 DBMS·버전에 문장이 없으면 null(부르는 쪽이 이유를 보인다). 인자 검증 예외는 <see cref="Build"/> 와 같다.
     /// </summary>
     public static string? BuildFor(IServiceProvider? services, ISession? session, DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns,
-                                   IReadOnlyList<object?> keyValues, string? currentUser = null, decimal? days = DefaultDays, DateTime? lastDdl = null)
-        => BuildCore(table, columns, keyColumns, keyValues, currentUser, days, lastDdl,
+                                   IReadOnlyList<object?> keyValues, string? currentUser = null, decimal? days = DefaultDays, DateTime? lastDdl = null,
+                                   object? undoRetentionSeconds = null)
+        => BuildCore(table, columns, keyColumns, keyValues, currentUser, days, lastDdl, undoRetentionSeconds,
             args => CatalogRouting.Text(services, session, "dbinfo.flashback_versions", args));
 
+    /// <summary>최근 N일을 undo 보존 기간의 이 몫까지로 줄인다(경계에서 이미 지워진 undo 로 ORA-30052 가 나지 않게 여유를 둔다).</summary>
+    internal const decimal UndoShare = 0.9m;
+
+    /// <summary>
+    /// 최근 N일이 undo 보존 기간(<c>undo_retention</c>, 초)보다 길면 그 <see cref="UndoShare"/> 몫(일, 소수 둘째 자리 내림, 최소 설정 하한)으로 줄인다.
+    /// 보존 기간을 모르면(v$parameter 권한 없음 등)·전체 기간(null)이면 그대로. 줄였으면 참.
+    /// </summary>
+    internal static bool TryFitUndo(decimal? days, object? undoRetentionSeconds, out decimal? fitted) =>
+        TryFitUndo(days, undoRetentionSeconds, out fitted, out _, out _);
+
+    /// <param name="seconds">파싱한 undo_retention(초). 모르면 null</param>
+    /// <param name="atMinimum">설정 하한에 걸려 그래도 undo 밖일 수 있다</param>
+    internal static bool TryFitUndo(decimal? days, object? undoRetentionSeconds, out decimal? fitted, out decimal? seconds, out bool atMinimum)
+    {
+        fitted = days;
+        seconds = null;
+        atMinimum = false;
+        if (days is not { } n || undoRetentionSeconds is null or DBNull
+            || !decimal.TryParse(Convert.ToString(undoRetentionSeconds, CultureInfo.InvariantCulture), NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
+            || parsed <= 0)
+        {
+            return false;
+        }
+
+        seconds = parsed;
+        var limit = Math.Floor(parsed * UndoShare / 86_400m * 100m) / 100m;
+        var minimum = (decimal)Oranda.Core.Settings.GridSettings.MinFlashbackTrackDays;
+        atMinimum = limit < minimum;
+        limit = Math.Max(limit, minimum);
+        if (n <= limit)
+        {
+            return false;
+        }
+
+        fitted = limit;
+        return true;
+    }
+
     private static string? BuildCore(DbObjectRef table, IReadOnlyList<string> columns, IReadOnlyList<string> keyColumns, IReadOnlyList<object?> keyValues,
-                                     string? currentUser, decimal? days, DateTime? lastDdl, Func<(string Key, string Value)[], string?> versionsSql)
+                                     string? currentUser, decimal? days, DateTime? lastDdl, object? undoRetentionSeconds,
+                                     Func<(string Key, string Value)[], string?> versionsSql)
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(columns);
@@ -88,6 +129,8 @@ internal static class FlashbackTrackSql
         }
 
         var inv = CultureInfo.InvariantCulture;
+        var asked = days;
+        var fitted = TryFitUndo(days, undoRetentionSeconds, out days, out var undoSeconds, out var atMinimum);
         string range;
         var sb = new StringBuilder();
         sb.Append("-- ").Append(OneLine(RowDmlBuilder.QualifiedName(table))).Append(" 의 변경 이력(키: ").Append(OneLine(string.Join(", ", shown))).Append("). ");
@@ -96,7 +139,17 @@ internal static class FlashbackTrackSql
             var since = "SYSDATE - " + n.ToString("0.##", inv);
             range = "TIMESTAMP " + since;
             sb.Append("기간: 최근 ").Append(n.ToString("0.##", inv)).Append("일(").Append(since).Append(")은 고쳐 다시 돌리거나 ").Append(SettingPath)
-              .Append("에서 바꿀 수 있습니다. undo 보존 기간과 테이블 정의 변경 시점까지만 보입니다. ORA-08180·ORA-30052 가 나면 기간을 줄이세요.");
+              .Append("에서 바꿀 수 있습니다. undo 보존 기간과 테이블 정의 변경 시점까지만 보입니다. ORA-08180 이 나면 기간을 줄이고, ")
+              .Append("ORA-30052(하한이 undo 보존 기간 밖)가 나면 범위를 VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE 로 바꿔(서버가 읽을 수 있는 가장 앞부터) 다시 돌리세요.");
+            if (fitted && asked is { } wanted && undoSeconds is { } u)
+            {
+                sb.Append(" undo_retention ").Append(u.ToString("0", inv)).Append("초에 맞춰 설정한 ")
+                  .Append(wanted.ToString("0.##", inv)).Append("일을 ").Append(n.ToString("0.##", inv)).Append("일로 줄였습니다.");
+                if (atMinimum)
+                {
+                    sb.Append(" undo 보존 기간이 설정 최소(").Append(n.ToString("0.##", inv)).Append("일)보다 짧아 그래도 ORA-30052 가 날 수 있습니다.");
+                }
+            }
             if (lastDdl is { } ddl)
             {
                 var at = ddl.ToString("yyyy-MM-dd HH:mm:ss", inv);

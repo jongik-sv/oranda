@@ -167,7 +167,7 @@ public sealed class ManualRollbackScreens
             StatementSummary = "ALTER TABLE EMPLOYEES ADD JOB_TITLE VARCHAR2(30)",
             PreviousDdl = "CREATE TABLE SAMPLE.EMPLOYEES (EMP_ID NUMBER(6) NOT NULL);",
         });
-        using var vm = new ChangeJournalViewModel(journal, store) { RetentionDaysProvider = () => 30 };
+        using var vm = ChangeJournalViewModel.ForTests(journal, store); // 보관 기간은 기본값 30일
         await vm.ReloadAsync();
         var view = new ChangeJournalView { DataContext = vm };
         var window = Show(view, 1280, 560);

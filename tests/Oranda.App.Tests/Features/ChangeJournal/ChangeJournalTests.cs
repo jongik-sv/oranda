@@ -52,7 +52,7 @@ public sealed class ChangeJournalTests
     {
         var store = new ListStore([Entry(1, "CREATE TABLE emp (a NUMBER)"), Entry(2, "CREATE TABLE dept (a NUMBER)", name: "DEPT"),
                                    Entry(3, "x", cause: JournalCause.Compile, failure: "ORA-31603")]);
-        using var vm = new ChangeJournalViewModel(store);
+        using var vm = ChangeJournalViewModel.ForTests(store);
 
         await vm.ReloadAsync();
         Assert.Equal([3L, 2L, 1L], vm.Items.Select(i => i.Id));
@@ -73,7 +73,7 @@ public sealed class ChangeJournalTests
     public async Task Detail_box_is_a_sql_code_view_with_the_sql_colorizer()
     {
         var store = new ListStore([Entry(1, "CREATE TABLE emp (a NUMBER)")]);
-        using var vm = new ChangeJournalViewModel(store);
+        using var vm = ChangeJournalViewModel.ForTests(store);
         await vm.ReloadAsync();
         await vm.SetSelectionAsync([vm.Items[0]]);
 
@@ -95,7 +95,7 @@ public sealed class ChangeJournalTests
     public async Task Object_filter_limits_to_that_object_and_clears()
     {
         var store = new ListStore([Entry(1, "a"), Entry(2, "b", name: "DEPT")]);
-        using var vm = new ChangeJournalViewModel(store);
+        using var vm = ChangeJournalViewModel.ForTests(store);
 
         vm.ShowObject(new DbObjectRef("APP", "DEPT", "TABLE"));
         await vm.ReloadAsync();
@@ -113,7 +113,7 @@ public sealed class ChangeJournalTests
     {
         var store = new ListStore([Entry(1, "CREATE TABLE emp (\n  a NUMBER\n)"), Entry(2, "CREATE TABLE emp (\n  a NUMBER,\n  b NUMBER\n)"),
                                    Entry(3, "CREATE TABLE dept (\n  a NUMBER\n)", name: "DEPT")]);
-        using var vm = new ChangeJournalViewModel(store);
+        using var vm = ChangeJournalViewModel.ForTests(store);
         await vm.ReloadAsync();
 
         await vm.SetSelectionAsync([vm.Items.Single(i => i.Id == 2)]);
@@ -140,7 +140,7 @@ public sealed class ChangeJournalTests
     {
         var store = new ListStore([Entry(1, "CREATE TABLE emp (a NUMBER)"), Entry(2, "PACKAGE BODY p AS\nEND p;", name: "P", type: "PACKAGE BODY"),
                                    Entry(3, "x", failure: "ORA-31603")]);
-        using var vm = new ChangeJournalViewModel(store);
+        using var vm = ChangeJournalViewModel.ForTests(store);
         await vm.ReloadAsync();
         var opened = new List<(string Text, Guid? Profile)>();
         vm.EditorOpener = (text, profile) =>
@@ -176,7 +176,7 @@ public sealed class ChangeJournalTests
     public async Task Window_shows_list_diff_and_opens_new_editor()
     {
         var store = new ListStore([Entry(1, "CREATE TABLE emp (\n  a NUMBER\n)"), Entry(2, "CREATE TABLE emp (\n  a NUMBER,\n  b NUMBER\n)")]);
-        using var vm = new ChangeJournalViewModel(store);
+        using var vm = ChangeJournalViewModel.ForTests(store);
         await vm.ReloadAsync();
         var opened = new List<string>();
         vm.EditorOpener = (text, _) =>

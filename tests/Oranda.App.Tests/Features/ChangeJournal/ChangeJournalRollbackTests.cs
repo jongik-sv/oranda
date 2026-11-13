@@ -81,7 +81,7 @@ public sealed class ChangeJournalRollbackTests
             Statements = [],
         }, null, default);
         var journal = new FixedJournal([Ddl(7, T0.AddHours(1)), Ddl(8, T0.AddHours(4), JournalCause.Compile)]);
-        var vm = new ChangeJournalViewModel(journal, store) { RetentionDaysProvider = () => 30 };
+        var vm = ChangeJournalViewModel.ForTests(journal, store); // 보관 기간은 기본값 30일
         await vm.ReloadAsync();
         return (vm, store, confirmedId, rolledBackId);
     }
@@ -202,7 +202,7 @@ public sealed class ChangeJournalRollbackTests
     [Fact]
     public async Task Without_a_rollback_store_the_list_is_the_old_ddl_journal()
     {
-        var vm = new ChangeJournalViewModel(new FixedJournal([Ddl(1, T0)]), null);
+        var vm = ChangeJournalViewModel.ForTests(new FixedJournal([Ddl(1, T0)]), null);
         await vm.ReloadAsync();
         Assert.Single(vm.Rows);
         Assert.Equal("1건", vm.StatusMessage);

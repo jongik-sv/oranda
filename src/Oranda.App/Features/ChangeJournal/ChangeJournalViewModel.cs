@@ -156,23 +156,39 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
             : Task.FromResult(false);
     }
 
-    /// <summary>시험용: 저장소를 직접 넣는다.</summary>
-    internal ChangeJournalViewModel(IChangeJournalStore store)
-        : this()
-    {
-        _store = store;
-        _rollbackStoreResolved = true;
-        PostToUi = a => a();
-    }
+    /// <summary>시험용: 변경 일지 저장소(와 원복 묶음 저장소)를 직접 넣는다. 명령 실행기는 넣지 않는다(<see cref="CommandRunner"/> 를 시험이 정한다).</summary>
+    internal static ChangeJournalViewModel ForTests(IChangeJournalStore? store, IRollbackStore? rollbackStore = null) =>
+        new(store, rollbackStore, TestsOnly.Marker);
 
-    /// <summary>시험용: 변경 일지 저장소와 원복 묶음 저장소를 함께 넣는다.</summary>
-    internal ChangeJournalViewModel(IChangeJournalStore? store, IRollbackStore? rollbackStore)
+    /// <summary>
+    /// <see cref="ForTests"/> 의 생성자. 셸은 패널 ViewModel 을 컨테이너로 만드는데, 컨테이너는 인자가 가장 많은 생성자(internal·private 포함)를 고른다.
+    /// 컨테이너가 채울 수 없는 표지 인자를 두어 셸이 이 생성자(명령 실행기 없음)를 고르지 않게 한다(win144 실앱: 「원복 스크립트를 열지 못했다」).
+    /// </summary>
+    private ChangeJournalViewModel(IChangeJournalStore? store, IRollbackStore? rollbackStore, TestsOnly marker)
         : this()
     {
+        if (!marker.Set)
+        {
+            throw new ArgumentException("ForTests 로만 만든다.", nameof(marker));
+        }
+
         _store = store;
         _rollbackStore = rollbackStore;
         _rollbackStoreResolved = true;
         PostToUi = a => a();
+    }
+
+    /// <summary>
+    /// 컨테이너가 만들 수 없는 표지(<see cref="ForTests"/>). 기본값 없는 값 형식이라 컨테이너가 등록·지연 어셈블리를 찾아보기 전에 거부한다
+    /// (클래스면 이름공간이 Oranda.* 라 지연 어셈블리 훑기를 일으킨다).
+    /// </summary>
+    private readonly struct TestsOnly
+    {
+        public static readonly TestsOnly Marker = new(true);
+
+        private TestsOnly(bool set) => Set = set;
+
+        public bool Set { get; }
     }
 
     /// <summary>패널이 아직 만들어지기 전에 「변경 일지 보기」 가 정한 대상. 패널이 만들어질 때 가져간다.</summary>
@@ -517,8 +533,8 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
         }
 
         var ok = await RunCommandAsync(RollbackCommandIds.OpenScript, new RollbackScriptArgs(group.Id)).ConfigureAwait(true);
-        // 열기에 실패한 이유(키 없음·파일 없음)는 명령 처리기가 따로 알린다. 여기서는 명령을 찾지 못했을 때만 적는다.
-        StatusMessage = ok ? $"원복 스크립트 #{group.Id} 을(를) 여는 중(자동으로 실행하지 않는다)" : "원복 스크립트를 열지 못했다";
+        // 열기에 실패한 이유(키 없음·파일 없음)는 명령 처리기가 따로 알린다. 처리기가 던진 오류는 그 글을 남기고, 명령을 찾지 못했을 때만 아래 문구.
+        StatusMessage = ok ? $"원복 스크립트 #{group.Id} 을(를) 여는 중(자동으로 실행하지 않는다)" : _commandError ?? "원복 스크립트를 열지 못했다";
         return ok;
     }
 
@@ -536,21 +552,25 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
         var ok = await RunCommandAsync(RollbackCommandIds.ComparePoint, new PointCompareArgs(group.Group.ProfileId, group.Id, table, null, null, null)).ConfigureAwait(true);
         if (!ok)
         {
-            StatusMessage = "이 실행 전과 비교 화면을 열지 못했다";
+            StatusMessage = _commandError ?? "이 실행 전과 비교 화면을 열지 못했다";
         }
 
         return ok;
     }
 
+    /// <summary>마지막 명령 실행에서 처리기가 던진 오류 글(없으면 null).</summary>
+    private string? _commandError;
+
     private async Task<bool> RunCommandAsync(string id, object arg)
     {
+        _commandError = null;
         try
         {
             return await CommandRunner(id, arg).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            StatusMessage = ex.Message;
+            _commandError = ex.Message;
             return false;
         }
     }
