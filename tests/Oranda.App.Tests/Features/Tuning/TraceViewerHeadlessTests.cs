@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using Oranda.App.Features.Tuning.Trace;
 using Oranda.App.Shell.Controls;
 using Oranda.App.Tests.Features.MyBatisWorkspace.Flow;
+using Oranda.App.Tests.Shell.Controls;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Tuning;
 using TestSession = Oranda.Testing.FakeSession;
@@ -20,6 +21,25 @@ public class TraceViewerHeadlessTests
         Dispatcher.UIThread.RunJobs();
         return (view, window);
     }
+
+    [Fact]
+    public Task Statement_and_wait_columns_follow_the_header_drag() => HeadlessHost.Run(async () =>
+    {
+        var vm = new TraceViewerViewModel(new TraceViewerTests.FakeTuning()) { Parser = _ => TraceViewerTests.Summary() };
+        vm.OptimizerTrace = _ => Task.FromException<OptimizerTraceOutcome>(new InvalidOperationException("x"));
+        var (view, window) = Show(vm);
+        try
+        {
+            await vm.LoadAsync(new TestSession());
+            Dispatcher.UIThread.RunJobs();
+            TableColumnsCheck.DragMovesHeaderAndRows(window, view.FindControl<Grid>("StatementHeader")!, view.FindControl<ListBox>("StatementList")!, 2);
+            TableColumnsCheck.DragMovesHeaderAndRows(window, view.FindControl<Grid>("WaitHeader")!, view.FindControl<ListBox>("WaitList")!, 1);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 
     [Fact]
     public Task Summary_and_body_views_show_the_trace() => HeadlessHost.Run(async () =>

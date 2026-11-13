@@ -1,17 +1,18 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.Tuning.Assistant"
              x:Class="Oranda.App.Features.Tuning.Assistant.TuningAssistantView"
              x:DataType="vm:TuningAssistantViewModel">
   <UserControl.Styles>
-    <!-- 후보 표 칸 폭(머리글과 줄이 같은 클래스를 써서 세로로 맞는다). -->
-    <Style Selector=":is(Control).i-ico"><Setter Property="Width" Value="28" /></Style>
-    <Style Selector=":is(Control).i-tbl"><Setter Property="Width" Value="230" /></Style>
-    <Style Selector=":is(Control).i-basis"><Setter Property="Width" Value="118" /></Style>
-    <Style Selector=":is(Control).i-ovl"><Setter Property="Width" Value="180" /></Style>
-    <Style Selector=":is(Control).r-chk"><Setter Property="Width" Value="44" /></Style>
+    <!-- 표 칸: 폭은 머리글·줄 Grid 의 ColumnDefinitions(머리글 경계를 끌어 바꾼다, TableColumns). 칸 글자는 공용 표 칸과 같게. -->
+    <Style Selector="Grid.cells > TextBlock">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
     <!-- 「벤치」 칸: 칸 전체가 눌리는 자리(투명 배경), 체크 상자는 가운데. 체크할 수 없는 줄은 흐린 글(경고만·—). -->
     <Style Selector="Panel.bench-cell"><Setter Property="Background" Value="Transparent" /><Setter Property="Cursor" Value="Hand" /></Style>
     <Style Selector="CheckBox.bench">
@@ -41,21 +42,6 @@
       <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
       <Setter Property="Opacity" Value="0.75" />
     </Style>
-    <Style Selector=":is(Control).r-rule"><Setter Property="Width" Value="320" /></Style>
-    <Style Selector=":is(Control).r-loc"><Setter Property="Width" Value="70" /></Style>
-    <Style Selector=":is(Control).h-hint"><Setter Property="Width" Value="360" /></Style>
-    <Style Selector=":is(Control).h-mean"><Setter Property="Width" Value="380" /></Style>
-    <!-- 벤치마크 표 칸 폭. -->
-    <Style Selector=":is(Control).b-no"><Setter Property="Width" Value="32" /></Style>
-    <Style Selector=":is(Control).b-label"><Setter Property="Width" Value="230" /></Style>
-    <Style Selector=":is(Control).b-elapsed"><Setter Property="Width" Value="92" /></Style>
-    <Style Selector=":is(Control).b-bar"><Setter Property="Width" Value="136" /></Style>
-    <Style Selector=":is(Control).b-minmax"><Setter Property="Width" Value="118" /></Style>
-    <Style Selector=":is(Control).b-lr"><Setter Property="Width" Value="92" /></Style>
-    <Style Selector=":is(Control).b-pr"><Setter Property="Width" Value="92" /></Style>
-    <Style Selector=":is(Control).b-rows"><Setter Property="Width" Value="84" /></Style>
-    <Style Selector=":is(Control).b-hash"><Setter Property="Width" Value="104" /></Style>
-    <Style Selector=":is(Control).b-verdict"><Setter Property="Width" Value="210" /></Style>
 
     <!-- 「상대」 막대: 원문 = 중립, 가장 나음 = 초록, 행 수 다름 = 호박, 나머지 = 파랑(계획 창 막대와 같은 모양). -->
     <Style Selector="Border.bar-track">
@@ -195,27 +181,27 @@
               </StackPanel>
               <Grid ColumnDefinitions="1.05*,4,1.15*" IsVisible="{Binding !IndexEmpty}">
                 <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                  <DockPanel>
+                  <DockPanel ctl:TableColumns.Scope="TuningAssistant.Indexes">
                     <Border DockPanel.Dock="Top" Classes="grid-header">
-                      <StackPanel Orientation="Horizontal" Classes="cells">
-                        <TextBlock Classes="i-ico" Text="" />
-                        <TextBlock Classes="i-tbl" Text="테이블 (열)" />
-                        <TextBlock Classes="i-basis" Text="근거" />
-                        <TextBlock Classes="i-ovl" Text="겹침" ToolTip.Tip="기존 인덱스와 앞 열이 겹치는지(이미 있음·넓히기·첫 열만)" />
-                      </StackPanel>
+                      <Grid x:Name="IndexHeader" Classes="cells" ctl:TableColumns.Header="True" ColumnDefinitions="28,230,118,180">
+                        <TextBlock Grid.Column="0" Classes="i-ico" Text="" />
+                        <TextBlock Grid.Column="1" Classes="i-tbl" Text="테이블 (열)" />
+                        <TextBlock Grid.Column="2" Classes="i-basis" Text="근거" />
+                        <TextBlock Grid.Column="3" Classes="i-ovl" Text="겹침" ToolTip.Tip="기존 인덱스와 앞 열이 겹치는지(이미 있음·넓히기·첫 열만)" />
+                      </Grid>
                     </Border>
                     <ListBox x:Name="IndexList" Classes="table" ItemsSource="{Binding IndexItems}" SelectedItem="{Binding SelectedIndex, Mode=TwoWay}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="인덱스 후보">
                       <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:IndexCandidateItem">
-                          <StackPanel Orientation="Horizontal" Classes="cells" Background="Transparent" ToolTip.Tip="{Binding Tip}">
-                            <ContentControl Classes="i-ico" Margin="6,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left"
+                          <Grid Classes="cells" ctl:TableColumns.Row="True" ColumnDefinitions="28,230,118,180" Background="Transparent" ToolTip.Tip="{Binding Tip}">
+                            <ContentControl Grid.Column="0" Classes="i-ico" Margin="6,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left"
                                             Content="{Binding Source='objIndex', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
-                            <TextBlock Classes="i-tbl mono" Classes.dim="{Binding IsCovered}" Text="{Binding TableText}" />
-                            <TextBlock Classes="i-basis" Classes.dim="{Binding IsCovered}" Text="{Binding BasisText}" />
-                            <TextBlock Classes="i-ovl" Classes.warning-text="{Binding IsOverlapWarning}" Classes.success-text="{Binding IsCovered}"
+                            <TextBlock Grid.Column="1" Classes="i-tbl mono" Classes.dim="{Binding IsCovered}" Text="{Binding TableText}" />
+                            <TextBlock Grid.Column="2" Classes="i-basis" Classes.dim="{Binding IsCovered}" Text="{Binding BasisText}" />
+                            <TextBlock Grid.Column="3" Classes="i-ovl" Classes.warning-text="{Binding IsOverlapWarning}" Classes.success-text="{Binding IsCovered}"
                                        Classes.dim="{Binding IsUnknown}" Text="{Binding OverlapText}" />
-                          </StackPanel>
+                          </Grid>
                         </DataTemplate>
                       </ListBox.ItemTemplate>
                     </ListBox>
@@ -263,25 +249,25 @@
                 <DockPanel Grid.Column="0">
                 <TextBlock DockPanel.Dock="Top" Classes="check-note" IsVisible="{Binding HasWarningOnlyRewrite}" Text="{Binding RewriteCheckNote}" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                  <DockPanel>
+                  <DockPanel ctl:TableColumns.Scope="TuningAssistant.Rewrites">
                     <Border DockPanel.Dock="Top" Classes="grid-header">
-                      <StackPanel Orientation="Horizontal" Classes="cells">
-                        <TextBlock Classes="r-chk" Text="벤치" TextAlignment="Center" ToolTip.Tip="체크한 재작성은 벤치마크에 든다" />
-                        <TextBlock Classes="r-rule" Text="규칙" />
-                        <TextBlock Classes="r-loc" Text="위치" />
-                      </StackPanel>
+                      <Grid x:Name="RewriteHeader" Classes="cells" ctl:TableColumns.Header="True" ColumnDefinitions="44,320,70">
+                        <TextBlock Grid.Column="0" Classes="r-chk" Text="벤치" TextAlignment="Center" ToolTip.Tip="체크한 재작성은 벤치마크에 든다" />
+                        <TextBlock Grid.Column="1" Classes="r-rule" Text="규칙" />
+                        <TextBlock Grid.Column="2" Classes="r-loc" Text="위치" />
+                      </Grid>
                     </Border>
                     <ListBox x:Name="RewriteList" Classes="table" ItemsSource="{Binding RewriteItems}" SelectedItem="{Binding SelectedRewrite, Mode=TwoWay}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="재작성 후보">
                       <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:RewriteCandidateItem">
-                          <StackPanel Orientation="Horizontal" Classes="cells">
+                          <Grid Classes="cells" ctl:TableColumns.Row="True" ColumnDefinitions="44,320,70">
                             <!-- 「벤치」 칸: 칸 어디를 눌러도 체크가 바뀐다(코드 뒤). 체크할 수 없으면 흐린 상자 대신 「경고만」. -->
-                            <Panel Classes="r-chk bench-cell" ToolTip.Tip="{Binding CheckTip}">
+                            <Panel Grid.Column="0" Classes="r-chk bench-cell" ToolTip.Tip="{Binding CheckTip}">
                               <CheckBox Classes="bench" IsVisible="{Binding CanCheck}" IsChecked="{Binding IsChecked, Mode=TwoWay}" AutomationProperties.Name="벤치마크에 넣기" />
                               <TextBlock Classes="no-check" IsVisible="{Binding !CanCheck}" Text="{Binding NoCheckText}" />
                             </Panel>
-                            <DockPanel Classes="r-rule">
+                            <DockPanel Grid.Column="1" Classes="r-rule">
                               <ContentControl DockPanel.Dock="Left" Margin="6,0,4,0" VerticalAlignment="Center" IsVisible="{Binding IsWarning}"
                                               Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=12}" />
                               <TextBlock DockPanel.Dock="Right" Classes="no-rewrite-reason" IsVisible="{Binding IsWarningOnly}" Text="{Binding NoRewriteReason}"
@@ -289,8 +275,8 @@
                               <TextBlock Classes.dim="{Binding IsWarningOnly}" Text="{Binding Title}" Padding="6,0" VerticalAlignment="Center"
                                          TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
                             </DockPanel>
-                            <TextBlock Classes="r-loc mono" Text="{Binding LocationText}" />
-                          </StackPanel>
+                            <TextBlock Grid.Column="2" Classes="r-loc mono" Text="{Binding LocationText}" />
+                          </Grid>
                         </DataTemplate>
                       </ListBox.ItemTemplate>
                     </ListBox>
@@ -381,26 +367,26 @@
                 <DockPanel IsVisible="{Binding !HintEmpty}">
                 <TextBlock DockPanel.Dock="Top" Classes="check-note" IsVisible="{Binding HasDisabledHint}" Text="{Binding HintCheckNote}" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                  <DockPanel>
+                  <DockPanel ctl:TableColumns.Scope="TuningAssistant.Hints">
                     <Border DockPanel.Dock="Top" Classes="grid-header">
-                      <StackPanel Orientation="Horizontal" Classes="cells">
-                        <TextBlock Classes="r-chk" Text="벤치" TextAlignment="Center" ToolTip.Tip="체크한 힌트는 원문에 넣어 벤치마크한다" />
-                        <TextBlock Classes="h-hint" Text="힌트" />
-                        <TextBlock Classes="h-mean" Text="뜻" />
-                      </StackPanel>
+                      <Grid x:Name="HintHeader" Classes="cells" ctl:TableColumns.Header="True" ColumnDefinitions="44,360,380">
+                        <TextBlock Grid.Column="0" Classes="r-chk" Text="벤치" TextAlignment="Center" ToolTip.Tip="체크한 힌트는 원문에 넣어 벤치마크한다" />
+                        <TextBlock Grid.Column="1" Classes="h-hint" Text="힌트" />
+                        <TextBlock Grid.Column="2" Classes="h-mean" Text="뜻" />
+                      </Grid>
                     </Border>
                     <ListBox x:Name="HintList" Classes="table" ItemsSource="{Binding HintItems}" SelectedItem="{Binding SelectedHint, Mode=TwoWay}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="힌트 대안">
                       <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:HintCandidateItem">
-                          <StackPanel Orientation="Horizontal" Classes="cells">
-                            <Panel Classes="r-chk bench-cell" ToolTip.Tip="{Binding CheckTip}">
+                          <Grid Classes="cells" ctl:TableColumns.Row="True" ColumnDefinitions="44,360,380">
+                            <Panel Grid.Column="0" Classes="r-chk bench-cell" ToolTip.Tip="{Binding CheckTip}">
                               <CheckBox Classes="bench" IsVisible="{Binding CanCheck}" IsChecked="{Binding IsChecked, Mode=TwoWay}" AutomationProperties.Name="벤치마크에 넣기" />
                               <TextBlock Classes="no-check" IsVisible="{Binding !CanCheck}" Text="—" />
                             </Panel>
-                            <TextBlock Classes="h-hint mono" Classes.dim="{Binding IsDisabled}" Text="{Binding HintText}" ToolTip.Tip="{Binding HintText}" />
-                            <TextBlock Classes="h-mean" Classes.dim="{Binding IsDisabled}" Text="{Binding MeaningText}" ToolTip.Tip="{Binding MeaningText}" />
-                          </StackPanel>
+                            <TextBlock Grid.Column="1" Classes="h-hint mono" Classes.dim="{Binding IsDisabled}" Text="{Binding HintText}" ToolTip.Tip="{Binding HintText}" />
+                            <TextBlock Grid.Column="2" Classes="h-mean" Classes.dim="{Binding IsDisabled}" Text="{Binding MeaningText}" ToolTip.Tip="{Binding MeaningText}" />
+                          </Grid>
                         </DataTemplate>
                       </ListBox.ItemTemplate>
                     </ListBox>
@@ -429,40 +415,40 @@
             <TextBlock IsVisible="{Binding BenchmarkEmpty}" Classes="dim" Margin="16" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center"
                        Text="{Binding BenchmarkEmptyText}" />
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding !BenchmarkEmpty}">
-              <DockPanel>
+              <DockPanel ctl:TableColumns.Scope="TuningAssistant.Benchmark">
                 <Border DockPanel.Dock="Top" Classes="grid-header">
-                  <StackPanel Orientation="Horizontal" Classes="cells">
-                    <TextBlock Classes="b-no num" Text="#" />
-                    <TextBlock Classes="b-label" Text="변형" />
-                    <TextBlock Classes="b-elapsed num" Text="경과 평균" />
-                    <TextBlock Classes="b-bar" Text="상대" ToolTip.Tip="가장 느린 변형 대비 경과" />
-                    <TextBlock Classes="b-minmax num" Text="최소 / 최대" ToolTip.Tip="반복 중 가장 짧은·긴 경과(ms)" />
-                    <TextBlock Classes="b-lr num" Text="논리 읽기" ToolTip.Tip="반복 평균 session logical reads" />
-                    <TextBlock Classes="b-pr num" Text="물리 읽기" ToolTip.Tip="반복 평균 physical reads" />
-                    <TextBlock Classes="b-rows num" Text="행 수" />
-                    <TextBlock Classes="b-hash num" Text="plan_hash" />
-                    <TextBlock Classes="b-verdict" Text="판정" ToolTip.Tip="가장 나음 = 행 수가 원문과 같은 변형 중 경과 평균 최소(같으면 논리 읽기 적은 쪽)" />
-                  </StackPanel>
+                  <Grid x:Name="BenchmarkHeader" Classes="cells" ctl:TableColumns.Header="True" ColumnDefinitions="32,230,92,136,118,92,92,84,104,210">
+                    <TextBlock Grid.Column="0" Classes="b-no num" Text="#" />
+                    <TextBlock Grid.Column="1" Classes="b-label" Text="변형" />
+                    <TextBlock Grid.Column="2" Classes="b-elapsed num" Text="경과 평균" />
+                    <TextBlock Grid.Column="3" Classes="b-bar" Text="상대" ToolTip.Tip="가장 느린 변형 대비 경과" />
+                    <TextBlock Grid.Column="4" Classes="b-minmax num" Text="최소 / 최대" ToolTip.Tip="반복 중 가장 짧은·긴 경과(ms)" />
+                    <TextBlock Grid.Column="5" Classes="b-lr num" Text="논리 읽기" ToolTip.Tip="반복 평균 session logical reads" />
+                    <TextBlock Grid.Column="6" Classes="b-pr num" Text="물리 읽기" ToolTip.Tip="반복 평균 physical reads" />
+                    <TextBlock Grid.Column="7" Classes="b-rows num" Text="행 수" />
+                    <TextBlock Grid.Column="8" Classes="b-hash num" Text="plan_hash" />
+                    <TextBlock Grid.Column="9" Classes="b-verdict" Text="판정" ToolTip.Tip="가장 나음 = 행 수가 원문과 같은 변형 중 경과 평균 최소(같으면 논리 읽기 적은 쪽)" />
+                  </Grid>
                 </Border>
                 <ListBox x:Name="BenchmarkList" Classes="table" ItemsSource="{Binding BenchmarkRows}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="벤치마크 결과">
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:BenchmarkRowItem">
-                      <StackPanel Orientation="Horizontal" Classes="cells" Background="Transparent" ToolTip.Tip="{Binding SqlTip}">
-                        <TextBlock Classes="b-no num dim" Text="{Binding Number}" />
-                        <TextBlock Classes="b-label" Classes.best="{Binding IsBest}" Text="{Binding Label}" />
-                        <TextBlock Classes="b-elapsed num" Classes.best="{Binding IsBest}" Classes.success-text="{Binding IsBest}" Text="{Binding ElapsedText}" />
-                        <Panel Classes="b-bar" Margin="6,0,0,0">
+                      <Grid Classes="cells" ctl:TableColumns.Row="True" ColumnDefinitions="32,230,92,136,118,92,92,84,104,210" Background="Transparent" ToolTip.Tip="{Binding SqlTip}">
+                        <TextBlock Grid.Column="0" Classes="b-no num dim" Text="{Binding Number}" />
+                        <TextBlock Grid.Column="1" Classes="b-label" Classes.best="{Binding IsBest}" Text="{Binding Label}" />
+                        <TextBlock Grid.Column="2" Classes="b-elapsed num" Classes.best="{Binding IsBest}" Classes.success-text="{Binding IsBest}" Text="{Binding ElapsedText}" />
+                        <Panel Grid.Column="3" Classes="b-bar" Margin="6,0,0,0">
                           <Border Classes="bar-track" />
                           <Border Classes="bar" Classes.neutral="{Binding IsBarNeutral}" Classes.good="{Binding IsBarGood}" Classes.warn="{Binding IsBarWarn}"
                                   Width="{Binding BarWidth}" />
                         </Panel>
-                        <TextBlock Classes="b-minmax num" Text="{Binding MinMaxText}" />
-                        <TextBlock Classes="b-lr num" Text="{Binding LogicalText}" />
-                        <TextBlock Classes="b-pr num" Text="{Binding PhysicalText}" />
-                        <TextBlock Classes="b-rows num" Classes.danger-text="{Binding IsRowsMismatch}" Text="{Binding RowsText}" />
-                        <TextBlock Classes="b-hash num" Text="{Binding PlanHashText}" />
-                        <Panel Classes="b-verdict" Margin="6,0,0,0">
+                        <TextBlock Grid.Column="4" Classes="b-minmax num" Text="{Binding MinMaxText}" />
+                        <TextBlock Grid.Column="5" Classes="b-lr num" Text="{Binding LogicalText}" />
+                        <TextBlock Grid.Column="6" Classes="b-pr num" Text="{Binding PhysicalText}" />
+                        <TextBlock Grid.Column="7" Classes="b-rows num" Classes.danger-text="{Binding IsRowsMismatch}" Text="{Binding RowsText}" />
+                        <TextBlock Grid.Column="8" Classes="b-hash num" Text="{Binding PlanHashText}" />
+                        <Panel Grid.Column="9" Classes="b-verdict" Margin="6,0,0,0">
                           <Border Classes="chip" HorizontalAlignment="Left" IsVisible="{Binding IsBest}">
                             <StackPanel Orientation="Horizontal" Spacing="4">
                               <ContentControl VerticalAlignment="Center"
@@ -487,7 +473,7 @@
                             </TextBlock.IsVisible>
                           </TextBlock>
                         </Panel>
-                      </StackPanel>
+                      </Grid>
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>

@@ -7,6 +7,7 @@ using Avalonia.VisualTree;
 using Oranda.App.Features.Tuning.Cursors;
 using Oranda.App.Features.Tuning.Stats;
 using Oranda.App.Shell.Controls;
+using Oranda.App.Tests.Shell.Controls;
 using Oranda.App.Tests.Shell.Headless;
 
 namespace Oranda.App.Tests.Features.Tuning;
@@ -159,6 +160,26 @@ public class TuningStatsHeadlessTests
             Pump();
             Assert.False(vm.Items[0].IsCompared);
             Render(window, "cursors-same-plan", 1280, 720);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Child_cursor_compare_columns_follow_the_header_drag() => HeadlessHost.Run(async () =>
+    {
+        var vm = new ChildCursorsViewModel(TuningSamples.Cursors()) { SqlTextLoader = (_, _, _) => Task.FromResult<string?>("SELECT 1 FROM dual") };
+        vm.Attach(new TuningFakeSession(), "7h35uxf5uhmm1");
+        var view = new ChildCursorsView { DataContext = vm };
+        var window = new Window { Content = view, Width = 1280, Height = 720 };
+        window.Show();
+        try
+        {
+            await vm.LoadAsync();
+            Pump();
+            TableColumnsCheck.DragMovesHeaderAndRows(window, view.FindControl<Grid>("CompareHeader")!, view.FindControl<ListBox>("CompareList")!, 2);
         }
         finally
         {

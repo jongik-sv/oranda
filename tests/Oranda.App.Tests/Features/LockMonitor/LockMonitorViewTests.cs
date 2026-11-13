@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.LockMonitor;
 using Oranda.App.Features.SessionMonitor;
+using Oranda.App.Tests.Shell.Controls;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 
@@ -160,6 +161,29 @@ public class LockMonitorViewTests
             button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Pump();
             Assert.Equal(5, h.Vm.TreeRows.Count);
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task Wait_tree_columns_follow_the_header_drag_and_the_indent_stays() => HeadlessHost.Run(async () =>
+    {
+        var h = new LockHarness();
+        await h.Vm.StartAsync();
+        var (w, view) = Show(h.Vm);
+        try
+        {
+            var tree = view.FindControl<ListBox>("TreeList")!;
+            Pump();
+            static List<double> Indents(ListBox l) =>
+                l.GetVisualDescendants().OfType<Oranda.App.Features.ExecutionPlan.PlanTreeGuides>().Select(g => g.Bounds.Width).ToList();
+            var indents = Indents(tree);
+            Assert.NotEmpty(indents);
+            // 첫 열(세션) 폭만 바뀌고 들여쓰기 안내선 폭은 그대로다.
+            TableColumnsCheck.DragMovesHeaderAndRows(w, view.FindControl<Grid>("TreeHeader")!, tree, 0, 50, () => Assert.Equal(indents, Indents(tree)));
         }
         finally
         {

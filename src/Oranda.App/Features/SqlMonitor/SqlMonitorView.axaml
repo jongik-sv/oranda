@@ -4,6 +4,7 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:vm="using:Oranda.App.Features.SqlMonitor"
              xmlns:mon="using:Oranda.App.Features.SessionMonitor"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.SqlMonitor.SqlMonitorView"
              keymaps:FocusSlot.Name="monitor"
              x:DataType="vm:SqlMonitorViewModel">
@@ -12,12 +13,12 @@
       <Setter Property="Foreground" Value="{DynamicResource OrandaEnvProductionBrush}" />
     </Style>
 
-    <!-- 튜닝 탭(TSK-06-06) 칸 폭: 머리글과 줄이 같은 클래스를 써서 세로로 맞는다. -->
-    <Style Selector=":is(Control).w-event"><Setter Property="Width" Value="270" /></Style>
-    <Style Selector=":is(Control).w-class"><Setter Property="Width" Value="120" /></Style>
-    <Style Selector=":is(Control).w-samples"><Setter Property="Width" Value="64" /></Style>
-    <Style Selector=":is(Control).w-share"><Setter Property="Width" Value="180" /></Style>
-    <Style Selector=":is(Control).w-sessions"><Setter Property="Width" Value="56" /></Style>
+    <!-- 튜닝 탭(TSK-06-06) 대기 이벤트 칸: 폭은 머리글·줄 Grid 의 ColumnDefinitions(머리글 경계를 끌어 바꾼다, TableColumns). 칸 글자는 공용 표 칸과 같게. -->
+    <Style Selector="Grid.cells > TextBlock">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
 
     <!-- 비율 막대(계획 창과 같은 얇은 둥근 막대). 색 = 대기 분류(아이콘 브러시). -->
     <Style Selector="Border.bar-track">
@@ -289,25 +290,25 @@
                   </ItemsControl>
                   <Border BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1">
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                      <DockPanel>
+                      <DockPanel ctl:TableColumns.Scope="SqlMonitor.WaitEvents">
                         <Border DockPanel.Dock="Top" Classes="grid-header">
-                          <StackPanel Orientation="Horizontal" Classes="cells">
-                            <TextBlock Classes="w-event" Text="이벤트" />
-                            <TextBlock Classes="w-class" Text="대기 분류" />
-                            <TextBlock Classes="w-samples num" Text="표본" ToolTip.Tip="표본 수(1 초 간격이면 대략 초)" />
-                            <TextBlock Classes="w-share" Text="비율" />
-                            <TextBlock Classes="w-sessions num" Text="세션" ToolTip.Tip="표본에 나온 세션 수(ASH 는 —)" />
-                          </StackPanel>
+                          <Grid x:Name="WaitHeader" Classes="cells" ctl:TableColumns.Header="True" ColumnDefinitions="270,120,64,180,56,Auto">
+                            <TextBlock Grid.Column="0" Classes="w-event" Text="이벤트" />
+                            <TextBlock Grid.Column="1" Classes="w-class" Text="대기 분류" />
+                            <TextBlock Grid.Column="2" Classes="w-samples num" Text="표본" ToolTip.Tip="표본 수(1 초 간격이면 대략 초)" />
+                            <TextBlock Grid.Column="3" Classes="w-share" Text="비율" />
+                            <TextBlock Grid.Column="4" Classes="w-sessions num" Text="세션" ToolTip.Tip="표본에 나온 세션 수(ASH 는 —)" />
+                          </Grid>
                         </Border>
                         <ListBox x:Name="WaitList" Classes="table" ItemsSource="{Binding Events}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  AutomationProperties.Name="대기 이벤트">
                           <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:WaitEventItem">
-                              <StackPanel Orientation="Horizontal" Classes="cells" ToolTip.Tip="{Binding Tip}" Background="Transparent">
-                                <TextBlock Classes="w-event" Text="{Binding Event}" />
-                                <TextBlock Classes="w-class" Text="{Binding WaitClass}" />
-                                <TextBlock Classes="w-samples num" Text="{Binding SamplesText}" />
-                                <Grid Classes="w-share" ColumnDefinitions="126,*">
+                              <Grid Classes="cells" ctl:TableColumns.Row="True" ColumnDefinitions="270,120,64,180,56,Auto" ToolTip.Tip="{Binding Tip}" Background="Transparent">
+                                <TextBlock Grid.Column="0" Classes="w-event" Text="{Binding Event}" />
+                                <TextBlock Grid.Column="1" Classes="w-class" Text="{Binding WaitClass}" />
+                                <TextBlock Grid.Column="2" Classes="w-samples num" Text="{Binding SamplesText}" />
+                                <Grid Grid.Column="3" Classes="w-share" ColumnDefinitions="126,*">
                                   <Panel Margin="6,0,0,0">
                                     <Border Classes="bar-track" />
                                     <Border Classes="bar tone" Width="{Binding ShareBarWidth}" Classes.cpu="{Binding IsCpu}" Classes.userio="{Binding IsUserIo}"
@@ -315,10 +316,10 @@
                                   </Panel>
                                   <TextBlock Grid.Column="1" Classes="num pct" Margin="0,0,6,0" VerticalAlignment="Center" Text="{Binding ShareText}" />
                                 </Grid>
-                                <TextBlock Classes="w-sessions num" Text="{Binding SessionsText}" />
-                                <Button Classes="tool" Margin="6,0,0,0" Padding="4,0" Content="Lock 모니터" icons:ButtonIcon.Key="lock" IsVisible="{Binding ShowLockLink}"
+                                <TextBlock Grid.Column="4" Classes="w-sessions num" Text="{Binding SessionsText}" />
+                                <Button Grid.Column="5" Classes="tool" Margin="6,0,0,0" Padding="4,0" Content="Lock 모니터" icons:ButtonIcon.Key="lock" IsVisible="{Binding ShowLockLink}"
                                         Click="OnLockMonitorClick" ToolTip.Tip="행 잠금 대기입니다. Lock 모니터에서 막고 있는 세션을 봅니다" />
-                              </StackPanel>
+                              </Grid>
                             </DataTemplate>
                           </ListBox.ItemTemplate>
                         </ListBox>

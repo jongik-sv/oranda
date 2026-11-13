@@ -6,6 +6,7 @@
              xmlns:sm="using:Oranda.App.Features.SessionMonitor"
              xmlns:plan="using:Oranda.App.Features.ExecutionPlan"
              xmlns:se="using:Oranda.App.Features.SqlEditor"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.LockMonitor.LockMonitorView"
              keymaps:FocusSlot.Name="lockMonitor"
              x:DataType="vm:LockMonitorViewModel">
@@ -13,14 +14,12 @@
     <Style Selector="TextBlock.account.production">
       <Setter Property="Foreground" Value="{DynamicResource OrandaEnvProductionBrush}" />
     </Style>
-    <!-- 대기 트리 칸 폭(머리글과 줄이 같은 클래스). -->
-    <Style Selector=":is(Control).lk-sess"><Setter Property="Width" Value="168" /></Style>
-    <Style Selector=":is(Control).lk-user"><Setter Property="Width" Value="98" /></Style>
-    <Style Selector=":is(Control).lk-state"><Setter Property="Width" Value="80" /></Style>
-    <Style Selector=":is(Control).lk-wait"><Setter Property="Width" Value="66" /></Style>
-    <Style Selector=":is(Control).lk-event"><Setter Property="Width" Value="206" /></Style>
-    <Style Selector=":is(Control).lk-obj"><Setter Property="Width" Value="116" /></Style>
-    <Style Selector=":is(Control).lk-sql"><Setter Property="Width" Value="140" /></Style>
+    <!-- 대기 트리 칸: 폭은 머리글·줄 Grid 의 ColumnDefinitions(머리글 경계를 끌어 바꾼다, TableColumns). 칸 글자는 공용 표 칸과 같게. -->
+    <Style Selector="Grid.cells > TextBlock">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
     <!-- 보유자 줄: 계획 창 「가장 비싼 단계」 와 같은 왼쪽 3 DIP 주황 띠 + 옅은 주황 바탕(OrandaHotRowBrush). -->
     <Style Selector="Border.plan-row">
       <Setter Property="BorderThickness" Value="3,0,0,0" />
@@ -379,25 +378,25 @@
                 <TextBlock Classes="dim" Margin="12" Text="기다리는 세션이 없습니다. 아래 잠금 목록은 거른 조건의 잠금입니다."
                            IsVisible="{Binding !TreeRows.Count}" TextWrapping="Wrap" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding !!TreeRows.Count}">
-                  <DockPanel>
+                  <DockPanel ctl:TableColumns.Scope="LockMonitor.WaitTree">
                     <Border DockPanel.Dock="Top" Classes="grid-header">
-                      <StackPanel Orientation="Horizontal" Classes="cells" Margin="3,0,0,0">
-                        <TextBlock Classes="lk-sess" Text="세션 (인스턴스·SID)" />
-                        <TextBlock Classes="lk-user" Text="사용자" />
-                        <TextBlock Classes="lk-state" Text="상태" />
-                        <TextBlock Classes="lk-wait num" Text="대기" />
-                        <TextBlock Classes="lk-event" Text="이벤트" />
-                        <TextBlock Classes="lk-obj" Text="객체" />
-                        <TextBlock Classes="lk-sql" Text="sql_id" />
-                      </StackPanel>
+                      <Grid x:Name="TreeHeader" Classes="cells" Margin="3,0,0,0" ctl:TableColumns.Header="True" ColumnDefinitions="168,98,80,66,206,116,140">
+                        <TextBlock Grid.Column="0" Classes="lk-sess" Text="세션 (인스턴스·SID)" />
+                        <TextBlock Grid.Column="1" Classes="lk-user" Text="사용자" />
+                        <TextBlock Grid.Column="2" Classes="lk-state" Text="상태" />
+                        <TextBlock Grid.Column="3" Classes="lk-wait num" Text="대기" />
+                        <TextBlock Grid.Column="4" Classes="lk-event" Text="이벤트" />
+                        <TextBlock Grid.Column="5" Classes="lk-obj" Text="객체" />
+                        <TextBlock Grid.Column="6" Classes="lk-sql" Text="sql_id" />
+                      </Grid>
                     </Border>
                     <ListBox x:Name="TreeList" Classes="table" ItemsSource="{Binding TreeRows}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="대기 트리">
                       <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:LockTreeItem">
                           <Border Classes="plan-row" Classes.hot="{Binding IsHolder}" ToolTip.Tip="{Binding ToolTip}">
-                            <StackPanel Orientation="Horizontal" Classes="cells">
-                              <Border Classes="lk-sess" Padding="6,0,0,0">
+                            <Grid Classes="cells" ctl:TableColumns.Row="True" ColumnDefinitions="168,98,80,66,206,116,140">
+                              <Border Grid.Column="0" Classes="lk-sess" Padding="6,0,0,0">
                                 <DockPanel>
                                   <plan:PlanTreeGuides DockPanel.Dock="Left" Lines="{Binding TreeLines}" Stroke="{DynamicResource OrandaTreeGuideBrush}" />
                                   <Button DockPanel.Dock="Left" Classes="expander" Content="{Binding ExpanderGlyph}" IsEnabled="{Binding HasChildren}"
@@ -407,13 +406,13 @@
                                   <TextBlock Classes="key mono" Text="{Binding KeyText}" VerticalAlignment="Center" />
                                 </DockPanel>
                               </Border>
-                              <TextBlock Classes="lk-user" Text="{Binding Username}" />
-                              <TextBlock Classes="lk-state" Classes.warning-text="{Binding IsInactive}" Text="{Binding StatusText}" />
-                              <TextBlock Classes="lk-wait num" Text="{Binding WaitText}" />
-                              <TextBlock Classes="lk-event" Classes.dim="{Binding IsHolder}" Text="{Binding EventText}" ToolTip.Tip="{Binding EventText}" />
-                              <TextBlock Classes="lk-obj mono" Text="{Binding ObjectText}" ToolTip.Tip="{Binding ObjectText}" />
-                              <TextBlock Classes="lk-sql mono" Classes.dim="{Binding SqlIsPrevious}" Text="{Binding SqlText}" />
-                            </StackPanel>
+                              <TextBlock Grid.Column="1" Classes="lk-user" Text="{Binding Username}" />
+                              <TextBlock Grid.Column="2" Classes="lk-state" Classes.warning-text="{Binding IsInactive}" Text="{Binding StatusText}" />
+                              <TextBlock Grid.Column="3" Classes="lk-wait num" Text="{Binding WaitText}" />
+                              <TextBlock Grid.Column="4" Classes="lk-event" Classes.dim="{Binding IsHolder}" Text="{Binding EventText}" ToolTip.Tip="{Binding EventText}" />
+                              <TextBlock Grid.Column="5" Classes="lk-obj mono" Text="{Binding ObjectText}" ToolTip.Tip="{Binding ObjectText}" />
+                              <TextBlock Grid.Column="6" Classes="lk-sql mono" Classes.dim="{Binding SqlIsPrevious}" Text="{Binding SqlText}" />
+                            </Grid>
                           </Border>
                         </DataTemplate>
                       </ListBox.ItemTemplate>

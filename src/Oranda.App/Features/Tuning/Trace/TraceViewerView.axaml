@@ -6,18 +6,12 @@
              x:Class="Oranda.App.Features.Tuning.Trace.TraceViewerView"
              x:DataType="vm:TraceViewerViewModel">
   <UserControl.Styles>
-    <!-- 문장 요약 표 칸 폭(머리글과 줄이 같은 클래스). -->
-    <Style Selector=":is(Control).s-n"><Setter Property="Width" Value="34" /></Style>
-    <Style Selector=":is(Control).s-id"><Setter Property="Width" Value="122" /></Style>
-    <Style Selector=":is(Control).s-sql"><Setter Property="Width" Value="280" /></Style>
-    <Style Selector=":is(Control).s-exec"><Setter Property="Width" Value="70" /></Style>
-    <Style Selector=":is(Control).s-sec"><Setter Property="Width" Value="80" /></Style>
-    <Style Selector=":is(Control).s-share"><Setter Property="Width" Value="104" /></Style>
-    <Style Selector=":is(Control).s-blk"><Setter Property="Width" Value="92" /></Style>
-    <!-- 대기 표 칸 폭. -->
-    <Style Selector=":is(Control).w-n"><Setter Property="Width" Value="30" /></Style>
-    <Style Selector=":is(Control).w-ev"><Setter Property="Width" Value="230" /></Style>
-    <Style Selector=":is(Control).w-num"><Setter Property="Width" Value="76" /></Style>
+    <!-- 표 칸: 폭은 머리글·줄 Grid 의 ColumnDefinitions(머리글 경계를 끌어 바꾼다, TableColumns). 칸 글자는 공용 표 칸과 같게. -->
+    <Style Selector="Grid.cells > TextBlock">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
 
     <!-- 비중 막대: 가장 큰 문장 = 주황, 나머지 = 파랑, 재귀(dep>0) = 회색(계획 창과 같은 모양). -->
     <Style Selector="Border.bar-track">
@@ -45,7 +39,7 @@
       <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
       <Setter Property="Opacity" Value="0.75" />
     </Style>
-    <Style Selector="StackPanel.idle > TextBlock">
+    <Style Selector="Grid.idle > TextBlock">
       <Setter Property="Opacity" Value="0.5" />
     </Style>
 
@@ -203,45 +197,45 @@
         <Grid x:Name="SummaryPane" RowDefinitions="1.1*,5,*" IsVisible="{Binding ShowSummary}">
           <Panel Grid.Row="0">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-              <DockPanel>
+              <DockPanel ctl:TableColumns.Scope="TraceViewer.Statements">
                 <Border DockPanel.Dock="Top" Classes="grid-header">
-                  <StackPanel Orientation="Horizontal" Classes="cells">
-                    <TextBlock Classes="s-n num" Text="#" />
-                    <TextBlock Classes="s-id" Text="sql_id" />
-                    <TextBlock Classes="s-sql" Text="문장" />
-                    <TextBlock Classes="s-exec num" Text="실행" />
-                    <TextBlock Classes="s-sec num" Text="cpu(s)" />
-                    <TextBlock Classes="s-sec num" Text="elapsed(s)" />
-                    <TextBlock Classes="s-share" Text="비중" ToolTip.Tip="파일 전체 경과 대비 이 문장의 경과" />
-                    <TextBlock Classes="s-blk num" Text="disk" ToolTip.Tip="물리 읽기 블록(p=)" />
-                    <TextBlock Classes="s-blk num" Text="query" ToolTip.Tip="일관 읽기 블록(cr=)" />
-                    <TextBlock Classes="s-blk num" Text="current" ToolTip.Tip="현재 읽기 블록(cu=)" />
-                    <TextBlock Classes="s-blk num" Text="rows" />
-                  </StackPanel>
+                  <Grid x:Name="StatementHeader" Classes="cells" ctl:TableColumns.Header="True" ColumnDefinitions="34,122,280,70,80,80,104,92,92,92,92">
+                    <TextBlock Grid.Column="0" Classes="s-n num" Text="#" />
+                    <TextBlock Grid.Column="1" Classes="s-id" Text="sql_id" />
+                    <TextBlock Grid.Column="2" Classes="s-sql" Text="문장" />
+                    <TextBlock Grid.Column="3" Classes="s-exec num" Text="실행" />
+                    <TextBlock Grid.Column="4" Classes="s-sec num" Text="cpu(s)" />
+                    <TextBlock Grid.Column="5" Classes="s-sec num" Text="elapsed(s)" />
+                    <TextBlock Grid.Column="6" Classes="s-share" Text="비중" ToolTip.Tip="파일 전체 경과 대비 이 문장의 경과" />
+                    <TextBlock Grid.Column="7" Classes="s-blk num" Text="disk" ToolTip.Tip="물리 읽기 블록(p=)" />
+                    <TextBlock Grid.Column="8" Classes="s-blk num" Text="query" ToolTip.Tip="일관 읽기 블록(cr=)" />
+                    <TextBlock Grid.Column="9" Classes="s-blk num" Text="current" ToolTip.Tip="현재 읽기 블록(cu=)" />
+                    <TextBlock Grid.Column="10" Classes="s-blk num" Text="rows" />
+                  </Grid>
                 </Border>
                 <ListBox x:Name="StatementList" Classes="table" ItemsSource="{Binding Statements}" SelectedItem="{Binding SelectedStatement, Mode=TwoWay}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="문장 요약">
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:TraceStatementItem">
-                      <StackPanel Orientation="Horizontal" Classes="cells">
-                        <TextBlock Classes="s-n num dim" Text="{Binding Number}" />
-                        <TextBlock Classes="s-id mono" Text="{Binding SqlIdText}" />
-                        <TextBlock Classes="s-sql mono" Text="{Binding ShortText}" ToolTip.Tip="{Binding FullText}" />
-                        <TextBlock Classes="s-exec num" Text="{Binding ExecutionsText}" />
-                        <TextBlock Classes="s-sec num" Text="{Binding CpuText}" />
-                        <TextBlock Classes="s-sec num" Text="{Binding ElapsedText}" />
-                        <Grid Classes="s-share" ColumnDefinitions="66,*">
+                      <Grid Classes="cells" ctl:TableColumns.Row="True" ColumnDefinitions="34,122,280,70,80,80,104,92,92,92,92">
+                        <TextBlock Grid.Column="0" Classes="s-n num dim" Text="{Binding Number}" />
+                        <TextBlock Grid.Column="1" Classes="s-id mono" Text="{Binding SqlIdText}" />
+                        <TextBlock Grid.Column="2" Classes="s-sql mono" Text="{Binding ShortText}" ToolTip.Tip="{Binding FullText}" />
+                        <TextBlock Grid.Column="3" Classes="s-exec num" Text="{Binding ExecutionsText}" />
+                        <TextBlock Grid.Column="4" Classes="s-sec num" Text="{Binding CpuText}" />
+                        <TextBlock Grid.Column="5" Classes="s-sec num" Text="{Binding ElapsedText}" />
+                        <Grid Grid.Column="6" Classes="s-share" ColumnDefinitions="66,*">
                           <Panel Margin="6,0,0,0">
                             <Border Classes="bar-track" />
                             <Border Classes="bar" Classes.top="{Binding IsTop}" Classes.recursive="{Binding IsRecursive}" Width="{Binding BarLength}" />
                           </Panel>
                           <TextBlock Grid.Column="1" Classes="num pct" Margin="0,0,6,0" VerticalAlignment="Center" Text="{Binding ShareText}" />
                         </Grid>
-                        <TextBlock Classes="s-blk num" Text="{Binding DiskText}" />
-                        <TextBlock Classes="s-blk num" Text="{Binding QueryText}" />
-                        <TextBlock Classes="s-blk num" Text="{Binding CurrentText}" />
-                        <TextBlock Classes="s-blk num" Text="{Binding RowsText}" />
-                      </StackPanel>
+                        <TextBlock Grid.Column="7" Classes="s-blk num" Text="{Binding DiskText}" />
+                        <TextBlock Grid.Column="8" Classes="s-blk num" Text="{Binding QueryText}" />
+                        <TextBlock Grid.Column="9" Classes="s-blk num" Text="{Binding CurrentText}" />
+                        <TextBlock Grid.Column="10" Classes="s-blk num" Text="{Binding RowsText}" />
+                      </Grid>
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
@@ -276,27 +270,27 @@
                 <TextBlock Text="idle 대기(SQL*Net message from client 등)는 흐리게, 합계에서 뺌" TextTrimming="CharacterEllipsis" />
               </Border>
               <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                <DockPanel>
+                <DockPanel ctl:TableColumns.Scope="TraceViewer.Waits">
                   <Border DockPanel.Dock="Top" Classes="grid-header">
-                    <StackPanel Orientation="Horizontal" Classes="cells">
-                      <TextBlock Classes="w-n num" Text="#" />
-                      <TextBlock Classes="w-ev" Text="이벤트" />
-                      <TextBlock Classes="w-num num" Text="횟수" />
-                      <TextBlock Classes="w-num num" Text="평균(ms)" />
-                      <TextBlock Classes="w-num num" Text="합계(s)" />
-                    </StackPanel>
+                    <Grid x:Name="WaitHeader" Classes="cells" ctl:TableColumns.Header="True" ColumnDefinitions="30,230,76,76,76">
+                      <TextBlock Grid.Column="0" Classes="w-n num" Text="#" />
+                      <TextBlock Grid.Column="1" Classes="w-ev" Text="이벤트" />
+                      <TextBlock Grid.Column="2" Classes="w-num num" Text="횟수" />
+                      <TextBlock Grid.Column="3" Classes="w-num num" Text="평균(ms)" />
+                      <TextBlock Grid.Column="4" Classes="w-num num" Text="합계(s)" />
+                    </Grid>
                   </Border>
                   <ListBox x:Name="WaitList" Classes="table" ItemsSource="{Binding Waits}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                            AutomationProperties.Name="대기 합계">
                     <ListBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:TraceWaitItem">
-                        <StackPanel Orientation="Horizontal" Classes="cells" Classes.idle="{Binding IsIdle}">
-                          <TextBlock Classes="w-n num dim" Text="{Binding Number}" />
-                          <TextBlock Classes="w-ev" Text="{Binding Event}" ToolTip.Tip="{Binding Event}" />
-                          <TextBlock Classes="w-num num" Text="{Binding CountText}" />
-                          <TextBlock Classes="w-num num" Text="{Binding AverageText}" />
-                          <TextBlock Classes="w-num num" Text="{Binding TotalText}" />
-                        </StackPanel>
+                        <Grid Classes="cells" ctl:TableColumns.Row="True" ColumnDefinitions="30,230,76,76,76" Classes.idle="{Binding IsIdle}">
+                          <TextBlock Grid.Column="0" Classes="w-n num dim" Text="{Binding Number}" />
+                          <TextBlock Grid.Column="1" Classes="w-ev" Text="{Binding Event}" ToolTip.Tip="{Binding Event}" />
+                          <TextBlock Grid.Column="2" Classes="w-num num" Text="{Binding CountText}" />
+                          <TextBlock Grid.Column="3" Classes="w-num num" Text="{Binding AverageText}" />
+                          <TextBlock Grid.Column="4" Classes="w-num num" Text="{Binding TotalText}" />
+                        </Grid>
                       </DataTemplate>
                     </ListBox.ItemTemplate>
                   </ListBox>

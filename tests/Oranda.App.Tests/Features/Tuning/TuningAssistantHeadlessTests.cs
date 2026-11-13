@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Tuning.Assistant;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Controls;
 using Oranda.Core.Connection;
 using Oranda.Language.Tuning;
 
@@ -175,6 +176,22 @@ public sealed class TuningAssistantHeadlessTests
                     Assert.Equal(item.Advice.DisabledReason, ToolTip.GetTip(cell));
                 }
             }
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Benchmark_columns_follow_the_header_drag() => Ui.Run(async () =>
+    {
+        var (vm, _, _) = await TuningAssistantTests.LoadedAsync(tuning: new TuningAssistantTests.FakeTuning { Result = _ => (64, 1440, 12, 1208, 3392001144) });
+        await vm.RunBenchmarkAsync();
+        var (view, window) = Show(vm);
+        try
+        {
+            TableColumnsCheck.DragMovesHeaderAndRows(window, Named<Grid>(view, "BenchmarkHeader"), Named<ListBox>(view, "BenchmarkList"), 1);
         }
         finally
         {

@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using Oranda.App.Features.SqlMonitor;
 using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Tests.Features.MyBatisWorkspace.Flow;
+using Oranda.App.Tests.Shell.Controls;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 using Oranda.Core.Tuning;
@@ -171,6 +172,25 @@ public class SqlMonitorTuningViewTests
         Assert.True(Named<Button>(window, "ControlsCopyGrantButton").IsEffectivelyVisible);
         Shot(window, "controls-denied");
         window.Close();
+    });
+
+    [Fact]
+    public Task Wait_event_columns_follow_the_header_drag() => HeadlessHost.Run(async () =>
+    {
+        var h = await TuningHarness.StartAsync();
+        h.Vm.DetailTabIndex = SqlMonitorViewModel.WaitsTab;
+        h.Tuning.Samples = i => Mix(i);
+        h.Vm.Waits.Delay = (_, _) => Task.CompletedTask;
+        await h.Vm.Waits.StartAsync();
+        var window = Show(h.Vm);
+        try
+        {
+            TableColumnsCheck.DragMovesHeaderAndRows(window, Named<Grid>(window, "WaitHeader"), Named<ListBox>(window, "WaitList"), 0);
+        }
+        finally
+        {
+            window.Close();
+        }
     });
 
     [Fact]
