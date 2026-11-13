@@ -12,8 +12,10 @@ using Oranda.Core.History;
 using Oranda.Core.Journal;
 using Oranda.Core.Rollback;
 using Oranda.Core.Rollback.Backup;
+using Oranda.Core.Rollback.Capture;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Sessions;
+using EndScope = Oranda.Oracle.Sessions.OracleSession.EndScope;
 
 namespace Oranda.Oracle.Execution;
 
@@ -36,18 +38,20 @@ internal sealed partial class OracleExecutionService : IExecutionService
     private readonly IEventBus _events;
     private readonly ISqlPlusCommandProcessor? _sqlPlus;
     private readonly IGridFetchSettings? _grid;
+    private readonly IDmlAnalyzer _analyzer;
     private readonly ConditionalWeakTable<OracleSession, SessionRuntime> _runtimes = new();
 
     public OracleExecutionService(IExecutionPolicy policy, IExecutionInteraction interaction, IEventBus events,
-                                  ISqlPlusCommandProcessor sqlPlus)
-        : this(policy, interaction, events, sqlPlus, pageSize: 500)
+                                  ISqlPlusCommandProcessor sqlPlus, IDmlAnalyzer? analyzer = null)
+        : this(policy, interaction, events, sqlPlus, pageSize: 500, analyzer: analyzer)
     {
     }
 
     internal OracleExecutionService(IExecutionPolicy policy, IExecutionInteraction interaction, IEventBus events,
                                     ISqlPlusCommandProcessor? sqlPlus, int pageSize = 500, bool dbmsOutput = true,
-                                    IGridFetchSettings? grid = null)
+                                    IGridFetchSettings? grid = null, IDmlAnalyzer? analyzer = null)
     {
+        _analyzer = analyzer ?? NullDmlAnalyzer.Instance;
         _policy = policy;
         _interaction = interaction;
         _events = events;
@@ -157,12 +161,15 @@ internal sealed partial class OracleExecutionService : IExecutionService
             stmt = substituted;
         }
 
-        // 2. 확인 창 제안(명령 잠금 밖): 데이터가 사라지는 DDL 앞 백업 테이블(RB-44).
+        // 2. 확인 창 제안(명령 잠금 밖): 원복 스크립트(설계 6.1 의 2단계)와 데이터가 사라지는 DDL 앞 백업 테이블(RB-44).
+        var plan = RollbackPlan.None;
         var extras = ConfirmExtras.None;
-        if (s is OracleSession prepared)
+        if (s is OracleSession prepared && stmt.Kind != StatementKind.SqlPlus)
         {
             try
             {
+                plan = await PrepareRollbackQuietlyAsync(prepared, stmt, binds, options, ct);
+                extras = plan.Extras;
                 if (await OfferBackupAsync(prepared, stmt, ct) is { } backup)
                 {
                     extras = extras with { Backup = backup };
@@ -222,7 +229,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         session.SetBusy(true);
         try
         {
-            return await RunOnDriverAsync(session, runtime, stmt, binds, applied, gate.Answer, extras, ct);
+            return await RunOnDriverAsync(session, runtime, stmt, binds, applied, gate.Answer, extras, plan, ct);
         }
         finally
         {
@@ -233,7 +240,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
     private async Task<ExecutionResult> RunOnDriverAsync(OracleSession session, SessionRuntime runtime, SqlStatement stmt,
                                                          IReadOnlyDictionary<string, BindValue> binds, PolicyDecision? applied,
-                                                         ConfirmAnswer answer, ConfirmExtras extras, CancellationToken ct)
+                                                         ConfirmAnswer answer, ConfirmExtras extras, RollbackPlan plan, CancellationToken ct)
     {
         var conn = session.Connection;
         var kind = ExecutionPolicy.EffectiveKind(stmt);
@@ -243,6 +250,15 @@ internal sealed partial class OracleExecutionService : IExecutionService
         // 확인 창이 고른 백업(RB-44). 이 실행의 제안에서 나온 글만 보낸다(정책 관문을 지나지 않는 글이다).
         var backupSql = stmt.Kind == StatementKind.Ddl && IsOfferedBackup(extras.Backup, answer.BackupSql) ? answer.BackupSql : null;
         RollbackStatementSummary? backupLog = null;
+        IStatementCapture? capture = null; // 엔진이 이 문장을 맡았을 때만(시작 단계가 저장점·잠금 읽기를 보냈을 수 있다)
+        RollbackStatementSummary? completed = null;
+        EndScope? scope = null;
+        var pendingBefore = session.HasPendingTransaction;
+        var sent = false; // 사용자 문장을 드라이버로 보내기 시작했다(그 뒤에만 트랜잭션 끝을 따진다)
+        var executed = false; // 사용자 문장이 드라이버에서 끝났다(그 뒤 실패는 Abandon 이 아니라 Complete, 끝 판정은 성공으로)
+        var endReported = false; // 이 문장의 트랜잭션 끝을 이미 따졌다(실패 경로에서 다시 알리지 않는다)
+        long? doneRows = null;
+        Dictionary<string, object?>? doneOut = null;
         try
         {
             await PrepareSessionAsync(session, runtime, ct);
@@ -258,10 +274,25 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
             await CaptureBeforeChangeAsync(session, stmt, BackupPlanner.BackupNameOf(backupSql), ct);
 
+            // 되돌리기(6.1 의 5단계·7.4): 끝낼 수 있는 문장이면 열린 묶음 저장과 끝 알림 범위, 그다음 시점 읽기·내부 저장점·잠금 읽기.
+            pendingBefore = session.HasPendingTransaction;
+            if (RollbackFlow.CanEndTransaction(stmt))
+            {
+                scope = session.BeginEndScope();
+                await session.Rollback.BeforeEndAsync(session, ct);
+            }
+
+            capture = await BeginRollbackAsync(session, plan, answer, ct);
+            var send = capture?.StatementToSend ?? stmt;
+            var sendBinds = capture?.BindsToSend ?? binds;
+            // 바인드 이름 목록이 없는 사용자 문장(바인드 사전의 키로 붙임)에 엔진이 출력 바인드 이름만 더했으면 사전의 키로 모두 붙인다.
+            var bindShape = stmt.BindNames.Count == 0 && binds.Count > 0 ? send with { BindNames = [] } : send;
+
             cmd = conn.CreateCommand();
             cmd.BindByName = true;
-            cmd.CommandText = stmt.Text;
-            var parameters = BindBuilder.Build(cmd, stmt, binds);
+            cmd.CommandText = send.Text;
+            var parameters = BindBuilder.Build(cmd, bindShape, sendBinds);
+            sent = true;
             var pageSize = CurrentPageSize; // 실행마다 한 번 읽는다: 한 결과 안에서 페이지 크기가 바뀌지 않게
             var lobFetchSize = CurrentLobFetchSize;
 
@@ -291,15 +322,30 @@ internal sealed partial class OracleExecutionService : IExecutionService
                     rows = kind == StatementKind.Dml && n >= 0 ? n : null;
                 }
 
+                executed = true;
+                doneRows = rows;
+
                 ct.ThrowIfCancellationRequested();
             }
 
-            var outValues = parameters.Count == 0
+            var allOut = parameters.Count == 0
                 ? new Dictionary<string, object?>()
                 : OracleValues.ReadOutValues(session, parameters, pageSize, lobFetchSize);
+            doneOut = allOut;
+            var outValues = UserOutValues(allOut, stmt);
 
             sw.Stop();
-            var pending = await TrackTransactionAsync(session, stmt, kind, ct);
+            var (pending, transactionId) = await TrackTransactionIdAsync(session, stmt, kind, ct);
+            // 6.1 의 8단계: 행 수 대조·직후 값 읽기·원장 기록. 문장은 이미 성공했으므로 취소하지 않는다(엔진은 실패를 불완전으로 담는다).
+            if (capture is not null)
+            {
+                completed = await CompleteQuietlyAsync(capture, rows, allOut, transactionId);
+                capture = null; // 한 번만 마무리한다(뒤 단계가 실패해도 다시 부르지 않는다)
+            }
+
+            endReported = true;
+            await AfterStatementAsync(session, stmt, succeeded: true, pendingBefore, pending);
+            scope?.Reported();
             // 질의 뒤에는 숨은 문장(GET_LINES)을 보내지 않는다: 세션의 직전 커서가 바뀌면 다음 문장의
             // dbms_xplan.display_cursor(sql_id => null) 가 사용자 질의 대신 그 문장을 보인다(TSK-06-14).
             // 질의 안 함수가 낸 출력은 버퍼에 남아 다음 질의 아닌 문장 뒤에 함께 나온다.
@@ -319,38 +365,53 @@ internal sealed partial class OracleExecutionService : IExecutionService
                 DbmsOutput = output,
                 OutValues = outValues,
                 TransactionPending = pending,
-                Rollback = backupLog,
+                Rollback = backupLog ?? completed,
             };
         }
         catch (Exception ex) when (IsCancellation(ex, ct))
         {
+            var finished = await FinishAfterFailureAsync(session, capture, executed, doneRows, doneOut, null,
+                new DbError("ORA-01013", "사용자가 취소했습니다.") { Kind = DbErrorKind.Cancelled });
             var pending = await SafeTrackAfterFailureAsync(session, stmt, kind);
+            await EndAfterFailureAsync(session, stmt, sent && !endReported, executed, pendingBefore, pending, scope);
             return new ExecutionResult(stmt, ExecutionStatus.Cancelled)
             {
-                Elapsed = sw.Elapsed, Policy = applied, TransactionPending = pending, Rollback = backupLog,
+                Elapsed = sw.Elapsed, Policy = applied, TransactionPending = pending, Rollback = backupLog ?? completed ?? finished,
             };
         }
         catch (OracleException ex)
         {
             session.ReportFailure(ex);
+            var error = ToDbError(ex, stmt.Text);
+            var finished = await FinishAfterFailureAsync(session, capture, executed, doneRows, doneOut, null, error);
             var pending = await SafeTrackAfterFailureAsync(session, stmt, kind);
+            await EndAfterFailureAsync(session, stmt, sent && !endReported, executed, pendingBefore, pending, scope);
             var output = session.State is SessionState.Broken ? [] : await SafeCollectAsync(session, runtime);
             return new ExecutionResult(stmt, ExecutionStatus.Failed)
             {
                 Elapsed = sw.Elapsed,
-                Error = ToDbError(ex, stmt.Text),
+                Error = error,
                 Policy = applied,
                 DbmsOutput = output,
                 TransactionPending = pending,
-                Rollback = backupLog,
+                Rollback = backupLog ?? completed ?? finished,
             };
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or FormatException or InvalidCastException)
         {
-            return Failed(stmt, "ORANDA-EXEC", ex.Message, applied) with { Elapsed = sw.Elapsed, Rollback = backupLog };
+            var error = new DbError("ORANDA-EXEC", ex.Message);
+            var began = capture is not null; // 시작 단계가 저장점·잠금 읽기로 트랜잭션을 열었을 수 있다
+            var finished = await FinishAfterFailureAsync(session, capture, executed, doneRows, doneOut, null, error);
+            var pending = sent || began ? await SafeTrackAfterFailureAsync(session, stmt, kind) : session.HasPendingTransaction;
+            await EndAfterFailureAsync(session, stmt, sent && !endReported, executed, pendingBefore, pending, scope);
+            return Failed(stmt, "ORANDA-EXEC", ex.Message, applied) with
+            {
+                Elapsed = sw.Elapsed, TransactionPending = pending, Rollback = backupLog ?? completed ?? finished,
+            };
         }
         finally
         {
+            scope?.Dispose();
             if (reader is not null)
             {
                 await reader.DisposeAsync();
@@ -429,25 +490,47 @@ internal sealed partial class OracleExecutionService : IExecutionService
     }
 
     /// <summary>DBMS_TRANSACTION.LOCAL_TRANSACTION_ID 로 미커밋 상태를 갱신한다. 읽기 전용 프로필은 늘 false.</summary>
-    internal static async Task<bool> TrackTransactionAsync(OracleSession session, SqlStatement stmt, StatementKind kind, CancellationToken ct)
+    internal static async Task<bool> TrackTransactionAsync(OracleSession session, SqlStatement stmt, StatementKind kind, CancellationToken ct) =>
+        (await TrackTransactionIdAsync(session, stmt, kind, ct)).Pending;
+
+    /// <summary><see cref="TrackTransactionAsync"/> 와 같고, 읽은 트랜잭션 id(<c>usn.slot.sqn</c>, 없으면 null)도 돌려준다(원장 묶음, 설계 7.1).</summary>
+    internal static async Task<(bool Pending, string? TransactionId)> TrackTransactionIdAsync(OracleSession session, SqlStatement stmt,
+                                                                                          StatementKind kind, CancellationToken ct)
     {
         if (session.Profile.ReadOnly)
         {
             session.SetPending(false);
-            return false;
+            return (false, null);
         }
 
         if (IsPlainQuery(stmt, kind))
         {
-            return session.HasPendingTransaction;
+            return (session.HasPendingTransaction, null);
         }
 
         await using var cmd = session.Connection.CreateCommand();
         cmd.CommandText = "SELECT DBMS_TRANSACTION.LOCAL_TRANSACTION_ID FROM dual";
-        var id = await cmd.ExecuteScalarAsync(ct);
-        var pending = id is not null and not DBNull;
+        var id = OracleValues.ToText(await cmd.ExecuteScalarAsync(ct));
+        var pending = id is not null;
         session.SetPending(pending);
-        return pending;
+        return (pending, id);
+    }
+
+    /// <summary>
+    /// 실패·취소한 문장 뒤의 트랜잭션 끝(실패한 DDL 앞 암시적 커밋 등, 7.3). 드라이버로 보내지 않았거나 이미 따진 문장은 건너뛴다.
+    /// 드라이버에서 끝난 뒤의 실패(OUT 값 읽기 등)는 성공한 문장으로 따진다(COMMIT·ROLLBACK TO·SAVEPOINT 가 제 종류대로 남게).
+    /// 끝 알림 범위가 없는 문장(DML 등)이 끊기면 세션이 이미 끊김 끝을 알렸으므로 다시 알리지 않는다.
+    /// </summary>
+    private static async Task EndAfterFailureAsync(OracleSession session, SqlStatement stmt, bool due, bool executed, bool pendingBefore,
+                                                   bool pendingAfter, EndScope? scope)
+    {
+        if (!due || (scope is null && session.State is SessionState.Broken or SessionState.Closed))
+        {
+            return;
+        }
+
+        await AfterStatementAsync(session, stmt, succeeded: executed, pendingBefore, pendingAfter);
+        scope?.Reported();
     }
 
     internal static async Task<bool> SafeTrackAfterFailureAsync(OracleSession session, SqlStatement stmt, StatementKind kind)
@@ -465,6 +548,10 @@ internal sealed partial class OracleExecutionService : IExecutionService
         {
             session.ReportFailure(ex);
             return session.HasPendingTransaction;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+        {
+            return session.HasPendingTransaction; // 연결이 닫혔다: 마지막으로 안 상태
         }
     }
 
@@ -561,7 +648,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
                 processor?.SetDefine(s, name, value);
             });
-        return stmt with { Text = text };
+        return stmt with { Text = text, Dml = null }; // 치환한 글은 만든 쪽이 준 모양과 다를 수 있다: 다시 분석한다(설계 13.3)
     }
 
     private static async Task ExecSqlAsync(OracleConnection conn, string sql, CancellationToken ct)

@@ -1,5 +1,4 @@
 using System.Globalization;
-using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Rollback;
@@ -13,8 +12,9 @@ namespace Oranda.Oracle.Rollback;
 /// Oracle 되돌리기 방언(<see cref="IRollbackDialect"/>, 설계 6.6·7.1·15장). 값 읽기 식·리터럴·값 종류는 Oracle 계열 공용 규칙
 /// (<see cref="OracleFamilyLiterals"/>, RB-01)을 그대로 쓴다. 시점 읽기 질의는 데이터 복사와 같은 순서·같은 글이다(<see cref="OracleCopyDialect.Point"/>).
 /// Tibero 방언(RB-11)은 이 클래스와 같은 모양으로 두고 실측(RB-13)이 다른 값만 바꾼다.
+/// 컨테이너에 등록하지 않는다: 쓰는 곳은 공급자(통로·실행 서비스·세션 훅)뿐이고 <see cref="Instance"/> 를 직접 넘긴다
+/// (Dbms 키 등록은 Core 디스패처가 있어야 한다. 앱 쪽에서 DBMS 별 방언이 필요해지면 그때 디스패처와 함께 등록한다).
 /// </summary>
-[OrandaService(typeof(IRollbackDialect), Dbms = Dbms.Oracle)]
 internal sealed class OracleRollbackDialect : IRollbackDialect
 {
     public static readonly OracleRollbackDialect Instance = new();
