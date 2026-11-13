@@ -129,6 +129,17 @@ internal sealed class FakeDialogs : IExecutionDialogs
         return Task.FromResult(ConfirmAnswer);
     }
 
+    /// <summary>원복 스크립트 불완전 커밋 확인(되돌리기 지점 설계 10.3)의 답과 물은 글.</summary>
+    public bool IncompleteCommitAnswer { get; set; } = true;
+
+    public List<string> IncompleteCommitAsked { get; } = [];
+
+    public Task<bool> ConfirmIncompleteCommitAsync(string message, CancellationToken ct)
+    {
+        IncompleteCommitAsked.Add(message);
+        return Task.FromResult(IncompleteCommitAnswer);
+    }
+
     public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, IReadOnlyDictionary<string, string> last, CancellationToken ct)
     {
         SubstitutionLasts.Add(new Dictionary<string, string>(last));
@@ -223,7 +234,7 @@ internal sealed class Rig : IDisposable
     private static readonly Lazy<ServiceContainer> Services = new(() =>
         AppComposition.Create(new AppCompositionOptions { DataDirectory = Path.Combine(Path.GetTempPath(), "oranda-exec-" + Guid.NewGuid().ToString("N")) }));
 
-    public Rig(ConnectionProfile? profile = null)
+    public Rig(ConnectionProfile? profile = null, Oranda.Core.Rollback.IRollbackLedger? rollbackLedger = null)
     {
         Profile = profile ?? new ConnectionProfile("dev", "scott", "localhost:1521/FREEPDB1");
         Session = new FakeSession(Profile);
@@ -243,6 +254,7 @@ internal sealed class Rig : IDisposable
             Binds = BindVariableStore.For(Bus),
             ActivatePanel = id => Panels.Add("show " + id),
             TogglePanel = id => Panels.Add("toggle " + id),
+            RollbackLedger = () => rollbackLedger,
         });
         Bus.Publish(new SessionOpened(Session.Id, Profile, Session.Server, SessionPurpose.Work));
     }

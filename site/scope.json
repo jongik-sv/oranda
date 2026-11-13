@@ -404,6 +404,7 @@
     {"id": "tab.grid", "page": "settings/options"},
     {"id": "tab.history", "page": "settings/options"},
     {"id": "tab.monitor", "page": "settings/options"},
+    {"id": "tab.rollback", "page": "settings/options"},
     {"id": "tab.update", "page": "install/update"}
   ]
 }

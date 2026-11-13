@@ -37,6 +37,7 @@ public sealed partial class ExecutionController
         {
             case ExecutionStatus.Succeeded:
                 Log.AddMessage(MessageKind.Info, $"{Brief(stmt)} — {text}");
+                LogRollback(r);
 
                 // SQL*Plus 명령이 낸 글(PROMPT, DEFINE 목록, SPOOL 상태 등)은 메시지 창에 그대로 보인다.
                 if (stmt.Kind == StatementKind.SqlPlus)
@@ -72,6 +73,7 @@ public sealed partial class ExecutionController
             case ExecutionStatus.Failed:
                 State.SetError(stmt, r.Error, tab.TabId, profileId);
                 Log.AddMessage(MessageKind.Error, $"{Brief(stmt)} — {text}");
+                LogRollback(r);
                 if (!scriptMode)
                 {
                     results.AddMessage("오류", ErrorText(r), isError: true, stmt);

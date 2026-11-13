@@ -34,6 +34,11 @@ public sealed partial class ExecutionController
             return false;
         }
 
+        if (IsCommitStatement(stmt) && !await ConfirmIncompleteCommitAsync(session, ct).ConfigureAwait(true))
+        {
+            return false;
+        }
+
         Flash(tab, [stmt]);
         ExecutionResult? result = null;
         await GuardedAsync(session, tab, async token =>
@@ -77,6 +82,11 @@ public sealed partial class ExecutionController
 
         var results = Prepare(tab, out var session);
         if (session is null)
+        {
+            return false;
+        }
+
+        if (IsCommitStatement(stmt) && !await ConfirmIncompleteCommitAsync(session, ct).ConfigureAwait(true))
         {
             return false;
         }
@@ -133,8 +143,23 @@ public sealed partial class ExecutionController
             var en = exec.ExecuteScriptAsync(session, stmts, State.ErrorMode, options, token).GetAsyncEnumerator(token);
             try
             {
-                while (await Task.Run(() => en.MoveNextAsync().AsTask(), CancellationToken.None).ConfigureAwait(true))
+                while (true)
                 {
+                    // 다음에 보낼 문장이 COMMIT 이면 그 앞에서 커밋 전 경고(설계 10.3). 커밋하지 않으면 스크립트를 멈춘다.
+                    // 앞 문장이 실패했고 「계속」 이 아니면 엔진이 멈추거나 먼저 묻는다: 그 COMMIT 은 보내지 않을 수 있으므로 묻지 않는다.
+                    var previousFailed = done > 0 && en.Current.Status != ExecutionStatus.Succeeded && State.ErrorMode != ScriptErrorMode.Continue;
+                    if (done < stmts.Count && !previousFailed && IsCommitStatement(stmts[done])
+                        && !await ConfirmIncompleteCommitAsync(session, token).ConfigureAwait(true))
+                    {
+                        cancelled = true;
+                        break;
+                    }
+
+                    if (!await Task.Run(() => en.MoveNextAsync().AsTask(), CancellationToken.None).ConfigureAwait(true))
+                    {
+                        break;
+                    }
+
                     var r = en.Current;
                     done++;
                     if (r.Status == ExecutionStatus.Succeeded)

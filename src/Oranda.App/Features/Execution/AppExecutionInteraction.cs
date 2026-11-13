@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Oranda.Core.Composition;
 using Oranda.Core.Execution;
+using Oranda.Core.Rollback;
 
 namespace Oranda.App.Features.Execution;
 
@@ -25,6 +26,22 @@ public sealed class AppExecutionInteraction : IExecutionInteraction
 
     /// <summary>확인 대화상자 머리 띠에 보일 접속. 실행 상태가 안다.</summary>
     public Func<Oranda.Core.Connection.ConnectionProfile?>? ProfileProvider { get; set; }
+
+    /// <summary>원복 줄의 보관 일수·SCN 기록 줄을 정할 지금 설정. 없으면 기본값.</summary>
+    public Func<RollbackSettings>? RollbackSettingsProvider { get; set; }
+
+    /// <summary>원복 스크립트·백업 테이블 줄이 있는 확인(되돌리기 지점 설계 10.1). 제안이 없으면 예전 확인 창과 같다.</summary>
+    public Task<ConfirmAnswer> ConfirmChangeAsync(SqlStatement stmt, PolicyDecision decision, ConfirmExtras extras, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(stmt);
+        ArgumentNullException.ThrowIfNull(decision);
+        var request = new ConfirmRequest(stmt, decision, ProfileProvider?.Invoke())
+        {
+            Extras = extras ?? ConfirmExtras.None,
+            Rollback = RollbackSettingsProvider?.Invoke() ?? new RollbackSettings(),
+        };
+        return Dialogs.ConfirmChangeAsync(request, ct);
+    }
 
     public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct)
     {

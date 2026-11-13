@@ -101,6 +101,12 @@ public sealed class ExecutionDeps
 
     public Func<IMetadataProvider?> Metadata { get; init; } = () => null;
 
+    /// <summary>원복 원장(커밋 전 경고가 열린 묶음의 행 수 다름을 읽는다, 되돌리기 지점 설계 10.3). 없으면 묻지 않는다.</summary>
+    public Func<Oranda.Core.Rollback.IRollbackLedger?> RollbackLedger { get; init; } = () => null;
+
+    /// <summary>되돌리기 설정(커밋 전 경고를 켤지).</summary>
+    public Func<Oranda.Core.Rollback.RollbackSettings> RollbackSettings { get; init; } = () => new();
+
     /// <summary>도구 창 탭을 앞으로 가져온다(패널 ID). 실행하면 「조회 결과」 창을 보인다.</summary>
     public Action<string> ActivatePanel { get; init; } = _ => { };
 

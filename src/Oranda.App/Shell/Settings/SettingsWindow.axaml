@@ -263,6 +263,49 @@
         </ScrollViewer>
       </TabItem>
 
+      <!-- 되돌리기 지점 설계 10.4(화면 5). 범위는 RollbackSettings 상수(1~1,000,000행, 1~365일)와 같다. 원복 스크립트는 운영 접속에서만 만든다: 개발·테스트 접속에는 켜는 항목이 없다. -->
+      <TabItem x:Name="RollbackTab" Header="{Binding Strings[tab.rollback]}">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="10" MaxWidth="640" HorizontalAlignment="Left">
+            <CheckBox x:Name="RollbackRecordPointBox" Content="{Binding Strings[rollback.recordPoint]}" IsChecked="{Binding Rollback.RecordPoint}" />
+            <StackPanel Spacing="4">
+              <CheckBox x:Name="RollbackScriptBox" Content="{Binding Strings[rollback.scriptOnProduction]}" IsChecked="{Binding Rollback.ScriptOnProduction}"
+                        IsEnabled="{Binding Rollback.CanStoreScripts}" />
+              <TextBlock Classes="hint" Margin="28,0,0,0" TextWrapping="Wrap" Text="{Binding Strings[rollback.scriptHint]}" />
+              <TextBlock x:Name="RollbackNoStoreText" Classes="hint" Margin="28,0,0,0" TextWrapping="Wrap" Foreground="{DynamicResource OrandaWarningForegroundBrush}"
+                         IsVisible="{Binding Rollback.NoSecureStore}" Text="{Binding Strings[rollback.noSecureStore]}" />
+            </StackPanel>
+            <Grid Classes="form" ColumnDefinitions="Auto,Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="10">
+              <TextBlock Grid.Row="0" Text="{Binding Strings[rollback.maxRows]}" />
+              <NumericUpDown x:Name="RollbackMaxRowsBox" Grid.Row="0" Grid.Column="1" MinWidth="140" Increment="1000" FormatString="0"
+                             Minimum="1" Maximum="1000000" Value="{Binding Rollback.MaxRowsPerStatement}"
+                             AutomationProperties.Name="{Binding Strings[rollback.maxRows]}" />
+              <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Strings[rollback.maxRowsUnit]}" />
+              <TextBlock Grid.Row="1" Text="{Binding Strings[rollback.retention]}" />
+              <NumericUpDown x:Name="RollbackRetentionBox" Grid.Row="1" Grid.Column="1" MinWidth="140" Increment="1" FormatString="0"
+                             Minimum="1" Maximum="365" Value="{Binding Rollback.RetentionDays}"
+                             AutomationProperties.Name="{Binding Strings[rollback.retention]}" />
+              <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Strings[rollback.retentionUnit]}" />
+            </Grid>
+            <TextBlock x:Name="RollbackRetentionNotice" Classes="hint" TextWrapping="Wrap" Foreground="{DynamicResource OrandaWarningForegroundBrush}"
+                       IsVisible="{Binding Rollback.HasRetentionNotice}" Text="{Binding Rollback.RetentionNotice}" />
+            <CheckBox x:Name="RollbackWarnMismatchBox" Content="{Binding Strings[rollback.warnMismatch]}" IsChecked="{Binding Rollback.WarnRowCountMismatch}" />
+            <CheckBox x:Name="RollbackBackupBox" Content="{Binding Strings[rollback.suggestBackup]}" IsChecked="{Binding Rollback.SuggestBackupBeforeDataLossDdl}" />
+            <Separator Margin="0,6" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <TextBlock x:Name="RollbackStorageText" VerticalAlignment="Center" Text="{Binding Rollback.StorageSummary}" />
+              <Button x:Name="RollbackClearButton" Content="{Binding Strings[rollback.clear]}" Command="{Binding Rollback.AskClearCommand}" />
+            </StackPanel>
+            <StackPanel x:Name="RollbackClearConfirm" Orientation="Horizontal" Spacing="8" IsVisible="{Binding Rollback.IsConfirmingClear}">
+              <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[rollback.clearConfirm]}" />
+              <Button x:Name="RollbackClearYes" Content="{Binding Strings[rollback.clearYes]}" Command="{Binding Rollback.ConfirmClearCommand}" />
+              <Button Content="{Binding Strings[rollback.clearNo]}" Command="{Binding Rollback.CancelClearCommand}" />
+            </StackPanel>
+            <TextBlock x:Name="RollbackClearMessage" Classes="hint" TextWrapping="Wrap" Text="{Binding Rollback.ClearMessage}" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
       <TabItem Header="{Binding Strings[tab.grid]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">

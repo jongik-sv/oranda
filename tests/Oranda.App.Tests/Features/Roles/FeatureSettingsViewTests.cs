@@ -765,7 +765,7 @@ public sealed class FeatureSettingsViewTests
     {
         Assert.Equal(1, SettingsViewModel.FeaturesTabIndex);
         Assert.Equal(SettingsViewModel.FeaturesTabIndex + 2, SettingsViewModel.FormatTabIndex);
-        Assert.Equal(8, SettingsViewModel.UpdateTabIndex);
+        Assert.Equal(9, SettingsViewModel.UpdateTabIndex); // 실행 뒤 「되돌리기」 탭(되돌리기 지점 설계 10.4)
     }
 
     // ---- 재시작 띠 ----

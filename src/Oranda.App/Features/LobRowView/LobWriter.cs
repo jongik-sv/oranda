@@ -21,7 +21,8 @@ public sealed class LobWriter(IExecutionService execution)
 {
     internal const string Savepoint = "ORANDA_LOB";
 
-    private static readonly ExecutionOptions DmlOptions = new() { Source = HistorySource.GridEdit };
+    // LOB 값은 리터럴로 담지 못하므로 원복 스크립트 없이 SCN 만 기록한다(되돌리기 지점 설계 7.5, RD-21).
+    private static readonly ExecutionOptions DmlOptions = new() { Source = HistorySource.GridEdit, Recording = Oranda.Core.Rollback.ChangeRecording.PointOnly };
     private static readonly ExecutionOptions ControlOptions = new() { Source = HistorySource.GridEdit, SkipHistory = true };
     private static readonly Dictionary<string, BindValue> NoBinds = [];
 

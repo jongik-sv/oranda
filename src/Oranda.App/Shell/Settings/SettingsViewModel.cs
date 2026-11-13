@@ -176,8 +176,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>「SQL 포맷」 탭의 순서(편집기 다음).</summary>
     public const int FormatTabIndex = 3;
 
-    /// <summary>「그리드」 탭의 순서(실행 다음).</summary>
-    public const int GridTabIndex = 5;
+    /// <summary>「되돌리기」 탭의 순서(실행 다음, 되돌리기 지점 설계 10.4).</summary>
+    public const int RollbackTabIndex = 5;
+
+    /// <summary>「그리드」 탭의 순서(되돌리기 다음).</summary>
+    public const int GridTabIndex = 6;
 
     /// <summary>「AI 모델」 쪽(시안 1). aiTuning 기능이 꺼져 있으면 탭을 보이지 않는다(<see cref="AiTabVisible"/>).</summary>
     private AiSettings _aiSaved;
@@ -187,10 +190,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public bool AiTabVisible { get; }
 
     /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 업데이트 탭, 그 뒤에 AI 모델 탭).</summary>
-    public const int UpdateTabIndex = 8;
+    public const int UpdateTabIndex = 9;
 
     /// <summary>「드라이버」 탭의 순서(맨 끝, AI 모델 탭 다음). <c>oranda.settings.openDrivers</c> 가 이 탭으로 연다.</summary>
-    public const int DriversTabIndex = 10;
+    public const int DriversTabIndex = 11;
 
     /// <summary>「드라이버」 탭(Tibero 드라이버 위치, 결정25).</summary>
     public DriverSettingsPage Drivers { get; }
@@ -224,7 +227,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <param name="sqlFormat">「SQL 포맷」 쪽. null 이면 앱 서비스(프로필 저장소·포매터)로 만든다(앱 밖이면 저장하지 않는 기본값 쪽).</param>
     /// <param name="featureGate">「기능」 탭의 재시작 안내를 읽을 게이트. null 이면 앱 서비스에서 찾는다(앱 밖이면 안내 없음).</param>
     /// <param name="drivers">「드라이버」 탭. null 이면 앱 서비스에서 Tibero 드라이버 상태(로더)·외부 적재 도구 확인을 찾아 만든다(앱 밖이면 둘 다 없음).</param>
-    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null, IFeatureGate? featureGate = null, DriverSettingsPage? drivers = null)
+    /// <param name="rollback">「되돌리기」 탭. null 이면 앱 서비스에서 원복 저장소·자료 폴더를 찾아 만든다(앱 밖이면 저장소 없음).</param>
+    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null, IFeatureGate? featureGate = null, DriverSettingsPage? drivers = null, RollbackSettingsPage? rollback = null)
     {
         _settings = settings;
         _text = text;
@@ -235,6 +239,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             text,
             featureGate ?? (Avalonia.Application.Current as App)?.Services?.GetService<IFeatureGate>());
         var gate = featureGate ?? (Avalonia.Application.Current as App)?.Services?.GetService<IFeatureGate>();
+        Rollback = rollback ?? CreateRollbackPage(settings, text);
         _aiSaved = settings.Current.Ai;
         AiModel = new AiModelSettingsPage(settings.Current.Ai, CreateAiProfileServices(settings, text));
         // 프로필 관리 창이 이미 기록하고 알렸으면 확인 때 같은 변경을 다시 알리지 않는다.
@@ -316,6 +321,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>「기능」 탭(Role 선택·기능 세부·재시작 안내, TSK-07-04).</summary>
     public FeatureSettingsPage Features { get; }
+
+    /// <summary>「되돌리기」 탭(되돌리기 지점 설계 10.4).</summary>
+    public RollbackSettingsPage Rollback { get; }
+
+    private static RollbackSettingsPage CreateRollbackPage(SettingsService settings, IShellText text)
+    {
+        var services = (Avalonia.Application.Current as App)?.Services;
+        var page = new RollbackSettingsPage(settings.Current.Rollback, text, services?.GetService<Oranda.Core.Rollback.IRollbackStore>(), services?.GetService<IAppDataPaths>());
+        _ = page.RefreshSummaryAsync();
+        return page;
+    }
 
     /// <summary>시험용: 「자세히…」가 포매터 프로필 화면을 여는 길(기본 = <c>oranda.format.profiles</c> 명령).</summary>
     internal Func<Task>? OpenProfiles { get; init; }
@@ -619,6 +635,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     ObjectListMaxAgeDays = Math.Clamp((int)ObjectListMaxAgeDays, 0, 365),
                 },
                 SchemaBrowser = s.SchemaBrowser with { SingleClickPreview = SchemaSingleClickPreview },
+                Rollback = Rollback.ToSettings(s.Rollback),
                 // 건너뛴 버전·마지막 확인 시각은 백그라운드 확인이 쓸 수 있어 지운 경우에만 덮어쓴다.
                 Update = s.Update with
                 {
@@ -641,6 +658,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         PublishAiChanged();
         UpdateService.Current?.RefreshSettings(); // 건너뛴 버전을 지웠으면 상태 표시줄 표시도 바로 맞춘다
         Features.AcceptSaved();
+        Rollback.AcceptSaved();
         Drivers.AcceptSaved();
         if (allowStayOpen && featuresChanged && Features.HasPendingRestart)
         {

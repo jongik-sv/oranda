@@ -101,6 +101,8 @@ public static class ExecutionCommands
                 Language = () => container.GetRequiredService<ILanguageService>(),
                 RowEditor = () => container.GetService<IRowEditor>(),
                 Metadata = () => container.GetService<IMetadataProvider>(),
+                RollbackLedger = () => container.GetService<Oranda.Core.Rollback.IRollbackLedger>(),
+                RollbackSettings = RollbackSettingsOf(container),
                 Binds = BindVariableStore.For(bus),
                 ActivatePanel = id => container.GetService<IShellUi>()?.Docking.ActivateTool(id),
                 TogglePanel = id => container.GetService<IShellUi>()?.Docking.ToggleTool(id),
@@ -109,6 +111,10 @@ public static class ExecutionCommands
             return controller;
         }
     }
+
+    /// <summary>확인 창 원복 줄이 읽을 지금 설정(설정 서비스가 없으면 기본값).</summary>
+    private static Func<Oranda.Core.Rollback.RollbackSettings> RollbackSettingsOf(ServiceContainer container) =>
+        () => container.GetService<Oranda.App.Shell.Settings.SettingsService>()?.Current.Rollback ?? new Oranda.Core.Rollback.RollbackSettings();
 
     /// <summary>
     /// 실행 엔진이 생성자에서 요구하는 정책 관문·대화 창구를 컨테이너에 등록한다(없을 때만). 정책 관문에는 등록된 기능 게이트를 넘긴다(조회 전용 Role, TSK-07-05).
@@ -128,11 +134,16 @@ public static class ExecutionCommands
             var interaction = container.GetService<IExecutionInteraction>();
             if (interaction is null)
             {
-                container.AddInstance<IExecutionInteraction>(new AppExecutionInteraction { ProfileProvider = () => ExecutionController.RunningProfile ?? state.ShownProfile });
+                container.AddInstance<IExecutionInteraction>(new AppExecutionInteraction
+                {
+                    ProfileProvider = () => ExecutionController.RunningProfile ?? state.ShownProfile,
+                    RollbackSettingsProvider = RollbackSettingsOf(container),
+                });
             }
             else if (interaction is AppExecutionInteraction app)
             {
                 app.ProfileProvider ??= () => ExecutionController.RunningProfile ?? state.ShownProfile;
+                app.RollbackSettingsProvider ??= RollbackSettingsOf(container);
             }
         }
     }

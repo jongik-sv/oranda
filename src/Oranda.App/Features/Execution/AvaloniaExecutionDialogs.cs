@@ -13,6 +13,7 @@ using Oranda.App.Shell.Appearance;
 using Oranda.App.Shell.Controls;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
+using Oranda.Core.Rollback;
 
 namespace Oranda.App.Features.Execution;
 
@@ -35,8 +36,14 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
     private Window? Owner
         => _owner?.Invoke() ?? DialogShell.MainWindow;
 
-    public Task<bool> ConfirmAsync(ConfirmRequest request, CancellationToken ct)
+    public async Task<bool> ConfirmAsync(ConfirmRequest request, CancellationToken ct)
+        => (await OnUi(() => ConfirmCoreAsync(new ConfirmDialogModel(request))).ConfigureAwait(false)).Proceed;
+
+    public Task<ConfirmAnswer> ConfirmChangeAsync(ConfirmRequest request, CancellationToken ct)
         => OnUi(() => ConfirmCoreAsync(new ConfirmDialogModel(request)));
+
+    public Task<bool> ConfirmIncompleteCommitAsync(string message, CancellationToken ct)
+        => OnUi(() => IncompleteCommitCoreAsync(message));
 
     public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(
         IReadOnlyList<string> names, IReadOnlyDictionary<string, string> last, CancellationToken ct)
@@ -74,7 +81,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
 
     // ---- 확인 ------------------------------------------------------------------------------
 
-    private async Task<bool> ConfirmCoreAsync(ConfirmDialogModel model)
+    private async Task<ConfirmAnswer> ConfirmCoreAsync(ConfirmDialogModel model)
     {
         var dialog = NewWindow("실행 확인");
         var header = new Border { Padding = new Thickness(16, 10) };
@@ -100,6 +107,8 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             body.Children.Add(new TextBlock { Text = $"계속하려면 '{expected}' 을(를) 입력하세요." });
             body.Children.Add(retype);
         }
+
+        var rollback = AddRollbackLines(model, body);
 
         bool accepted = false;
         var run = new Button { Content = "실행", MinWidth = 80, IsEnabled = model.CanAccept(string.Empty) };
@@ -131,7 +140,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
                 }
 
                 e.Handled = true;
-                if (model.CanAccept(retype.Text ?? string.Empty))
+                if (model.CanAccept(retype.Text ?? string.Empty) && BackupNameOk(rollback))
                 {
                     accepted = true;
                     dialog.Close();
@@ -143,10 +152,119 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
             }, RoutingStrategies.Tunnel);
         }
 
+        if (rollback is { Backup: { } backupBox, BackupName: { } nameBox })
+        {
+            // 백업 테이블을 고르고 이름이 쓸 수 없는 이름이면 실행하지 않는다(재입력 조건과 함께 본다).
+            void Refresh() => run.IsEnabled = model.CanAccept(retype?.Text ?? string.Empty) && BackupNameOk(rollback);
+            backupBox.IsCheckedChanged += (_, _) => Refresh();
+            nameBox.TextChanged += (_, _) => Refresh();
+            if (retype is not null)
+            {
+                retype.TextChanged += (_, _) => Refresh();
+            }
+        }
+
         body.Children.Add(DialogShell.Buttons(run, cancel));
         dialog.Content = new StackPanel { Children = { header, body } };
         // 이름 재입력이 있으면 그 칸에서 시작한다(바로 칠 수 있게). 없으면 기본 단추 「취소」.
         dialog.Opened += (_, _) => (retype as Control ?? cancel).Focus();
+        await ShowAsync(dialog).ConfigureAwait(true);
+        return model.Answer(accepted, rollback.Script?.IsChecked == true, rollback.Backup?.IsChecked == true, rollback.BackupName?.Text);
+    }
+
+    /// <summary>백업 테이블을 고르지 않았거나 이름이 쓸 수 있는 이름이다.</summary>
+    private static bool BackupNameOk(RollbackControls rollback) =>
+        rollback.Backup?.IsChecked != true || ConfirmDialogModel.IsValidBackupName(rollback.BackupName?.Text);
+
+    /// <summary>확인 창에 더한 원복·백업 칸(없으면 null).</summary>
+    internal readonly record struct RollbackControls(CheckBox? Script, CheckBox? Backup, TextBox? BackupName);
+
+    /// <summary>
+    /// 원복 줄(되돌리기 지점 설계 10.1)과 백업 테이블 확인란(9장)을 확인 창 본문에 더한다. 제안이 없으면 아무것도 더하지 않는다.
+    /// </summary>
+    internal static RollbackControls AddRollbackLines(ConfirmDialogModel model, Panel body)
+    {
+        CheckBox? script = null, backup = null;
+        TextBox? backupName = null;
+        if (model.ShowsBackupOption)
+        {
+            backup = new CheckBox { Content = model.BackupOptionText, IsChecked = false, Name = "ConfirmBackupBox" };
+            backupName = new TextBox { Text = model.BackupDefaultName, MinWidth = 280, IsEnabled = false, Name = "ConfirmBackupName", Margin = new Thickness(28, 0, 0, 0) };
+            DialogShell.AutomationName(backupName, "백업 테이블 이름");
+            var invalid = new TextBlock { Text = "백업 테이블 이름은 영문자로 시작하고 영문자·숫자·_ $ # 만 씁니다.", IsVisible = false, Classes = { "warning-text" }, Margin = new Thickness(28, 0, 0, 0) };
+            backup.IsCheckedChanged += (_, _) => backupName.IsEnabled = backup.IsChecked == true;
+            backupName.TextChanged += (_, _) => invalid.IsVisible = !ConfirmDialogModel.IsValidBackupName(backupName.Text);
+            body.Children.Add(backup);
+            body.Children.Add(backupName);
+            body.Children.Add(invalid);
+            body.Children.Add(Hint(model.BackupHintText));
+        }
+
+        if (model.ShowsScriptOption)
+        {
+            script = new CheckBox
+            {
+                Content = model.ScriptOptionText,
+                IsChecked = model.ScriptOptionDefault,
+                IsEnabled = model.ScriptOptionEnabled,
+                Name = "ConfirmRollbackBox",
+            };
+            body.Children.Add(script);
+            if (model.OverLimitText is { } over)
+            {
+                body.Children.Add(new TextBlock { Text = over, TextWrapping = TextWrapping.Wrap, MaxWidth = 560, Classes = { "warning-text" }, Margin = new Thickness(28, 0, 0, 0) });
+            }
+
+            if (model.ScriptHintText is { } hint)
+            {
+                body.Children.Add(Hint(hint));
+            }
+
+            foreach (var warning in model.ScriptWarnings)
+            {
+                body.Children.Add(new TextBlock { Text = warning, TextWrapping = TextWrapping.Wrap, MaxWidth = 560, Classes = { "warning-text" }, Margin = new Thickness(28, 0, 0, 0) });
+            }
+        }
+        else if (model.NotTargetText is { } notTarget)
+        {
+            body.Children.Add(Hint(notTarget, indent: false));
+        }
+
+        if (model.PointText is { } point)
+        {
+            body.Children.Add(Hint(point, indent: false));
+        }
+
+        return new RollbackControls(script, backup, backupName);
+
+        static TextBlock Hint(string text, bool indent = true) => new()
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 560,
+            Opacity = 0.75,
+            Margin = indent ? new Thickness(28, 0, 0, 0) : default,
+        };
+    }
+
+    // ---- 원복 스크립트 불완전 커밋(설계 10.3) -----------------------------------------------------
+
+    private async Task<bool> IncompleteCommitCoreAsync(string message)
+    {
+        var accepted = false;
+        var dialog = NewWindow("커밋 확인");
+        var ok = new Button { Content = "커밋", MinWidth = 80 };
+        var cancel = new Button { Content = "취소", MinWidth = 80, IsDefault = true, IsCancel = true };
+        ok.Click += (_, _) =>
+        {
+            accepted = true;
+            dialog.Close();
+        };
+        cancel.Click += (_, _) => dialog.Close();
+        dialog.Content = DialogShell.Framed(
+            new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+            DialogShell.Buttons(ok, cancel));
+        dialog.Opened += (_, _) => cancel.Focus();
         await ShowAsync(dialog).ConfigureAwait(true);
         return accepted;
     }

@@ -32,7 +32,8 @@ public sealed partial class ExecutionController
     /// </summary>
     public async Task ConfirmedCommitAsync(ISession? s, CancellationToken ct = default)
     {
-        if (s is not null && await ConfirmSharedAsync(s, commit: true, ct).ConfigureAwait(true))
+        if (s is not null && await ConfirmSharedAsync(s, commit: true, ct).ConfigureAwait(true)
+            && await ConfirmIncompleteCommitAsync(s, ct).ConfigureAwait(true))
         {
             await CommitAsync(s, ct).ConfigureAwait(true);
         }
