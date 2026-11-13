@@ -3,7 +3,8 @@ using Oranda.Core.Rollback;
 namespace Oranda.Testing.Rollback;
 
 /// <summary>
-/// 메모리 <see cref="IRollbackStore"/>. Id 를 1부터 붙이고, 검색은 최근 순(<see cref="RollbackGroup.StartedAt"/> 내림차순)으로 DbKey·표·글로 거른 뒤 Limit 개까지.
+/// 메모리 <see cref="IRollbackStore"/>. Id 를 1부터 붙이고, 검색은 최근 순(<c>EndedAt ?? StartedAt</c> 내림차순)으로 DbKey·표·글로 거른 뒤 Limit 개까지.
+/// 보존 정리는 끝난 묶음만 지우고 「열림」 묶음은 남긴다(실제 저장소와 같은 규칙).
 /// 문서는 직렬화하지 않고 그대로 보관한다. <see cref="RollbackScriptState.Open"/> 묶음은 <see cref="MarkOrphansAsync"/> 가 「확인 필요」로 바꾼다.
 /// </summary>
 public sealed class InMemoryRollbackStore : IRollbackStore
@@ -90,7 +91,7 @@ public sealed class InMemoryRollbackStore : IRollbackStore
                                  || g.Statements.Any(s => s.Summary.Contains(text, StringComparison.OrdinalIgnoreCase)));
             }
 
-            IReadOnlyList<RollbackGroup> result = [.. q.OrderByDescending(g => g.StartedAt).ThenByDescending(g => g.Id).Take(query.Limit)];
+            IReadOnlyList<RollbackGroup> result = [.. q.OrderByDescending(g => g.EndedAt ?? g.StartedAt).ThenByDescending(g => g.Id).Take(query.Limit)];
             return Task.FromResult(result);
         }
     }
@@ -141,7 +142,7 @@ public sealed class InMemoryRollbackStore : IRollbackStore
         lock (_gate)
         {
             var limit = DateTimeOffset.UtcNow.AddDays(-retentionDays);
-            foreach (var g in _groups.Values.Where(g => (g.EndedAt ?? g.StartedAt) < limit).ToList())
+            foreach (var g in _groups.Values.Where(g => g.State != RollbackScriptState.Open && (g.EndedAt ?? g.StartedAt) < limit).ToList())
             {
                 _groups.Remove(g.Id);
                 _documents.Remove(g.Id);

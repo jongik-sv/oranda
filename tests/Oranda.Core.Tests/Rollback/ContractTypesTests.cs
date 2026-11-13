@@ -140,6 +140,25 @@ public class ContractTypesTests
     }
 
     [Fact]
+    public async Task InMemory_store_orders_by_end_time_and_keeps_open_groups_on_prune()
+    {
+        var store = new InMemoryRollbackStore();
+        var old = DateTimeOffset.UtcNow.AddDays(-40);
+        RollbackGroup G(DateTimeOffset started, DateTimeOffset? ended, RollbackScriptState state) => new()
+        {
+            ProfileId = Guid.Empty, ProfileName = "prod-example", DbKey = "K", StartedAt = started, EndedAt = ended, State = state,
+        };
+
+        var lateEnd = await store.SaveAsync(G(old, DateTimeOffset.UtcNow, RollbackScriptState.Confirmed), null, default);
+        var open = await store.SaveAsync(G(old.AddDays(1), null, RollbackScriptState.Open), null, default);
+        var expired = await store.SaveAsync(G(old, old.AddMinutes(1), RollbackScriptState.Confirmed), null, default);
+
+        Assert.Equal([lateEnd, open, expired], (await store.SearchAsync(new RollbackQuery(), default)).Select(g => g.Id));
+        await store.PruneAsync(30, default);
+        Assert.Equal([lateEnd, open], store.Groups.Select(g => g.Id));
+    }
+
+    [Fact]
     public void Fake_dialect_follows_literal_table()
     {
         var d = new FakeRollbackDialect();
