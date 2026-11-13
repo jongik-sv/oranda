@@ -379,7 +379,7 @@ internal sealed partial class TiberoExecutionService : IExecutionService
                 }
 
                 backupLog = BackupSummary(backupSql);
-                pendingBefore = session.HasPendingTransaction; // CTAS 가 앞 트랜잭션을 커밋했다(그 끝은 CTAS 쪽이 알렸다. 원래 DDL 의 끝은 묶음이 없으면 원장이 무시한다)
+                pendingBefore = session.HasPendingTransaction; // CTAS 가 앞 트랜잭션을 커밋했다(그 끝은 CTAS 쪽이 알렸다. 묶음이 없으면 원래 DDL 은 끝이 아니다)
             }
 
             await CaptureBeforeChangeAsync(session, stmt, BackupPlanner.BackupNameOf(backupSql), ct).ConfigureAwait(false);
@@ -603,11 +603,9 @@ internal sealed partial class TiberoExecutionService : IExecutionService
             // 저장점 표시 실패는 문장 결과를 바꾸지 않는다.
         }
 
-        // 미커밋이 없던 세션의 PL/SQL·불확실 문장도 이번 기록으로 묶음이 열렸으면 「트랜잭션이 있었다」로 본다: 블록 안 COMMIT 으로 끝난 묶음을
-        // 다음 ROLLBACK 이 「롤백됨」으로 덮지 않게(리뷰 RB-11 3부). DML 은 미커밋을 남기고, DDL·트랜잭션 제어는 pendingBefore 를 보지 않는다.
-        var before = pendingBefore
-                     || ((stmt.Kind == StatementKind.PlSql || stmt.IsClassificationUncertain) && session.Rollback.Ledger.Open(session.Id) is not null);
-        if (RollbackFlow.EndAfter(session.Id, stmt, succeeded, before, pendingAfter) is { } ended)
+        // 열린 묶음 여부는 이 문장의 기록(Complete) 뒤에 읽는다: 미커밋이 없던 세션의 블록 안 COMMIT 도 그 묶음의 끝으로 판정된다(RollbackFlow 6인자 판).
+        var hasOpenGroup = session.Rollback.Ledger.Open(session.Id) is not null;
+        if (RollbackFlow.EndAfter(session.Id, stmt, succeeded, pendingBefore, pendingAfter, hasOpenGroup) is { } ended)
         {
             await session.Rollback.EndAsync(session, ended.Kind, ended.Source, ended.Savepoint).ConfigureAwait(false);
         }

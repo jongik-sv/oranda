@@ -102,7 +102,7 @@ public sealed class TiberoExecutionServiceTransactionEndTests : IDisposable
     }
 
     [Fact]
-    public async Task Ddl_without_an_open_group_ends_as_unknown_without_extra_round_trips()
+    public async Task Ddl_without_a_pending_transaction_or_open_group_is_not_an_end_and_reads_nothing_more()
     {
         _ledger.OpenState = null;
         Serve();
@@ -111,10 +111,26 @@ public sealed class TiberoExecutionServiceTransactionEndTests : IDisposable
 
         await service.ExecuteAsync(session, Stmt("CREATE TABLE X (A NUMBER)", StatementKind.Ddl), NoBinds, null, CancellationToken.None);
 
-        var ended = Assert.Single(_ledger.Ends);
-        Assert.Equal((TransactionEndKind.Unknown, TransactionEndSource.Ddl), (ended.Kind, ended.Source));
+        Assert.Empty(_ledger.Ends);
         Assert.Empty(_capture.Calls);
         Assert.Equal(["CREATE TABLE X (A NUMBER)", TiberoExecutionService.TransactionIdSql], Sent());
+    }
+
+    [Fact]
+    public async Task Ddl_after_an_uncommitted_dml_ends_the_open_group_as_the_probed_end()
+    {
+        _capture.ProbeResult = TransactionEndKind.Commit;
+        Serve();
+        var service = NewService();
+        await using var session = NewSession();
+        _pending = true;
+        await service.ExecuteAsync(session, Stmt(Update, StatementKind.Dml), NoBinds, null, CancellationToken.None);
+
+        _pending = false; // DDL 앞 암묵 커밋
+        await service.ExecuteAsync(session, Stmt("CREATE TABLE X (A NUMBER)", StatementKind.Ddl), NoBinds, null, CancellationToken.None);
+
+        var ended = Assert.Single(_ledger.Ends);
+        Assert.Equal((TransactionEndKind.Commit, TransactionEndSource.Ddl), (ended.Kind, ended.Source));
     }
 
     [Fact]
