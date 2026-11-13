@@ -315,7 +315,10 @@ public class ExtensionTestTests
             var interaction = new AppExecutionInteraction { Dialogs = Dialogs, ProfileProvider = () => profile };
             var type = Type.GetType("Oranda.Oracle.Execution.OracleExecutionService, Oranda.Oracle", throwOnError: true)!;
             var ctor = type.GetConstructors().Single();
-            Engine = (IExecutionService)ctor.Invoke([Policy, interaction, bus, null]);
+            // 앞 넷(정책·상호작용·버스·SQL*Plus)만 주고, 뒤에 붙는 선택 인자(분석기 등)는 기본값으로 채운다.
+            object?[] head = [Policy, interaction, bus, null];
+            var args = ctor.GetParameters().Select((p, i) => i < head.Length ? head[i] : p.HasDefaultValue ? p.DefaultValue : null).ToArray();
+            Engine = (IExecutionService)ctor.Invoke(args);
         }
 
         public TestSession Session { get; }
