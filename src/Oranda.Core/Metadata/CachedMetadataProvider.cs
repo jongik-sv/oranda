@@ -594,6 +594,9 @@ public abstract class CachedMetadataProvider
     }
 
 
+    /// <summary>마지막 객체 목록 갱신의 비용(다음 뒤 갱신 간격의 바탕, 세션 잠금을 쥔 시간). 아직 없으면 null(시험·진단용).</summary>
+    protected TimeSpan? RefreshCostOf(string dbKey) => _refreshCost.TryGetValue(dbKey, out var cost) ? cost : null;
+
     /// <summary>시험·진단용: 이 DbKey 의 뒤 갱신(다시 하기 기다림 포함)이 끝나는 작업. 돌고 있지 않으면 끝난 작업.</summary>
     protected Task BackgroundRefreshCompletion(string dbKey)
         => _running.TryGetValue(dbKey, out var running) ? running.Completion : Task.CompletedTask;

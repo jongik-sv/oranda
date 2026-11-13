@@ -545,12 +545,12 @@ public sealed class CachedMetadataProviderTests : IAsyncDisposable
         await Task.Delay(600);
         gate.Release();
         await refresh.WaitAsync(Quick);
-        await Task.Delay(700); // 기본 간격(0.5초)은 지났다. 기다린 0.6초를 비용으로 셌다면 간격은 18초다
 
-        await provider.ListObjectsAsync(_session, new ObjectQuery(), default);
-        await provider.WhenBackgroundDoneAsync(_session.DbKey).WaitAsync(Quick);
-
-        Assert.Equal(2, provider.Fetched.Count);
+        // 기다린 0.6초를 비용으로 셌다면 다음 뒤 갱신 간격은 그 30 배(18초)다. 쥔 시간만 셌으면 그보다 훨씬 작다.
+        // 간격이 지나기를 실제 시간으로 기다리지 않고 기록한 비용을 본다(Windows 러너에서 쥔 시간이 수십 ms 로 늘면 시각 비교가 흔들렸다).
+        var cost = provider.CostOf(_session.DbKey);
+        Assert.NotNull(cost);
+        Assert.True(cost < TimeSpan.FromMilliseconds(300), $"갱신 비용 {cost} 에 잠금을 기다린 시간이 들어갔다");
     }
 
     private static readonly TimeSpan Quick = TimeSpan.FromSeconds(10);
@@ -640,6 +640,8 @@ public sealed class CachedMetadataProviderTests : IAsyncDisposable
         public TaskCompletionSource FirstBusy { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task WhenBackgroundDoneAsync(string dbKey) => BackgroundRefreshCompletion(dbKey);
+
+        public TimeSpan? CostOf(string dbKey) => RefreshCostOf(dbKey);
 
         public Task<IReadOnlyList<MetaObject>> RefreshAsync(ISession s) => RefreshObjectListAsync(s, default);
 
