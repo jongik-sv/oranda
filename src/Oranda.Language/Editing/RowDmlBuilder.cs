@@ -19,6 +19,8 @@ public static class RowDmlBuilder
 {
     public const string RowIdKey = "ROWID";
 
+    private static readonly DmlShapeAnalyzer Shapes = new();
+
     // V$RESERVED_WORDS 의 RESERVED='Y' 와 SQL 예약어. 열 이름이 이 낱말이면 따옴표로 감싼다.
     private static readonly FrozenSet<string> Reserved = new[]
     {
@@ -110,7 +112,9 @@ public static class RowDmlBuilder
             RowChangeKind.Update => "UPDATE",
             _ => "DELETE",
         };
-        var stmt = new SqlStatement(sb.ToString(), default, StatementKind.Dml) { Verb = verb, BindNames = names };
+        var text = sb.ToString();
+        // 모양을 이미 아는 만든 쪽이므로 Dml 을 채운다(설계 13.3). 같은 분석기로 읽어 공급자가 다시 분석한 결과와 어긋나지 않게 한다.
+        var stmt = new SqlStatement(text, default, StatementKind.Dml) { Verb = verb, BindNames = names, Dml = Shapes.Analyze(text) };
         return new RowDml(change, stmt, binds);
     }
 
