@@ -208,6 +208,23 @@ public sealed class ChangeJournalRollbackTests
         Assert.Equal("1건", vm.StatusMessage);
     }
 
+    [Fact]
+    public Task Shell_journal_reads_the_real_rollback_store() => Oranda.App.Tests.Shell.Headless.HeadlessHost.Run(async () =>
+    {
+        using var h = new Oranda.App.Tests.Shell.Headless.ShellHarness(show: false);
+        var store = h.Services.GetService<IRollbackStore>();
+        Assert.NotNull(store);
+        Assert.Equal("SqliteRollbackStore", store.GetType().Name); // 앱 조립은 Platform 의 실제 저장소를 쓴다
+        var id = await store.SaveAsync(Confirmed(DateTimeOffset.Now.AddMinutes(-1)) with { HasScriptFile = false, State = RollbackScriptState.NotCreated, Reason = NotCreatedReason.NotProduction }, null, default);
+
+        using var vm = new ChangeJournalViewModel(h.Services);
+        vm.SelectedCause = vm.CauseChoices.Single(c => c.Filter == JournalCauseFilter.Dml);
+        await vm.ReloadAsync();
+        var row = Assert.Single(vm.Rows.OfType<RollbackGroupItem>(), g => g.Id == id);
+        Assert.StartsWith("만들지 않음", row.ScriptText, StringComparison.Ordinal);
+        Assert.Equal(3, row.StatementCount);
+    });
+
     private sealed class FixedJournal(IReadOnlyList<JournalEntry> all) : IChangeJournalStore
     {
         public Task<long?> AddAsync(JournalEntry entry, CancellationToken ct) => Task.FromResult<long?>(null);

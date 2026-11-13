@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Threading;
 using Oranda.App.Features.ChangeJournal;
 using Oranda.App.Features.Execution;
+using Oranda.App.Features.PointCompare;
 using Oranda.App.Features.Rollback;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Settings;
@@ -14,6 +15,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.Journal;
 using Oranda.Core.Metadata;
 using Oranda.Core.Rollback;
+using Oranda.Core.Rollback.Compare;
 using Oranda.Core.Text;
 using Oranda.Testing.Rollback;
 
@@ -22,7 +24,7 @@ namespace Oranda.App.Tests.Manual;
 /// <summary>
 /// 매뉴얼 「되돌리기 지점」 장 화면 캡처 생성기(되돌리기 지점 설계 17장): 변경 일지(화면 1), 원복 스크립트 탭(화면 2), 운영 확인 창(화면 4), 설정 「되돌리기」 탭(화면 5).
 /// DB 를 부르지 않고 메모리 저장소와 지어낸 예시 값(prod-example·dev-example·SAMPLE.PRODUCTS)만 쓴다. 실행 단추는 누르지 않는다.
-/// 화면 3(이 실행 전과 비교)은 그 화면을 만드는 쪽(PointCompare)이 들어온 뒤 더한다.
+/// 화면 3(이 실행 전과 비교)은 지어낸 DB 응답(<see cref="ExampleCompareDb"/>)으로 비교한 결과를 그린다. 반영 단추는 누르지 않는다.
 /// 번호의 뜻은 <c>site/src/content/docs/run/rollback.md</c>, <c>settings/options.md</c> 의 번호별 설명과 같아야 한다.
 /// 그림은 Windows 에서 같은 시험으로 만든다(Mac 렌더는 커밋하지 않는다).
 /// </summary>
@@ -309,6 +311,95 @@ public sealed class ManualRollbackScreens
             Directory.Delete(data, recursive: true);
         }
     });
+
+    [Fact]
+    public Task Rollback_compare() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var point = new PointOption("기준 SCN 48220114 (실행 직전)", PointOptionKind.Group)
+        {
+            BasePoint = 48220114,
+            BaseAt = DateTimeOffset.Now.AddMinutes(-13),
+            CommitPoint = 48220231,
+            CommitAt = DateTimeOffset.Now.AddMinutes(-11),
+            GroupId = 321,
+            Tables = [Products],
+        };
+        var vm = new PointCompareViewModel(new ExampleCompareDb(), "dev-example", Products, [point]);
+        var window = new PointCompareWindow { DataContext = vm, Width = 1100, Height = 780 };
+        window.Show();
+        await vm.LoadAsync();
+        Pump();
+        window.UpdateLayout();
+        Pump();
+
+        ManualCapture.Save(window, "rollback-compare",
+        [
+            new(Named<ComboBox>(window, "PointBox"), 1, -14),
+            new(Named<TextBlock>(window, "NotesText"), 2, -22),
+            new(Named<TextBlock>(window, "CountsLine"), 3, -22),
+            new(Named<ListBox>(window, "RowList"), 4, -14),
+            new(Named<Control>(window, "DmlView"), 5, -14),
+            AtRight(Named<Button>(window, "ApplyButton"), 6),
+        ]);
+        window.Close();
+    });
+
+    /// <summary>
+    /// 시안 화면 3 의 예시 응답(SAMPLE.PRODUCTS): 1001·1002 되돌림, 1007 충돌(그 뒤 다른 세션), 1040 되살림, 2001 지움. 쓰기는 하지 않는다.
+    /// 질의 글로 기준(48220114)·커밋(48220231)·지금 값을 가른다.
+    /// </summary>
+    private sealed class ExampleCompareDb : IPointCompareDb
+    {
+        private static readonly RollbackTable Table = new(Products,
+            [
+                new RollbackColumn("PRODUCT_ID", "NUMBER", RollbackValueKind.Number),
+                new RollbackColumn("PRODUCT_NAME", "VARCHAR2", RollbackValueKind.Text),
+                new RollbackColumn("UNIT_PRICE", "NUMBER", RollbackValueKind.Number),
+            ],
+            ["PRODUCT_ID"]);
+
+        private readonly FakeRollbackDialect _dialect = new();
+
+        public Dbms Dbms => _dialect.Dbms;
+
+        public IRollbackDialect Dialect => _dialect;
+
+        private static object?[] Row(int id, string name, int price) =>
+            [id.ToString(System.Globalization.CultureInfo.InvariantCulture), name, price.ToString(System.Globalization.CultureInfo.InvariantCulture), "AAAR" + id.ToString(System.Globalization.CultureInfo.InvariantCulture)];
+
+        public Task<RollbackTable?> TableAsync(DbObjectRef table, CancellationToken ct) => Task.FromResult<RollbackTable?>(Table);
+
+        public Task<IReadOnlyList<object?[]>> QueryAsync(CompareQuery query, CancellationToken ct)
+        {
+            var sql = query.Sql;
+            IReadOnlyList<object?[]> rows = sql switch
+            {
+                _ when sql.Contains("VERSIONS BETWEEN", StringComparison.Ordinal) => [["1001"], ["1002"], ["1007"], ["1040"], ["2001"]],
+                _ when sql.Contains("COUNT(*)", StringComparison.Ordinal) => [[5m]],
+                _ when sql.Contains(" 48220114 t", StringComparison.Ordinal) =>
+                    [Row(1001, "얼그레이 티백", 25900), Row(1002, "보이차", 8000), Row(1007, "현미 녹차", 19000), Row(1040, "보리차 티백", 4300)],
+                _ when sql.Contains(" 48220231 t", StringComparison.Ordinal) =>
+                    [Row(1001, "얼그레이 티백", 28490), Row(1002, "보이차", 8800), Row(1007, "현미 녹차", 20900), Row(2001, "유자차 스틱", 6200)],
+                _ => [Row(1001, "얼그레이 티백", 28490), Row(1002, "보이차", 8800), Row(1007, "현미 녹차", 21500), Row(2001, "유자차 스틱", 6200)],
+            };
+            return Task.FromResult(rows);
+        }
+
+        public Task<long?> CurrentPointAsync(CancellationToken ct) => Task.FromResult<long?>(48230000);
+
+        public Task<long?> PointMinutesAgoAsync(decimal minutesAgo, CancellationToken ct) => Task.FromResult<long?>(48220114);
+
+        public Task<long?> UndoRetentionAsync(CancellationToken ct) => Task.FromResult<long?>(900);
+
+        public Task<DateTimeOffset?> LastDdlAsync(DbObjectRef table, CancellationToken ct) => Task.FromResult<DateTimeOffset?>(null);
+
+        public Task<long> ExecuteAsync(string sql, CancellationToken ct) => throw new InvalidOperationException("매뉴얼 그림 시험은 반영하지 않는다.");
+    }
 
     private sealed class ExampleJournal(params JournalEntry[] all) : IChangeJournalStore
     {
