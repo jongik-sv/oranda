@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:vm="using:Oranda.App.Features.ExecutionPlan"
              x:Class="Oranda.App.Features.ExecutionPlan.PlanView"
              x:DataType="vm:PlanViewModel">
@@ -59,13 +60,12 @@
       <Setter Property="BorderThickness" Value="1" />
     </Style>
 
-    <!-- 비교 표 칸 폭. -->
-    <Style Selector=":is(Control).k-mark"><Setter Property="Width" Value="30" /></Style>
-    <Style Selector=":is(Control).k-id"><Setter Property="Width" Value="56" /></Style>
-    <Style Selector=":is(Control).k-op"><Setter Property="Width" Value="420" /></Style>
-    <Style Selector=":is(Control).k-obj"><Setter Property="Width" Value="210" /></Style>
-    <Style Selector=":is(Control).k-pair"><Setter Property="Width" Value="150" /></Style>
-    <Style Selector=":is(Control).k-delta"><Setter Property="Width" Value="68" /></Style>
+    <!-- 비교 표 칸: 폭은 머리글·줄 Grid 의 ColumnDefinitions(머리글 경계를 끌어 바꿈, TableColumns). 글자 여백은 표 칸(StackPanel.cells)과 같다. -->
+    <Style Selector="Grid.k-cells > TextBlock">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
 
     <!-- 줄 틀: 왼쪽 3 DIP 띠는 가장 비싼 단계에서만 색이 든다(나머지 줄도 같은 폭을 비워 칸이 어긋나지 않는다). -->
     <Style Selector="Border.plan-row">
@@ -497,33 +497,33 @@
             </DockPanel>
           </Border>
           <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-            <DockPanel>
+            <DockPanel ctl:TableColumns.Scope="Plan.Compare">
               <Border DockPanel.Dock="Top" Classes="grid-header">
-                <StackPanel Orientation="Horizontal" Classes="cells">
-                  <TextBlock Classes="k-mark" Text="" />
-                  <TextBlock Classes="k-id num" Text="기준 Id" ToolTip.Tip="고정한 계획의 Id" />
-                  <TextBlock Classes="k-id num" Text="지금 Id" ToolTip.Tip="지금 계획의 Id" />
-                  <TextBlock Classes="k-op" Text="연산 (← 기준)" />
-                  <TextBlock Classes="k-obj" Text="객체 (← 기준)" />
-                  <TextBlock Classes="k-pair num" Text="비용 기준 → 지금" />
-                  <TextBlock Classes="k-delta num" Text="변화" />
-                  <TextBlock Classes="k-pair num" Text="E-Rows 기준 → 지금" />
-                  <TextBlock Classes="k-delta num" Text="변화" />
-                  <TextBlock Classes="k-pair num" Text="A-Rows 기준 → 지금" />
-                  <TextBlock Classes="k-delta num" Text="변화" />
-                </StackPanel>
+                <Grid x:Name="CompareHeader" Classes="k-cells" ctl:TableColumns.Header="True" ColumnDefinitions="30,56,56,420,210,150,68,150,68,150,68,*">
+                  <TextBlock Grid.Column="0" Classes="k-mark" Text="" />
+                  <TextBlock Grid.Column="1" Classes="k-id num" Text="기준 Id" ToolTip.Tip="고정한 계획의 Id" />
+                  <TextBlock Grid.Column="2" Classes="k-id num" Text="지금 Id" ToolTip.Tip="지금 계획의 Id" />
+                  <TextBlock Grid.Column="3" Classes="k-op" Text="연산 (← 기준)" />
+                  <TextBlock Grid.Column="4" Classes="k-obj" Text="객체 (← 기준)" />
+                  <TextBlock Grid.Column="5" Classes="k-pair num" Text="비용 기준 → 지금" />
+                  <TextBlock Grid.Column="6" Classes="k-delta num" Text="변화" />
+                  <TextBlock Grid.Column="7" Classes="k-pair num" Text="E-Rows 기준 → 지금" />
+                  <TextBlock Grid.Column="8" Classes="k-delta num" Text="변화" />
+                  <TextBlock Grid.Column="9" Classes="k-pair num" Text="A-Rows 기준 → 지금" />
+                  <TextBlock Grid.Column="10" Classes="k-delta num" Text="변화" />
+                </Grid>
               </Border>
-              <ListBox Classes="table" ItemsSource="{Binding CompareRows}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+              <ListBox x:Name="CompareList" Classes="table" ItemsSource="{Binding CompareRows}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                        AutomationProperties.Name="계획 비교">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:PlanCompareRowItem">
                     <Border Classes="diff" Classes.changed="{Binding IsChanged}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}">
-                      <StackPanel Orientation="Horizontal" Classes="cells">
-                        <TextBlock Classes="k-mark mark" Classes.changed="{Binding IsChanged}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}"
+                      <Grid Classes="k-cells" ctl:TableColumns.Row="True" ColumnDefinitions="30,56,56,420,210,150,68,150,68,150,68,*">
+                        <TextBlock Grid.Column="0" Classes="k-mark mark" Classes.changed="{Binding IsChanged}" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}"
                                    Text="{Binding KindMark}" ToolTip.Tip="{Binding KindTip}" />
-                        <TextBlock Classes="k-id num dim" Text="{Binding PinnedIdText}" />
-                        <TextBlock Classes="k-id num dim" Text="{Binding CurrentIdText}" />
-                        <Border Classes="k-op" Padding="6,0,0,0">
+                        <TextBlock Grid.Column="1" Classes="k-id num dim" Text="{Binding PinnedIdText}" />
+                        <TextBlock Grid.Column="2" Classes="k-id num dim" Text="{Binding CurrentIdText}" />
+                        <Border Grid.Column="3" Classes="k-op" Padding="6,0,0,0">
                         <DockPanel>
                           <Border DockPanel.Dock="Left" Width="{Binding IndentWidth}" />
                           <ContentControl DockPanel.Dock="Left" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center"
@@ -534,14 +534,14 @@
                                      ToolTip.Tip="{Binding PreviousOperationText}" />
                         </DockPanel>
                         </Border>
-                        <TextBlock Classes="k-obj" Text="{Binding ObjectText}" ToolTip.Tip="{Binding ObjectText}" />
-                        <TextBlock Classes="k-pair num" Text="{Binding CostText}" Classes.big="{Binding CostBig}" />
-                        <TextBlock Classes="k-delta num" Text="{Binding CostDeltaText}" Classes.big="{Binding CostBig}" />
-                        <TextBlock Classes="k-pair num" Text="{Binding RowsText}" Classes.big="{Binding RowsBig}" />
-                        <TextBlock Classes="k-delta num" Text="{Binding RowsDeltaText}" Classes.big="{Binding RowsBig}" />
-                        <TextBlock Classes="k-pair num" Text="{Binding ActualRowsText}" Classes.big="{Binding ActualRowsBig}" />
-                        <TextBlock Classes="k-delta num" Text="{Binding ActualRowsDeltaText}" Classes.big="{Binding ActualRowsBig}" />
-                      </StackPanel>
+                        <TextBlock Grid.Column="4" Classes="k-obj" Text="{Binding ObjectText}" ToolTip.Tip="{Binding ObjectText}" />
+                        <TextBlock Grid.Column="5" Classes="k-pair num" Text="{Binding CostText}" Classes.big="{Binding CostBig}" />
+                        <TextBlock Grid.Column="6" Classes="k-delta num" Text="{Binding CostDeltaText}" Classes.big="{Binding CostBig}" />
+                        <TextBlock Grid.Column="7" Classes="k-pair num" Text="{Binding RowsText}" Classes.big="{Binding RowsBig}" />
+                        <TextBlock Grid.Column="8" Classes="k-delta num" Text="{Binding RowsDeltaText}" Classes.big="{Binding RowsBig}" />
+                        <TextBlock Grid.Column="9" Classes="k-pair num" Text="{Binding ActualRowsText}" Classes.big="{Binding ActualRowsBig}" />
+                        <TextBlock Grid.Column="10" Classes="k-delta num" Text="{Binding ActualRowsDeltaText}" Classes.big="{Binding ActualRowsBig}" />
+                      </Grid>
                     </Border>
                   </DataTemplate>
                 </ListBox.ItemTemplate>

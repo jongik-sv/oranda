@@ -133,6 +133,31 @@ public sealed class HistoryScriptsTests : IDisposable
     }
 
     [Fact]
+    public async Task History_columns_follow_the_header_drag()
+    {
+        var store = new ListStore([Entry(1, "SELECT 1 FROM dual"), Entry(2, "SELECT 2 FROM dual")]);
+        using var vm = new HistoryViewModel(store, () => null);
+        await vm.ReloadAsync();
+
+        await HeadlessHost.Run(() =>
+        {
+            var view = new HistoryView { DataContext = vm };
+            var window = new Window { Content = view, Width = 900, Height = 300 };
+            window.Show();
+            try
+            {
+                Dispatcher.UIThread.RunJobs();
+                var header = view.FindControl<Grid>("HistoryHeader")!;
+                Oranda.App.Tests.Shell.Controls.TableColumnsProbe.AssertDragMovesHeaderAndRows(window, header, view.FindControl<ListBox>("List")!, column: 2);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
     public async Task History_detail_box_is_a_sql_code_view_with_the_sql_colorizer()
     {
         var store = new ListStore([Entry(1, "SELECT 1 FROM dual")]);

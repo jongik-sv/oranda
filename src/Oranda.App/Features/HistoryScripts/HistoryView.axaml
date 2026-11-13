@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.HistoryScripts"
@@ -46,16 +47,16 @@
       </DockPanel>
     </Border>
     <!-- 표 위, 고른 문장 아래. 사이 분할선을 끌어 미리보기 높이를 바꾼다(높이는 창 코드가 앱을 켠 동안 기억, 고른 것이 없으면 접힌다). -->
-    <Grid x:Name="SplitGrid">
+    <Grid x:Name="SplitGrid" ctl:TableColumns.Scope="History.List">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
         <RowDefinition Height="*" MinHeight="60" />
         <RowDefinition Height="Auto" />
         <RowDefinition Height="0" />
       </Grid.RowDefinitions>
-      <!-- 표: 시간 | 상태 | 접속 | 경과 | 행 | SQL (+ 오류). 머리글과 줄이 같은 열 폭을 쓴다. -->
+      <!-- 표: 시간 | 상태 | 접속 | 경과 | 행 | SQL (+ 오류). 머리글과 줄이 같은 열 폭을 쓴다. 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns). -->
       <Border Grid.Row="0" Classes="grid-header">
-        <Grid x:Name="HistoryHeader" ColumnDefinitions="128,74,120,72,72,*,Auto">
+        <Grid x:Name="HistoryHeader" ctl:TableColumns.Header="True" ColumnDefinitions="128,74,120,72,72,*,Auto">
           <TextBlock Grid.Column="0" Padding="8,0,6,0" Text="시간" />
           <TextBlock Grid.Column="1" Padding="6,0" Text="상태" />
           <TextBlock Grid.Column="2" Padding="6,0" Text="접속" />
@@ -75,7 +76,7 @@
         </ListBox.ContextMenu>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:HistoryItem">
-            <Grid ColumnDefinitions="128,74,120,72,72,*,Auto" ToolTip.Tip="{Binding FullSql}">
+            <Grid ctl:TableColumns.Row="True" ColumnDefinitions="128,74,120,72,72,*,Auto" ToolTip.Tip="{Binding FullSql}">
               <TextBlock Grid.Column="0" Padding="8,0,6,0" VerticalAlignment="Center" Classes="mono dim" Text="{Binding TimeText}" />
               <StackPanel Grid.Column="1" Margin="6,0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                 <ContentControl VerticalAlignment="Center"

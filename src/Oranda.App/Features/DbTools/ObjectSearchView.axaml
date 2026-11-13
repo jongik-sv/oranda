@@ -26,8 +26,9 @@
           </WrapPanel>
           </Border>
           <Grid ColumnDefinitions="3*,4,2*">
-            <DockPanel Grid.Column="0">
-              <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="*,110,70,130,130,80" Opacity="0.7">
+            <!-- 세 표 모두 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns). -->
+            <DockPanel Grid.Column="0" controls:TableColumns.Scope="ObjectSearch.Results">
+              <Grid x:Name="ResultHeader" DockPanel.Dock="Top" Margin="6,2" controls:TableColumns.Header="True" ColumnDefinitions="*,110,70,130,130,80" Opacity="0.7">
                 <TextBlock Grid.Column="0" Text="이름" />
                 <TextBlock Grid.Column="1" Text="유형" />
                 <TextBlock Grid.Column="2" Text="상태" />
@@ -38,7 +39,7 @@
               <ListBox x:Name="ResultList" ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult, Mode=TwoWay}">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:ObjectSearchItem">
-                    <Grid ColumnDefinitions="*,110,70,130,130,80">
+                    <Grid controls:TableColumns.Row="True" ColumnDefinitions="*,110,70,130,130,80">
                       <TextBlock Grid.Column="0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                       <TextBlock Grid.Column="1" Text="{Binding ObjectType}" TextTrimming="CharacterEllipsis" />
                       <TextBlock Grid.Column="2" Text="{Binding Status}" />
@@ -58,7 +59,7 @@
         </DockPanel>
       </TabItem>
       <TabItem Header="소스 검색">
-        <DockPanel>
+        <DockPanel controls:TableColumns.Scope="ObjectSearch.Sources">
           <Border DockPanel.Dock="Top" Classes="panel-toolbar">
             <WrapPanel>
             <TextBox Width="110" Margin="0,0,6,4" PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" />
@@ -70,7 +71,7 @@
             <Button Classes="tool" icons:ButtonIcon.Key="find" x:Name="SourceSearchButton" Margin="0,0,6,4" Content="검색" IsEnabled="{Binding !IsBusy}" />
           </WrapPanel>
           </Border>
-          <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="220,110,60,*" Opacity="0.7">
+          <Grid x:Name="SourceHeader" DockPanel.Dock="Top" Margin="6,2" controls:TableColumns.Header="True" ColumnDefinitions="220,110,60,*" Opacity="0.7">
             <TextBlock Grid.Column="0" Text="객체" />
             <TextBlock Grid.Column="1" Text="유형" />
             <TextBlock Grid.Column="2" Margin="0,0,10,0" HorizontalAlignment="Right" Text="줄" />
@@ -80,7 +81,7 @@
                    ToolTip.Tip="두 번 누르면 PL/SQL 편집기에서 그 줄을 연다">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:SourceSearchItem">
-                <Grid ColumnDefinitions="220,110,60,*">
+                <Grid controls:TableColumns.Row="True" ColumnDefinitions="220,110,60,*">
                   <TextBlock Grid.Column="0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="1" Text="{Binding ObjectType}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="2" Margin="0,0,10,0" HorizontalAlignment="Right" Text="{Binding LineText}" />
@@ -92,7 +93,7 @@
         </DockPanel>
       </TabItem>
       <TabItem Header="열 이름 검색">
-        <DockPanel>
+        <DockPanel controls:TableColumns.Scope="ObjectSearch.Columns">
           <Border DockPanel.Dock="Top" Classes="panel-toolbar">
             <WrapPanel>
             <TextBox Width="110" Margin="0,0,6,4" PlaceholderText="스키마" Text="{Binding Owner, Mode=TwoWay}" />
@@ -100,7 +101,7 @@
             <Button Classes="tool" icons:ButtonIcon.Key="find" x:Name="ColumnSearchButton" Margin="0,0,6,4" Content="검색" IsEnabled="{Binding !IsBusy}" />
           </WrapPanel>
           </Border>
-          <Grid DockPanel.Dock="Top" Margin="6,2" ColumnDefinitions="*,130,*,170,50" Opacity="0.7">
+          <Grid x:Name="ColumnHeader" DockPanel.Dock="Top" Margin="6,2" controls:TableColumns.Header="True" ColumnDefinitions="*,130,*,170,50" Opacity="0.7">
             <TextBlock Grid.Column="0" Text="테이블" />
             <TextBlock Grid.Column="1" Text="유형" />
             <TextBlock Grid.Column="2" Text="열" />
@@ -111,7 +112,7 @@
                    ToolTip.Tip="두 번 누르면 객체 상세를 연다">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ColumnSearchItem">
-                <Grid ColumnDefinitions="*,130,*,170,50">
+                <Grid controls:TableColumns.Row="True" ColumnDefinitions="*,130,*,170,50">
                   <TextBlock Grid.Column="0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="1" Text="{Binding ObjectType}" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="2" Text="{Binding Column}" TextTrimming="CharacterEllipsis" />

@@ -2,9 +2,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.PlsqlEditor"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.PlsqlEditor.CompileErrorsView"
              x:DataType="vm:CompileErrorsViewModel">
-  <DockPanel>
+  <DockPanel ctl:TableColumns.Scope="CompileErrors.List">
     <!-- 머리 줄: 상태 아이콘(오류·경고·깨끗함) + 「탭: 오류 n건, 경고 m건」 -->
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,3">
@@ -13,19 +14,19 @@
         <TextBlock Text="{Binding Header}" FontWeight="SemiBold" FontSize="{DynamicResource OrandaFontSizeSmall}" VerticalAlignment="Center" />
       </StackPanel>
     </Border>
-    <!-- 표: 아이콘 | 종류 | 줄:열 | 메시지. 머리글과 줄이 같은 열 폭을 쓴다. -->
+    <!-- 표: 아이콘 | 종류 | 줄:열 | 메시지. 머리글과 줄이 같은 열 폭을 쓴다. 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns). -->
     <Border DockPanel.Dock="Top" Classes="grid-header">
-      <Grid x:Name="ErrorsHeader" ColumnDefinitions="30,96,76,*">
+      <Grid x:Name="ErrorsHeader" ctl:TableColumns.Header="True" ColumnDefinitions="30,96,76,*">
         <TextBlock Grid.Column="1" Padding="6,0" Text="종류" />
         <TextBlock Grid.Column="2" Padding="6,0" Classes="num" Text="줄:열" />
         <TextBlock Grid.Column="3" Padding="6,0" Text="메시지" />
       </Grid>
     </Border>
-    <ListBox Classes="table" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+    <ListBox x:Name="ErrorList" Classes="table" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
              ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="컴파일 오류 목록">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:CompileErrorItem">
-          <Grid ColumnDefinitions="30,96,76,*" Margin="0,3" Background="Transparent" ToolTip.Tip="두 번 누르면 그 줄로 이동">
+          <Grid ctl:TableColumns.Row="True" ColumnDefinitions="30,96,76,*" Margin="0,3" Background="Transparent" ToolTip.Tip="두 번 누르면 그 줄로 이동">
             <ContentControl Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,1,0,0"
                             Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
             <!-- 종류 + 쪽(패키지·타입 탭: 명세·본문) -->

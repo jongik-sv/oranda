@@ -155,6 +155,30 @@ public class DbToolsTests
     }
 
     [Fact]
+    public Task Object_search_result_columns_follow_the_header_drag() => Oranda.App.Tests.Shell.Headless.HeadlessHost.Run(async () =>
+    {
+        var admin = new FakeAdmin { Rows = [new ObjectSearchRow(new DbObjectRef("SCOTT", "EMP", "TABLE"), "VALID", null, null, null), new ObjectSearchRow(new DbObjectRef("SCOTT", "EMP_V", "VIEW"), "INVALID", null, null, null)] };
+        var vm = new ObjectSearchViewModel(admin, new FakeExec(), OracleDbmsServices.Statements);
+        vm.Attach(new FakeSession());
+        await vm.SearchAsync();
+        var view = new ObjectSearchView { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1200, Height = 500 };
+        window.Show();
+        try
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            // 세 표(결과·소스 검색·열 검색)는 같은 모양: 보이는 결과 표 하나로 확인한다.
+            Oranda.App.Tests.Shell.Controls.TableColumnsProbe.AssertDragMovesHeaderAndRows(
+                window, Avalonia.Controls.ControlExtensions.FindControl<Avalonia.Controls.Grid>(view, "ResultHeader")!,
+                Avalonia.Controls.ControlExtensions.FindControl<Avalonia.Controls.ListBox>(view, "ResultList")!, column: 1);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
     public async Task Newer_search_cancels_the_older_one_and_results_are_swapped_in_one_piece()
     {
         var admin = new FakeAdmin { Rows = [new ObjectSearchRow(new DbObjectRef("SCOTT", "OLD", "TABLE"), "VALID", null, null, null)], SearchGate = new TaskCompletionSource() };

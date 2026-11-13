@@ -68,6 +68,23 @@ public class DdlExtractTargetsTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public Task Target_columns_follow_the_header_drag() => HeadlessHost.Run(async () =>
+    {
+        var vm = NewVm(new FakeAdmin { Rows = Sample });
+        await vm.PendingRefresh;
+        var (window, view) = Show(vm);
+        try
+        {
+            Oranda.App.Tests.Shell.Controls.TableColumnsProbe.AssertDragMovesHeaderAndRows(
+                window, view.FindControl<Grid>("TargetHeader")!, view.FindControl<ListBox>("TargetList")!, column: 1);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
     public async Task The_query_carries_owner_types_name_pattern_and_invalid_only()
     {
         var admin = new FakeAdmin { Rows = Sample };
