@@ -30,8 +30,14 @@ public sealed partial class ExecutionController
             lines.Add((MessageKind.Warning, warning));
         }
 
+        // 엔진은 행 수 다름을 LogLine 과 Warning 에 같은 글로 함께 채울 수 있다: 같은 글이면 경고 한 줄만 남긴다.
         if (summary.LogLine is { Length: > 0 } line)
         {
+            if (string.Equals(line, summary.Warning, StringComparison.Ordinal))
+            {
+                return lines;
+            }
+
             lines.Add((summary.State == RollbackScriptState.Incomplete && summary.Warning is null ? MessageKind.Warning : MessageKind.Info, line));
             return lines;
         }

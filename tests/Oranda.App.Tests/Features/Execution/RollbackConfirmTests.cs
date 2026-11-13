@@ -112,6 +112,11 @@ public sealed class RollbackConfirmTests
         });
         Assert.Equal(MessageKind.Warning, Assert.Single(mismatch).Kind);
 
+        // 엔진이 같은 글을 LogLine 과 Warning 에 함께 채우면 경고 한 줄만 남는다.
+        const string Same = "원복 스크립트 불완전: 행 수 다름(잠금 12, 실행 13) — 커밋 전에 확인하세요";
+        var once = ExecutionController.RollbackLogLines(new RollbackStatementSummary(RollbackScriptState.Incomplete, NotCreatedReason.None, 12) { LogLine = Same, Warning = Same });
+        Assert.Equal([(MessageKind.Warning, Same)], once);
+
         var returning = ExecutionController.RollbackLogLines(new RollbackStatementSummary(RollbackScriptState.Open, NotCreatedReason.None, 1) { ReturningAppended = true });
         Assert.Equal(2, returning.Count);
         Assert.Contains("RETURNING ROWID INTO", returning[0].Text, StringComparison.Ordinal);
