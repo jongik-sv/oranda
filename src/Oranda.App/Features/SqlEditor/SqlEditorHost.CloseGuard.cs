@@ -193,12 +193,13 @@ public sealed partial class SqlEditorHost
     public Task<bool> CanShutdownAsync(CancellationToken ct) => CanCloseAsync(Tabs.ToList(), SqlCloseReason.AppExit, ct);
 
     /// <summary>
-    /// 고친 SQL 탭이 닫히기 전에 저장할지 묻는다. 탭 닫기·같은 ID 복원으로 교체될 때만 묻는다:
-    /// 작업 공간 닫기와 앱 종료는 작업 공간 파일이 내용을 보존한다. 이름 없는 탭의 저장은 「다른 이름으로」이고, 파일 고르기를 취소하면 닫기도 취소다.
+    /// 고친 SQL 탭이 닫히기 전에 저장할지 묻는다. 탭 닫기·작업 공간 닫기·같은 ID 복원으로 교체될 때 묻는다.
+    /// 앱 종료는 묻지 않는다(작업 공간 파일이 내용을 보존하고 다음 시작 때 복원한다). 작업 공간 닫기에서 「저장 안 함」 이어도 글은
+    /// 작업 공간 파일에 남는다(「작업 공간 열기」로 다시 연다). 이름 없는 탭의 저장은 「다른 이름으로」이고, 파일 고르기를 취소하면 닫기도 취소다.
     /// </summary>
     private async Task<bool> ConfirmSaveAsync(IReadOnlyList<SqlEditorViewModel> tabs, SqlCloseReason reason, CancellationToken ct)
     {
-        if (reason is not (SqlCloseReason.Tab or SqlCloseReason.Replace))
+        if (reason is not (SqlCloseReason.Tab or SqlCloseReason.Replace or SqlCloseReason.Workspace))
         {
             return true;
         }
@@ -239,6 +240,13 @@ public sealed partial class SqlEditorHost
             default:
                 return false;
         }
+    }
+
+    /// <summary>작업 공간에 닫기 전 저장 확인(<see cref="NeedsSaveConfirm"/>)을 물을 탭이 있으면 true. 문서 탭 × 의 확인 여부를 정할 때 쓴다.</summary>
+    internal bool HasUnsavedTabs(SqlWorkspaceViewModel workspace)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        return workspace.Tabs.Any(NeedsSaveConfirm);
     }
 
     /// <summary>

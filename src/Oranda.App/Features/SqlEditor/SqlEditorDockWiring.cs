@@ -86,6 +86,14 @@ public sealed partial class SqlEditorDockWiring(
                 }
             };
 
+            // 문서 탭 × ·닫기 명령으로 고친 SQL 탭이 든 작업 공간을 닫으면 탭마다 저장 확인을 묻는다(세션 라우터·전용 세션이 아직 없어도).
+            // 다른 기능이 먼저 건 확인이 있으면 그것을 쓴다: 그것도 CanCloseAsync 로 등록된 가드(저장 확인이 먼저)를 모두 돌린다.
+            var previousConfirm = docking.CloseConfirm;
+            docking.CloseConfirm = doc => previousConfirm?.Invoke(doc)
+                ?? (doc.Panel is SqlWorkspaceViewModel ws && host.Workspaces.Contains(ws) && host.HasUnsavedTabs(ws)
+                    ? ct => host.CanCloseAsync(ws.Tabs.ToList(), SqlCloseReason.Workspace, ct)
+                    : null);
+
             // 문서 탭을 끌어 순서를 바꾸면 호스트의 작업 공간 순서도 따라간다(다음 시작 때 그 순서로 복원).
             docking.LayoutChanged += (_, _) => host.ReorderWorkspaces(
                 [.. docking.Documents.Select(d => d.Panel).OfType<SqlWorkspaceViewModel>()]);

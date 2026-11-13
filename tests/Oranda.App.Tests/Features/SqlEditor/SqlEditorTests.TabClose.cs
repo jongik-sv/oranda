@@ -117,7 +117,7 @@ public sealed partial class SqlEditorTests
     });
 
     [Fact]
-    public Task Closing_a_workspace_does_not_ask() => Ui.Run(async () =>
+    public Task Closing_a_workspace_without_edits_does_not_ask() => Ui.Run(async () =>
     {
         var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Cancel };
         var host = new SqlEditorHost(dialogs: dialogs);
@@ -126,6 +126,42 @@ public sealed partial class SqlEditorTests
 
         Assert.True(await host.TryCloseWorkspaceAsync(workspace, default));
         Assert.True(await host.CanShutdownAsync(default));
+
+        Assert.Empty(dialogs.SaveAsked);
+    });
+
+    [Fact]
+    public Task Close_workspace_command_asks_for_each_edited_tab_and_cancel_keeps_the_workspace() => Ui.Run(async () =>
+    {
+        var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Cancel };
+        var host = new SqlEditorHost(dialogs: dialogs);
+        var first = host.NewDocument("select 1");
+        first.Document.Insert(first.Document.TextLength, " from dual");
+        host.NewDocument("select 2"); // 고치지 않은 탭은 묻지 않는다
+        var second = host.NewDocument();
+        second.Document.Insert(0, "select 3");
+        var workspace = host.ActiveWorkspace!;
+
+        Assert.False(await host.TryCloseWorkspaceAsync(workspace, default)); // 첫 탭에서 취소 → 닫지 않는다
+        Assert.Equal([first.Title], dialogs.SaveAsked);
+        Assert.Contains(workspace, host.Workspaces);
+        Assert.Equal(3, workspace.Tabs.Count);
+
+        dialogs.SaveAnswer = SaveChoice.DontSave;
+        Assert.True(await host.TryCloseWorkspaceAsync(workspace, default));
+        Assert.Equal([first.Title, first.Title, second.Title], dialogs.SaveAsked);
+        Assert.DoesNotContain(workspace, host.Workspaces);
+    });
+
+    [Fact]
+    public Task App_exit_still_does_not_ask_for_edited_tabs() => Ui.Run(async () =>
+    {
+        var dialogs = new FakeDialogs { SaveAnswer = SaveChoice.Cancel };
+        var host = new SqlEditorHost(dialogs: dialogs);
+        var tab = host.NewDocument();
+        tab.Document.Insert(0, "select 1");
+
+        Assert.True(await host.CanShutdownAsync(default)); // 앱 종료는 다음 시작 때 복원한다
 
         Assert.Empty(dialogs.SaveAsked);
     });

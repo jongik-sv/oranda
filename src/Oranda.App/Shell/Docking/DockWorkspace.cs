@@ -130,7 +130,8 @@ public sealed partial class DockWorkspace
         _ = CloseAfterConfirmAsync(document, confirm);
     }
 
-    private async Task CloseAfterConfirmAsync(PanelDocument document, Func<CancellationToken, Task<bool>> confirm)
+    /// <summary>확인을 기다린 뒤 닫는다. 닫았거나 이미 닫혀 있으면 true, 취소·실패면 false.</summary>
+    private async Task<bool> CloseAfterConfirmAsync(PanelDocument document, Func<CancellationToken, Task<bool>> confirm)
     {
         bool ok;
         try
@@ -146,7 +147,7 @@ public sealed partial class DockWorkspace
 
         if (!ok || !Documents.Contains(document))
         {
-            return; // 취소했거나 확인하는 동안 다른 경로로 이미 닫혔다
+            return ok; // 취소했거나 확인하는 동안 다른 경로로 이미 닫혔다
         }
 
         _confirmedClose = document;
@@ -158,6 +159,8 @@ public sealed partial class DockWorkspace
         {
             _confirmedClose = null;
         }
+
+        return true;
     }
 
     /// <summary>문서 탭이 닫혔다(탭의 × 단추·탭 닫기 명령 모두). 문서를 가진 기능이 자기 목록을 맞춘다.</summary>
@@ -670,14 +673,51 @@ public sealed partial class DockWorkspace
         return true;
     }
 
+    /// <summary>
+    /// 모든 문서를 닫는다. 확인(<see cref="CloseConfirm"/>)이 필요 없는 문서는 바로 닫고, 필요한 문서는 하나씩 차례로 묻는다
+    /// (확인 창이 겹치거나 앞 확인이 도는 동안 뒤 문서가 말없이 취소되지 않게). 하나라도 취소하면 남은 문서는 닫지 않는다.
+    /// </summary>
     public void CloseAllDocuments()
     {
+        var asking = new List<PanelDocument>();
         foreach (var d in Documents.ToList())
         {
+            if (CloseConfirm?.Invoke(d) is not null)
+            {
+                asking.Add(d);
+                continue;
+            }
+
             Factory.CloseDockable(d);
         }
 
         ActiveDocumentChanged?.Invoke(this, EventArgs.Empty);
+        if (asking.Count > 0)
+        {
+            _ = CloseInTurnAsync(asking);
+        }
+    }
+
+    private async Task CloseInTurnAsync(IReadOnlyList<PanelDocument> documents)
+    {
+        foreach (var document in documents)
+        {
+            if (!Documents.Contains(document))
+            {
+                continue; // 묻는 동안 다른 경로로 이미 닫혔다
+            }
+
+            if (CloseConfirm?.Invoke(document) is not { } confirm)
+            {
+                CloseDocument(document); // 앞 문서를 닫는 사이 확인할 것이 없어졌다
+                continue;
+            }
+
+            if (!await CloseAfterConfirmAsync(document, confirm).ConfigureAwait(true))
+            {
+                return; // 취소: 남은 문서는 닫지 않는다
+            }
+        }
     }
 
     /// <summary>활성 문서에서 <paramref name="step"/> 칸 옆 탭을 활성으로(끝에서 돌아온다).</summary>
