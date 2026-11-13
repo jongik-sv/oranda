@@ -65,6 +65,21 @@ public class RollbackFlowTests
     }
 
     [Fact]
+    public void Plsql_and_ddl_end_when_pending_before_or_open_group()
+    {
+        var id = Guid.NewGuid();
+        var block = Stmt("BEGIN INSERT INTO T VALUES (1); COMMIT; END;", StatementKind.PlSql);
+        // 미커밋이 없던 세션: 블록 기록이 열린 묶음에 있으므로 끝(모름 → 판정)
+        Assert.Equal((TransactionEndKind.Unknown, TransactionEndSource.PlSql),
+                     RollbackFlow.EndAfter(id, block, true, false, false, hasOpenGroup: true) is { } e ? (e.Kind, e.Source) : default);
+        Assert.Null(RollbackFlow.EndAfter(id, block, true, false, false, hasOpenGroup: false));
+        // 되돌리기를 끈 세션의 DDL: 미커밋도 열린 묶음도 없으면 끝을 내지 않는다
+        Assert.Null(RollbackFlow.EndAfter(id, Stmt("CREATE TABLE T (A NUMBER)", StatementKind.Ddl), true, false, false, hasOpenGroup: false));
+        Assert.NotNull(RollbackFlow.EndAfter(id, Stmt("CREATE TABLE T (A NUMBER)", StatementKind.Ddl), true, false, false, hasOpenGroup: true));
+        Assert.Null(RollbackFlow.EndAfter(id, Stmt("ALTER SESSION SET X = 1", StatementKind.Ddl), true, true, true, hasOpenGroup: true));
+    }
+
+    [Fact]
     public void Recording_is_none_for_read_only_agent_and_copy()
     {
         Assert.Equal(ChangeRecording.None, RollbackFlow.RecordingFor(new FakeSession(TestData.Profile(readOnly: true)), ExecutionOptions.Default));

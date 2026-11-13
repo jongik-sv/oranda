@@ -330,6 +330,19 @@ public class RollbackCaptureEngineTests
     }
 
     [Fact]
+    public async Task Returning_keeps_user_binds_when_statement_lists_no_bind_names()
+    {
+        var rig = new Rig();
+        var shape = new DmlShape(DmlVerb.InsertValues) { Owner = "SAMPLE", Name = "PRODUCTS" };
+        var binds = new Dictionary<string, BindValue> { ["id"] = new(BindDataType.Number, 2001m) };
+
+        var (capture, _) = await rig.BeginAsync(rig.Request("INSERT INTO SAMPLE.PRODUCTS VALUES (:id, 'a', 1, NULL)", shape, binds: binds));
+
+        Assert.Equal(["id", "ORANDA_RID"], capture.StatementToSend.BindNames);
+        Assert.Equal(2001m, capture.BindsToSend["id"].Value);
+    }
+
+    [Fact]
     public async Task Insert_without_returning_support_or_with_bind_clash_is_incomplete_and_unchanged()
     {
         var shape = new DmlShape(DmlVerb.InsertValues) { Owner = "SAMPLE", Name = "PRODUCTS" };

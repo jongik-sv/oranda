@@ -738,7 +738,9 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
             {
                 // 끝의 줄 주석(-- …) 안으로 들어가지 않게 줄을 바꿔 붙인다.
                 Text = _request.Statement.Text.TrimEnd() + "\nRETURNING ROWID INTO :" + ReturningBind,
-                BindNames = [.. _request.Statement.BindNames, ReturningBind],
+                // 원래 BindNames 가 비고 바인드 사전만 있는 문장(만든 쪽이 이름 목록을 채우지 않음)에 출력 바인드만 넣으면 사용자 바인드가 빠진다.
+                // 그래서 이름 목록이 비었으면 사전 키를 먼저 이름으로 옮긴 뒤 덧붙인다.
+                BindNames = [.. (_request.Statement.BindNames.Count > 0 ? _request.Statement.BindNames : _request.Binds.Keys), ReturningBind],
             };
             BindsToSend = new Dictionary<string, BindValue>(_request.Binds, StringComparer.OrdinalIgnoreCase)
             {

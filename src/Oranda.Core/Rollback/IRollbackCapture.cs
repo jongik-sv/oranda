@@ -43,7 +43,10 @@ public interface IRollbackCapture
 /// <summary>문장 하나의 캡처(설계 6.1 의 5~8단계). <see cref="IRollbackCapture.BeginAsync"/> 가 만든다.</summary>
 public interface IStatementCapture
 {
-    /// <summary>드라이버로 보낼 문장. 한 행 INSERT 면 <c>RETURNING ROWID INTO :ORANDA_RID</c> 가 붙은 글이다.</summary>
+    /// <summary>
+    /// 드라이버로 보낼 문장. 한 행 INSERT 면 <c>RETURNING ROWID INTO :ORANDA_RID</c> 가 붙은 글이고, <see cref="SqlStatement.BindNames"/> 는
+    /// 원래 이름 목록(비었으면 사용자 바인드 사전의 키) 뒤에 <c>ORANDA_RID</c> 를 덧붙인 것이다. 공급자는 이 이름 목록을 따로 고치지 않는다.
+    /// </summary>
     SqlStatement StatementToSend { get; }
 
     /// <summary>드라이버로 보낼 바인드(붙인 출력 바인드 포함).</summary>

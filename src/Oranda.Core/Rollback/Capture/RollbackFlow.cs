@@ -104,18 +104,26 @@ public static class RollbackFlow
     }
 
     /// <summary>
-    /// 문장을 보낸 뒤 알게 된 트랜잭션 끝(설계 7.3 표). 성공한 트랜잭션 제어 문장은 그 종류대로,
-    /// DDL(성공·실패 모두, 앞의 암시적 커밋)은 보낸 뒤 미커밋이 거짓이면 「모름」(<see cref="TransactionEndSource.Ddl"/>).
+    /// 문장을 보낸 뒤 알게 된 트랜잭션 끝(설계 7.3 표). 성공한 트랜잭션 제어 문장은 그 종류대로 낸다.
+    /// <para>
+    /// DDL·PL/SQL·분류 불확실 문장은 (보내기 전 미커밋이 참 <b>또는</b> 원장에 열린 묶음이 있음) 이고 보낸 뒤 미커밋이 거짓이면 「모름」
+    /// (<see cref="TransactionEndSource.Ddl"/>·<see cref="TransactionEndSource.PlSql"/>)이고, 공급자가 끝 판정을 한다.
+    /// 둘 다 거짓이면 끝이 아니다(되돌리기를 끈 세션에서 DDL 마다 끝을 내지 않는다). 열린 묶음을 보는 까닭: 미커밋이 없던 세션에서
+    /// <c>BEGIN INSERT …; COMMIT; END;</c> 는 그 블록 기록이 열린 묶음에 남는데, 보내기 전 미커밋만 보면 끝을 놓쳐 뒤의 ROLLBACK 이 커밋된 블록을 「롤백됨」으로 덮는다.
     /// 커밋하지 않는 DDL 분류 문장(<c>ALTER SESSION</c>, 구문 단계에서 실패한 DDL)은 미커밋이 남으므로 끝이 아니다.
-    /// PL/SQL·불확실 문장은 보내기 전 미커밋이 참이었다가 거짓이 되면 「모름」(<see cref="TransactionEndSource.PlSql"/>).
-    /// 그 밖의 문장(실패한 COMMIT 의 ORA-02091, 트랜잭션을 되돌리는 오류)도 미커밋이 참 → 거짓이면 「모름」(<see cref="TransactionEndSource.Statement"/>).
+    /// </para>
+    /// <para>
+    /// 그 밖의 문장(실패한 COMMIT 의 ORA-02091, 트랜잭션을 되돌리는 오류)은 보내기 전 미커밋이 참 → 보낸 뒤 거짓이면 「모름」(<see cref="TransactionEndSource.Statement"/>).
     /// 끝이 아니면 null. 저장점 표시(<c>SAVEPOINT</c>)도 끝이 아니므로 null 이다(<see cref="SavepointMarked"/>).
+    /// </para>
     /// </summary>
+    /// <param name="sessionId">세션</param>
     /// <param name="stmt">보낸 문장</param>
     /// <param name="succeeded">문장이 성공했는가</param>
     /// <param name="pendingBefore">보내기 전 미커밋 트랜잭션 여부</param>
     /// <param name="pendingAfter">보낸 뒤 미커밋 트랜잭션 여부</param>
-    public static TransactionEnded? EndAfter(Guid sessionId, SqlStatement stmt, bool succeeded, bool pendingBefore, bool pendingAfter)
+    /// <param name="hasOpenGroup">원장에 이 세션의 열린 묶음이 있는가(<c>ledger.Open(sessionId) is not null</c>, 이 문장의 기록 뒤에 읽는다)</param>
+    public static TransactionEnded? EndAfter(Guid sessionId, SqlStatement stmt, bool succeeded, bool pendingBefore, bool pendingAfter, bool hasOpenGroup)
     {
         ArgumentNullException.ThrowIfNull(stmt);
         var lost = pendingBefore && !pendingAfter;
@@ -133,19 +141,34 @@ public static class RollbackFlow
             };
         }
 
+        var mayEnd = (pendingBefore || hasOpenGroup) && !pendingAfter;
+        if (stmt.Kind == StatementKind.Ddl)
+        {
+            return mayEnd ? new TransactionEnded(sessionId, TransactionEndKind.Unknown, TransactionEndSource.Ddl) : null;
+        }
+
+        if (stmt.Kind == StatementKind.PlSql || stmt.IsClassificationUncertain)
+        {
+            return mayEnd ? new TransactionEnded(sessionId, TransactionEndKind.Unknown, TransactionEndSource.PlSql) : null;
+        }
+
+        return lost ? new TransactionEnded(sessionId, TransactionEndKind.Unknown, TransactionEndSource.Statement) : null;
+    }
+
+    /// <summary>
+    /// 열린 묶음을 모르는 옛 판(옛 규칙 그대로): DDL 은 보낸 뒤 미커밋이 거짓이면 「모름」, PL/SQL·불확실 문장은 미커밋 참 → 거짓일 때만 「모름」.
+    /// 미커밋이 없던 세션의 PL/SQL 안 COMMIT 을 놓치므로 공급자는 6인자 판
+    /// <see cref="EndAfter(Guid, SqlStatement, bool, bool, bool, bool)"/> 로 옮긴다(공급자 레인이 옮긴 뒤 지운다).
+    /// </summary>
+    public static TransactionEnded? EndAfter(Guid sessionId, SqlStatement stmt, bool succeeded, bool pendingBefore, bool pendingAfter)
+    {
+        ArgumentNullException.ThrowIfNull(stmt);
         if (stmt.Kind == StatementKind.Ddl)
         {
             return pendingAfter ? null : new TransactionEnded(sessionId, TransactionEndKind.Unknown, TransactionEndSource.Ddl);
         }
 
-        if (!lost)
-        {
-            return null;
-        }
-
-        return stmt.Kind == StatementKind.PlSql || stmt.IsClassificationUncertain
-            ? new TransactionEnded(sessionId, TransactionEndKind.Unknown, TransactionEndSource.PlSql)
-            : new TransactionEnded(sessionId, TransactionEndKind.Unknown, TransactionEndSource.Statement);
+        return EndAfter(sessionId, stmt, succeeded, pendingBefore, pendingAfter, hasOpenGroup: false);
     }
 
     /// <summary>성공한 <c>SAVEPOINT 이름</c> 이면 그 이름(원장 <see cref="IRollbackLedger.MarkSavepoint"/>). 내부 저장점 이름은 null.</summary>
