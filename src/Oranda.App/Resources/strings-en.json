@@ -1035,5 +1035,6 @@
   "Shell.settings.rollback.clearFailed": "Could not delete: {0}",
   "Cmd.oranda.rollback.openScript": "Open Rollback Script",
   "Cmd.oranda.rollback.runScript": "Run Rollback (No Commit)",
-  "Panel.oranda.panel.rollbackScript": "Rollback Script"
+  "Panel.oranda.panel.rollbackScript": "Rollback Script",
+  "Cmd.oranda.rollback.compare": "Compare with Before This Run…"
 }

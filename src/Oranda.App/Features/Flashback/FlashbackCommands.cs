@@ -1,7 +1,9 @@
 using System.Globalization;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.GridEdit;
+using Oranda.App.Features.PointCompare;
 using Oranda.App.Features.ResultGrid;
+using Oranda.App.Features.Rollback;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
@@ -94,7 +96,7 @@ public sealed class FlashbackCommandHandler : ICommandHandler
                     Notify(container, model, FlashbackTarget.RestoreNeedsEditMode);
                     break;
                 case "oranda.grid.flashback.restore":
-                    await RestoreAsync(container, runner, model, source.Target, edit, cancellationToken).ConfigureAwait(true);
+                    await RestoreAsync(container, model, source.Target, edit, cancellationToken).ConfigureAwait(true);
                     break;
             }
         }
@@ -249,19 +251,13 @@ public sealed class FlashbackCommandHandler : ICommandHandler
         return doc;
     }
 
-    /// <summary>「이전 값으로 되돌리기 UPDATE」: 고른 행의 N분 전 값으로 UPDATE 를 만들어 미리 보여 주고, 확인하면 커밋 없이 반영한다.</summary>
-    private static async Task RestoreAsync(ServiceContainer container, FlashbackRunner runner, ResultGridModel model, FlashbackTarget target, GridEditSession edit,
+    /// <summary>「이전 값으로 되돌리기」(G2): 고른 행(최대 200)의 키로 화면 3 을 연다. 반영은 커밋 없이 하고, 끝나면 결과를 다시 조회한다.</summary>
+    private static async Task RestoreAsync(ServiceContainer container, ResultGridModel model, FlashbackTarget target, GridEditSession edit,
                                     CancellationToken ct)
     {
         if (target.EditablePositions.Count == 0)
         {
             model.ReportNotice("되돌릴 수 있는 열이 없습니다.");
-            return;
-        }
-
-        var minutes = await AskMinutesAsync(container, runner, edit.Session, "이전 값으로 되돌리기", DefaultAsOfMinutes, ct).ConfigureAwait(true);
-        if (minutes is not { } n)
-        {
             return;
         }
 
@@ -278,40 +274,35 @@ public sealed class FlashbackCommandHandler : ICommandHandler
             return;
         }
 
-        var query = FlashbackQueryBuilder.BuildAsOf(target.Table, target.Names, target.KeyNames, [.. now.Select(x => (IReadOnlyList<object?>)target.KeyOf(x.Values))], n);
-        var past = await FlashbackRunner.ReadAllAsync(await runner.QueryAsync(edit.Session, query, ct).ConfigureAwait(true), ct).ConfigureAwait(true);
-        var plan = FlashbackPlanner.PlanRestore(target, now, past);
-        if (plan.Changes.Count == 0)
+        // G2(설계 8.5): 분 입력 대신 화면 3 을 고른 행의 키 범위로 연다. 시점 목록 맨 위 「10분 전」, 그 아래 이 표의 커밋 묶음, 맨 아래 직접 지정.
+        var args = new PointCompareArgs(edit.Session.Profile.Id, null, target.Table, target.KeyNames,
+                                        [.. now.Select(x => target.KeyOf(x.Values))], DefaultAsOfMinutes);
+        CompareApplyResult? done = null;
+        var note = cut.Length > 0 ? cut.Trim() : null;
+        var why = await PointCompareLauncher.OpenAsync(container, args, (applied, point) =>
         {
-            model.ReportNotice(plan.MissingThen > 0
-                ? $"되돌릴 행이 없습니다: 고른 행 {plan.MissingThen}개는 {n}분 전에 없었습니다."
-                : $"{n}분 전과 값이 같아 되돌릴 칸이 없습니다.");
-            return;
-        }
+            done = applied;
+            var when = point.Kind == PointOptionKind.MinutesAgo ? point.Label : point.Kind == PointOptionKind.Group ? "커밋 묶음 실행 직전" : "지정한 시점";
+            var failures = applied.Failed + applied.Conflicts;
+            var skipped = applied.KeyScope && applied.MissingThen + applied.Unchanged > 0 ? $" (건너뜀: 그때 없던 행 {applied.MissingThen}, 같은 값 {applied.Unchanged})" : string.Empty;
+            var zero = applied.ZeroRows > 0 ? $" 0행 {applied.ZeroRows}개는 그 뒤 다른 사람이 바꾼 행입니다." : string.Empty;
+            var notice = failures == 0
+                ? $"{applied.Applied} 행을 {when} 값으로 되돌렸습니다(커밋 안 함). 커밋하려면 커밋 단추, 되돌리려면 롤백.{skipped}{(applied.KeyScope ? cut : string.Empty)}{zero}"
+                : $"{applied.Applied} 행 반영, {failures} 행 실패: {applied.FirstError}{(applied.KeyScope ? cut : string.Empty)}";
+            GridEditCommands.Report?.Invoke(notice);
+            model.ReportNotice(notice);
+            return Task.CompletedTask;
+        }, ct, edit.Session, note).ConfigureAwait(true);
 
-        var dml = plan.Changes.Select(RowDmlBuilder.Build).Where(d => d is not null).Select(d => d!).ToList();
-        if (GridEditCommands.ConfirmPreview is not { } confirm || !await confirm(RowDmlBuilder.FormatPreview(dml), false, ct).ConfigureAwait(true))
-        {
-            model.ReportNotice("되돌리기를 취소했습니다.");
-            return;
-        }
-
-        if (container.GetService<IRowEditor>() is not { } editor)
-        {
-            model.ReportNotice("행 편집기가 없어 되돌릴 수 없습니다.");
-            return;
-        }
-
-        var applied = await editor.ApplyAsync(edit.Session, plan.Changes, false, ct).ConfigureAwait(true);
-        var skipped = plan.MissingThen + plan.Unchanged > 0 ? $" (건너뜀: 그때 없던 행 {plan.MissingThen}, 같은 값 {plan.Unchanged})" : string.Empty;
-        var notice = applied.Failures.Count == 0
-            ? $"{applied.AppliedCount} 행을 {n}분 전 값으로 되돌렸습니다(커밋 안 함). 커밋하려면 커밋 단추, 되돌리려면 롤백.{skipped}{cut}"
-            : $"{applied.AppliedCount} 행 반영, {applied.Failures.Count} 행 실패: {applied.Failures[0].Error?.Message}";
-        GridEditCommands.Report?.Invoke(notice);
-        model.ReportNotice(notice);
-        if (applied.Failures.Count == 0 && applied.AppliedCount > 0 && (edit.Rerun ?? GridEditCommands.Rerun) is { } rerun)
+        // 결과 다시 조회는 창을 닫은 뒤(모달 뒤에서 돌지 않게). 일부만 반영돼도 바뀐 행이 보이게 다시 읽는다.
+        if (done is { Applied: > 0 } && (edit.Rerun ?? GridEditCommands.Rerun) is { } rerun)
         {
             await rerun(edit.Query, ct).ConfigureAwait(true);
+        }
+
+        if (why is not null)
+        {
+            Notify(container, model, why);
         }
     }
 

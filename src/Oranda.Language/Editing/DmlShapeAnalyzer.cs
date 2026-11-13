@@ -30,6 +30,28 @@ public sealed class DmlShapeAnalyzer : IDmlAnalyzer
         "DEFAULT",
     }.ToFrozenSet(StringComparer.Ordinal);
 
+    /// <summary>
+    /// 한 행 <c>INSERT … VALUES (…)</c> 의 값 글(열 목록 순서, 바인드·리터럴·식 그대로). 그런 문장이 아니면 null. 예외를 던지지 않는다.
+    /// 시점 비교가 넣은 행의 키 조건을 만들 때 쓴다(설계 8.2 의 2번).
+    /// </summary>
+    public static IReadOnlyList<string>? InsertValues(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        try
+        {
+            var reader = new Reader(text);
+            return reader.Analyze() is { Verb: DmlVerb.InsertValues, NotTarget: null } ? reader.Values : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     public DmlShape? Analyze(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -50,6 +72,9 @@ public sealed class DmlShapeAnalyzer : IDmlAnalyzer
     /// <summary>주석·힌트를 뺀 토큰을 앞에서부터 읽는다.</summary>
     private sealed class Reader
     {
+        /// <summary>INSERT … VALUES 의 첫 행 값 글(최상위 쉼표로 나눔). 읽지 못하면 null.</summary>
+        public IReadOnlyList<string>? Values { get; private set; }
+
         private readonly string _text;
         private readonly List<Token> _t;
         private int _i;
@@ -200,6 +225,7 @@ public sealed class DmlShapeAnalyzer : IDmlAnalyzer
             if (Word(_i) == "VALUES")
             {
                 _i++;
+                Values = GroupItems();
                 SkipGroup();
                 if (_i < _t.Count && IsPunct(_t[_i], ','))
                 {
@@ -493,6 +519,47 @@ public sealed class DmlShapeAnalyzer : IDmlAnalyzer
 
                 _i++;
             }
+        }
+
+        /// <summary>지금 자리의 괄호 묶음 안 항목 글(최상위 쉼표로 나눔). 위치는 그대로.</summary>
+        private List<string>? GroupItems()
+        {
+            if (_i >= _t.Count || !IsPunct(_t[_i], '('))
+            {
+                return null;
+            }
+
+            var items = new List<string>();
+            var depth = 0;
+            var start = -1;
+            for (var j = _i; j < _t.Count; j++)
+            {
+                var t = _t[j];
+                if (IsPunct(t, '('))
+                {
+                    if (depth++ == 0)
+                    {
+                        start = j + 1;
+                        continue;
+                    }
+                }
+                else if (IsPunct(t, ')') && --depth == 0)
+                {
+                    if (j > start)
+                    {
+                        items.Add(_text[_t[start].Start.._t[j - 1].End].Trim());
+                    }
+
+                    return items;
+                }
+                else if (depth == 1 && IsPunct(t, ','))
+                {
+                    items.Add(j > start ? _text[_t[start].Start.._t[j - 1].End].Trim() : string.Empty);
+                    start = j + 1;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>지금 자리가 여는 괄호면 짝이 맞는 닫는 괄호 뒤로 넘긴다.</summary>

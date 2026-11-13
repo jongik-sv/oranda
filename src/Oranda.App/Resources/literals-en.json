@@ -1870,5 +1870,16 @@
   "파일로 내보내기…": "Export to file…",
   "멈추기": "Stop",
   "지금 문장이 끝나면 멈춥니다. 이미 실행한 문장은 커밋하지 않은 채 남습니다": "Stops after the current statement. Statements already run stay uncommitted",
-  "원복 실행 결과": "Rollback run results"
+  "원복 실행 결과": "Rollback run results",
+  "기준 시점": "Base point",
+  "커밋 직후": "After commit",
+  "지금": "Now",
+  "충돌 행도 되돌리기": "Also revert conflicting rows",
+  "만들어진 DML": "Generated DML",
+  "스크립트를 새 편집기에 열기": "Open Script in New Editor",
+  "이 실행 전과 비교": "Compare with Before This Run",
+  "시각 직접 지정": "Enter time",
+  "바뀐 행": "Changed rows",
+  "시점 번호 또는 yyyy-MM-dd HH:mm:ss": "Point number or yyyy-MM-dd HH:mm:ss",
+  "이 커밋 묶음 전체 보기": "Show the Whole Commit Group"
 }

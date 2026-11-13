@@ -117,4 +117,21 @@ public class PointComparePlannerTests
         var v = PointCompareQueries.VersionKeys(Products, d, 1, 2, "0A001B00");
         Assert.EndsWith(" AS K0 FROM SAMPLE.PRODUCTS VERSIONS BETWEEN SCN :b AND :c WHERE VERSIONS_XID = HEXTORAW(:xid)", v.Sql); // 키는 읽기 식(고정 형식 글)
     }
+
+    [Fact]
+    public void Planner_dml_reverses_with_rollback_reverse_and_rowid_delete_is_skipped()
+    {
+        var b = new[] { R(1001, "A", 25900), R(1040, "C", 4300) };
+        var n = new[] { R(1001, "A", null), R(2001, "N", 1) };
+        var script = PointComparePlanner.BuildDml(PointComparePlanner.Classify(Products, b, null, n), new FakeRollbackDialect());
+        var reversed = Oranda.Core.Rollback.Script.RollbackReverse.ReverseAll(script.Statements.Select(s => new RollbackStep(s.Sql)), out var skipped);
+        Assert.Equal(0, skipped);
+        Assert.Equal(3, reversed.Count);
+        Assert.Contains(reversed, r => r.Sql.StartsWith("UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = NULL WHERE PRODUCT_ID = ", StringComparison.Ordinal));
+
+        var noKey = Products with { KeyColumns = [] };
+        var rowid = PointComparePlanner.BuildDml(PointComparePlanner.Classify(noKey, [], null, [R(2001, "N", 1) with { RowId = "AAA" }]), new FakeRollbackDialect());
+        Oranda.Core.Rollback.Script.RollbackReverse.ReverseAll(rowid.Statements.Select(s => new RollbackStep(s.Sql)), out var rowidSkipped);
+        Assert.Equal(1, rowidSkipped); // 부르는 쪽이 반대 묶음을 「불완전」으로 둔다
+    }
 }

@@ -1,0 +1,98 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Oranda.App.Features.PointCompare"
+        xmlns:se="using:Oranda.App.Features.SqlEditor"
+        x:Class="Oranda.App.Features.PointCompare.PointCompareWindow"
+        x:DataType="vm:PointCompareViewModel"
+        Title="{Binding Title}"
+        Width="1100" Height="760" MinWidth="780" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <Window.Styles>
+    <Style Selector="TextBlock.error">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Opacity" Value="0.65" />
+    </Style>
+  </Window.Styles>
+
+  <!-- 화면 3(설계 8장): ① 시점 ② undo 안내·경고 ③ 차이 ④ 만들어진 DML -->
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" RowSpacing="10">
+    <StackPanel Grid.Row="0" Spacing="6">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="기준 시점" VerticalAlignment="Center" />
+        <ComboBox x:Name="PointBox" ItemsSource="{Binding Points}" SelectedItem="{Binding SelectedPoint}" MinWidth="420"
+                  AutomationProperties.Name="기준 시점" />
+        <TextBox x:Name="CustomBox" Text="{Binding CustomText}" IsVisible="{Binding IsCustom}" Width="220"
+                 PlaceholderText="시점 번호 또는 yyyy-MM-dd HH:mm:ss" AutomationProperties.Name="시각 직접 지정" />
+        <ComboBox x:Name="TableBox" ItemsSource="{Binding Tables}" SelectedItem="{Binding SelectedTable}" IsVisible="{Binding HasManyTables}"
+                  MinWidth="200" AutomationProperties.Name="테이블" />
+        <Button x:Name="CompareButton" Content="비교" Classes="accent" IsEnabled="{Binding CanCompare}" />
+        <Button x:Name="WidenButton" Content="이 커밋 묶음 전체 보기" IsVisible="{Binding CanWidenToGroup}" IsEnabled="{Binding CanCompare}" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <TextBlock x:Name="CommitLine" Classes="hint" Text="{Binding CommitText}" />
+        <TextBlock Classes="hint" Text="{Binding Connection, StringFormat='접속 {0}'}" />
+        <TextBlock x:Name="RangeLine" Classes="hint" Text="{Binding RangeText}" />
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel Grid.Row="1" Spacing="4">
+      <TextBlock x:Name="NotesText" Text="{Binding Notes}" TextWrapping="Wrap" />
+      <TextBlock x:Name="ErrorLine" Classes="error" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+      <Button x:Name="OpenRollbackButton" Content="원복 스크립트 열기" IsVisible="{Binding CanOpenRollbackScript}" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="16">
+      <TextBlock x:Name="CountsLine" Text="{Binding CountsText}" VerticalAlignment="Center" />
+      <CheckBox x:Name="ConflictBox" Content="충돌 행도 되돌리기" IsChecked="{Binding IncludeConflicts}" />
+    </StackPanel>
+
+    <Grid Grid.Row="3" RowDefinitions="Auto,*,Auto,*" RowSpacing="4">
+      <TextBlock Grid.Row="0" Classes="hint" Text="{Binding RowsHeader}" />
+      <Border Grid.Row="1" BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="70,140,140,*,*,*" Margin="6,2">
+            <TextBlock Grid.Column="0" Classes="hint" Text="구분" />
+            <TextBlock Grid.Column="1" Classes="hint" Text="키" />
+            <TextBlock Grid.Column="2" Classes="hint" Text="열" />
+            <TextBlock Grid.Column="3" Classes="hint" Text="기준 시점" />
+            <TextBlock Grid.Column="4" Classes="hint" Text="커밋 직후" />
+            <TextBlock Grid.Column="5" Classes="hint" Text="지금" />
+          </Grid>
+          <ListBox x:Name="RowList" ItemsSource="{Binding Rows}" AutomationProperties.Name="바뀐 행">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:CompareRowItem">
+                <Grid ColumnDefinitions="70,140,140,*,*,*">
+                  <TextBlock Grid.Column="0" Text="{Binding Kind}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Key}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Text="{Binding Column}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="3" Text="{Binding Base}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="4" Text="{Binding Commit}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="5" Text="{Binding Now}" TextTrimming="CharacterEllipsis" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+      <TextBlock Grid.Row="2" Classes="hint" Text="만들어진 DML" />
+      <Border Grid.Row="3" BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+        <se:SqlCodeView x:Name="DmlView" Text="{Binding DmlText}" />
+      </Border>
+    </Grid>
+
+    <TextBlock Grid.Row="4" x:Name="StatusLine" Text="{Binding StatusText}" TextWrapping="Wrap" AutomationProperties.Name="상태" />
+
+    <StackPanel Grid.Row="5" Spacing="8">
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="OpenScriptButton" Content="스크립트를 새 편집기에 열기" />
+        <Button x:Name="ApplyButton" Content="반영(커밋 안 함)" Classes="accent" IsEnabled="{Binding CanApply}" />
+        <Button x:Name="CloseButton" Content="취소" IsCancel="True" />
+      </StackPanel>
+    </StackPanel>
+  </Grid>
+</Window>
