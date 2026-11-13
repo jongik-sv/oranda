@@ -60,11 +60,9 @@ public sealed class OracleRollbackChannelTests : IAsyncDisposable
         await _session.CommandGate.EnterAsync(CancellationToken.None); // 호출자(실행 엔진)가 쥔 잠금
         var channel = OracleRollbackChannel.Locked(_session);
 
-        var send = channel.ExecuteAsync("SAVEPOINT ORANDA$RB", CancellationToken.None);
-        var finished = await Task.WhenAny(send, Task.Delay(TimeSpan.FromSeconds(5)));
-
-        Assert.Same(send, finished); // 잠금을 다시 기다리지 않고 바로 드라이버로 간다(열지 않은 연결이라 실패)
-        await Assert.ThrowsAsync<RollbackChannelException>(() => send);
+        // 잠금을 다시 기다리지 않고 바로 드라이버로 간다(열지 않은 연결이라 실패). 기다리면 5초 뒤 TimeoutException 으로 시험이 실패한다.
+        await Assert.ThrowsAsync<RollbackChannelException>(
+            () => channel.ExecuteAsync("SAVEPOINT ORANDA$RB", CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)));
         _session.CommandGate.Release();
     }
 
