@@ -3,6 +3,8 @@ using Oranda.App.Features.GridEdit;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
+using Oranda.Core.Rollback;
+using Oranda.Core.Rollback.Compare;
 using Oranda.Core.Sessions;
 using Oranda.Language.Editing;
 
@@ -126,37 +128,35 @@ public static class FlashbackPlanner
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(now);
         ArgumentNullException.ThrowIfNull(past);
-        var then = new Dictionary<string, object?[]>(StringComparer.Ordinal);
-        foreach (var p in past)
-        {
-            then[FlashbackDiff.KeyText(target.KeyOf(p))] = p;
-        }
+
+        // G1(설계 8.5): 시점 비교 계획기(두 시점: 그때 = 기준, 지금) 위의 얇은 어댑터. 범위가 고른 행이라 되돌림만 쓰고, 그때 없던 행(지움)은 건너뜀으로 센다.
+        var table = new RollbackTable(target.Table, [.. target.Names.Select(n => new RollbackColumn(n, string.Empty, RollbackValueKind.Text))], target.KeyNames);
+        var plan = PointComparePlanner.Classify(table, [.. past.Select(p => new CompareSnapshotRow(p))], null,
+            [.. now.Select(x => new CompareSnapshotRow(x.Values))], target.EditablePositions, SameAsGrid.Instance, FlashbackDiff.KeyText);
+        var byKey = plan.Rows.ToDictionary(r => FlashbackDiff.KeyText(r.Key), StringComparer.Ordinal);
 
         var changes = new List<RowChange>();
         int unchanged = 0, missing = 0;
         foreach (var (row, values) in now)
         {
-            if (!then.TryGetValue(FlashbackDiff.KeyText(target.KeyOf(values)), out var old))
+            if (!byKey.TryGetValue(FlashbackDiff.KeyText(target.KeyOf(values)), out var r) || r.Kind == CompareKind.Remove)
             {
                 missing++;
                 continue;
             }
 
-            var set = new Dictionary<string, object?>(StringComparer.Ordinal);
-            var seen = new Dictionary<string, object?>(StringComparer.Ordinal);
-            foreach (var p in target.EditablePositions)
-            {
-                if (!FlashbackDiff.SameValue(values[p], old[p]))
-                {
-                    set[target.Names[p]] = old[p] is DBNull ? null : old[p];
-                    seen[target.Names[p]] = values[p] is DBNull ? null : values[p];
-                }
-            }
-
-            if (set.Count == 0)
+            if (r.Kind != CompareKind.Revert)
             {
                 unchanged++;
                 continue;
+            }
+
+            var set = new Dictionary<string, object?>(StringComparer.Ordinal);
+            var seen = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var p in r.ChangedColumns)
+            {
+                set[target.Names[p]] = r.Base![p] is DBNull ? null : r.Base[p];
+                seen[target.Names[p]] = values[p] is DBNull ? null : values[p];
             }
 
             var key = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -169,6 +169,16 @@ public static class FlashbackPlanner
         }
 
         return new FlashbackRestorePlan(changes, unchanged, missing);
+    }
+
+    /// <summary>그리드와 같은 값 같음(<see cref="FlashbackDiff.SameValue"/>).</summary>
+    private sealed class SameAsGrid : IEqualityComparer<object?>
+    {
+        public static SameAsGrid Instance { get; } = new();
+
+        public new bool Equals(object? x, object? y) => FlashbackDiff.SameValue(x, y);
+
+        public int GetHashCode(object? obj) => 0;
     }
 }
 
