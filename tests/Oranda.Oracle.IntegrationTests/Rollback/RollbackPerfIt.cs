@@ -51,7 +51,7 @@ public sealed class RollbackPerfIt(OracleFreeFixture db, ITestOutputHelper outpu
         _ledger = new RollbackLedger(_store, _bus);
         var metadata = _metadata = new OracleMetadataProvider(new MemoryMetadataCache(), _bus, Timeout.InfiniteTimeSpan);
         // 상한을 표 행 수와 같게 둔다(예상 행 수 > 상한일 때만 만들지 않는다). 기본값이 바뀌어도 이 시험은 10만 행을 다 담는다.
-        var engine = new RollbackCaptureEngine(_ledger, () => new RollbackSettings { MaxRowsPerStatement = BigRows }, metadata, _store);
+        var engine = new RollbackCaptureEngine(_ledger, () => new RollbackSettings { MaxRowsPerStatement = BigRows }, metadata, _store, events: _bus);
         _manager = new OracleSessionManager(_bus, engine, _ledger);
         _exec = new OracleExecutionService(new ExecutionPolicy(), new RecordingRollbackInteraction(), _bus, null, pageSize: 500,
             analyzer: new DmlShapeAnalyzer());

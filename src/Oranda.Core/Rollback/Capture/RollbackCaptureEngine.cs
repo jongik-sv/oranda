@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using Oranda.Core.Connection;
+using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Execution.Providers;
 using Oranda.Core.Metadata;
@@ -31,21 +32,56 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
     private readonly IRollbackStore? _store;
     private readonly TimeProvider _time;
     private readonly ConcurrentDictionary<Guid, int> _pointMethod = new();
+    private readonly RollbackTableCache<LoadedTable>? _tables;
+    private readonly RollbackTableCache<IReadOnlyList<string>> _sideEffects;
+
+    /// <summary>표 정보 캐시 수명. 다른 PC·PL/SQL 안의 DDL 은 무효화 알림이 오지 않으므로 짧게 둔다(그리드 반영은 몇 초 안에 몰린다).</summary>
+    internal static readonly TimeSpan TableTtl = TimeSpan.FromSeconds(60);
+
+    /// <summary>트리거·CASCADE 안내 캐시 수명(틀려도 확인 창 안내 문구에만 영향).</summary>
+    internal static readonly TimeSpan SideEffectsTtl = TimeSpan.FromMinutes(5);
 
     /// <param name="ledger">원장(마무리에서 문장 기록을 넘긴다)</param>
     /// <param name="settings">지금 설정(실행할 때마다 읽는다)</param>
     /// <param name="metadata">표 정보·시노님 풀기(준비 단계, 명령 잠금 밖). null 이면 원복 스크립트를 만들지 않는다</param>
     /// <param name="store">묶음 저장소. null 이거나 <see cref="IRollbackStore.CanStoreScripts"/> 가 거짓이면 「안전한 저장소 없음」</param>
     /// <param name="time">시각(시험용)</param>
+    /// <param name="events">
+    /// DDL·변경 감지(<see cref="MetadataInvalidated"/>)와 세션 닫힘·끊김을 받을 버스. 있으면 소유자를 적은 직접 참조 표의 정보(열·PK·안내)를
+    /// <see cref="TableTtl"/> 동안 캐시하고 DDL 알림 때 모두 버린다(RB-90: 그리드 한 행마다 되풀이하던 시노님 풀기·표 정보 왕복을 줄인다).
+    /// null 이면 표 정보는 캐시하지 않고(시노님 풀기를 문장마다 서버에 묻는다), 틀려도 안내 문구에만 영향이 가는 트리거·CASCADE 찾기만 캐시한다.
+    /// </param>
     public RollbackCaptureEngine(IRollbackLedger ledger, Func<RollbackSettings> settings, IMetadataProvider? metadata = null,
-                                 IRollbackStore? store = null, TimeProvider? time = null)
+                                 IRollbackStore? store = null, TimeProvider? time = null, IEventBus? events = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _metadata = metadata;
         _store = store;
         _time = time ?? TimeProvider.System;
+        _sideEffects = new RollbackTableCache<IReadOnlyList<string>>(_time, SideEffectsTtl);
+        if (events is not null)
+        {
+            var tables = _tables = new RollbackTableCache<LoadedTable>(_time, TableTtl);
+            // 다른 계정 접속(DbKey 가 다름)의 DDL 도 이 계정이 시노님으로 쓰는 표를 바꿀 수 있다: DB 를 가리지 않고 모두 버린다(드문 일이다).
+            events.Subscribe<MetadataInvalidated>(this, _ =>
+            {
+                tables.InvalidateAll();
+                _sideEffects.InvalidateAll();
+            });
+            events.Subscribe<SessionClosed>(this, e => Forget(e.SessionId));
+            events.Subscribe<SessionBroken>(this, e => Forget(e.SessionId));
+        }
     }
+
+    private void Forget(Guid sessionId)
+    {
+        _tables?.Forget(sessionId);
+        _sideEffects.Forget(sessionId);
+    }
+
+    /// <summary>준비 단계가 읽은 표와 PK 가 켜져 있는지(꺼진 PK 는 중복이 있을 수 있어 한 행 판정에 쓰지 않는다).</summary>
+    private sealed record LoadedTable(RollbackTable Table, bool PrimaryKeyEnabled);
 
     /// <summary><c>COUNT(*)</c> 예상 행 수의 제한 시간(RD-11, 변경 일지와 같은 값).</summary>
     public TimeSpan CountTimeout { get; init; } = ChangeCapture.Timeout;
@@ -100,7 +136,8 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
         var settings = Settings;
         try
         {
-            var table = await LoadTableAsync(s, shape, gatedChannel, dialect, ct).ConfigureAwait(false);
+            var loaded = await LoadTableAsync(s, shape, gatedChannel, dialect, ct).ConfigureAwait(false);
+            var table = loaded?.Table;
             if (table is null)
             {
                 return Offer(RollbackOffer.NotApplicable(NotCreatedReason.NotTarget, "뷰") with { Shape = shape });
@@ -121,7 +158,10 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
                     : $"큰 열({string.Join(", ", large.Select(c => c.DataType).Distinct())})이 있어 일부 행은 원복 문장을 만들 수 없습니다");
             }
 
-            var estimated = shape.Verb == DmlVerb.InsertValues ? 1 : await CountAsync(shape, table, request.Binds, gatedChannel, ct).ConfigureAwait(false);
+            // 한 행 INSERT 와 키로 한 행만 고르는 문장(그리드 반영 등)은 예상 1행: COUNT(*) 왕복을 하지 않는다(RB-90).
+            var estimated = shape.Verb == DmlVerb.InsertValues || SingleRowKey.Matches(shape.WhereText, table, loaded!.PrimaryKeyEnabled)
+                ? 1
+                : await CountAsync(shape, table, request.Binds, gatedChannel, ct).ConfigureAwait(false);
             var over = estimated > settings.MaxRowsPerStatement;
             return Offer(new RollbackOffer(true, NotCreatedReason.None)
             {
@@ -317,8 +357,18 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
         return new CapturePlan(NotCreatedReason.None) { Table = offer.Table };
     }
 
-    private async Task<RollbackTable?> LoadTableAsync(ISession s, DmlShape shape, IRollbackChannel channel, IRollbackDialect dialect, CancellationToken ct)
+    private async Task<LoadedTable?> LoadTableAsync(ISession s, DmlShape shape, IRollbackChannel channel, IRollbackDialect dialect, CancellationToken ct)
     {
+        // 소유자를 적은 직접 참조만 캐시한다: 소유자 없는 이름은 세션의 현재 스키마·시노님에 따라 가리키는 표가 바뀔 수 있다.
+        RollbackTableKey? key = shape.Owner is { } writtenOwner ? new RollbackTableKey(s.Id, writtenOwner, shape.Name!, shape.Verb == DmlVerb.Delete) : null;
+        if (key is { } hit && _tables is not null && _tables.TryGet(hit, out var cached))
+        {
+            return cached;
+        }
+
+        var tableGeneration = _tables?.Generation ?? 0;
+        var noticeGeneration = _sideEffects.Generation;
+
         var metadata = _metadata!;
         var owner = shape.Owner ?? s.Server.SessionUser ?? s.Profile.User;
         var written = new DbObjectRef(owner, shape.Name!, "TABLE");
@@ -344,16 +394,37 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
                 IsInvisible = c.IsInvisible,
             })
             .ToList();
-        var keys = info.Constraints.FirstOrDefault(c => c.Kind == ConstraintKind.PrimaryKey)?.Columns ?? [];
+        var primaryKey = info.Constraints.FirstOrDefault(c => c.Kind == ConstraintKind.PrimaryKey);
+        var keys = primaryKey?.Columns ?? [];
         var table = new DbObjectRef(info.Table.Owner, info.Table.Name, "TABLE");
-        return new RollbackTable(table, columns, keys)
+        IReadOnlyList<string>? found = null;
+        if (key is not { } noticeKey || !_sideEffects.TryGet(noticeKey, out var sideEffects))
         {
-            SideEffects = await SideEffectsAsync(table, shape.Verb, channel, dialect, ct).ConfigureAwait(false),
-        };
+            found = await SideEffectsAsync(table, shape.Verb, channel, dialect, ct).ConfigureAwait(false);
+            sideEffects = found ?? [];
+            if (found is not null && key is { } putKey)
+            {
+                _sideEffects.Put(putKey, found, noticeGeneration);
+            }
+        }
+        else
+        {
+            found = sideEffects;
+        }
+
+        var loaded = new LoadedTable(new RollbackTable(table, columns, keys) { SideEffects = sideEffects }, primaryKey?.IsEnabled ?? false);
+        // 시노님을 거쳐 풀린 표와 안내를 찾지 못한 표는 표 캐시에 넣지 않는다(시노님은 다른 곳에서 다시 가리킬 수 있고, 실패한 안내는 다시 찾아야 한다).
+        var direct = string.Equals(resolved.Owner, written.Owner, StringComparison.Ordinal) && string.Equals(resolved.Name, written.Name, StringComparison.Ordinal);
+        if (key is { } tableKey && direct && found is not null)
+        {
+            _tables?.Put(tableKey, loaded, tableGeneration);
+        }
+
+        return loaded;
     }
 
-    /// <summary>트리거·ON DELETE CASCADE 안내(설계 10.1). 찾지 못해도 실행은 계속한다.</summary>
-    private static async Task<IReadOnlyList<string>> SideEffectsAsync(DbObjectRef table, DmlVerb verb, IRollbackChannel channel, IRollbackDialect dialect,
+    /// <summary>트리거·ON DELETE CASCADE 안내(설계 10.1). 찾지 못해도 실행은 계속한다(null: 캐시하지 않는다).</summary>
+    private static async Task<IReadOnlyList<string>?> SideEffectsAsync(DbObjectRef table, DmlVerb verb, IRollbackChannel channel, IRollbackDialect dialect,
                                                                       CancellationToken ct)
     {
         if (dialect.SideEffectsSql is not { } sql)
@@ -404,7 +475,7 @@ public sealed class RollbackCaptureEngine : IRollbackCapture
         }
         catch (Exception)
         {
-            return [];
+            return null;
         }
     }
 

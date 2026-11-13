@@ -19,10 +19,11 @@ namespace Oranda.App.Shell.Composition;
 
 /// <summary>원복 캡처 엔진 등록(RB-02 <see cref="RollbackCaptureEngine"/>). 설정은 실행할 때마다 <see cref="SettingsService.Current"/> 에서 읽는다.</summary>
 [OrandaService(typeof(IRollbackCapture))]
-internal sealed class AppRollbackCapture(IRollbackLedger ledger, SettingsService settings, IMetadataProvider metadata, IRollbackStore? store = null)
+internal sealed class AppRollbackCapture(IRollbackLedger ledger, SettingsService settings, IMetadataProvider metadata, IEventBus events,
+                                         IRollbackStore? store = null)
     : IRollbackCapture
 {
-    private readonly RollbackCaptureEngine _inner = new(ledger, () => settings.Current.Rollback, metadata, store);
+    private readonly RollbackCaptureEngine _inner = new(ledger, () => settings.Current.Rollback, metadata, store, events: events);
 
     public Task<ConfirmExtras> PrepareAsync(RollbackRequest request, IRollbackChannel gatedChannel, IRollbackDialect dialect, CancellationToken ct) =>
         _inner.PrepareAsync(request, gatedChannel, dialect, ct);
