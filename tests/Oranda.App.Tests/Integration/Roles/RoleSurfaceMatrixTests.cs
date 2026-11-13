@@ -293,7 +293,7 @@ public sealed class RoleSurfaceMatrixTests
             Assert.Equal(a.TopMenus, b.TopMenus);
             Assert.Equal(a.StatusTypes.Order(), b.StatusTypes.Order());
             Assert.Equal(a.StartupTasks.Order(), b.StartupTasks.Order());
-            Assert.Equal(13, a.StartupTasks.Count);
+            Assert.Equal(14, a.StartupTasks.Count);
             Assert.Equal(10, a.TopMenus.Count); // 「모니터」 가 없다
             Assert.True(a.RegistryCommands.Count < ShellTestHelpers.AppContributions.Commands.Count);
         }
@@ -314,7 +314,7 @@ public sealed class RoleSurfaceMatrixTests
         Assert.Equal(OptInItems.Without(all.Panels).Count(), s.RegistryPanels.Count);
         Assert.Equal(11, s.TopMenus.Count);
         Assert.Equal(10, s.StatusTypes.Count);
-        Assert.Equal(18, s.StartupTasks.Count);
+        Assert.Equal(19, s.StartupTasks.Count);
         Assert.Equal(OptInItems.StartupTaskNames.Order(StringComparer.Ordinal), s.SkippedTasks.Order(StringComparer.Ordinal));
         Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());
         Assert.False(s.GateReadOnlyRole);

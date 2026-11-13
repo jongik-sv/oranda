@@ -37,12 +37,13 @@ namespace Oranda.App.Tests.Features.Roles
     /// </summary>
     public sealed class StartupFilterTests
     {
-        /// <summary>features 없음 = 지금과 같은 시작 작업 16개(조사 1.8, TSK-14-04 가 SessionsAutoShow, 설정 이력·캐시 수정이 MetadataCachePruner 를 더함).</summary>
+        /// <summary>features 없음 = 지금과 같은 시작 작업 16개(조사 1.8, TSK-14-04 가 SessionsAutoShow, 설정 이력·캐시 수정이 MetadataCachePruner 를, RB-22 가 RollbackMaintenance 를 더함).</summary>
         private static readonly string[] AllStartupTasks =
         [
             "EditorDiagnosticsStartup", "MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup",
             "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
             "UpdateStartup", "HistoryRecorder", "MetadataCachePruner", "ChangeJournalRecorder", "PlSqlWarmUpTask", "SessionsAutoShow",
+            "RollbackMaintenance", // RB-22: 되돌리기 기록은 기능·역할과 상관없이 남아 정리도 늘 돈다
             "AiContextKeys", "AgentBridgeStartup",
         ];
 

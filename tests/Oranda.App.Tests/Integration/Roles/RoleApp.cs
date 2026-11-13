@@ -161,13 +161,14 @@ internal static class PrdMatrix
     /// <summary>
     /// 시작 작업 16개 = a507d81 의 14개 + 그 뒤 더한 공통 2개: 「세션」 도구 창 자동 보이기(<c>SessionsAutoShow</c>, d02a414 TSK-14-04, 접속 = 공통)·
     /// 메타데이터 캐시 보관 일수 정리(<c>MetadataCachePruner</c>, 6559bc0, Platform 저장소 = 공통).
+    /// 그 뒤 공통 1개: 되돌리기 묶음 기동 정리(<c>RollbackMaintenance</c>, RB-22. 되돌리기 기록은 기능·역할과 상관없이 남는다).
     /// </summary>
     public static readonly string[] AllTasks =
     [
         "EditorDiagnosticsStartup", "MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup",
         "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
         "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "PlSqlWarmUpTask",
-        "SessionsAutoShow", "MetadataCachePruner",
+        "SessionsAutoShow", "MetadataCachePruner", "RollbackMaintenance",
         "AiContextKeys", "AgentBridgeStartup", // aiTuning(2026-10-29 기본 켬)
     ];
 
