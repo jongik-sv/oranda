@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Statements"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              x:Class="Oranda.App.Features.MyBatisWorkspace.Statements.MyBatisStatementsView"
              x:DataType="vm:MyBatisStatementsViewModel">
   <UserControl.Styles>
@@ -109,10 +110,11 @@
           <TextBlock Text="{Binding ChangedFilterText}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
         </ToggleButton>
       </StackPanel>
-      <DockPanel>
-        <!-- 머리글 줄: 공용 격자(Styles/GridC)와 같은 머리글. 칸 너비는 아래 줄 서식과 같은 값을 쓴다(가상화 목록이라 공유 너비 대신 고정). -->
+      <DockPanel ctl:TableColumns.Scope="MyBatis.Statements">
+        <!-- 머리글 줄: 공용 격자(Styles/GridC)와 같은 머리글. 칸 너비는 아래 줄 서식과 같은 값을 쓴다(가상화 목록이라 공유 너비 대신 고정).
+             머리글 경계를 끌어 열 폭을 바꾼다(TableColumns, 머리글이 정본이고 줄이 따라간다). -->
         <Border DockPanel.Dock="Top" Classes="grid-c-header" IsVisible="{Binding !IsModeActive}">
-          <Grid ColumnDefinitions="40,*,48">
+          <Grid x:Name="HeaderGrid" ctl:TableColumns.Header="True" ColumnDefinitions="40,*,48">
             <Border Classes="grid-c-cell"><TextBlock Text="종류" TextTrimming="CharacterEllipsis" /></Border>
             <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="id" /></Border>
             <Border Grid.Column="2" Classes="grid-c-cell" ToolTip.Tip="● 저장 안 한 고침 · ○ xml 에 저장함(연 때와 다름) · 붉은 숫자 = 조합 오류 수 · 흐린 숫자 = sql 조각을 쓰는 곳 수">
@@ -133,7 +135,7 @@
                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
                   </StackPanel>
                 </Border>
-                <Grid IsVisible="{Binding !IsGroup}" ColumnDefinitions="40,*,48" Opacity="{Binding RowOpacity}" ToolTip.Tip="{Binding ToolTipText}">
+                <Grid IsVisible="{Binding !IsGroup}" ctl:TableColumns.Row="True" ColumnDefinitions="40,*,48" Opacity="{Binding RowOpacity}" ToolTip.Tip="{Binding ToolTipText}">
                   <Border Classes="grid-c-cell row-head" Padding="0">
                     <Panel>
                       <Border Classes="open-bar" Classes.open="{Binding IsOpen}" Classes.current="{Binding IsCurrent}" Width="3" HorizontalAlignment="Left" />

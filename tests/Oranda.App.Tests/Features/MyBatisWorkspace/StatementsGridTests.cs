@@ -12,6 +12,7 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.Testing.MyBatis;
+using Oranda.App.Tests.Shell.Controls;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -101,6 +102,27 @@ public sealed class StatementsGridTests : IDisposable
         }
         finally
         {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Columns_follow_the_header_drag() => Ui.Run(async () =>
+    {
+        var (_, _, view, window) = await ShowAsync(WriteEmp());
+        try
+        {
+            var header = view.FindControl<Grid>("HeaderGrid")!;
+            var list = view.FindControl<ListBox>("Tree")!;
+            Assert.NotEmpty(TableColumnsDrag.Rows(list)); // 묶음 머리 줄은 Grid 가 아니고 항목 줄만 따라간다
+            TableColumnsDrag.Drag(window, header, 0, 20); // 종류 칸 40 → 60
+            Assert.Equal(60, header.ColumnDefinitions[0].ActualWidth, 1);
+            Assert.All(TableColumnsDrag.Rows(list), r => Assert.Equal(60, r.ColumnDefinitions[0].ActualWidth, 1));
+            Assert.All(TableColumnsDrag.Rows(list), r => Assert.Equal(header.ColumnDefinitions[2].ActualWidth, r.ColumnDefinitions[2].ActualWidth, 1));
+        }
+        finally
+        {
+            TableColumnsDrag.ResetAll(window);
             window.Close();
         }
     });

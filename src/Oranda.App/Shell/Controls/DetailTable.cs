@@ -68,6 +68,7 @@ public sealed class DetailTable : UserControl
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly Border _statusHost = new() { Classes = { "panel-status" } };
     private readonly Dictionary<IReadOnlyList<object?>, TextBlock> _markers = new(ReferenceEqualityComparer.Instance);
+    private readonly DockPanel _body = new();
     private readonly Border _headerHost = new();
     private readonly Border _probeHost = new(); // 전체 행 기준 칸 너비를 고정하는 숨은 줄(GridC.Probe)
     private readonly List<ListBoxItem> _items = [];
@@ -85,7 +86,7 @@ public sealed class DetailTable : UserControl
         root.Children.Add(_scroll);
         Content = root;
 
-        var body = new DockPanel();
+        var body = _body;
         DockPanel.SetDock(_headerHost, Avalonia.Controls.Dock.Top);
         body.Children.Add(_headerHost);
         DockPanel.SetDock(_probeHost, Avalonia.Controls.Dock.Top);
@@ -396,6 +397,8 @@ public sealed class DetailTable : UserControl
         _list.ItemsSource = _items.ToList();
         var titles = new List<string> { string.Empty };
         titles.AddRange(columns);
+        // 머리글 경계를 끌어 칸 폭을 바꾼다(TableColumns). 폭은 열 이름 묶음마다 기억한다(같은 열의 표 = 같은 폭). 머리글을 붙이기 전에 범위를 정한다.
+        TableColumns.SetScope(_body, "Detail." + string.Join("|", columns));
         _headerHost.Child = GridC.Header(titles, Group);
 
         // 칸 너비는 처음부터 전체 행 기준: 칸마다 글이 가장 넓은 행으로 숨은 줄을 만들어 같은 묶음에 참여시킨다(스크롤해도 안 바뀐다).

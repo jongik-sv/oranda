@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dc="using:Oranda.App.Features.DataCopy"
+        xmlns:ctl="using:Oranda.App.Shell.Controls"
         x:Class="Oranda.App.Features.DataCopy.TableFinderWindow"
         x:DataType="dc:TableFinderViewModel"
         Title="테이블 찾기"
@@ -43,9 +44,10 @@
       </StackPanel>
     </DockPanel>
     <Border Classes="grid-frame" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1">
-      <DockPanel>
+      <!-- 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns, 머리글이 정본이고 줄이 따라간다). -->
+      <DockPanel ctl:TableColumns.Scope="DataCopy.TableFinder">
         <Border DockPanel.Dock="Top" Classes="grid-header">
-          <Grid ColumnDefinitions="34,240,70,*">
+          <Grid x:Name="HeaderGrid" ctl:TableColumns.Header="True" ColumnDefinitions="34,240,70,*">
             <CheckBox Grid.Column="0" HorizontalAlignment="Center" IsThreeState="False" IsChecked="{Binding AllVisibleChecked, Mode=TwoWay}"
                       IsEnabled="{Binding CanCheckAll}" ToolTip.Tip="보이는 테이블 모두 고르기·풀기" AutomationProperties.Name="보이는 테이블 모두 고르기" />
             <TextBlock Grid.Column="1" Padding="6,0" Text="이름" />
@@ -58,7 +60,7 @@
                    AutomationProperties.Name="찾은 테이블">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="dc:TableFinderRow">
-                <Grid ColumnDefinitions="34,240,70,*" Opacity="{Binding IsAdded, Converter={x:Static dc:TableFinderWindow.AddedOpacity}}">
+                <Grid ctl:TableColumns.Row="True" ColumnDefinitions="34,240,70,*" Opacity="{Binding IsAdded, Converter={x:Static dc:TableFinderWindow.AddedOpacity}}">
                   <CheckBox Grid.Column="0" HorizontalAlignment="Center" IsChecked="{Binding IsChecked, Mode=TwoWay}" IsEnabled="{Binding CanCheck}"
                             AutomationProperties.Name="{Binding Name}" />
                   <!-- 긴 이름은 칸 안에서 말줄임(가로 StackPanel 은 폭을 묶지 않아 유형 칸을 덮었다). 「이미 있음」은 칸 오른쪽. -->

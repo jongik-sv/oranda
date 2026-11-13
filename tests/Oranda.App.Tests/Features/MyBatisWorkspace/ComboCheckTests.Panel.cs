@@ -9,6 +9,7 @@ using Oranda.App.Tests.Features.MyBatisWorkspace.Fakes;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.MyBatis;
 using Oranda.Testing.MyBatis;
+using Oranda.App.Tests.Shell.Controls;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -103,6 +104,37 @@ public partial class ComboCheckTests : IDisposable
         SqlInlineText.SetSql(box, null);
         Assert.Empty(box.Inlines!);
         window.Close();
+    });
+
+    [Fact]
+    public Task Combo_table_columns_follow_the_header_drag() => HeadlessHost.Run(async () =>
+    {
+        var vm = Panel();
+        await vm.CheckAsync(Session(MockupUpdateEmpSal), Id);
+        var view = new MyBatisCombosView { DataContext = vm };
+        var window = new Window { Content = view, Width = 1900, Height = 420 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            var header = view.FindControl<Grid>("HeaderGrid")!;
+            var list = header.FindAncestorOfType<DockPanel>()!.GetVisualDescendants().OfType<ListBox>().First();
+            Assert.NotEmpty(TableColumnsDrag.Rows(list));
+            // 조건 칸(Auto, 조건 수 × 96)은 끌 수 없고 #·결과 칸만 끈다.
+            Assert.Equal([0, 2], header.Children.OfType<Oranda.App.Shell.Controls.TableColumnGrip>().Select(g => g.Boundary).Order());
+            TableColumnsDrag.Drag(window, header, 2, 30); // 결과 칸 190 → 220
+            Assert.Equal(220, header.ColumnDefinitions[2].ActualWidth, 1);
+            Assert.All(TableColumnsDrag.Rows(list), r =>
+            {
+                Assert.Equal(220, r.ColumnDefinitions[2].ActualWidth, 1);
+                Assert.Equal(header.ColumnDefinitions[1].ActualWidth, r.ColumnDefinitions[1].ActualWidth, 1);
+            });
+        }
+        finally
+        {
+            TableColumnsDrag.ResetAll(window);
+            window.Close();
+        }
     });
 
     // ORANDA_RENDER_DIR 가 있을 때만 조합 검사 표(한 줄 SQL 색·고른 줄)와 오른쪽 칸을 라이트·다크 PNG 로 뽑는다(렌더 점검용).

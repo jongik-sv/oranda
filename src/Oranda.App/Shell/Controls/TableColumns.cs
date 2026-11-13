@@ -13,7 +13,8 @@ namespace Oranda.App.Shell.Controls;
 /// 줄 템플릿 Grid 에 <c>ctl:TableColumns.Row="True"</c>. 머리글과 줄의 <c>ColumnDefinitions</c> 는 같은 개수로 둔다.
 /// <list type="bullet">
 /// <item>머리글의 픽셀 열(<c>124</c>)은 오른쪽 경계를 끌어 폭을 바꾼다. 최소 폭 = 그 열의 <c>MinWidth</c>(없으면 24).</item>
-/// <item>마지막 <c>*</c> 열은 남은 폭을 받는다. 그 열의 오른쪽 경계를 끌면 바로 뒤 픽셀 열이 반대로 바뀐다. Auto·다른 * 열은 끌 수 없다.</item>
+/// <item>마지막 <c>*</c> 열은 남은 폭을 받는다. 그 열의 오른쪽 경계를 끌면 바로 뒤 픽셀 열이 반대로 바뀐다. 다른 * 열·묶음 없는 Auto 열은 끌 수 없다.</item>
+/// <item><c>SharedSizeGroup</c> 을 단 Auto 열(내용 폭 표, <c>Styles/GridC</c>)은 처음엔 내용 폭이고, 끌면 그 폭(픽셀)이 된다. 두 번 누르기·「열 폭 처음으로」 = 다시 내용 폭.</item>
 /// <item>두 번 누르면 그 열은 처음 폭(XAML 값)으로 돌아간다. 머리글 오른쪽 클릭 「열 폭 처음으로」 = 모든 열.</item>
 /// <item>폭은 화면 키마다 앱 데이터 폴더의 <c>table-columns.json</c> 에 기본과 다른 열만 남는다(<c>plan-columns.json</c> 과 같은 관례: 손상·IO 오류 = 기본 폭).</item>
 /// </list>
@@ -178,7 +179,11 @@ public static class TableColumns
     }
 }
 
-/// <summary>한 표 범위의 열 폭. 머리글 Grid 의 첫 등록이 열의 기본·최소 폭을 정한다. UI 스레드에서 쓴다.</summary>
+/// <summary>
+/// 한 표 범위의 열 폭. 머리글 Grid 의 첫 등록이 열의 기본·최소 폭을 정한다(머리글의 열 개수가 바뀌면 다시 정한다). UI 스레드에서 쓴다.
+/// 픽셀 열의 폭은 늘 값이 있고, 공유 묶음 Auto 열은 끌기 전에는 값이 없다(NaN = 내용 폭, <c>SharedSizeGroup</c> 그대로). Auto 열을 끌면 그 열은 머리글·줄 모두 픽셀이 되고
+/// 공유 묶음에서 빠진다(숨은 폭 재기 줄이 묶음에 남으면 내용 폭 아래로 줄지 않는다). 처음 폭으로 되돌리면 Auto 와 묶음 이름이 돌아온다.
+/// </summary>
 internal sealed class TableColumnState(string scopeKey)
 {
     /// <summary>폭의 위쪽 한계(실수로 화면 밖까지 끄는 것을 막는다).</summary>
@@ -194,8 +199,11 @@ internal sealed class TableColumnState(string scopeKey)
     private double[] _defaults = [];
     private double[] _mins = [];
     private double[] _widths = [];
+    private bool[] _auto = [];
+    private string?[] _groups = [];
+    private double[] _caps = [];
 
-    /// <summary>열마다 폭(픽셀 열만, 나머지 NaN).</summary>
+    /// <summary>열마다 폭(픽셀 열·끈 Auto 열만, 나머지 NaN).</summary>
     public IReadOnlyList<double> Widths => _widths;
 
     /// <summary>남은 폭을 받는 열(마지막 * 열). 없으면 -1.</summary>
@@ -209,30 +217,9 @@ internal sealed class TableColumnState(string scopeKey)
         }
 
         _header = header;
-        if (_defaults.Length == 0)
+        if (_defaults.Length != header.ColumnDefinitions.Count)
         {
-            var defs = header.ColumnDefinitions;
-            _defaults = defs.Select(d => d.Width.IsAbsolute ? d.Width.Value : double.NaN).ToArray();
-            _mins = defs.Select(d => d.MinWidth > 0 ? d.MinWidth : DefaultMin).ToArray();
-            _widths = (double[])_defaults.Clone();
-            for (var i = defs.Count - 1; i >= 0; i--)
-            {
-                if (defs[i].Width.IsStar)
-                {
-                    Fill = i;
-                    break;
-                }
-            }
-
-            _key = _scopeKey + "/" + defs.Count.ToString(System.Globalization.CultureInfo.InvariantCulture); // 열 개수가 바뀐 XAML 에 옛 폭이 붙지 않게
-            foreach (var (name, width) in TableColumns.Load(_key))
-            {
-                if (int.TryParse(name, System.Globalization.CultureInfo.InvariantCulture, out var i) && i >= 0 && i < _widths.Length
-                    && !double.IsNaN(_widths[i]) && double.IsFinite(width))
-                {
-                    _widths[i] = Clamp(i, width);
-                }
-            }
+            Init(header.ColumnDefinitions);
         }
 
         AddGrips(header);
@@ -254,6 +241,39 @@ internal sealed class TableColumnState(string scopeKey)
             Apply(row);
         }
     }
+
+    // 머리글의 열 정의로 기본·최소 폭과 끌 수 있는 열을 정하고, 그 열 개수의 저장 폭을 읽는다.
+    private void Init(ColumnDefinitions defs)
+    {
+        _defaults = defs.Select(d => d.Width.IsAbsolute ? d.Width.Value : double.NaN).ToArray();
+        _mins = defs.Select(d => d.MinWidth > 0 ? d.MinWidth : DefaultMin).ToArray();
+        _auto = defs.Select(d => d.Width.IsAuto && d.SharedSizeGroup is not null).ToArray(); // 묶음 없는 Auto 열(내용이 폭을 정하는 칸)은 그대로 끌 수 없다
+        _groups = defs.Select(d => d.Width.IsAuto ? d.SharedSizeGroup : null).ToArray();
+        _widths = (double[])_defaults.Clone();
+        _caps = defs.Select(_ => MaxWidth).ToArray();
+        Fill = -1;
+        for (var i = defs.Count - 1; i >= 0; i--)
+        {
+            if (defs[i].Width.IsStar)
+            {
+                Fill = i;
+                break;
+            }
+        }
+
+        _key = _scopeKey + "/" + defs.Count.ToString(System.Globalization.CultureInfo.InvariantCulture); // 열 개수가 바뀐 XAML 에 옛 폭이 붙지 않게
+        foreach (var (name, width) in TableColumns.Load(_key))
+        {
+            if (int.TryParse(name, System.Globalization.CultureInfo.InvariantCulture, out var i) && i >= 0 && i < _widths.Length
+                && Sizable(i) && double.IsFinite(width))
+            {
+                _widths[i] = Clamp(i, width);
+            }
+        }
+    }
+
+    // 끌 수 있는 열 = 픽셀 열·공유 묶음 Auto 열.
+    private bool Sizable(int column) => !double.IsNaN(_defaults[column]) || _auto[column];
 
     public void AddRow(Grid row)
     {
@@ -282,19 +302,30 @@ internal sealed class TableColumnState(string scopeKey)
             return null;
         }
 
-        if (!double.IsNaN(_widths[boundary]))
+        if (Sizable(boundary))
         {
             return (boundary, 1);
         }
 
-        return boundary == Fill && boundary + 1 < _widths.Length && !double.IsNaN(_widths[boundary + 1]) ? (boundary + 1, -1) : null;
+        return boundary == Fill && boundary + 1 < _widths.Length && Sizable(boundary + 1) ? (boundary + 1, -1) : null;
     }
 
-    public double Get(int column) => _widths[column];
+    /// <summary>열의 지금 폭. 끌기 전 Auto 열은 머리글에 그려진 폭(내용 폭).</summary>
+    public double Get(int column)
+    {
+        if (!double.IsNaN(_widths[column]))
+        {
+            return _widths[column];
+        }
+
+        var actual = _header is { } h && column < h.ColumnDefinitions.Count ? h.ColumnDefinitions[column].ActualWidth : _mins[column];
+        _caps[column] = Math.Max(MaxWidth, actual); // 내용 폭이 위쪽 한계보다 넓은 칸이 끌기 시작에 좁아지며 튀지 않게
+        return actual;
+    }
 
     public void Set(int column, double width)
     {
-        if (double.IsNaN(_widths[column]))
+        if (!Sizable(column) || !double.IsFinite(width))
         {
             return;
         }
@@ -306,32 +337,39 @@ internal sealed class TableColumnState(string scopeKey)
         }
 
         _widths[column] = value;
-        if (_header is not null)
-        {
-            Apply(_header);
-        }
-
-        foreach (var row in _rows)
-        {
-            Apply(row);
-        }
+        ApplyAll();
     }
 
-    public void Reset(int column) => Set(column, _defaults[column]);
+    /// <summary>열을 처음 폭으로: 픽셀 열 = XAML 값, Auto 열 = 다시 내용 폭(공유 묶음).</summary>
+    public void Reset(int column)
+    {
+        if (_auto[column])
+        {
+            if (!double.IsNaN(_widths[column]))
+            {
+                _widths[column] = double.NaN;
+                ApplyAll();
+            }
+
+            return;
+        }
+
+        Set(column, _defaults[column]);
+    }
 
     /// <summary>모든 열을 처음 폭으로(손잡이가 화면 밖으로 밀려 두 번 누를 수 없을 때 머리글 오른쪽 클릭 메뉴로).</summary>
     public void ResetAll()
     {
         for (var i = 0; i < _widths.Length; i++)
         {
-            if (!double.IsNaN(_widths[i]))
+            if (Sizable(i))
             {
-                Set(i, _defaults[i]);
+                Reset(i);
             }
         }
     }
 
-    /// <summary>기본과 다른 픽셀 열만 저장한다.</summary>
+    /// <summary>기본과 다른 열만 저장한다(Auto 열은 끈 것만).</summary>
     public void Save()
     {
         var changed = new Dictionary<string, double>();
@@ -347,16 +385,50 @@ internal sealed class TableColumnState(string scopeKey)
     }
 
     private double Clamp(int column, double width) =>
-        Math.Round(Math.Clamp(double.IsFinite(width) ? width : _defaults[column], _mins[column], Math.Max(_mins[column], MaxWidth)));
+        Math.Round(Math.Clamp(width, _mins[column], Math.Max(_mins[column], _caps[column])));
+
+    private void ApplyAll()
+    {
+        if (_header is not null)
+        {
+            Apply(_header);
+        }
+
+        foreach (var row in _rows)
+        {
+            Apply(row);
+        }
+    }
 
     private void Apply(Grid grid)
     {
         var defs = grid.ColumnDefinitions;
         for (var i = 0; i < _widths.Length && i < defs.Count; i++)
         {
-            if (!double.IsNaN(_widths[i]) && defs[i].Width != new GridLength(_widths[i]))
+            var d = defs[i];
+            if (!double.IsNaN(_widths[i]))
             {
-                defs[i].Width = new GridLength(_widths[i]);
+                if (_auto[i] && d.SharedSizeGroup is not null)
+                {
+                    d.SharedSizeGroup = null; // 묶음에 남으면 다른 줄(숨은 폭 재기 줄)의 내용 폭이 이 폭을 덮는다
+                }
+
+                if (d.Width != new GridLength(_widths[i]))
+                {
+                    d.Width = new GridLength(_widths[i]);
+                }
+            }
+            else if (_auto[i])
+            {
+                if (!d.Width.IsAuto)
+                {
+                    d.Width = GridLength.Auto;
+                }
+
+                if (d.SharedSizeGroup != _groups[i])
+                {
+                    d.SharedSizeGroup = _groups[i];
+                }
             }
         }
     }

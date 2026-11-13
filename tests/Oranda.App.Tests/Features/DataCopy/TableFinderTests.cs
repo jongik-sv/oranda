@@ -11,6 +11,7 @@ using Oranda.App.Shell;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Metadata;
 using Oranda.Testing;
+using Oranda.App.Tests.Shell.Controls;
 
 namespace Oranda.App.Tests.Features.DataCopy;
 
@@ -490,6 +491,33 @@ public sealed class TableFinderTests : IDisposable
         {
             window.Close();
         }
+    });
+
+    [Fact]
+    public Task Finder_columns_follow_the_header_drag() => HeadlessHost.Run(() =>
+    {
+        var loader = new Loader();
+        loader.ByOwner["APP"] = [.. AppTables];
+        var vm = new TableFinderViewModel(["APP"], "APP", loader.Load, (_, _) => false) { FilterText = "mo" };
+        var window = new TableFinderWindow { DataContext = vm };
+        window.Show();
+        Settle(window);
+        try
+        {
+            var header = window.FindControl<Grid>("HeaderGrid")!;
+            var list = window.FindControl<ListBox>("List")!;
+            Assert.NotEmpty(TableColumnsDrag.Rows(list));
+            TableColumnsDrag.Drag(window, header, 1, 40); // 이름 칸 240 → 280
+            Assert.Equal(280, header.ColumnDefinitions[1].ActualWidth, 1);
+            Assert.All(TableColumnsDrag.Rows(list), r => Assert.Equal(280, r.ColumnDefinitions[1].ActualWidth, 1));
+        }
+        finally
+        {
+            TableColumnsDrag.ResetAll(window);
+            window.Close();
+        }
+
+        return Task.CompletedTask;
     });
 
     /// <summary>이름 칸(이름 + 「이미 있음」)의 글이 240 칸을 넘어 유형 칸을 덮지 않는다.</summary>

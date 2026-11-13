@@ -247,6 +247,86 @@ public sealed class TableColumnsTests : IDisposable
         return Task.CompletedTask;
     });
 
+    [Fact]
+    public Task Shared_size_auto_columns_start_at_content_width_follow_the_drag_below_content_and_return_on_double_click() => HeadlessHost.Run(() =>
+    {
+        // 정보 표(DetailTable, Styles/GridC): 칸 = Auto + SharedSizeGroup, 숨은 폭 재기 줄(Probe)이 전체 행 기준 내용 폭을 정한다.
+        string[] columns = ["이름-" + Guid.NewGuid().ToString("N")[..6], "값", "메모"];
+        IReadOnlyList<object?>[] rows = [["SGA_TARGET_SIZE_PARAMETER", "1024", "가"], ["PGA", "2", "나"]];
+        static Grid HeaderOf(DetailTable t) => t.GetVisualDescendants().OfType<Grid>().Single(TableColumns.GetHeader);
+        var table = new DetailTable { Columns = columns, Rows = rows };
+        var window = new Window { Content = table, Width = 700, Height = 300 };
+        window.Show();
+        double content;
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var header = HeaderOf(table);
+            Assert.True(header.ColumnDefinitions[1].Width.IsAuto);
+            Assert.Equal([0, 1, 2], header.Children.OfType<TableColumnGrip>().Select(g => g.Boundary).Order()); // 마지막 * 칸은 끌지 않음
+            content = header.ColumnDefinitions[1].ActualWidth;
+            Assert.True(content > 100, "처음 폭 = 긴 이름의 내용 폭: " + content);
+            var all = TableColumnsDrag.Rows(table); // 화면 줄 + 숨은 폭 재기 줄
+            Assert.True(all.Count > rows.Length);
+
+            // 내용 폭보다 좁게: 숨은 줄도 따라가므로 공유 묶음이 막지 않는다.
+            Drag(window, Center(Grip(header, 1), window), -60);
+            Assert.Equal(content - 60, header.ColumnDefinitions[1].ActualWidth, 1);
+            Assert.Null(header.ColumnDefinitions[1].SharedSizeGroup);
+            Assert.All(TableColumnsDrag.Rows(table), r => Assert.Equal(content - 60, r.ColumnDefinitions[1].Width.Value, 1));
+            Assert.All(TableColumnsDrag.Rows(table).Where(r => r.IsArrangeValid && r.Bounds.Height > 0), r => Assert.Equal(content - 60, r.ColumnDefinitions[1].ActualWidth, 1));
+        }
+        finally
+        {
+            window.Close();
+        }
+
+        // 끈 폭은 남는다: 같은 열의 새 표가 그 폭으로 시작하고, 두 번 누르면 다시 내용 폭(Auto + 묶음 이름).
+        var table2 = new DetailTable { Columns = columns, Rows = rows };
+        var window2 = new Window { Content = table2, Width = 700, Height = 300 };
+        window2.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var header = HeaderOf(table2);
+            Assert.Equal(content - 60, header.ColumnDefinitions[1].ActualWidth, 1);
+            DoubleClick(window2, Center(Grip(header, 1), window2));
+            Assert.True(header.ColumnDefinitions[1].Width.IsAuto);
+            Assert.NotNull(header.ColumnDefinitions[1].SharedSizeGroup);
+            Assert.Equal(content, header.ColumnDefinitions[1].ActualWidth, 1);
+            Assert.All(TableColumnsDrag.Rows(table2), r => Assert.True(r.ColumnDefinitions[1].Width.IsAuto));
+        }
+        finally
+        {
+            TableColumnsDrag.ResetAll(window2);
+            window2.Close();
+        }
+
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task Auto_columns_without_a_shared_group_stay_fixed() => HeadlessHost.Run(() =>
+    {
+        var header = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("60,Auto,*") };
+        TableColumns.SetHeader(header, true);
+        var root = new DockPanel { Children = { header } };
+        TableColumns.SetScope(root, "t-" + Guid.NewGuid().ToString("N"));
+        var window = new Window { Content = root, Width = 400, Height = 200 };
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal([0], header.Children.OfType<TableColumnGrip>().Select(g => g.Boundary)); // 내용이 폭을 정하는 Auto 칸(조합 검사 조건 칸 등)은 그대로
+        }
+        finally
+        {
+            window.Close();
+        }
+
+        return Task.CompletedTask;
+    });
+
     private sealed class OneStore(JournalEntry entry) : IChangeJournalStore
     {
         public Task<long?> AddAsync(JournalEntry e, CancellationToken ct) => Task.FromResult<long?>(null);

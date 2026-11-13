@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
+using Avalonia.Media;
+using Oranda.App.Shell.Controls;
 
 namespace Oranda.App.Styles;
 
@@ -15,8 +17,16 @@ public static class GridC
     /// <summary>
     /// 격자 한 줄. 칸마다 <c>grid-c-cell</c> 테두리를 씌우고, <paramref name="rowHead"/> 면 첫 칸을 행 머리로 칠한다.
     /// 머리글과 행이 같은 <see cref="Grid.IsSharedSizeScopeProperty"/> 안에서 같은 <paramref name="group"/> 이름을 쓰면 칸 너비가 맞는다(마지막 칸만 남는 너비를 차지).
+    /// 줄은 <see cref="TableColumns"/> 줄로 표시된다: 바깥에 <c>TableColumns.Scope</c> 가 있으면 머리글(<see cref="Header"/>)을 끌어 바꾼 칸 폭을 따른다.
     /// </summary>
     public static Grid Row(IReadOnlyList<Control> cells, bool rowHead = true, string group = "gc", double lastMinWidth = 80)
+    {
+        var grid = Cells(cells, rowHead, group, lastMinWidth);
+        TableColumns.SetRow(grid, true);
+        return grid;
+    }
+
+    private static Grid Cells(IReadOnlyList<Control> cells, bool rowHead, string group, double lastMinWidth)
     {
         ArgumentNullException.ThrowIfNull(cells);
         var grid = new Grid();
@@ -29,7 +39,12 @@ public static class GridC
                 MinWidth = last ? lastMinWidth : 0,
             });
             cells[i].VerticalAlignment = VerticalAlignment.Center;
-            var cell = new Border { Classes = { "grid-c-cell" }, Child = cells[i] };
+            if (cells[i] is TextBlock { TextTrimming: var trim } text && trim == TextTrimming.None)
+            {
+                text.TextTrimming = TextTrimming.CharacterEllipsis; // 끌어 좁힌 칸은 말줄임(내용 폭일 때는 그대로)
+            }
+
+            var cell = new Border { Classes = { "grid-c-cell" }, Child = cells[i], ClipToBounds = true }; // 끌어 좁힌 칸의 글이 옆 칸을 덮지 않게
             if (i == 0 && rowHead)
             {
                 cell.Classes.Add("row-head");
@@ -156,15 +171,16 @@ public static class GridC
         return sum;
     }
 
-    /// <summary>머리글 줄(<see cref="Row"/> 를 <c>grid-c-header</c> 로 감싼 것).</summary>
+    /// <summary>
+    /// 머리글 줄(<see cref="Row"/> 와 같은 칸을 <c>grid-c-header</c> 로 감싼 것). 안의 Grid 는 <see cref="TableColumns"/> 머리글로 표시된다:
+    /// 바깥에 <c>TableColumns.Scope</c> 가 있으면 칸 경계를 끌어 폭을 바꾼다(처음 = 내용 폭, 두 번 누르기 = 다시 내용 폭).
+    /// </summary>
     public static Border Header(IReadOnlyList<string> titles, string group = "gc", double lastMinWidth = 80)
     {
         ArgumentNullException.ThrowIfNull(titles);
-        return new Border
-        {
-            Classes = { "grid-c-header" },
-            Child = Row(titles.Select(t => (Control)new TextBlock { Text = t }).ToList(), rowHead: false, group, lastMinWidth),
-        };
+        var grid = Cells(titles.Select(t => (Control)new TextBlock { Text = t }).ToList(), rowHead: false, group, lastMinWidth);
+        TableColumns.SetHeader(grid, true);
+        return new Border { Classes = { "grid-c-header" }, Child = grid };
     }
 
     /// <summary>

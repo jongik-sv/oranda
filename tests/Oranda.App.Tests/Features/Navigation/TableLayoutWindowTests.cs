@@ -8,6 +8,8 @@ using Avalonia.VisualTree;
 using Oranda.App.Features.Navigation;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.App.Shell.Controls;
+using Oranda.App.Tests.Shell.Controls;
 
 namespace Oranda.App.Tests.Features.Navigation;
 
@@ -71,6 +73,28 @@ public class TableLayoutWindowTests
     }
 
     private static string[] Selected(TableLayoutWindow w) => w.SelectedRows.Select(r => r.Name).ToArray();
+
+    [Fact]
+    public Task Columns_start_at_content_width_and_follow_the_header_drag() => HeadlessHost.Run(() =>
+    {
+        var (_, w) = Open();
+        try
+        {
+            Item(w, "CODE");
+            var header = w.GetVisualDescendants().OfType<Grid>().Single(TableColumns.GetHeader);
+            var type = header.ColumnDefinitions[2].ActualWidth; // 타입 칸(Auto, 내용 폭)
+            TableColumnsDrag.Drag(w, header, 2, 30);
+            Assert.Equal(type + 30, header.ColumnDefinitions[2].ActualWidth, 1);
+            Assert.All(TableColumnsDrag.Rows(w.List), r => Assert.Equal(type + 30, r.ColumnDefinitions[2].ActualWidth, 1));
+        }
+        finally
+        {
+            TableColumnsDrag.ResetAll(w);
+            w.Close();
+        }
+
+        return Task.CompletedTask;
+    });
 
     [Fact]
     public Task Shift_click_selects_a_range_and_primary_click_adds_single_rows_and_enter_inserts_in_table_order() => HeadlessHost.Run(() =>

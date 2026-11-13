@@ -1,15 +1,21 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.MyBatisWorkspace.Combos"
              x:Class="Oranda.App.Features.MyBatisWorkspace.Combos.MyBatisCombosView"
              x:DataType="vm:MyBatisCombosViewModel">
   <UserControl.Styles>
-    <!-- 표 칸 폭(머리글과 줄이 같은 클래스를 써서 세로로 맞는다). 조건 칸은 조건 수만큼 반복된다. -->
-    <Style Selector=":is(Control).c-no"><Setter Property="Width" Value="40" /></Style>
+    <!-- 조건 칸 폭(머리글과 줄이 같은 클래스를 써서 세로로 맞는다). 조건 칸은 조건 수만큼 반복된다.
+         #·결과 칸 폭은 머리글·줄 Grid 의 열 정의(40,Auto,190,*)이고 머리글 경계를 끌어 바꾼다(TableColumns). -->
     <Style Selector=":is(Control).c-cond"><Setter Property="Width" Value="96" /></Style>
-    <Style Selector=":is(Control).c-result"><Setter Property="Width" Value="190" /></Style>
+    <!-- 앱 공용 StackPanel.cells 칸 서식을 Grid 칸에도(머리글·줄이 Grid 라 끌어 바꾼 폭을 함께 따른다). -->
+    <Style Selector="Grid.cells > TextBlock">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
     <Style Selector="TextBlock.on"><Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" /></Style>
     <Style Selector="TextBlock.pass"><Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" /></Style>
     <Style Selector="TextBlock.warning"><Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" /></Style>
@@ -116,11 +122,11 @@
       <Grid ColumnDefinitions="*,5,420" IsVisible="{Binding !!Rows.Count}">
         <DockPanel Grid.Column="0">
           <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-            <DockPanel>
+            <DockPanel ctl:TableColumns.Scope="MyBatis.Combos">
               <Border DockPanel.Dock="Top" Classes="grid-header">
-                <StackPanel Orientation="Horizontal" Classes="cells" Margin="3,0,0,0">
-                  <TextBlock Classes="c-no num" Text="#" />
-                  <ItemsControl ItemsSource="{Binding ConditionLabels}">
+                <Grid x:Name="HeaderGrid" ctl:TableColumns.Header="True" ColumnDefinitions="40,Auto,190,*" Classes="cells" Margin="3,0,0,0">
+                  <TextBlock Classes="num" Text="#" />
+                  <ItemsControl Grid.Column="1" ItemsSource="{Binding ConditionLabels}">
                     <ItemsControl.ItemsPanel>
                       <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
@@ -130,18 +136,18 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <TextBlock Classes="c-result" Text="결과" />
-                  <TextBlock Text="펼친 SQL" />
-                </StackPanel>
+                  <TextBlock Grid.Column="2" Text="결과" />
+                  <TextBlock Grid.Column="3" Text="펼친 SQL" />
+                </Grid>
               </Border>
               <ListBox Classes="table" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                        ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="조합 검사 결과">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:ComboRowItem">
                     <Border Classes="combo-row" Classes.error="{Binding IsError}">
-                      <StackPanel Orientation="Horizontal" Classes="cells">
-                        <TextBlock Classes="c-no num dim" Text="{Binding Number}" />
-                        <ItemsControl ItemsSource="{Binding States}">
+                      <Grid ctl:TableColumns.Row="True" ColumnDefinitions="40,Auto,190,*" Classes="cells">
+                        <TextBlock Classes="num dim" Text="{Binding Number}" />
+                        <ItemsControl Grid.Column="1" ItemsSource="{Binding States}">
                           <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                           </ItemsControl.ItemsPanel>
@@ -151,10 +157,11 @@
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <TextBlock Classes="c-result" Classes.pass="{Binding IsPass}" Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}"
+                        <TextBlock Grid.Column="2" Classes.pass="{Binding IsPass}" Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}"
                                    Text="{Binding ResultText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ResultText}" />
-                        <TextBlock Classes="mono" sqled:SqlInlineText.Sql="{Binding SqlLine}" TextTrimming="CharacterEllipsis" MaxWidth="900" ToolTip.Tip="{Binding SqlLine}" />
-                      </StackPanel>
+                        <TextBlock Grid.Column="3" Classes="mono" sqled:SqlInlineText.Sql="{Binding SqlLine}" TextTrimming="CharacterEllipsis" MaxWidth="900"
+                                   HorizontalAlignment="Left" ToolTip.Tip="{Binding SqlLine}" />
+                      </Grid>
                     </Border>
                   </DataTemplate>
                 </ListBox.ItemTemplate>

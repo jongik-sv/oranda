@@ -10,6 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Localization;
+using Oranda.App.Shell.Controls;
 using Oranda.App.Shell.Icons;
 using Oranda.App.Styles;
 
@@ -268,8 +269,9 @@ public sealed class TableLayoutView : UserControl
             Text = (LiteralTranslator.IsEnglish ? "Enter · double-click = insert · {0} = copy" : "Enter·두 번 누르기 = 넣기 · {0} = 복사").Replace("{0}", OperatingSystem.IsMacOS() ? "⌘C" : "Ctrl+C", StringComparison.Ordinal),
         };
 
-        // 격자 표(Styles/GridC): 머리글과 줄이 같은 칸 묶음 이름(tl)을 써서 너비가 맞는다.
+        // 격자 표(Styles/GridC): 머리글과 줄이 같은 칸 묶음 이름(tl)을 써서 너비가 맞는다. 머리글 경계를 끌어 칸 폭을 바꾼다(TableColumns).
         var body = new DockPanel();
+        TableColumns.SetScope(body, "Navigation.TableLayout");
         var header = GridC.Header(LiteralTranslator.IsEnglish ? HeadersEn : HeadersKo, Group);
         DockPanel.SetDock(header, Avalonia.Controls.Dock.Top);
         body.Children.Add(header);
