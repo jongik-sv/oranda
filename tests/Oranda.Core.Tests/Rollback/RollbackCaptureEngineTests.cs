@@ -192,6 +192,43 @@ public class RollbackCaptureEngineTests
     }
 
     [Fact]
+    public async Task Begin_failure_after_savepoint_releases_it_once_and_still_returns_a_capture()
+    {
+        var rig = new Rig();
+        rig.Channel.Fail(sql => sql.EndsWith("FOR UPDATE", StringComparison.Ordinal), new InvalidOperationException("드라이버 오류"));
+        var request = rig.Request("UPDATE …", UpdatePrice);
+
+        var (capture, _) = await rig.BeginAsync(request);
+        await capture.AbandonAsync(null, CancellationToken.None); // 공급자가 사용자 문장 실패 뒤 불러도 두 번 보내지 않는다
+
+        Assert.Same(request.Statement, capture.StatementToSend);
+        Assert.Single(rig.Channel.SentSql, s => s == "ROLLBACK TO SAVEPOINT ORANDA$RB");
+    }
+
+    [Fact]
+    public async Task Abandon_sends_nothing_when_this_begin_set_no_savepoint()
+    {
+        // 한 행 INSERT(저장점 없음), 개발 접속(시점만), 확인 창에서 끈 운영 문장 — 어느 것도 앞 문장의 ORANDA$RB 로 되돌리면 안 된다.
+        var insert = new Rig();
+        var (a, _) = await insert.BeginAsync(insert.Request("INSERT INTO SAMPLE.PRODUCTS VALUES (1, 'a', 1, NULL)",
+                                                            new DmlShape(DmlVerb.InsertValues) { Owner = "SAMPLE", Name = "PRODUCTS" }));
+        await a.AbandonAsync(null, CancellationToken.None);
+
+        var dev = new Rig(ConnectionEnvironment.Development);
+        var (b, _) = await dev.BeginAsync(dev.Request("UPDATE …", UpdatePrice));
+        await b.AbandonAsync(null, CancellationToken.None);
+
+        var declined = new Rig();
+        var (c, _) = await declined.BeginAsync(declined.Request("UPDATE …", UpdatePrice), new ConfirmAnswer(true, false, null));
+        await c.AbandonAsync(null, CancellationToken.None);
+
+        foreach (var rig in new[] { insert, dev, declined })
+        {
+            Assert.DoesNotContain(rig.Channel.SentSql, s => s.Contains("SAVEPOINT", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
     public async Task Large_set_column_is_not_reverted_and_row_movement_is_incomplete()
     {
         var rig = new Rig();

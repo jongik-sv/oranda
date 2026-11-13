@@ -7,6 +7,10 @@ public sealed record RollbackOpenState(int Statements, int Steps, bool HasMismat
 /// 원장(설계 7.3, RD-6·RD-7): 세션마다 열린 묶음 하나를 들고, 문장 기록·저장점·트랜잭션 끝을 받아 상태를 바꾼다.
 /// 구현: <c>Oranda.Core.Rollback.Ledger.RollbackLedger</c>(RB-04). 끔 구현은 <see cref="DisabledRollbackLedger"/>.
 /// 공급자는 메서드를 이벤트가 아니라 직접 불러 기다린다(같은 세션의 기록과 끝의 순서 보장).
+/// <para>
+/// 이벤트(<see cref="RollbackStatementCaptured"/>·<see cref="RollbackGroupSaved"/>)는 공급자가 명령 잠금을 쥔 채 부른 <see cref="Record"/>·<see cref="EndAsync"/>
+/// 안에서 난다. 구독자는 처리기 안에서 같은 세션에 동기로 명령을 보내지 않고(교착) 비동기로 넘겨 처리한다(화면은 UI 스레드에 Post).
+/// </para>
 /// </summary>
 public interface IRollbackLedger
 {

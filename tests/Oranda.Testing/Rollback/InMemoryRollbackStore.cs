@@ -18,6 +18,9 @@ public sealed class InMemoryRollbackStore : IRollbackStore
     /// <summary>참이면 <see cref="SaveAsync"/> 가 <see cref="IOException"/> 을 던진다(저장 실패 시험).</summary>
     public bool FailSaves { get; set; }
 
+    /// <summary>참이면 <see cref="PruneAsync"/> 가 <see cref="IOException"/> 을 던진다(정리 실패 시험).</summary>
+    public bool FailPrunes { get; set; }
+
     public int SaveCount { get; private set; }
 
     public IReadOnlyList<RollbackGroup> Groups
@@ -130,6 +133,11 @@ public sealed class InMemoryRollbackStore : IRollbackStore
 
     public Task PruneAsync(int retentionDays, CancellationToken ct)
     {
+        if (FailPrunes)
+        {
+            throw new IOException("정리 실패(시험)");
+        }
+
         lock (_gate)
         {
             var limit = DateTimeOffset.UtcNow.AddDays(-retentionDays);

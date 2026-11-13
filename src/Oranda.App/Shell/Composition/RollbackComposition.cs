@@ -2,16 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Oranda.Core.Composition;
 using Oranda.App.Shell.Settings;
+using Oranda.Core.Composition;
+using Oranda.Core.Events;
 using Oranda.Core.Metadata;
 using Oranda.Core.Rollback;
 using Oranda.Core.Rollback.Capture;
+using Oranda.Core.Rollback.Ledger;
 
 namespace Oranda.App.Shell.Composition;
 
 // 되돌리기 지점 조립(되돌리기 지점 설계 13.1). Core 구현은 스캔 대상이 아니므로 앱 어셈블리(스캔 대상)의 얇은 등록 형식이 Core 구현을 올린다.
-// 엔진은 RB-02 RollbackCaptureEngine. 원장은 지금 끔 구현이고 RB-04 가 RollbackLedger 로 바꾼다.
+// 엔진은 RB-02 RollbackCaptureEngine, 원장은 RB-04 RollbackLedger.
 // 컨테이너는 같은 서비스의 마지막 등록을 고르므로, 나중에 훑는 Language 의 IDmlAnalyzer(RB-30)가 여기 끔 분석기를 이긴다.
 // 저장소·금고(IRollbackStore·IRollbackVault)는 Platform(RB-20·RB-21)이 올린다. 여기서 대신 등록하지 않는다(앱 어셈블리가 Platform 뒤에 훑여 실구현을 가린다).
 
@@ -36,11 +38,11 @@ internal sealed class AppRollbackCapture(IRollbackLedger ledger, SettingsService
         _inner.ReadPointAsync(sessionId, channel, dialect, ct);
 }
 
-/// <summary>원장 등록. 지금은 <see cref="DisabledRollbackLedger"/>.</summary>
+/// <summary>원장 등록(RB-04 <see cref="RollbackLedger"/>). 저장소가 아직 없으면(Platform RB-21 전) 메모리에서만 묶음을 든다.</summary>
 [OrandaService(typeof(IRollbackLedger))]
-internal sealed class AppRollbackLedger : IRollbackLedger
+internal sealed class AppRollbackLedger(IEventBus events, SettingsService settings, IRollbackStore? store = null) : IRollbackLedger
 {
-    private readonly DisabledRollbackLedger _inner = DisabledRollbackLedger.Instance;
+    private readonly RollbackLedger _inner = new(store, events, () => settings.Current.Rollback);
 
     public void Record(RollbackStatementRecord record) => _inner.Record(record);
 
