@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:vm="using:Oranda.App.Features.Execution"
              xmlns:binds="using:Oranda.App.Features.Binds"
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
@@ -55,19 +56,18 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
     </Border>
-    <!-- 창이 표의 최소 폭보다 좁으면 방향 열을 자르지 않고 가로로 스크롤한다.
-         열 폭은 표 폭(창 폭, 최소 232)에서 픽셀로 계산해 머리글과 모든 줄에 같은 값을 넣는다(코드 숨김 ApplyColumns).
-         * 열을 줄마다 두면 처음 무한 폭으로 잰 줄이 글자 폭을 따라가 열이 어긋난다. -->
+    <!-- 창이 표의 최소 폭보다 좁으면 방향 열을 자르지 않고 가로로 스크롤한다(표 폭 = 창 폭과 열 폭 합 중 큰 것, 코드 숨김 FitTable).
+         열 폭: 값 열(*)이 남는 폭을 받고, 나머지는 머리글 경계를 끌어 바꾼다(TableColumns, 머리글이 정본이고 줄이 따라간다). -->
     <ScrollViewer x:Name="TableScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <DockPanel x:Name="Table" MinWidth="232">
+    <DockPanel x:Name="Table" MinWidth="232" ctl:TableColumns.Scope="bind-variables">
     <Border DockPanel.Dock="Top" Classes="grid-c-header">
-      <Grid x:Name="HeaderGrid" Height="26">
+      <Grid x:Name="HeaderGrid" Height="26" ctl:TableColumns.Header="True">
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="24" />
-          <ColumnDefinition Width="2*" MinWidth="44" />
-          <ColumnDefinition Width="3.5*" MinWidth="48" />
-          <ColumnDefinition Width="2*" MinWidth="64" />
-          <ColumnDefinition Width="52" />
+          <ColumnDefinition Width="24" MinWidth="20" />
+          <ColumnDefinition Width="48" MinWidth="44" />
+          <ColumnDefinition Width="*" MinWidth="48" />
+          <ColumnDefinition Width="64" MinWidth="64" />
+          <ColumnDefinition Width="52" MinWidth="44" />
         </Grid.ColumnDefinitions>
         <Border Grid.Column="0" Classes="grid-c-cell" Padding="0"><TextBlock Classes="head" Text="#" HorizontalAlignment="Center" Margin="0" /></Border>
         <Border Grid.Column="1" Classes="grid-c-cell" Padding="0"><TextBlock Classes="head" Text="변수" /></Border>
@@ -91,13 +91,13 @@
       </ListBox.ContextMenu>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="binds:BindVariableRow">
-          <Grid Classes="row" Loaded="OnRowGridLoaded">
+          <Grid Classes="row" ctl:TableColumns.Row="True">
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="24" />
-              <ColumnDefinition Width="2*" MinWidth="44" />
-              <ColumnDefinition Width="3.5*" MinWidth="48" />
-              <ColumnDefinition Width="2*" MinWidth="64" />
-              <ColumnDefinition Width="52" />
+              <ColumnDefinition Width="24" MinWidth="20" />
+              <ColumnDefinition Width="48" MinWidth="44" />
+              <ColumnDefinition Width="*" MinWidth="48" />
+              <ColumnDefinition Width="64" MinWidth="64" />
+              <ColumnDefinition Width="52" MinWidth="44" />
             </Grid.ColumnDefinitions>
             <Border Grid.Column="0" Classes="grid-c-cell row-head" Padding="0">
               <TextBlock Text="{Binding Number}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />

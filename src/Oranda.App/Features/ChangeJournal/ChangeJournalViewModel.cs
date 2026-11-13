@@ -93,6 +93,15 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
     private int _generation;
     private int _selectionGeneration;
 
+    // 마지막으로 읽은 묶음 문서(같은 묶음 안에서 줄만 바꿔 고를 때 다시 복호화하지 않게). 다시 읽기(Reload) 때 비운다.
+    private (long Id, RollbackScriptDocument? Document, string? Error)? _lastDocument;
+
+    /// <summary>오른쪽 아래 원복 스크립트 미리 보기의 최대 줄 수(넘으면 「원복 스크립트 열기」 안내 한 줄).</summary>
+    internal const int MaxPreviewLines = 500;
+
+    /// <summary>본문 칸 문장 한 줄의 최대 글자 수(넘으면 「…(N자)」).</summary>
+    internal const int MaxStatementChars = 2000;
+
     [ObservableProperty]
     private string _searchText = string.Empty;
 
@@ -323,6 +332,7 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
     /// </summary>
     public async Task ReloadAsync(CancellationToken ct = default)
     {
+        _lastDocument = null;
         var store = ResolveStore();
         var rollbackStore = ResolveRollbackStore();
         if (store is null && rollbackStore is null)
@@ -496,28 +506,113 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
         };
         if (SelectedGroup is { } group)
         {
-            ++_selectionGeneration; // 앞서 고른 DDL 의 차이 읽기가 늦게 끝나도 묶음 본문을 덮지 않게
+            var generation = ++_selectionGeneration; // 앞서 고른 DDL 의 차이 읽기가 늦게 끝나도 묶음 본문을 덮지 않게
             Selection = [];
             Diff.Clear();
-            DiffTitle = string.Empty;
+            DiffTitle = "원복 스크립트를 읽는 중…";
             DetailTitle = $"#{group.Id} · {group.Group.ProfileName} · {group.CauseText} · {group.ScriptText}";
             DetailText = GroupDetail(group.Group);
+            var (document, error) = _lastDocument is { } last && last.Id == group.Id
+                ? (last.Document, last.Error)
+                : await LoadDocumentAsync(group, ct).ConfigureAwait(true);
+            if (generation != _selectionGeneration)
+            {
+                return;
+            }
+
+            _lastDocument = (group.Id, document, error);
+
+            DetailText = GroupDetail(group.Group, document);
+            ShowScriptPreview(group, document, error);
             return;
         }
 
         await SetSelectionAsync([.. selected.OfType<JournalItem>()], ct).ConfigureAwait(true);
     }
 
-    /// <summary>묶음 본문 칸: 문장마다 한 줄(「[1/3] 14:03:21 UPDATE … · 12행 · 12문장」).</summary>
-    internal static string GroupDetail(RollbackGroup group)
+    /// <summary>묶음의 암호화 문서를 읽는다(문장 원문·바인드·원복 문장). 파일이 없거나 못 읽으면 문서 없이 이유만.</summary>
+    private async Task<(RollbackScriptDocument? Document, string? Error)> LoadDocumentAsync(RollbackGroupItem group, CancellationToken ct)
+    {
+        if (!group.Group.HasScriptFile || ResolveRollbackStore() is not { } store)
+        {
+            return (null, null);
+        }
+
+        try
+        {
+            return (await store.LoadDocumentAsync(group.Id, ct).ConfigureAwait(true), null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (null, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 오른쪽 아래 칸: DML 묶음은 저장된 원복 스크립트를 「원복 스크립트 열기」 와 같은 글로 미리 보인다(새로 만들지 않는다).
+    /// 보일 스크립트가 없으면 제목에 이유를 한 줄로 쓴다(빈 칸으로 두지 않는다).
+    /// </summary>
+    private void ShowScriptPreview(RollbackGroupItem group, RollbackScriptDocument? document, string? error)
+    {
+        Diff.Clear();
+        if (!group.CanOpenScript)
+        {
+            DiffTitle = "원복 스크립트 없음: " + group.ScriptText;
+        }
+        else if (error is not null)
+        {
+            DiffTitle = "원복 스크립트를 읽지 못했다: " + error;
+        }
+        else if (document is null)
+        {
+            DiffTitle = "원복 스크립트 없음: 보관된 파일을 찾지 못했다";
+        }
+        else
+        {
+            DiffTitle = $"원복 스크립트: #{group.Id.ToString(CultureInfo.InvariantCulture)} · {group.ScriptText}";
+            // 큰 묶음(행 상한 100,000)은 원복 문장이 수십만 줄이 된다: 칸은 가상화되지 않으므로 앞부분만 보이고 나머지는 탭으로 연다.
+            var lines = Core.Rollback.Script.RollbackScriptWriter.Write(group.Group, document).TrimEnd('\n').Split('\n');
+            foreach (var line in lines.Take(MaxPreviewLines))
+            {
+                Diff.Add(new DiffLine(line, ' '));
+            }
+
+            if (lines.Length > MaxPreviewLines)
+            {
+                Diff.Add(new DiffLine(
+                    $"-- … 나머지 {(lines.Length - MaxPreviewLines).ToString("N0", CultureInfo.CurrentCulture)}줄은 「원복 스크립트 열기」로 보세요", ' '));
+            }
+        }
+    }
+
+    internal static string GroupDetail(RollbackGroup group) => GroupDetail(group, null);
+
+    // 치환한 뒤에 공백을 접는다: 먼저 접으면 「-- 메모」 줄 주석이 뒤 문장을 삼켜 그 뒤 바인드를 못 찾고, 값 안 줄바꿈이 한 줄 형식을 깬다.
+    private static string OneLine(string text)
+    {
+        var line = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return line.Length > MaxStatementChars
+            ? line[..MaxStatementChars] + "…(" + line.Length.ToString(CultureInfo.InvariantCulture) + "자)"
+            : line;
+    }
+
+    /// <summary>
+    /// 묶음 본문 칸: 문장마다 한 줄(「-- [1/3] 14:03:21 UPDATE … · 12행 · 12문장」). 문서가 있으면 문장 글의 바인드 자리를 저장된 값으로 바꿔 보인다
+    /// (<see cref="BindLiteralSubstituter"/>, 실행한 문장은 그대로). 없으면 가린 요약.
+    /// </summary>
+    internal static string GroupDetail(RollbackGroup group, RollbackScriptDocument? document)
     {
         var total = group.Statements.Count;
+        var stored = document?.Statements.ToDictionary(s => s.Seq) ?? [];
         var lines = group.Statements.OrderBy(x => x.Seq).Select(st =>
         {
             var row = new RollbackStatementItem(new RollbackGroupItem(group), st);
             var rows = st.RowsAffected is { } n ? $" · {n.ToString("N0", CultureInfo.CurrentCulture)}행" : string.Empty;
             var point = st.BeforePoint is { } p ? " · " + p.Text : string.Empty;
-            return $"-- [{st.Seq.ToString(CultureInfo.InvariantCulture)}/{total.ToString(CultureInfo.InvariantCulture)}] {row.TimeText} {row.SummaryText}{rows}{point} · {row.ScriptText}";
+            var text = stored.TryGetValue(st.Seq, out var s) && !string.IsNullOrWhiteSpace(s.Text)
+                ? OneLine(BindLiteralSubstituter.Substitute(s.Text, s.Binds))
+                : row.SummaryText;
+            return $"-- [{st.Seq.ToString(CultureInfo.InvariantCulture)}/{total.ToString(CultureInfo.InvariantCulture)}] {row.TimeText} {text}{rows}{point} · {row.ScriptText}";
         });
         var head = group.StateReason is { Length: > 0 } reason ? [$"-- {reason}"] : Array.Empty<string>();
         return string.Join('\n', head.Concat(lines));

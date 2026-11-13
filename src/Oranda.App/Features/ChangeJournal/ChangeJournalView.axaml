@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.ChangeJournal"
              x:Class="Oranda.App.Features.ChangeJournal.ChangeJournalView"
@@ -70,10 +71,10 @@
     </Border>
     <Grid RowDefinitions="*,5,*">
       <!-- 표(되돌리기 지점 설계 11.1): 접기·아이콘 | 시간 | 객체 | 원인 | 요약 | 영향 행 | 시점 | 원복 스크립트.
-           DDL 보관본·커밋 묶음·묶음 안 문장 줄이 같은 열을 쓴다(IJournalRow). -->
-      <DockPanel Grid.Row="0">
+           DDL 보관본·커밋 묶음·묶음 안 문장 줄이 같은 열을 쓴다(IJournalRow). 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns). -->
+      <DockPanel Grid.Row="0" ctl:TableColumns.Scope="change-journal">
         <Border DockPanel.Dock="Top" Classes="grid-header">
-          <Grid x:Name="JournalHeader" ColumnDefinitions="44,124,200,92,*,76,200,170">
+          <Grid x:Name="JournalHeader" ctl:TableColumns.Header="True" ColumnDefinitions="44,124,200,92,*,76,200,170">
             <TextBlock Grid.Column="1" Padding="6,0" Text="시간" />
             <TextBlock Grid.Column="2" Padding="6,0" Text="객체" />
             <TextBlock Grid.Column="3" Padding="6,0" Text="원인" />
@@ -87,7 +88,7 @@
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="변경 일지">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:IJournalRow">
-              <Grid ColumnDefinitions="44,124,200,92,*,76,200,170" ToolTip.Tip="{Binding SummaryText}">
+              <Grid ctl:TableColumns.Row="True" ColumnDefinitions="44,124,200,92,*,76,200,170" ToolTip.Tip="{Binding SummaryText}">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
                   <TextBlock Width="12" Classes="dim" Text="{Binding ExpandGlyph}" VerticalAlignment="Center" />
                   <ContentControl VerticalAlignment="Center" IsVisible="{Binding !IsChild}"

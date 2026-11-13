@@ -1887,5 +1887,6 @@
   "DB 링크 테이블의 플래시백 결과는 되돌릴 수 없습니다.": "A Flashback result of a database link table cannot be restored.",
   "유효 시간(PERIOD FOR) 플래시백 결과는 되돌릴 수 없습니다.": "A valid-time (PERIOD FOR) Flashback result cannot be restored.",
   "바꿀 것 없음: 지금 값이 고른 행과 같습니다.": "Nothing to change: the current values match the chosen row.",
-  "고른 결과 행": "Chosen result row"
+  "고른 결과 행": "Chosen result row",
+  "열 폭 처음으로": "Reset column widths"
 }

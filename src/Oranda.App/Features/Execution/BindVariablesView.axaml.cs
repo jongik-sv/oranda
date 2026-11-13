@@ -15,13 +15,20 @@ public partial class BindVariablesView : UserControl
     public BindVariablesView()
     {
         InitializeComponent();
-        // 가로 스크롤 안은 폭이 무한이라 * 열이 줄마다 다른 폭이 된다: 표 폭을 창 폭(최소 232)으로 고정하고,
-        // 열 폭은 그 폭에서 픽셀로 계산해 머리글과 모든 줄에 같은 값을 넣는다.
-        TableScroll.SizeChanged += (_, e) =>
+        // 가로 스크롤 안은 폭이 무한이라 * 열이 줄마다 다른 폭이 된다: 표 폭을 창 폭(열 폭 합보다 좁으면 열 폭 합)으로 고정한다.
+        // 열 폭은 머리글을 끌면(TableColumns) 바뀌므로 그때도 다시 맞춘다.
+        TableScroll.SizeChanged += (_, _) => FitTable();
+        foreach (var column in HeaderGrid.ColumnDefinitions)
         {
-            Table.Width = Math.Max(Table.MinWidth, e.NewSize.Width);
-            ApplyColumns();
-        };
+            column.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == ColumnDefinition.WidthProperty)
+                {
+                    FitTable();
+                }
+            };
+        }
+
         RowList.AddHandler(KeyDownEvent, OnRowListKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         RowList.AddHandler(PointerPressedEvent, OnRowListPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         RowList.AddHandler(PointerMovedEvent, OnRowListPointerMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
@@ -49,44 +56,12 @@ public partial class BindVariablesView : UserControl
 
     private BindVariableStore? _watched;
 
-    // 열: 번호(고정) | 변수 2 | 값 3.5(남는 폭) | 자료형 2 | 방향(고정). 비율 열은 최소 폭을 지킨다. 최소 폭 합 = 표 MinWidth(232), 기본 오른쪽 열 폭(0.23)에서 가로 스크롤이 없게.
-    private const double NumberWidth = 24, DirectionWidth = 52;
-    private static readonly (double Weight, double Min)[] Flex = [(2, 44), (3.5, 48), (2, 64)];
-
-    private double[] ColumnWidths()
+    /// <summary>표 폭 = 창 폭, 단 픽셀 열 폭 합 + * 열 최소 폭보다 좁으면 그 합(가로 스크롤).</summary>
+    private void FitTable()
     {
-        var width = double.IsNaN(Table.Width) ? Table.MinWidth : Table.Width;
-        var unit = Math.Max(0, width - NumberWidth - DirectionWidth) / Flex.Sum(f => f.Weight);
-        return [NumberWidth, .. Flex.Select(f => Math.Max(f.Min, Math.Floor(f.Weight * unit))), DirectionWidth];
-    }
-
-    private static void SetColumns(Grid grid, double[] widths)
-    {
-        for (int i = 0; i < widths.Length && i < grid.ColumnDefinitions.Count; i++)
-        {
-            grid.ColumnDefinitions[i].Width = new GridLength(widths[i]);
-        }
-    }
-
-    private void ApplyColumns()
-    {
-        var widths = ColumnWidths();
-        SetColumns(HeaderGrid, widths);
-        foreach (var container in RowList.GetRealizedContainers())
-        {
-            foreach (var grid in container.GetVisualDescendants().OfType<Grid>().Where(g => g.Classes.Contains("row")))
-            {
-                SetColumns(grid, widths);
-            }
-        }
-    }
-
-    private void OnRowGridLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (sender is Grid grid)
-        {
-            SetColumns(grid, ColumnWidths());
-        }
+        var need = HeaderGrid.ColumnDefinitions.Sum(c => c.Width.IsAbsolute ? c.Width.Value : c.MinWidth);
+        Table.MinWidth = need;
+        Table.Width = Math.Max(need, TableScroll.Bounds.Width);
     }
 
     // 활성 탭이 바뀌면 목록도 바뀐다: 새 목록의 포커스 요청을 듣는다.
