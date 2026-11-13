@@ -202,5 +202,10 @@ END;
 | 가상 열 `GENERATED ALWAYS AS (…) VIRTUAL`·`B AS (…)` | 됨. `ALL_TAB_COLS.VIRTUAL_COLUMN` = **`Y`/`N`**(Oracle `YES`/`NO`), `HIDDEN_COLUMN` 도 `N` | `meta.columns` 가 이미 `YES`/`NO` 로 바꿔 `IsVirtual` 을 채운다 → DELETE 원복 INSERT 가 뺀다 |
 | 숨김 열 `INVISIBLE` | TBR-7001(없음) | `IsInvisible` 늘 거짓 |
 | IDENTITY 열 | 없음(`ALL_TAB_IDENTITY_COLS` TBR-8103, `IDENTITY_COLUMN` 열 TBR-8026 — copy 사전 실측과 같음) | `IsIdentity` 늘 거짓 |
-| 부작용 찾기 `TiberoRollbackValues.SideEffectsSql`(바인드 `:owner`·`:name` 이름 바인드) | 켜진 트리거(`TRIGGER 이름`)와 ON DELETE CASCADE 자식 FK(`FK CASCADE 자식표.FK`)를 찾음 | 그대로 |
+| 부작용 찾기 `TiberoRollbackValues.SideEffectsSql`(바인드 `:owner`·`:name` 이름 바인드) | 켜진 트리거(`TRIGGER 이름`)와 ON DELETE CASCADE 자식 FK(`CASCADE 자식표.FK`)를 찾음. KIND = TRIGGER·CASCADE·SET NULL(Oracle 과 같은 글) | 그대로 |
 | `AS OF TSN n`(`TiberoRollbackValues.AsOf`, `GET_SYSTEM_CHANGE_NUMBER` 로 읽은 n) | 그 뒤 커밋한 UPDATE 앞 값을 읽음 | 그대로 |
+| **방언 왕복**(`TiberoRollbackDialect` + `TiberoRollbackChannel.Gated`, `ALL_TAB_COLS.DATA_TYPE` → `KindOf` → `ReadExpression` → 통로로 읽기 → `Literal` → `COUNT(*)`) | NUMBER(38,9) 음수 38자리, BINARY_FLOAT·DOUBLE(보통 값·NaN·±무한대·-3.4E38), DATE, TIMESTAMP(9), TZ(지역), LTZ, INTERVAL 둘(음수 포함), RAW, CHAR, VARCHAR(작은따옴표·역슬래시), NVARCHAR(BMP 밖 글자), NCHAR, NULL 모두 1행. CLOB 은 NULL 여부만 | 형식 이름: `VARCHAR`·`NVARCHAR`·`TIMESTAMP(9) WITH LOCAL TIME ZONE`·`INTERVAL DAY(9) TO SECOND(9)`·`RAW` |
+| **BINARY_DOUBLE `-BINARY_DOUBLE_INFINITY` 를 드라이버가 double 로 읽으면 `-2.225073858507201E-308`**(잘못 읽음). `TO_CHAR(c)` 는 `-Inf`·`Inf`·`Nan` | 드라이버 결함 | 방언은 BINARY_FLOAT·DOUBLE 을 `TO_CHAR(c)` 로 읽고 `Nan`·`Inf`·`-Inf` 를 상수로 쓴다. 그리드 표시(`TiberoValues`)도 같은 값을 잘못 보일 수 있다(후속) |
+| 트랜잭션이 남은 채 닫기: 세션 정리(`TiberoSession.DisposeAsync`) / 연결만 닫기(`Connection.CloseAsync`) | 둘 다 **롤백**(다른 세션에 안 보임). 암묵 커밋 없음. DDL 뒤에 닫으면 DDL 앞 행은 커밋돼 있고 DDL 뒤 행만 롤백 | 「SessionClosed = 모름」 묶음은 실제로는 롤백. 판정은 원장 규칙 그대로(RD-6) |
+| 파티션 키 UPDATE(RANGE 파티션, 다른 파티션으로 옮김) | ROW MOVEMENT 없으면 TBR-10019. 켜면 성공하고 **ROWID 가 바뀌어** 옛 ROWID 로 0행 | 설계 6.2 그대로: 직후 값 읽기가 빠지면 「불완전」 |
+| NUMBER 38자리 유효숫자 + 큰·작은 지수(`1.23…E-100`, `-9.87…E+120`, 소수 30자리 뒤) `TO_CHAR(c, 'TM9')` | 지수 표기로 바뀌고(43~45글자, 64 미만) 따옴표 없는 리터럴로 1행 | 64자 넘는 경우가 생기지 않음(TM9 가 지수로 줄임) |

@@ -4,9 +4,11 @@ using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Execution.Providers;
+using Oranda.Core.Rollback;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Driver;
 using Oranda.Tibero.Execution;
+using Oranda.Tibero.Rollback;
 
 namespace Oranda.Tibero.Sessions;
 
@@ -29,6 +31,7 @@ internal sealed class TiberoSession : ISession
     private readonly Action<Guid>? _onDisposed;
     private readonly Func<ValueTask> _closeConnection;
     private readonly Timer? _keepAlive;
+    private readonly TiberoRollbackHooks? _rollback;
     private int _state = (int)SessionState.Idle;
     private volatile bool _pending;
     private int _disposed;
@@ -38,10 +41,12 @@ internal sealed class TiberoSession : ISession
     /// 이 객체의 Commit·Rollback·Dispose 를 부르면 자동 커밋으로 돌아간다(tb-exec 실측) → 세션이 닫힐 때까지 두고 닫을 때만 정리한다(SAFE-04).
     /// </param>
     /// <param name="driver">연결을 만든 드라이버 어댑터. 서버 없는 단위 시험(가짜 연결)만 null.</param>
+    /// <param name="rollback">되돌리기 원장에 세션 API 커밋·롤백을 알리는 자리(설계 13.5 끝). null 이면 알리지 않는다.</param>
     public TiberoSession(Guid id, ConnectionProfile profile, ServerInfo server, SessionPurpose purpose, string dbKey,
                          DbConnection connection, DbTransaction? transaction, IEventBus events, Action<Guid>? onDisposed = null,
-                         Func<ValueTask>? closeConnection = null, TiberoDriver? driver = null)
+                         Func<ValueTask>? closeConnection = null, TiberoDriver? driver = null, TiberoRollbackHooks? rollback = null)
     {
+        _rollback = rollback;
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(events);
         Driver = driver;
@@ -147,9 +152,10 @@ internal sealed class TiberoSession : ISession
     }
 
     // 미커밋 플래그는 잠금을 쥔 채 지운다 — 놓은 뒤에 지우면 그 사이 다른 DML 이 켠 플래그까지 지워진다.
-    public Task CommitAsync(CancellationToken ct) => ExecAsync(CommitSql, () => SetPending(false), ct);
+    // 되돌리기 원장(설계 7.3·7.4): 커밋 앞 BeforeEnd, 커밋·롤백 뒤 시점 읽기와 End 를 잠금 안에서 기다리고, 알림 이벤트는 잠금을 놓은 뒤 낸다.
+    public Task CommitAsync(CancellationToken ct) => ExecAsync(CommitSql, TransactionEndKind.Commit, ct);
 
-    public Task RollbackAsync(CancellationToken ct) => ExecAsync(RollbackSql, () => SetPending(false), ct);
+    public Task RollbackAsync(CancellationToken ct) => ExecAsync(RollbackSql, TransactionEndKind.Rollback, ct);
 
     public async ValueTask DisposeAsync()
     {
@@ -171,11 +177,17 @@ internal sealed class TiberoSession : ISession
         await TimedClose.RunAsync(_closeConnection, "Tibero 세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
     }
 
-    private async Task ExecAsync(string sql, Action whileHeld, CancellationToken ct)
+    private async Task ExecAsync(string sql, TransactionEndKind kind, CancellationToken ct)
     {
         await CommandGate.EnterAsync(ct).ConfigureAwait(false);
+        TransactionEnded? ended = null;
         try
         {
+            if (_rollback is not null && kind == TransactionEndKind.Commit)
+            {
+                await _rollback.BeforeCommitAsync(this, ct).ConfigureAwait(false);
+            }
+
             // 드라이버의 *Async 는 동기로 돈다 → 부른 스레드(UI)를 막지 않게 스레드 풀로 옮긴다.
             await Task.Run(
                 async () =>
@@ -184,7 +196,11 @@ internal sealed class TiberoSession : ISession
                     await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 },
                 CancellationToken.None).ConfigureAwait(false);
-            whileHeld();
+            SetPending(false);
+            if (_rollback is not null)
+            {
+                ended = await _rollback.AfterEndAsync(this, kind).ConfigureAwait(false);
+            }
         }
         catch (Exception ex) when (ReportFailure(ex))
         {
@@ -193,6 +209,11 @@ internal sealed class TiberoSession : ISession
         finally
         {
             CommandGate.Release();
+        }
+
+        if (ended is not null)
+        {
+            _rollback!.Publish(ended);
         }
     }
 

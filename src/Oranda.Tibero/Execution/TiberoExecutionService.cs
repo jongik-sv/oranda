@@ -10,9 +10,12 @@ using Oranda.Core.Execution.Providers;
 using Oranda.Core.Grid;
 using Oranda.Core.History;
 using Oranda.Core.Journal;
+using Oranda.Core.Rollback;
+using Oranda.Core.Rollback.Capture;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Driver;
 using Oranda.Tibero.Results;
+using Oranda.Tibero.Rollback;
 using Oranda.Tibero.Sessions;
 
 namespace Oranda.Tibero.Execution;
@@ -36,6 +39,12 @@ namespace Oranda.Tibero.Execution;
 /// 변경 일지(E5, D4): ALTER·DROP·CREATE OR REPLACE·RENAME 직전에 <see cref="TiberoDdlSource"/> 로 <see cref="ChangeCapture"/> 를 돌려
 /// 「보관 안 함 + 이유」 행을 <see cref="ChangeSnapshotCaptured"/> 로 알린다(서버에 아무것도 보내지 않는다). 실제 이전 DDL 보관은 T3.
 /// </para>
+/// <para>
+/// 되돌리기 지점(설계 13.5, RB-11): 쓰기 문장이면 정책 관문 앞(명령 잠금 밖)에서 <see cref="IRollbackCapture.PrepareAsync"/>(잠그는 통로) →
+/// 관문에 제안(<see cref="ConfirmExtras"/>)을 넘기고 답을 받는다 → 명령 잠금 안에서 <see cref="IRollbackCapture.BeginAsync"/>(쥔 통로) →
+/// 캡처가 준 문장·바인드를 보낸다 → 성공이면 <see cref="IStatementCapture.CompleteAsync"/>, 사용자 문장이 끝나기 전의 실패·취소면
+/// <see cref="IStatementCapture.AbandonAsync"/>(내부 저장점으로 잠금을 푼다). 결과의 <see cref="ExecutionResult.Statement"/> 는 사용자 문장 그대로다.
+/// </para>
 /// </summary>
 [OrandaService(typeof(IExecutionService), Dbms = Dbms.Tibero)]
 internal sealed partial class TiberoExecutionService : IExecutionService
@@ -56,6 +65,8 @@ internal sealed partial class TiberoExecutionService : IExecutionService
     private readonly IEventBus _events;
     private readonly ISqlPlusCommandProcessor? _sqlPlus;
     private readonly IGridFetchSettings? _grid;
+    private readonly IRollbackCapture _capture;
+    private readonly IDmlAnalyzer _analyzer;
     private readonly ConditionalWeakTable<TiberoSession, SessionRuntime> _runtimes = new();
 
     public TiberoExecutionService(IExecutionPolicy policy, IExecutionInteraction interaction, IEventBus events,
@@ -66,7 +77,7 @@ internal sealed partial class TiberoExecutionService : IExecutionService
 
     internal TiberoExecutionService(IExecutionPolicy policy, IExecutionInteraction interaction, IEventBus events,
                                     ISqlPlusCommandProcessor? sqlPlus, bool dbmsOutput = true, int pageSize = 500,
-                                    IGridFetchSettings? grid = null)
+                                    IGridFetchSettings? grid = null, IRollbackCapture? capture = null, IDmlAnalyzer? analyzer = null)
     {
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(interaction);
@@ -78,7 +89,12 @@ internal sealed partial class TiberoExecutionService : IExecutionService
         DbmsOutputEnabled = dbmsOutput;
         PageSize = pageSize;
         _grid = grid;
+        _capture = capture ?? RollbackCapture.Disabled;
+        _analyzer = analyzer ?? NullDmlAnalyzer.Instance;
     }
+
+    /// <summary>되돌리기 방언(설계 15장).</summary>
+    internal static IRollbackDialect Dialect => TiberoRollbackDialect.Instance;
 
     /// <summary>생성할 때 받은 결과 페이지 크기(설정 서비스가 없을 때의 값). 실행할 때는 <see cref="CurrentPageSize"/>.</summary>
     internal int PageSize { get; }
@@ -185,11 +201,32 @@ internal sealed partial class TiberoExecutionService : IExecutionService
                 return new ExecutionResult(stmt, ExecutionStatus.Cancelled);
             }
 
-            stmt = substituted;
+            stmt = substituted with { Dml = null }; // 치환한 글은 만든 쪽이 준 모양과 다를 수 있다 → 다시 분석(설계 13.3)
         }
 
-        // 2. 정책 관문. 거부면 드라이버를 부르지 않는다(SAFE-07). 미리 받은 확인은 치환 뒤 텍스트로 비교한다.
-        var gate = await PolicyGate.DecideAsync(_policy, _interaction, _events, s, stmt, options, ct).ConfigureAwait(false);
+        // 2. 되돌리기 제안(설계 13.5): 쓰기 문장만, 정책 관문 앞·명령 잠금 밖. 실패는 엔진이 NotApplicable 로 삼키고 사용자 취소만 전파한다.
+        var tiberoSession = s as TiberoSession;
+        var rollback = tiberoSession is not null && ShouldCapture(s, stmt, options) ? NewRollbackRequest(s, stmt, binds, options) : null;
+        var extras = ConfirmExtras.None;
+        if (rollback is not null)
+        {
+            try
+            {
+                extras = await _capture.PrepareAsync(rollback, TiberoRollbackChannel.Gated(tiberoSession!), Dialect, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return new ExecutionResult(stmt, ExecutionStatus.Cancelled);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // 엔진은 던지지 않는 계약이다. 그래도 던지면(엔진 안 제한 시간·통로 밖 예외) 제안 없이 실행한다 — 결과 계약(예외 대신 결과)을 지킨다.
+                extras = ConfirmExtras.None;
+            }
+        }
+
+        // 3. 정책 관문. 거부면 드라이버를 부르지 않는다(SAFE-07). 미리 받은 확인은 치환 뒤 텍스트로 비교한다.
+        var gate = await PolicyGate.DecideAsync(_policy, _interaction, _events, s, stmt, options, extras, ct).ConfigureAwait(false);
         switch (gate.Outcome)
         {
             case PolicyGateOutcome.Denied:
@@ -241,7 +278,8 @@ internal sealed partial class TiberoExecutionService : IExecutionService
             try
             {
                 // 드라이버 호출은 동기로 돈다(실측 4장) → 부른 스레드(UI)를 막지 않게 드라이버 단계 전체를 스레드 풀로 옮긴다.
-                return await Task.Run(() => RunOnDriverAsync(session, runtime, stmt, binds, applied, orphans, ct), CancellationToken.None)
+                var plan = rollback is null ? null : new RollbackPlan(rollback, extras, gate.Answer);
+                return await Task.Run(() => RunOnDriverAsync(session, runtime, stmt, binds, applied, orphans, plan, ct), CancellationToken.None)
                     .ConfigureAwait(false);
             }
             finally
@@ -261,9 +299,16 @@ internal sealed partial class TiberoExecutionService : IExecutionService
 
     private async Task<ExecutionResult> RunOnDriverAsync(TiberoSession session, SessionRuntime runtime, SqlStatement stmt,
                                                          IReadOnlyDictionary<string, BindValue> binds, PolicyDecision? applied,
-                                                         List<IAsyncDisposable> orphans, CancellationToken ct)
+                                                         List<IAsyncDisposable> orphans, RollbackPlan? plan, CancellationToken ct)
     {
         var kind = ExecutionPolicy.EffectiveKind(stmt);
+        IStatementCapture? capture = null;
+        var began = false; // 시작 단계가 통로로 문장을 보냈다(내부 저장점·잠금 읽기를 했을 수 있다)
+        long? rows = null;
+        Dictionary<string, object?>? outValues = null; // 실패 경로의 마무리도 이미 읽은 OUT 값(ORANDA_RID)과 트랜잭션 id 를 쓴다
+        string? transactionId = null;
+        RollbackStatementSummary? summary = null;
+        IReadOnlySet<string> added = EmptyNames;
         var sw = Stopwatch.StartNew();
         DbCommand? cmd = null;
         DbDataReader? reader = null; // 결과 집합에 넘기기 전까지 이 메서드가 소유한다
@@ -281,17 +326,39 @@ internal sealed partial class TiberoExecutionService : IExecutionService
 
             await CaptureBeforeChangeAsync(session, stmt, ct).ConfigureAwait(false);
 
-            cmd = session.CreateCommand(stmt.Text);
-            if (stmt.BindNames.Count > 0 || binds.Count > 0)
+            // 되돌리기 시작(시점 읽기·내부 저장점·잠금 읽기). 보낼 글·바인드는 캡처가 정한다(한 행 INSERT 면 RETURNING 이 붙는다).
+            var send = stmt;
+            var sendBinds = binds;
+            if (plan is not null)
+            {
+                var channel = TiberoRollbackChannel.Locked(session);
+                try
+                {
+                    capture = await BeginCaptureAsync(channel, plan, ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    began = channel.HasSent; // 시작 단계가 서버에 무언가 보냈다(저장점·잠금 읽기·시점 읽기) → 실패해도 미커밋 표시를 갱신한다
+                }
+
+                if (capture is not null)
+                {
+                    send = capture.StatementToSend;
+                    sendBinds = capture.BindsToSend;
+                    added = AddedBindNames(binds, sendBinds);
+                }
+            }
+
+            cmd = session.CreateCommand(send.Text);
+            if (send.BindNames.Count > 0 || sendBinds.Count > 0)
             {
                 // 값이 없는 바인드는 여기서 InvalidOperationException → ORANDA-EXEC, 문장은 보내지 않는다.
                 var driver = session.Driver ?? throw new InvalidOperationException("세션에 Tibero 드라이버 어댑터가 없어 바인드를 만들 수 없습니다.");
-                outBinds = TiberoBindBuilder.Build(driver, cmd, stmt, binds);
+                outBinds = TiberoBindBuilder.Build(driver, cmd, send, sendBinds);
             }
 
             var pageSize = CurrentPageSize; // 실행마다 한 번 읽는다: 한 결과 안에서 페이지 크기가 바뀌지 않게
             var lobFetchSize = CurrentLobFetchSize;
-            long? rows = null;
             var hasRows = false;
 
             // 취소: 토큰 → DbCommand.Cancel()(Oracle 과 같다). 드라이버 호출이 돌아올 때까지(서버가 멈출 때까지) 이 줄에서 기다린다.
@@ -299,7 +366,7 @@ internal sealed partial class TiberoExecutionService : IExecutionService
             using (cmd.CancelOnToken(ct))
             {
                 dispatched = true;
-                if (stmt.Kind == StatementKind.Query || stmt.IsClassificationUncertain)
+                if (send.Kind == StatementKind.Query || send.IsClassificationUncertain)
                 {
                     // 질의와 분류가 불확실한 문장은 리더로 받는다(PSM 블록도 FieldCount=0 으로 된다, 실측 3장). 행이 있으면 결과 집합.
                     reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -328,10 +395,16 @@ internal sealed partial class TiberoExecutionService : IExecutionService
             }
 
             // REF CURSOR OUT 은 결과 집합이 된다. 만드는 즉시 orphans 에 올려(중간 OUT 값 읽기가 실패해도 새지 않게) 결과를 돌려주기 직전에 뺀다.
-            var outValues = ReadOutValues(session, outBinds, pageSize, lobFetchSize, orphans);
+            outValues = ReadOutValues(session, outBinds, pageSize, lobFetchSize, orphans);
 
             sw.Stop();
-            var pending = await TrackTransactionAsync(session, stmt, kind, ct).ConfigureAwait(false);
+            (var pending, transactionId) = await TrackTransactionIdAsync(session, stmt, kind, ct).ConfigureAwait(false);
+            if (capture is not null)
+            {
+                // 사용자 문장은 이미 성공했다: 늦은 취소가 직후 값 읽기를 끊어 원복 스크립트만 망가지지 않게 사용자 토큰을 넘기지 않는다(14장).
+                summary = await CompleteCaptureAsync(capture, rows, outValues, transactionId, CancellationToken.None).ConfigureAwait(false);
+                capture = null; // 마무리했다: 뒤 단계가 실패해도 다시 마무리하지 않는다(요약은 summary 에 남는다)
+            }
 
             // 질의 뒤에는 숨은 문장(거두기)을 보내지 않는다(Oracle 과 같다): 직전 커서가 바뀌지 않게. 질의 안 함수가 낸 출력은 버퍼에 남아 다음 문장 뒤에 나온다.
             // 리더가 열려 있으면(행을 낸 불확실 문장·FOR UPDATE)도 거두지 않는다: 같은 연결에서 거두기 블록의 CLOB OUT 로케이터가 비어
@@ -361,8 +434,9 @@ internal sealed partial class TiberoExecutionService : IExecutionService
                 ResultSet = resultSet,
                 Policy = applied,
                 DbmsOutput = output,
-                OutValues = outValues,
+                OutValues = WithoutAdded(outValues, added),
                 TransactionPending = pending,
+                Rollback = summary,
             };
         }
         catch (Exception ex) when (IsCancellation(ex, ct))
@@ -372,12 +446,15 @@ internal sealed partial class TiberoExecutionService : IExecutionService
                 await CloseCursorOutsAsync(session, outBinds).ConfigureAwait(false); // 서버가 연 REF CURSOR 를 감싸지 않은 채 남기지 않는다.
             }
 
+            summary = await FinishCaptureAfterFailureAsync(session, capture, executed, rows, outValues, transactionId, null).ConfigureAwait(false) ?? summary;
             var pending = await SafeTrackAfterFailureAsync(session, stmt, kind).ConfigureAwait(false);
-            return new ExecutionResult(stmt, ExecutionStatus.Cancelled) { Elapsed = Elapsed(), Policy = applied, TransactionPending = pending };
+            return new ExecutionResult(stmt, ExecutionStatus.Cancelled) { Elapsed = Elapsed(), Policy = applied, TransactionPending = pending, Rollback = summary };
         }
         catch (Exception ex) when (TiberoErrorClassifier.IsDriverException(ex))
         {
             session.ReportFailure(ex);
+            var error = TiberoErrorClassifier.ToDbError(ex, stmt.Text) ?? new DbError("TBR", ex.Message) { Dbms = Dbms.Tibero };
+            summary = await FinishCaptureAfterFailureAsync(session, capture, executed, rows, outValues, transactionId, error).ConfigureAwait(false) ?? summary;
             var pending = await SafeTrackAfterFailureAsync(session, stmt, kind).ConfigureAwait(false);
             // 실패 뒤에도 오류 앞에서 낸 출력을 거둔다(끊긴 세션은 빼고). 사용자 문장이 나가기 전의 실패(준비 문장)면 거둘 것이 없다.
             IReadOnlyList<string> output = !dispatched || session.State is SessionState.Broken or SessionState.Closed
@@ -386,32 +463,169 @@ internal sealed partial class TiberoExecutionService : IExecutionService
             return new ExecutionResult(stmt, ExecutionStatus.Failed)
             {
                 Elapsed = Elapsed(),
-                Error = TiberoErrorClassifier.ToDbError(ex, stmt.Text) ?? new DbError("TBR", ex.Message) { Dbms = Dbms.Tibero },
+                Error = error,
                 Policy = applied,
                 DbmsOutput = output,
                 TransactionPending = pending,
+                Rollback = summary,
             };
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or FormatException or InvalidCastException)
         {
             // 문장이 돈 뒤(OUT 값 읽기 등)의 실패면 트랜잭션이 이미 바뀌었을 수 있다 → 상태를 갱신한다.
             var failed = Failed(stmt, "ORANDA-EXEC", ex.Message, applied) with { Elapsed = Elapsed() };
-            if (!executed)
+            summary = await FinishCaptureAfterFailureAsync(session, capture, executed, rows, outValues, transactionId, failed.Error).ConfigureAwait(false) ?? summary;
+            if (!executed && !began)
             {
-                return failed;
+                return failed with { Rollback = summary };
             }
+
+            // 보내기 전 실패라도 캡처가 시작했으면(내부 저장점·잠금 읽기) 서버 트랜잭션이 열려 있을 수 있다 → 미커밋 표시를 갱신한다(6.2).
 
             var pending = await SafeTrackAfterFailureAsync(session, stmt, kind).ConfigureAwait(false);
             var output = collected ?? (session.State is SessionState.Broken or SessionState.Closed
                 ? []
                 : await SafeCollectAsync(session, runtime, ct).ConfigureAwait(false));
-            return failed with { TransactionPending = pending, DbmsOutput = output };
+            return failed with { TransactionPending = pending, DbmsOutput = output, Rollback = summary };
         }
         finally
         {
             // 결과 집합에 넘기지 않은 리더·명령만 여기서 닫는다(넘겼으면 null).
             await SafeDisposeAsync(reader).ConfigureAwait(false);
             await SafeDisposeAsync(cmd).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>정책 관문에서 받은 답까지 모은 되돌리기 준비(명령 잠금 안으로 넘긴다).</summary>
+    internal sealed record RollbackPlan(RollbackRequest Request, ConfirmExtras Extras, ConfirmAnswer Answer);
+
+    /// <summary>
+    /// 되돌리기 엔진에 넘길 문장인가(설계 7.1·7.5, 판단은 Core <see cref="RollbackFlow"/>): 기록 방식이 <see cref="ChangeRecording.None"/> 이 아니고
+    /// (읽기 전용 프로필·에이전트·데이터 복사는 None) 원장에 기록하는 쓰기 문장(DML·PL/SQL·분류 불확실). SQL*Plus 명령은 처리기로 간다.
+    /// </summary>
+    internal static bool ShouldCapture(ISession s, SqlStatement stmt, ExecutionOptions options) =>
+        stmt.Kind != StatementKind.SqlPlus
+        && RollbackFlow.IsRecordedWrite(stmt)
+        && RollbackFlow.RecordingFor(s, options) != ChangeRecording.None;
+
+    /// <summary>엔진 요청. 모양은 만든 쪽이 준 <see cref="SqlStatement.Dml"/>(그리드 편집), 없으면 분석기. 분석기 실패는 「모양 없음」.</summary>
+    private RollbackRequest NewRollbackRequest(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds, ExecutionOptions options)
+    {
+        DmlShape? shape;
+        try
+        {
+            shape = stmt.Dml ?? _analyzer.Analyze(stmt.Text);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            shape = null; // 분석기는 던지지 않는 계약이다. 그래도 던지면 원복 대상 밖으로 보고 실행은 막지 않는다.
+        }
+
+        return new RollbackRequest(s, stmt, binds, options) { Shape = shape };
+    }
+
+    /// <summary>
+    /// 명령 잠금 안 시작 단계. 사용자 취소는 전파한다(사용자 문장을 보내지 않는다). 그 밖의 엔진 실패는 원복 없이 사용자 문장을 그대로 보낸다(null).
+    /// </summary>
+    private async Task<IStatementCapture?> BeginCaptureAsync(TiberoRollbackChannel channel, RollbackPlan plan, CancellationToken ct)
+    {
+        try
+        {
+            return await _capture.BeginAsync(plan.Request, plan.Extras, plan.Answer, channel, Dialect, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return null; // 엔진 안 제한 시간: 사용자 취소가 아니므로 원복 없이 사용자 문장을 보낸다(엔진 실패와 같다)
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && !TiberoErrorClassifier.IsDriverException(ex))
+        {
+            return null;
+        }
+    }
+
+    private static readonly IReadOnlySet<string> EmptyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>캡처가 덧붙인 바인드 이름(<c>ORANDA_RID</c> 등): 보낸 바인드에는 있고 사용자 바인드에는 없는 것.</summary>
+    internal static IReadOnlySet<string> AddedBindNames(IReadOnlyDictionary<string, BindValue> user, IReadOnlyDictionary<string, BindValue> sent)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in sent.Keys)
+        {
+            if (!user.ContainsKey(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names.Count == 0 ? EmptyNames : names;
+    }
+
+    /// <summary>결과에 싣는 OUT 값: 캡처가 덧붙인 내부 바인드는 뺀다(사용자에게는 사용자 문장의 OUT 값만, 설계 6.1). 엔진에는 다 넘긴다.</summary>
+    internal static IReadOnlyDictionary<string, object?> WithoutAdded(Dictionary<string, object?> values, IReadOnlySet<string> added)
+    {
+        if (added.Count == 0)
+        {
+            return values;
+        }
+
+        var result = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase);
+        foreach (var name in added)
+        {
+            result.Remove(name);
+        }
+
+        return result;
+    }
+
+    /// <summary>사용자 문장 성공 뒤 마무리. 엔진은 던지지 않는 계약이고, 취소·실패가 와도 이미 성공한 사용자 문장 결과를 바꾸지 않는다.</summary>
+    private static async Task<RollbackStatementSummary?> CompleteCaptureAsync(IStatementCapture capture, long? rows, IReadOnlyDictionary<string, object?> outValues,
+                                                                             string? transactionId, CancellationToken ct)
+    {
+        try
+        {
+            return await capture.CompleteAsync(rows, outValues, transactionId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return new RollbackStatementSummary(RollbackScriptState.Incomplete, NotCreatedReason.Failed, 0)
+            {
+                Warning = "원복 스크립트를 마무리하지 못했습니다: " + ex.Message,
+            };
+        }
+    }
+
+    /// <summary>
+    /// 실패·취소 뒤. 사용자 문장이 끝나기 전이면 <see cref="IStatementCapture.AbandonAsync"/>(내부 저장점으로 되돌려 잠금을 푼다).
+    /// 사용자 문장은 이미 끝났고 그 뒤 단계(OUT 값 읽기·트랜잭션 추적)가 실패했으면 되돌리지 않고 마무리한다 — 저장점으로 되돌리면 성공한 사용자 문장이 지워진다.
+    /// 끊긴 세션은 보낼 수 없으므로 엔진에 실패만 알린다(엔진은 통로 오류를 삼킨다).
+    /// </summary>
+    private static async Task<RollbackStatementSummary?> FinishCaptureAfterFailureAsync(TiberoSession session, IStatementCapture? capture, bool executed,
+                                                                                        long? rows, IReadOnlyDictionary<string, object?>? outValues,
+                                                                                        string? transactionId, DbError? error)
+    {
+        if (capture is null)
+        {
+            return null;
+        }
+
+        if (executed)
+        {
+            return await CompleteCaptureAsync(capture, rows, outValues ?? new Dictionary<string, object?>(), transactionId, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+
+        try
+        {
+            return await capture.AbandonAsync(error, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return new RollbackStatementSummary(RollbackScriptState.NotCreated, NotCreatedReason.Failed, 0)
+            {
+                Warning = session.State is SessionState.Broken or SessionState.Closed
+                    ? null
+                    : "원복 스크립트용 잠금을 풀지 못했습니다: " + ex.Message,
+            };
         }
     }
 
@@ -562,17 +776,22 @@ internal sealed partial class TiberoExecutionService : IExecutionService
     }
 
     /// <summary><c>DBMS_TRANSACTION.LOCAL_TRANSACTION_ID</c> 로 미커밋 상태를 갱신한다. 읽기 전용 프로필은 늘 false. 명령 잠금을 쥔 채 부른다.</summary>
-    internal static async Task<bool> TrackTransactionAsync(TiberoSession session, SqlStatement stmt, StatementKind kind, CancellationToken ct)
+    internal static async Task<bool> TrackTransactionAsync(TiberoSession session, SqlStatement stmt, StatementKind kind, CancellationToken ct) =>
+        (await TrackTransactionIdAsync(session, stmt, kind, ct).ConfigureAwait(false)).Pending;
+
+    /// <summary><see cref="TrackTransactionAsync"/> + 읽은 트랜잭션 id(<c>usn.slot.sqn</c>, 없거나 읽지 않았으면 null). 되돌리기 원장이 묶음에 남긴다(설계 7.1).</summary>
+    internal static async Task<(bool Pending, string? TransactionId)> TrackTransactionIdAsync(TiberoSession session, SqlStatement stmt, StatementKind kind,
+                                                                                            CancellationToken ct)
     {
         if (session.Profile.ReadOnly)
         {
             session.SetPending(false);
-            return false;
+            return (false, null);
         }
 
         if (IsPlainQuery(stmt, kind))
         {
-            return session.HasPendingTransaction;
+            return (session.HasPendingTransaction, null);
         }
 
         var cmd = session.CreateCommand(TransactionIdSql);
@@ -582,7 +801,8 @@ internal sealed partial class TiberoExecutionService : IExecutionService
             // 드라이버 NULL 은 DBNull 이 아니라 IsNull 인 공급자 값일 수 있다(실측 3장) → 어댑터로 판정한다.
             var pending = session.Driver is { } driver ? !driver.IsProviderNull(id) : id is not null and not DBNull;
             session.SetPending(pending);
-            return pending;
+            var text = pending ? Convert.ToString(session.Driver is { } d ? d.ConvertProviderValue(id).Value : id, System.Globalization.CultureInfo.InvariantCulture) : null;
+            return (pending, text);
         }
     }
 

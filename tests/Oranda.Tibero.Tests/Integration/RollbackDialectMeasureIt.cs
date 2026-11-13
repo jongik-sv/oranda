@@ -3,7 +3,10 @@ using System.Globalization;
 using System.Text;
 using Oranda.Core.Execution;
 using Oranda.Core.Execution.Providers;
+using Oranda.Core.Metadata;
+using Oranda.Core.Rollback;
 using Oranda.Tibero.Execution;
+using Oranda.Tibero.Rollback;
 using Oranda.Tibero.Sessions;
 using Xunit.Abstractions;
 
@@ -358,7 +361,7 @@ public class RollbackDialectMeasureIt(ITestOutputHelper output)
             });
             output.WriteLine("RB13 side effects: " + string.Join(" | ", rows));
             Assert.Contains("TRIGGER ORB_RB_TRG", rows);
-            Assert.Contains($"FK CASCADE {X}.ORB_RB_X_FK", rows);
+            Assert.Contains($"CASCADE {X}", rows);
 
             var point = Convert.ToInt64(await ScalarAsync(s, Oranda.Tibero.Rollback.TiberoRollbackValues.PointQueries[0]), CultureInfo.InvariantCulture);
             await ExecAsync(s, $"UPDATE {T} SET NAME = 'b' WHERE ID = 1");
@@ -370,6 +373,151 @@ public class RollbackDialectMeasureIt(ITestOutputHelper output)
         finally
         {
             await CleanupAsync(s);
+        }
+    }
+
+    [TiberoWriteFact]
+    public async Task Tibero_dialect_reads_every_kind_through_the_channel_and_its_literal_finds_exactly_that_row()
+    {
+        await using var it = TiberoItSessions.Create();
+        if (it is null)
+        {
+            return;
+        }
+
+        var s = await it.OpenAsync();
+        await CleanupAsync(s);
+        try
+        {
+            await ExecAsync(s, $"""
+                CREATE TABLE {L} (ID NUMBER PRIMARY KEY, N NUMBER(38,9), BF BINARY_FLOAT, BD BINARY_DOUBLE, D DATE, TS TIMESTAMP(9),
+                  TZ TIMESTAMP(9) WITH TIME ZONE, LTZ TIMESTAMP(9) WITH LOCAL TIME ZONE, IDS INTERVAL DAY(9) TO SECOND(9), IYM INTERVAL YEAR(9) TO MONTH,
+                  R RAW(16), C CHAR(5), V VARCHAR2(40), NV NVARCHAR2(20), NC NCHAR(4), CL CLOB)
+                """);
+            await ExecAsync(s, $"""
+                INSERT INTO {L} VALUES (1, -12345678901234567890123456789.123456789, TO_BINARY_FLOAT('0.1'), TO_BINARY_DOUBLE('0.1') / 3,
+                  TO_DATE('2026-11-13 14:05:10', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-11-13 14:05:10.123456789', 'YYYY-MM-DD HH24:MI:SS.FF9'),
+                  TO_TIMESTAMP_TZ('2026-07-01 09:00:00.000000001 Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS.FF9 TZR'),
+                  TO_TIMESTAMP('2026-11-13 14:05:10.987654321', 'YYYY-MM-DD HH24:MI:SS.FF9'),
+                  TO_DSINTERVAL('-000000003 04:05:06.123456789'), TO_YMINTERVAL('+000000002-03'), HEXTORAW('00FF10AB'), 'ab', 'it''s \ ok', N'가나다😀', N'한', NULL)
+                """);
+            await ExecAsync(s, $"INSERT INTO {L} (ID, BF, BD) VALUES (2, BINARY_FLOAT_NAN, -BINARY_DOUBLE_INFINITY)");
+            await ExecAsync(s, $"INSERT INTO {L} (ID, BF, BD) VALUES (3, -BINARY_FLOAT_INFINITY, BINARY_DOUBLE_INFINITY)");
+            await ExecAsync(s, $"INSERT INTO {L} (ID, BF, BD) VALUES (4, TO_BINARY_FLOAT('-3.4E38'), BINARY_DOUBLE_NAN)");
+
+            var dialect = TiberoRollbackDialect.Instance;
+            var channel = TiberoRollbackChannel.Gated(s);
+            var types = await channel.QueryAsync(
+                $"SELECT COLUMN_NAME, DATA_TYPE FROM ALL_TAB_COLS WHERE OWNER = USER AND TABLE_NAME = '{L}' AND COLUMN_NAME <> 'ID' ORDER BY COLUMN_ID",
+                NoBinds, 100, CancellationToken.None);
+            var failures = new List<string>();
+            foreach (var id in new[] { 1, 2, 3, 4 })
+            {
+                foreach (var t in types.Rows)
+                {
+                    var name = (string)t[0]!;
+                    var info = new ColumnInfo(name, 0, (string)t[1]!);
+                    var column = new RollbackColumn(name, info.DataType, dialect.KindOf(info));
+                    var read = await channel.QueryAsync($"SELECT {dialect.ReadExpression(column, "t.\"" + name + "\"")} FROM {L} t WHERE ID = {id}",
+                        NoBinds, 1, CancellationToken.None);
+                    var value = read.Rows[0][0];
+                    var literal = dialect.Literal(column, value, out var reason);
+                    string count;
+                    if (column.Kind == RollbackValueKind.Large)
+                    {
+                        count = literal is null ? $"large({reason}) nullFlag={value}" : "literal " + literal;
+                    }
+                    else
+                    {
+                        var where = literal == "NULL" ? $"{name} IS NULL" : $"{name} = {literal}";
+                        var rows = await channel.QueryAsync($"SELECT COUNT(*) FROM {L} WHERE ID = {id} AND {where}", NoBinds, 1, CancellationToken.None);
+                        count = Convert.ToString(rows.Rows[0][0], CultureInfo.InvariantCulture)!;
+                        if (count != "1")
+                        {
+                            failures.Add($"{name}#{id}");
+                        }
+                    }
+
+                    output.WriteLine($"RB13 dialect {name}#{id}: type={t[1]} kind={column.Kind} value={value} ({value?.GetType().Name}) literal={literal} count={count}");
+                }
+            }
+
+            Assert.Empty(failures);
+        }
+        finally
+        {
+            await CleanupAsync(s);
+        }
+    }
+
+    [TiberoWriteFact]
+    public async Task Close_with_open_transaction_partition_key_move_and_long_numbers()
+    {
+        await using var it = TiberoItSessions.Create();
+        if (it is null)
+        {
+            return;
+        }
+
+        var b = await it.OpenAsync();
+        await CleanupAsync(b);
+        try
+        {
+            await ExecAsync(b, $"CREATE TABLE {T} (ID NUMBER PRIMARY KEY, NAME VARCHAR2(30))");
+
+            // 트랜잭션이 남은 채 닫기: 세션 정리(트랜잭션 객체 Dispose) 와 연결만 닫기.
+            var a1 = await it.OpenAsync();
+            await ExecAsync(a1, $"INSERT INTO {T} VALUES (1, 'a')");
+            await a1.DisposeAsync();
+            output.WriteLine($"RB13 close session dispose: otherSees={await ScalarTextAsync(b, $"SELECT COUNT(*) FROM {T} WHERE ID = 1")}");
+            var a2 = await it.OpenAsync();
+            await ExecAsync(a2, $"INSERT INTO {T} VALUES (2, 'b')");
+            await a2.Connection.CloseAsync();
+            output.WriteLine($"RB13 close connection only: state={a2.State} otherSees={await ScalarTextAsync(b, $"SELECT COUNT(*) FROM {T} WHERE ID = 2")}");
+            var a3 = await it.OpenAsync();
+            await ExecAsync(a3, $"INSERT INTO {T} VALUES (3, 'c')");
+            await ExecAsync(a3, $"CREATE TABLE {X} (A NUMBER)"); // DDL 뒤 닫기(암묵 커밋이 먼저 났는가)
+            await ExecAsync(a3, $"INSERT INTO {T} VALUES (4, 'd')");
+            await a3.DisposeAsync();
+            output.WriteLine($"RB13 close after ddl: before-ddl row={await ScalarTextAsync(b, $"SELECT COUNT(*) FROM {T} WHERE ID = 3")} after-ddl row={await ScalarTextAsync(b, $"SELECT COUNT(*) FROM {T} WHERE ID = 4")}");
+
+            // 파티션 키 UPDATE: ROW MOVEMENT 없음·있음, ROWID 변화.
+            var made = await TryAsync(b, $"CREATE TABLE {L} (ID NUMBER PRIMARY KEY, K NUMBER) PARTITION BY RANGE (K) (PARTITION P1 VALUES LESS THAN (10), PARTITION P2 VALUES LESS THAN (MAXVALUE))");
+            output.WriteLine("RB13 partition create: " + made);
+            if (made == "ok")
+            {
+                await ExecAsync(b, $"INSERT INTO {L} VALUES (1, 5)");
+                await ExecAsync(b, "COMMIT");
+                var before = await ScalarTextAsync(b, $"SELECT ROWIDTOCHAR(ROWID) FROM {L} WHERE ID = 1");
+                var noMove = await TryAsync(b, $"UPDATE {L} SET K = 50 WHERE ID = 1");
+                await ExecAsync(b, "ROLLBACK");
+                var enable = await TryAsync(b, $"ALTER TABLE {L} ENABLE ROW MOVEMENT");
+                var moved = await TryAsync(b, $"UPDATE {L} SET K = 50 WHERE ID = 1");
+                var after = await ScalarTextAsync(b, $"SELECT ROWIDTOCHAR(ROWID) FROM {L} WHERE ID = 1");
+                var byOld = before is null ? "-" : await TryScalarAsync(b, $"SELECT COUNT(*) FROM {L} WHERE ROWID = CHARTOROWID('{before}')");
+                output.WriteLine($"RB13 partition key update: withoutRowMovement={noMove} enable={enable} withRowMovement={moved} rowidChanged={!string.Equals(before, after, StringComparison.Ordinal)} oldRowidFinds={byOld}");
+                await ExecAsync(b, "ROLLBACK");
+                await TryAsync(b, $"DROP TABLE {L} PURGE");
+            }
+
+            // 64글자를 넘는 NUMBER 의 TM9.
+            await ExecAsync(b, $"CREATE TABLE {L} (ID NUMBER PRIMARY KEY, N NUMBER)");
+            await ExecAsync(b, $"INSERT INTO {L} VALUES (1, 1.2345678901234567890123456789012345678E-100)");
+            await ExecAsync(b, $"INSERT INTO {L} VALUES (2, -9.8765432109876543210987654321098765432E+120)");
+            await ExecAsync(b, $"INSERT INTO {L} VALUES (3, 0.000000000000000000000000000012345678901234567890123456789012345678)");
+            var dialect = TiberoRollbackDialect.Instance;
+            var column = new RollbackColumn("N", "NUMBER", RollbackValueKind.Number);
+            foreach (var id in new[] { 1, 2, 3 })
+            {
+                var text = await ScalarTextAsync(b, $"SELECT {dialect.ReadExpression(column, "N")} FROM {L} WHERE ID = {id}");
+                var literal = dialect.Literal(column, text, out var reason);
+                var count = literal is null ? "literal null: " + reason : await TryScalarAsync(b, $"SELECT COUNT(*) FROM {L} WHERE ID = {id} AND N = {literal}");
+                output.WriteLine($"RB13 long number #{id}: tm9={text} len={text?.Length} literal={literal} count={count}");
+            }
+        }
+        finally
+        {
+            await CleanupAsync(b);
         }
     }
 

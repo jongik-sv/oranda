@@ -5,9 +5,11 @@ using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Security;
+using Oranda.Core.Rollback;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Connection;
 using Oranda.Tibero.Driver;
+using Oranda.Tibero.Rollback;
 
 namespace Oranda.Tibero.Sessions;
 
@@ -25,13 +27,17 @@ internal sealed class TiberoSessionManager : ISessionManager
     private readonly TiberoServerVersionPolicy _policy = new();
     private readonly ConcurrentDictionary<Guid, TiberoSession> _sessions = new();
     private readonly IDriverPathSource? _paths;
+    private readonly TiberoRollbackHooks? _rollback;
 
     /// <param name="events">이벤트 버스.</param>
     /// <param name="paths">드라이버 위치(설정). App 이 등록하면 주입되고, 없으면 환경 변수 <c>ORANDA_TIBERO_DRIVER</c> 만 본다.</param>
-    public TiberoSessionManager(IEventBus events, IDriverPathSource? paths = null)
+    /// <param name="ledger">되돌리기 원장(앱 조립이 등록). 원장과 엔진이 둘 다 있을 때만 세션의 커밋·롤백이 끝을 알린다.</param>
+    /// <param name="capture">되돌리기 엔진(커밋 시점 읽기).</param>
+    public TiberoSessionManager(IEventBus events, IDriverPathSource? paths = null, IRollbackLedger? ledger = null, IRollbackCapture? capture = null)
     {
         _events = events;
         _paths = paths;
+        _rollback = ledger is not null && capture is not null ? new TiberoRollbackHooks(ledger, capture, events) : null;
     }
 
     public IReadOnlyList<ISession> Sessions => [.. _sessions.Values];
@@ -58,7 +64,7 @@ internal sealed class TiberoSessionManager : ISessionManager
             var (info, transaction, id) = await Task.Run(() => PrepareAsync(driver, connection, profile, purpose, ct), CancellationToken.None).ConfigureAwait(false);
 
             var session = new TiberoSession(id, profile, info, purpose, TiberoServerProbe.BuildDbKey(info), connection, transaction, _events,
-                closed => _sessions.TryRemove(closed, out _), driver: driver);
+                closed => _sessions.TryRemove(closed, out _), driver: driver, rollback: _rollback);
             _sessions[id] = session;
             _events.Publish(new SessionOpened(id, profile, info, purpose));
             return session;

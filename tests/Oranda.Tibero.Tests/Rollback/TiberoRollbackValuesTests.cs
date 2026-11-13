@@ -28,6 +28,8 @@ public sealed class TiberoRollbackValuesTests
         Assert.Contains("DELETE_RULE IN ('CASCADE', 'SET NULL')", sql, StringComparison.Ordinal);
         Assert.Contains(":owner", sql, StringComparison.Ordinal);
         Assert.Contains(":name", sql, StringComparison.Ordinal);
+        Assert.Contains("SELECT 'TRIGGER' AS KIND", sql, StringComparison.Ordinal);
+        Assert.Contains("SELECT DISTINCT c.DELETE_RULE AS KIND", sql, StringComparison.Ordinal); // CASCADE | SET NULL (Oracle 판과 같은 글)
         Assert.DoesNotContain("DBA_", sql, StringComparison.Ordinal);
     }
 }

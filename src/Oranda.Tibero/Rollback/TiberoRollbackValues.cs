@@ -1,4 +1,6 @@
 using System.Globalization;
+using Oranda.Core.Connection;
+using Oranda.Tibero.Catalog;
 using Oranda.Tibero.Transfer.Copy;
 
 namespace Oranda.Tibero.Rollback;
@@ -35,15 +37,11 @@ internal static class TiberoRollbackValues
     }
 
     /// <summary>
-    /// 표의 부작용(켜진 트리거, 지울 때 자식 행을 지우거나 NULL 로 바꾸는 FK) 찾기. 바인드 <c>:owner</c>·<c>:name</c> → (KIND, NAME) 행.
+    /// 표의 부작용 찾기 질의(카탈로그 <c>rollback.side_effects</c>, Oracle 판과 같은 id·열). 바인드 <c>:owner</c>·<c>:name</c> → (KIND, NAME) 행,
+    /// KIND = <c>TRIGGER</c>·<c>CASCADE</c>·<c>SET NULL</c>, NAME = <c>OWNER.NAME</c>.
     /// 실측: <c>ALL_TRIGGERS</c>(TABLE_OWNER·TABLE_NAME·STATUS)·<c>ALL_CONSTRAINTS.DELETE_RULE</c> 가 Oracle 과 같은 사전 이름이다.
     /// </summary>
-    public const string SideEffectsSql =
-        "SELECT 'TRIGGER' AS KIND, OWNER || '.' || TRIGGER_NAME AS NAME FROM ALL_TRIGGERS"
-        + " WHERE TABLE_OWNER = :owner AND TABLE_NAME = :name AND STATUS = 'ENABLED'"
-        + " UNION ALL"
-        + " SELECT 'FK ' || c.DELETE_RULE AS KIND, c.OWNER || '.' || c.TABLE_NAME || '.' || c.CONSTRAINT_NAME AS NAME"
-        + " FROM ALL_CONSTRAINTS c JOIN ALL_CONSTRAINTS p ON p.OWNER = c.R_OWNER AND p.CONSTRAINT_NAME = c.R_CONSTRAINT_NAME"
-        + " WHERE c.CONSTRAINT_TYPE = 'R' AND c.STATUS = 'ENABLED' AND c.DELETE_RULE IN ('CASCADE', 'SET NULL')"
-        + " AND p.OWNER = :owner AND p.TABLE_NAME = :name";
+    public static string SideEffectsSql => SideEffects.Value;
+
+    private static readonly Lazy<string> SideEffects = new(() => TiberoEmbeddedCatalog.Load().Get("rollback.side_effects", 6, Dbms.Tibero).Sql);
 }
