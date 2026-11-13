@@ -89,6 +89,37 @@ public sealed class OracleRollbackHooksTests : IAsyncDisposable
         Assert.Equal(["EndAsync:Unknown"], _ledger.Calls);
     }
 
+    [Fact]
+    public async Task Closing_inside_an_end_scope_reports_once_when_the_scope_ends()
+    {
+        _ledger.OpenState = new RollbackOpenState(1, 1, false, false);
+
+        using (_session.BeginEndScope())
+        {
+            await _session.DisposeAsync(); // 커밋·DDL 을 보내는 중에 닫힘: 닫기는 범위에 맡긴다
+            await Task.Delay(100);
+            Assert.Empty(_ledger.Ends);
+        }
+
+        var end = Assert.Single(await EndsAsync(1));
+        Assert.Equal((TransactionEndKind.Unknown, TransactionEndSource.SessionClosed), (end.Kind, end.Source));
+    }
+
+    [Fact]
+    public async Task A_scope_that_reported_its_end_tells_nothing_more_on_close()
+    {
+        _ledger.OpenState = new RollbackOpenState(1, 1, false, false);
+
+        using (var scope = _session.BeginEndScope())
+        {
+            scope.Reported();
+            await _session.DisposeAsync();
+        }
+
+        await Task.Delay(100);
+        Assert.Empty(_ledger.Ends);
+    }
+
     /// <summary>스레드 풀에 맡긴 끝 알림을 기다린다(최대 5초).</summary>
     private async Task<IReadOnlyList<TransactionEnded>> EndsAsync(int count)
     {

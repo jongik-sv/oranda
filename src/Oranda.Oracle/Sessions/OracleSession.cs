@@ -190,7 +190,8 @@ internal sealed class OracleSession : ISession
 
     /// <summary>
     /// 트랜잭션을 끝낼 수 있는 문장을 보내는 동안 켜 두는 범위(명령 잠금 안). 그동안 끊기면 <see cref="MarkBroken"/> 은 원장에 따로 알리지 않고
-    /// 범위를 연 쪽이 끝을 알린다(끊김이 커밋 결과를 「롤백」으로 덮지 않게). 범위가 끝날 때까지 알리지 못했는데 세션이 끊겼으면 그때 「모름」으로 알린다.
+    /// 범위를 연 쪽이 끝을 알린다(끊김이 커밋 결과를 「롤백」으로 덮지 않게). 닫기(<see cref="DisposeAsync"/>)도 같다.
+    /// 범위가 끝날 때까지 알리지 못했는데 세션이 끊겼거나 닫혔으면 그때 「모름」(SessionBroken·SessionClosed)으로 알린다.
     /// </summary>
     internal EndScope BeginEndScope()
     {
@@ -214,9 +215,20 @@ internal sealed class OracleSession : ISession
                 return;
             }
 
-            if (Interlocked.Decrement(ref session._endInFlight) == 0 && !_reported && session.State == SessionState.Broken)
+            if (Interlocked.Decrement(ref session._endInFlight) != 0 || _reported)
             {
-                session.EndOpenGroup(TransactionEndKind.Unknown, TransactionEndSource.SessionBroken);
+                return;
+            }
+
+            // 범위 안에서 끊기거나 닫혔는데 끝을 알리지 못했다: 그동안 끊김·닫힘 처리는 알림을 범위에 맡겼으므로 여기서 「모름」으로 알린다.
+            switch (session.State)
+            {
+                case SessionState.Broken:
+                    session.EndOpenGroup(TransactionEndKind.Unknown, TransactionEndSource.SessionBroken);
+                    break;
+                case SessionState.Closed:
+                    session.EndOpenGroup(TransactionEndKind.Unknown, TransactionEndSource.SessionClosed);
+                    break;
             }
         }
     }
