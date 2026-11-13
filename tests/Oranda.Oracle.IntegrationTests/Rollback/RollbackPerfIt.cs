@@ -44,11 +44,12 @@ public sealed class RollbackPerfIt(OracleFreeFixture db, ITestOutputHelper outpu
     private RollbackLedger _ledger = null!;
     private OracleSessionManager _manager = null!;
     private OracleExecutionService _exec = null!;
+    private OracleMetadataProvider _metadata = null!;
 
     public async Task InitializeAsync()
     {
         _ledger = new RollbackLedger(_store, _bus);
-        var metadata = new OracleMetadataProvider(new MemoryMetadataCache(), _bus, Timeout.InfiniteTimeSpan);
+        var metadata = _metadata = new OracleMetadataProvider(new MemoryMetadataCache(), _bus, Timeout.InfiniteTimeSpan);
         // 상한을 표 행 수와 같게 둔다(예상 행 수 > 상한일 때만 만들지 않는다). 기본값이 바뀌어도 이 시험은 10만 행을 다 담는다.
         var engine = new RollbackCaptureEngine(_ledger, () => new RollbackSettings { MaxRowsPerStatement = BigRows }, metadata, _store);
         _manager = new OracleSessionManager(_bus, engine, _ledger);
@@ -146,6 +147,55 @@ public sealed class RollbackPerfIt(OracleFreeFixture db, ITestOutputHelper outpu
         Assert.Equal(NotCreatedReason.NotProduction, last.Rollback?.Reason); // 원복 스크립트 없이
         Assert.NotNull(last.Rollback?.BeforePoint); // 시점은 읽었다
         Assert.True(point < TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>
+    /// 그리드 한 행의 늘어난 시간이 어디서 오는지(엔진이 문장마다 보내는 것을 하나씩 같은 횟수만큼): 시노님 풀기·표 정보(메타데이터 제공자),
+    /// 트리거·CASCADE 찾기, 예상 행 수 <c>COUNT(*)</c>, 시점 읽기, 내부 저장점, 잠금 읽기, 직후 값 읽기.
+    /// </summary>
+    [Fact]
+    public async Task Grid_single_row_cost_breakdown()
+    {
+        const int n = 200;
+        await using var prod = await OpenAsync(ConnectionEnvironment.Production);
+        var channel = Oranda.Oracle.Rollback.OracleRollbackChannel.Gated(prod);
+        var dialect = Oranda.Oracle.Rollback.OracleRollbackDialect.Instance;
+        var table = new Oranda.Core.Metadata.DbObjectRef("SYSTEM", _table, "TABLE");
+        var key = new Dictionary<string, BindValue> { ["id"] = new(BindDataType.Number, 1) };
+        var named = new Dictionary<string, BindValue>
+        {
+            ["owner"] = new(BindDataType.Varchar2, "SYSTEM"),
+            ["name"] = new(BindDataType.Varchar2, _table),
+        };
+        var parts = new (string Name, Func<Task> Call)[]
+        {
+            ("name-step", () => _metadata.GetNameStepAsync(prod, "SYSTEM", _table, CancellationToken.None)),
+            ("table-info", () => _metadata.GetTableAsync(prod, table, CancellationToken.None)),
+            ("side-effects", () => channel.QueryAsync(dialect.SideEffectsSql!, named, 200, CancellationToken.None)),
+            ("count", () => channel.QueryAsync($"SELECT COUNT(*) FROM {_table} WHERE ID = :id", key, 1, CancellationToken.None)),
+            ("scn", () => channel.QueryAsync(dialect.PointQueries[0], NoBinds, 1, CancellationToken.None)),
+            ("savepoint", () => channel.ExecuteAsync("SAVEPOINT ORANDA$RB", CancellationToken.None)),
+            ("lock-read", () => channel.QueryAsync($"SELECT ROWIDTOCHAR(ROWID), ID, PRICE FROM {_table} WHERE ID = :id FOR UPDATE", key, 2,
+                CancellationToken.None)),
+            ("after-read", () => channel.QueryAsync($"SELECT ROWIDTOCHAR(ROWID), ID, TO_CHAR(PRICE, 'TM9') FROM {_table} WHERE ID = :id", key, 2,
+                CancellationToken.None)),
+        };
+        var line = new List<string>();
+        foreach (var (name, call) in parts)
+        {
+            await call(); // 워밍업(파싱·캐시)
+            var sw = Stopwatch.StartNew();
+            for (var i = 0; i < n; i++)
+            {
+                await call();
+            }
+
+            sw.Stop();
+            line.Add($"{name} {Ms(sw.Elapsed / n)}");
+        }
+
+        await RunAsync(prod, "ROLLBACK", StatementKind.TransactionControl, ChangeRecording.None);
+        Emit(Line("grid-row-parts", string.Join(", ", line) + $" ms/call ({n} calls each)"));
     }
 
     /// <summary>그리드 반영처럼 한 행 키 문장을 바인드로 <paramref name="count"/> 번. 문장당 평균 시간과 마지막 결과.</summary>
