@@ -107,7 +107,7 @@ DELETE 는 3단계가 없다(행이 없어졌다). 한 행 INSERT … VALUES 는
 - 원복 UPDATE 의 SET 에는 SET 대상 열만 넣는다. 트리거가 같은 행의 다른 열(예: 수정 시각)을 바꿨다면 그 열은 되돌리지 않는다. 확인 창이 트리거가 있다고 미리 알린다.
 - DELETE 의 원복 INSERT 는 가상 열(`IsVirtual`)을 빼고, 숨김 열(`IsInvisible`)은 이름을 적어 넣는다. ID 열(`IsIdentity`)이 있으면 `GENERATED ALWAYS` 일 때 ORA-32795 로 거부되므로, 그 문장을 「불완전 · ID 열」로 둔다(원복 문장은 만들어 두고 주석으로 알린다) **[설계자 결정 RD-12]**.
 - 큰 열(LOB·LONG·XMLTYPE·JSON·VECTOR·객체 형식)은 조건에 넣지 않는다. DELETE 로 지운 행의 큰 열 값이 NULL 이 아니면 그 행은 원복 INSERT 를 만들 수 없어 문장을 「불완전 · 큰 열」로 둔다 **[설계, RD-12 로 행 단위로 좁힘]**.
-- PK 가 없는 표에서 한 묶음 안의 두 문장이 같은 행을 건드리면(예: UPDATE 뒤 DELETE), 되살린 행은 ROWID 가 바뀌어 앞 문장의 원복이 그 행을 찾지 못한다. 엔진이 ROWID 겹침으로 이것을 알아보고 묶음을 「불완전 · PK 없는 행을 두 번 바꿈」으로 둔다 **[설계자 결정 RD-13]**.
+- PK 가 없는 표에서 한 묶음 안의 두 문장이 같은 행을 건드리면(예: UPDATE 뒤 DELETE), 되살린 행은 ROWID 가 바뀌어 앞 문장의 원복이 그 행을 찾지 못한다. 엔진이 ROWID 겹침으로 이것을 알아보고 묶음을 「불완전 · PK 없는 행을 두 번 바꿈」으로 둔다 **[설계자 결정 RD-13]**. 겹침 검사용 ROWID(`RollbackStatementRecord.TouchedRowIds`)는 PK 없는 표 말고도 ROWID 로 찾는 원복(PK 를 바꾼 UPDATE)과 DELETE(되살리면 ROWID 가 바뀜)에도 채운다 **[구현 중 결정 RD-23]**.
 - PK 가 있는 표에서는 지웠다가 되살린 행도 PK 로 찾으므로 역순 실행이 맞게 돈다(시안 화면 2 의 1040 행).
 - `RETURNING ROWID INTO :ORANDA_RID` 는 문장에 같은 이름의 바인드가 없을 때만 붙인다. 공급자 방언이 이 기능을 확인하지 않았으면(`SupportsReturningRowId = false`, Tibero 실측 전) 붙이지 않고 문장을 「불완전 · RETURNING 미지원」으로 둔다.
 
@@ -128,7 +128,8 @@ DELETE 는 3단계가 없다(행이 없어졌다). 한 행 INSERT … VALUES 는
 | VARCHAR2·CHAR | 열 그대로 | `'…'` (4000바이트를 넘으면 불완전) |
 | NVARCHAR2·NCHAR | 열 그대로 | `UNISTR('…')` (ASCII 밖 글자는 `\XXXX`). DB 문자셋 밖 글자가 SQL 글을 지나며 깨지지 않게 한다 |
 | NUMBER·FLOAT | `TO_CHAR(c, 'TM9', 'NLS_NUMERIC_CHARACTERS=''.,''')` | 따옴표 없는 숫자 |
-| BINARY_FLOAT·BINARY_DOUBLE | 열 그대로(.NET float·double) | `TO_BINARY_DOUBLE('R 형식')`, NaN·무한대는 `BINARY_DOUBLE_NAN`·`BINARY_DOUBLE_INFINITY`(`-` 붙임) |
+| BINARY_FLOAT | 열 그대로(.NET float) | `TO_BINARY_FLOAT('R 형식')`, NaN·무한대는 `BINARY_FLOAT_NAN`·`BINARY_FLOAT_INFINITY`(`-` 붙임). `TO_BINARY_DOUBLE` 로 견주면 0행이다(Tibero 실측) **[구현 중 결정 RD-22]** |
+| BINARY_DOUBLE | 열 그대로(.NET double) | `TO_BINARY_DOUBLE('R 형식')`, NaN·무한대는 `BINARY_DOUBLE_NAN`·`BINARY_DOUBLE_INFINITY`(`-` 붙임) |
 | DATE | `TO_CHAR(c, 'SYYYY-MM-DD HH24:MI:SS')` | `TO_DATE('…', 'SYYYY-MM-DD HH24:MI:SS')` |
 | TIMESTAMP(n) | `TO_CHAR(c, 'SYYYY-MM-DD HH24:MI:SS.FF9')` | `TO_TIMESTAMP('…', 'SYYYY-MM-DD HH24:MI:SS.FF9')` |
 | TIMESTAMP WITH TIME ZONE | `TO_CHAR(c, 'SYYYY-MM-DD HH24:MI:SS.FF9 TZR')` | `TO_TIMESTAMP_TZ('…', 'SYYYY-MM-DD HH24:MI:SS.FF9 TZR')` |
@@ -139,7 +140,8 @@ DELETE 는 3단계가 없다(행이 없어졌다). 한 행 INSERT … VALUES 는
 | 큰 열 | 읽지 않음(NULL 여부만 `CASE WHEN c IS NULL THEN 1 ELSE 0 END`) | 쓰지 않음 |
 
 - 조건에서 값이 NULL 이면 `= NULL` 이 아니라 `IS NULL` 로 쓴다 **[설계]**.
-- 형식 마스크가 Tibero 에서 같은지(`FF9`, `TZR`, `TM9`, `SYYYY`, `UNISTR`)는 RB-13 에서 실측한다. 다르면 Tibero 방언이 식을 바꾼다.
+- 형식 마스크(`FF9`, `TZR`, `TM9`, `SYYYY`, `UNISTR`)는 Tibero 에서도 같다(RB-13 실측, 리터럴 왕복 확인). 다른 것은 BINARY_FLOAT 하나다(RD-22).
+- 한계: `TZR` 지역 이름은 서머타임이 끝나 같은 벽시계 시각이 두 번 나오는 한 시간 안의 값을 한 순간으로 다시 읽으므로, 다른 쪽 순간에 저장된 값이면 조건이 0행이 될 수 있다.
 - 시험: 형식마다 「값 → 읽는 식 → 리터럴 → `WHERE c = 리터럴` 이 정확히 그 한 행」 왕복 시험을 Oracle 통합 시험과 Tibero 실DB 시험에 둔다(16장).
 
 ### 6.7 원복 스크립트 파일 (커밋 단위, 역순)
@@ -210,8 +212,9 @@ UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 4300
 |---|---|---|
 | `OracleSession`·`TiberoSession` 의 `CommitAsync`·`RollbackAsync` | 커밋·롤백 | `SessionApi` |
 | 실행 서비스가 보낸 트랜잭션 제어 문장: `COMMIT [WORK] [COMMENT …] [WRITE …]`, `ROLLBACK [WORK]`, `ROLLBACK [WORK] TO [SAVEPOINT] 이름`, `SAVEPOINT 이름` | 커밋·롤백·저장점까지 롤백·저장점 표시 | `Statement` |
-| 실행 서비스가 보낸 DDL(성공·실패 모두. Oracle 은 DDL 앞에서 암시적으로 커밋한다) | 모름 → 판정 | `Ddl` |
+| 실행 서비스가 보낸 DDL(성공·실패 모두. Oracle 은 DDL 앞에서 암시적으로 커밋한다) 뒤 미커밋 표시가 거짓. 커밋하지 않는 DDL 분류 문장(`ALTER SESSION`, 구문 단계에서 실패한 DDL)은 미커밋이 남으므로 끝이 아니다 **[구현 중 결정 RD-24]** | 모름 → 판정 | `Ddl` |
 | 실행 서비스가 보낸 PL/SQL·불확실 문장 뒤 미커밋 표시가 참 → 거짓 | 모름 → 판정 | `PlSql` |
+| 그 밖의 문장(실패한 COMMIT 의 ORA-02091, 트랜잭션을 되돌리는 오류) 뒤 미커밋 표시가 참 → 거짓 **[구현 중 결정 RD-24]** | 모름 → 판정 | `Statement` |
 | `SessionBroken` | 롤백(서버가 되돌림) | `SessionBroken` |
 | `SessionClosed` 때 열린 묶음이 있음 | 모름(판정 못 함) | `SessionClosed` |
 | 앱 시작 때 「열림」으로 저장된 묶음 | 모름 | `AppRestart` |
@@ -325,7 +328,7 @@ G2 에서 운영 접속이면 그리드 반영도 DML 이므로 원복 스크립
 
 ### 10.4 설정 「되돌리기」 탭 (화면 5)
 
-- 자리: 설정 창 탭 줄의 「실행」과 「기능」 사이(일반 · 편집기 · 결과 그리드 · 실행 · **되돌리기** · 기능 …) **[설계]**. `AppSettings.Rollback`(JSON 섹션 `rollback`)을 읽고 쓰며, 저장하면 `SettingsChanged("rollback")` 을 낸다. 새 섹션이라 설정 스키마 버전은 올리지 않는다(키가 없는 옛 파일 = 모두 기본값).
+- 자리: 설정 창 탭 줄의 「실행」 바로 뒤(일반 · 편집기 · 결과 그리드 · 실행 · **되돌리기** · …) **[설계]**(구현 RB-40 의 실제 `SettingsWindow` 순서). `AppSettings.Rollback`(JSON 섹션 `rollback`)을 읽고 쓰며, 저장하면 `SettingsChanged("rollback")` 을 낸다. 새 섹션이라 설정 스키마 버전은 올리지 않는다(키가 없는 옛 파일 = 모두 기본값).
 - 항목:
 
 | 항목 | 설정 키 | 기본 | 범위 | 끄거나 바꾸면 |
@@ -365,11 +368,11 @@ G2 에서 운영 접속이면 그리드 반영도 DML 이므로 원복 스크립
 | 만들지 않음 · 이유 | 개발·테스트 접속, 설정 끔, 확인 창에서 끔, 상한 넘음, 대상 아님, 안전한 저장소 없음 | `NotCreated` |
 | 확인 필요 · 이유 | 트랜잭션이 어떻게 끝났는지 모른다(7.3·7.4). 스크립트는 열 수 있고 경고가 보인다 **[설계자 결정 RD-6]** | `Unverified` |
 
-묶음의 상태는 문장 상태를 모아 정한다: 하나라도 무효가 아닌 문장의 원복이 있고 모두 완전하면 확정, 하나라도 불완전이면 불완전, 모든 문장이 무효면 무효, 원복 문장을 만든 문장이 없으면 만들지 않음.
+묶음의 상태는 문장 상태를 모아 정한다: 하나라도 무효가 아닌 문장의 원복이 있고 모두 완전하면 확정, 하나라도 불완전이면 불완전, 모든 문장이 무효면 무효, 원복 문장을 만든 문장이 없으면 만들지 않음. 원복 문장이 있는 묶음에 원복 문장을 만들지 않은 문장(MERGE·PL/SQL·상한 넘음 등)이 섞이면 스크립트만으로 묶음을 다 되돌리지 못하므로 「불완전 · 원복 문장을 만들지 않은 문장 n개」다 **[구현 중 결정 RD-25]**. 스크립트에서 그 문장은 「-- 원복 문장 없음: 이유」로 쓴다.
 
 ### 11.3 원복 스크립트 탭 (화면 2)
 
-- 「원복 스크립트 열기」는 새 SQL 탭을 묶음의 접속으로 열고(지금 「이 DDL 을 새 편집기에 열기」와 같은 접속 찾기), 6.7 의 글을 넣는다. 탭은 읽기 전용이다. 고치려면 「일반 SQL 탭으로 복사」를 쓴다 **[설계]**.
+- 「원복 스크립트 열기」는 묶음의 접속으로(지금 「이 DDL 을 새 편집기에 열기」와 같은 접속 찾기) 읽기 전용 문서 탭(`Features/Rollback`, 도구 창 id `oranda.panel.rollbackScript`)을 열고 6.7 의 글(`RollbackScriptWriter.Write`)을 넣는다. 고치려면 「일반 SQL 탭으로 복사」를 쓴다 **[설계]**(탭 모양은 RB-43 구현).
 - 자동으로 실행하지 않는다.
 - 도구 모음: 「원복 실행 (커밋 안 함)」, 「일반 SQL 탭으로 복사」, 「파일로 내보내기…」. 내보내기는 평문 `.sql` 이므로 「이 파일에는 실제 데이터가 평문으로 들어갑니다」를 묻는다.
 - 상태 줄: 「원복 문장 16개 · 암호화 보관 · 2026-12-12 에 지움 · 읽기 전용」.
@@ -467,7 +470,7 @@ CREATE INDEX IF NOT EXISTS ix_rollback_stmt_object ON rollback_statement(owner, 
 | `src/Oranda.Oracle/Rollback/` | Oracle `IRollbackChannel`·`IRollbackDialect` 구현, 카탈로그 `rollback/*.sql` | RB-10 |
 | `src/Oranda.Tibero/Rollback/` | Tibero 같은 것, 오류 분류 보강(`TiberoErrorClassifier`), 백업 권유·TRUNCATE 일지 연결 | RB-11·RB-13·RB-14 |
 | `src/Oranda.Platform/Rollback/` | `RollbackVault`, `SqliteRollbackStore`, 시작 정리 작업 | RB-20~22 |
-| `src/Oranda.App/Shell/Composition/RollbackComposition.cs` | 앱 조립: 엔진·원장·분석기 등록(Core 는 스캔 대상이 아니다) | RB-00(빈 구현) → RB-02·RB-04 가 실구현으로 바꿈 |
+| `src/Oranda.App/Shell/Composition/RollbackComposition.cs` | 앱 조립: 엔진·원장·분석기 등록(Core 구현은 스캔 대상이 아니다, `[OrandaService]` 등록 형식으로 올림, RD-28) | RB-00(빈 구현) → RB-02·RB-04 가 실구현으로 바꿈 |
 | `src/Oranda.App/Features/Rollback/RollbackCommandIds.cs` | 명령 id 와 인자 레코드(레인 사이 화면 연결) | RB-00, 그 뒤 동결 |
 | `src/Oranda.App/Features/Rollback/` (위 파일 빼고) | 원복 스크립트 탭·원복 실행 | RB-43 |
 | `src/Oranda.App/Features/PointCompare/` | 화면 3 | RB-32 |
@@ -566,12 +569,19 @@ public sealed record ConfirmAnswer(bool Proceed, bool CreateScript, string? Back
 // ---------- 공급자가 구현 (IRollbackChannel.cs, IRollbackDialect.cs) ----------
 public sealed record RollbackRows(IReadOnlyList<object?[]> Rows, bool Truncated);
 
-/// <summary>공급자 연결 위의 통로. Begin·Complete·Probe 단계에서는 호출한 쪽이 명령 잠금을 쥐고 있다.
+/// <summary>공급자 연결 위의 통로. 서버 오류는 RollbackChannelException(분류한 DbError)으로 던지고, ct 가 취소되면 드라이버 명령을 취소한다(RD-26).
+/// Begin·Complete·Probe 단계에서는 호출한 쪽이 명령 잠금을 쥐고 있다.
 /// Prepare 단계에 넘기는 통로는 메서드마다 스스로 잠금을 잡고 놓는다. 리더는 끝까지 읽고 닫은 뒤 돌려준다.</summary>
 public interface IRollbackChannel
 {
     Task<RollbackRows> QueryAsync(string sql, IReadOnlyDictionary<string, Oranda.Core.Execution.BindValue> binds, int maxRows, CancellationToken ct);
     Task ExecuteAsync(string sql, CancellationToken ct);   // SAVEPOINT·ROLLBACK TO 내부 문장만
+}
+
+/// 통로의 서버 오류. 엔진은 Kind = InsufficientPrivileges 를 「만들지 않음 · 권한 없음」으로 바꾼다(RD-26).
+public sealed class RollbackChannelException(Oranda.Core.Execution.DbError error, Exception? innerException = null) : Exception(error.Message, innerException)
+{
+    public Oranda.Core.Execution.DbError Error { get; } = error;
 }
 
 public interface IRollbackDialect
@@ -603,7 +613,9 @@ public interface IRollbackCapture
     /// <summary>정책 관문 앞, 명령 잠금 밖. 실패해도 예외 없이 NotApplicable(Failed). 사용자 취소만 전파.</summary>
     Task<ConfirmExtras> PrepareAsync(RollbackRequest request, IRollbackChannel gatedChannel, IRollbackDialect dialect, CancellationToken ct);
 
-    /// <summary>명령 잠금 안, 사용자 문장 직전. 층 B 시점 읽기와 0·1단계.</summary>
+    /// <summary>명령 잠금 안, 사용자 문장 직전. 층 B 시점 읽기와 0·1단계.
+    /// SAVEPOINT·잠금 읽기를 보낸 뒤 실패·취소되면 엔진이 스스로 ROLLBACK TO SAVEPOINT ORANDA$RB 를 보낸 뒤 끝낸다.
+    /// 공급자는 캡처를 받지 못했을 때 대신 ROLLBACK TO 를 보내지 않는다(RD-27).</summary>
     Task<IStatementCapture> BeginAsync(RollbackRequest request, ConfirmExtras extras, ConfirmAnswer answer,
                                        IRollbackChannel channel, IRollbackDialect dialect, CancellationToken ct);
 
@@ -623,8 +635,10 @@ public interface IStatementCapture
     Task<RollbackStatementSummary> CompleteAsync(long? rowsAffected, IReadOnlyDictionary<string, object?> outValues,
                                                  string? transactionId, CancellationToken ct);
 
-    /// <summary>사용자 문장 실패·취소 뒤. 내부 저장점으로 되돌려 잠금을 푼다. ct 는 None 으로 부른다.</summary>
-    Task<RollbackStatementSummary> AbandonAsync(Oranda.Core.Execution.DbError? error, CancellationToken ct);
+    /// <summary>사용자 문장 실패·취소 뒤. 이번 Begin 이 건 내부 저장점이 있을 때만 그리로 되돌려 잠금을 푼다.
+    /// 저장점을 걸지 않은 문장(한 행 INSERT, 시점만 기록)에서는 보내지 않는다(앞 문장의 같은 이름 저장점으로 되돌아가 성공한 변경이 지워진다, RD-27).
+    /// ct 는 None 으로 부른다.</summary>
+    Task<RollbackStatementSummary> AbandonAsync(Oranda.Core.Execution.DbError? failure, CancellationToken ct);   // 이름 failure(CA1716)
 }
 
 public sealed record RollbackStatementSummary(RollbackScriptState State, NotCreatedReason Reason, int StepCount)
@@ -678,7 +692,11 @@ public sealed record RollbackStatementRecord
 
 public sealed record RollbackStatementInfo(int Seq, DateTimeOffset ExecutedAt, DmlVerb Verb, Oranda.Core.Metadata.DbObjectRef? Table,
                                            string Summary, long? RowsAffected, ChangePoint? BeforePoint,
-                                           RollbackScriptState State, string? Reason, int StepCount, bool Invalidated);
+                                           RollbackScriptState State, string? Reason, int StepCount, bool Invalidated)
+{
+    public Oranda.Core.History.HistorySource Source { get; init; }   // rollback_statement.source
+    public long? LockedRows { get; init; }                          // rollback_statement.locked_rows
+}
 
 public sealed record RollbackGroup
 {
@@ -726,6 +744,8 @@ public sealed record RollbackQuery
 // ---------- 원장 (IRollbackLedger.cs) — 구현: Ledger/RollbackLedger ----------
 public sealed record RollbackOpenState(int Statements, int Steps, bool HasMismatch, bool HasIncomplete);
 
+/// 이벤트(RollbackStatementCaptured·RollbackGroupSaved)는 공급자가 명령 잠금을 쥔 채 부른 Record·EndAsync 안에서 난다.
+/// 구독자는 같은 세션에 동기 명령을 보내지 않고 비동기로(화면은 UI 스레드에 Post) 처리한다(RD-27).
 public interface IRollbackLedger
 {
     void Record(RollbackStatementRecord record);
@@ -801,7 +821,7 @@ public sealed record RollbackSettings
 | `Oranda.Core/Storage/IAppDataPaths.cs` | `string RollbackDirectory => Path.Combine(DataDirectory, "rollback");`(기본 구현) |
 | `docs/design/data-model.md` | 12장의 표·파일·보존·비밀 없음 줄, 마이그레이션 0005 예약 |
 | `src/Oranda.App/Features/Rollback/RollbackCommandIds.cs` | 아래 13.4 |
-| `src/Oranda.App/Shell/Composition/RollbackComposition.cs` | 끔 구현 등록. 실구현이 들어오면 RB-02·RB-04 가 바꾼다 |
+| `src/Oranda.App/Shell/Composition/RollbackComposition.cs` | 끔 구현 등록. 실구현이 들어오면 RB-02·RB-04 가 바꾼다. 앱 어셈블리가 `[OrandaService]` 스캔 대상이므로 이 파일 안의 등록 형식(`AppRollbackCapture`·`AppRollbackLedger`·`AppNullDmlAnalyzer`)으로 올리고 `ServiceContainer.Features.cs` 는 고치지 않는다 **[구현 중 결정 RD-28]** |
 | `tests/Oranda.Testing/Rollback/` | `FakeRollbackChannel`(보낸 SQL 기록·준비한 결과 반환), `InMemoryRollbackStore`, `FakeRollbackVault`, `FakeRollbackDialect`(Oracle 규칙) — 레인들이 서로를 기다리지 않고 시험하게 한다 |
 
 ### 13.4 앱 명령 계약 (RB-00, 동결)
@@ -859,9 +879,9 @@ RunAsync(s, stmt, binds, options):
 
 | 오류 | 어디서 | 처리 |
 |---|---|---|
-| ORA-01555·ORA-08180 (`SnapshotTooOld`, Tibero 는 `CopyReadPointSupport.SnapshotTooOldMessages` 글 조각) | 시점 비교 읽기 | 「기준 시점의 값을 undo 에서 잃었습니다(undo_retention n초). 원복 스크립트가 있으면 그것을 쓰세요」. 원복 스크립트가 있는 묶음이면 「원복 스크립트 열기」 단추를 함께 보인다 |
-| ORA-01466 (`DefinitionChangedNumbers`) | 시점 비교 읽기 | 「기준 시점 뒤 테이블 정의가 바뀌어(DDL) 그 시점으로 읽을 수 없습니다」. 미리 `dbinfo.flashback_ddl` 로 알면 읽기 전에 막는다 |
-| ORA-08181 (`InvalidPointNumbers`) | 시점 직접 지정 | 「시점 번호가 올바르지 않습니다」 |
+| ORA-01555·ORA-08180 (`SnapshotTooOld`, Tibero 는 TBR-21003·TBR-21034 를 `SnapshotTooOld` 로 분류, RB-13 실측) | 시점 비교 읽기 | 「기준 시점의 값을 undo 에서 잃었습니다(undo_retention n초). 원복 스크립트가 있으면 그것을 쓰세요」. 원복 스크립트가 있는 묶음이면 「원복 스크립트 열기」 단추를 함께 보인다 |
+| ORA-01466 (`DefinitionChangedNumbers`, Tibero 는 대응 번호 없음) | 시점 비교 읽기 | 「기준 시점 뒤 테이블 정의가 바뀌어(DDL) 그 시점으로 읽을 수 없습니다」. 미리 `dbinfo.flashback_ddl` 로 알면 읽기 전에 막는다 |
+| ORA-08181 (`InvalidPointNumbers`, Tibero 는 대응 번호 없음·미래 TSN 도 오류가 나지 않음) | 시점 직접 지정 | 「시점 번호가 올바르지 않습니다」 |
 | ORA-30052 | VERSIONS 질의 | 8.2 의 다음 방법으로 넘어간다 |
 | ORA-01031 (`InsufficientPrivileges`) | 잠금 읽기·`COUNT(*)`·메타데이터 | 원복 스크립트를 만들지 않고(「만들지 않음 · 권한 없음」) 사용자 문장은 그대로 실행한다 |
 | ORA-01031·ORA-01039 | 다른 스키마 표의 시점 비교 | 「다른 스키마 테이블은 FLASHBACK 권한이 있어야 합니다」(지금 플래시백 문구와 같다) |
@@ -883,12 +903,12 @@ RunAsync(s, stmt, binds, options):
 | 시점 읽기 | `GET_SYSTEM_CHANGE_NUMBER` → `TIMESTAMP_TO_SCN` | `GET_SYSTEM_CHANGE_NUMBER` → `TIMESTAMP_TO_TSN` → `V$DATABASE.CURRENT_TSN` | 6.2.15 실측 확인(#187) |
 | 시점 지정 읽기 | `AS OF SCN n` | `AS OF SCN n`·`AS OF TSN n` 둘 다 됨 | 실측 확인(#187) |
 | `SELECT … FOR UPDATE` | 됨 | 됨(읽기 전용 트랜잭션에서도 잠근다). 리더를 끝까지 읽고 닫은 뒤 다음 명령 | 동작 확인, 행 수 대조는 RB-13 |
-| `SAVEPOINT`·`ROLLBACK TO` | 됨 | 미측정 | RB-13 |
-| `RETURNING ROWID INTO` 출력 바인드 | ODP.NET 실측 필요 | 미측정. 확인 전 `SupportsReturningRowId = false`(한 행 INSERT 는 불완전) | RB-12·RB-13 |
+| `SAVEPOINT`·`ROLLBACK TO` | 됨 | 됨. `ROLLBACK TO` 가 잠금 읽기의 잠금을 푼다 | 실측 확인(RB-13) |
+| `RETURNING ROWID INTO` 출력 바인드 | ODP.NET 실측 필요 | 됨(`SupportsReturningRowId = true`) | Tibero 실측 확인(RB-13), Oracle 은 RB-12 |
 | ROWID 글·비교 | `ROWIDTOCHAR`·`CHARTOROWID` | 18글자 글, `ROWID = :R`·`CHARTOROWID(:R)` 둘 다 됨 | 실측 확인(driver-values 5장) |
-| 형식 마스크 `FF9`·`TZR`·`TM9`·`SYYYY`, `UNISTR` | 됨 | 미측정 | RB-13 |
-| VERSIONS 질의 | `dbinfo.flashback_versions` | 카탈로그 없음 → 8.2 의 2번 방법(WHERE)부터 | 미측정 |
-| 오류 종류 | `OracleErrorClassifier` | `TiberoErrorClassifier`, 시점 오류 번호는 미측정이라 글 조각·`UnmappedErrorsFailTable` 규칙 | 데이터 복사와 같음 |
+| 형식 마스크 `FF9`·`TZR`·`TM9`·`SYYYY`, `UNISTR` | 됨 | 됨(리터럴 왕복 확인, BINARY_FLOAT 만 `TO_BINARY_FLOAT`, RD-22) | 실측 확인(RB-13) |
+| VERSIONS 질의 | `dbinfo.flashback_versions` | 안 됨(TBR-8022) → 8.2 의 2번 방법(WHERE)부터 | 실측 확인(RB-13) |
+| 오류 종류 | `OracleErrorClassifier` | `TiberoErrorClassifier`: TBR-21003·TBR-21034 = `SnapshotTooOld`. `DefinitionChanged`·`InvalidPoint` 에 해당하는 번호 없음 | 실측 확인(RB-13). 데이터 복사도 TBR-21034 를 시점 잃음으로 보아 전체 중단한다(동작 변화, 릴리스 노트 몫) |
 | 트리거·CASCADE 찾기 | `ALL_TRIGGERS`·`ALL_CONSTRAINTS.DELETE_RULE` | 같은 사전 이름인지 확인(catalog-map) | RB-11 |
 | 읽기 전용 프로필 | 정책 관문이 쓰기 거부 | 같다(서버가 막지 않으므로 정책 관문뿐) | 바뀜 없음 |
 
@@ -990,3 +1010,17 @@ RunAsync(s, stmt, binds, options):
 | RD-19 | 접속 간 데이터 복사(대량 경로)는 기록하지 않는다 | 운영 대상이 될 수 없고 다시 실행하면 같은 결과 | — |
 | RD-20 | 원복 대상이 아닌 문장도 PL/SQL·MERGE·불확실 문장은 SCN 을 기록한다 | 시안 「대상이 아닌 문장은 SCN 만 기록」 | — |
 | RD-21 | 앱 안 호출처마다 기록 방식을 정한다: LOB 쓰기·데이터 가져오기는 SCN 만, 원복 실행·비교 반영은 스스로 기록(7.5) | 운영 접속에서 쓸모없는 불완전 묶음과 지연을 막는다 | 호출처의 옵션 한 줄 |
+
+### 구현 중 결정 (RD-22~)
+
+구현 회차(rollback-1113)에서 레인이 찾고 조정자가 받아들인 결정이다. 모두 사용자가 뒤집을 수 있다.
+
+| 번호 | 결정 | 근거 | 되돌리기 |
+|---|---|---|---|
+| RD-22 | BINARY_FLOAT 열의 리터럴은 `TO_BINARY_FLOAT('R')`·`BINARY_FLOAT_NAN`·`BINARY_FLOAT_INFINITY`, BINARY_DOUBLE 만 DOUBLE 판(6.6) | Tibero 실측: BINARY_FLOAT 열을 `TO_BINARY_DOUBLE` 로 견주면 0행 | 방언 안 |
+| RD-23 | `TouchedRowIds` 를 PK 없는 표 말고도 ROWID 로 찾는 원복(PK 를 바꾼 UPDATE)과 DELETE 원복에도 채운다(6.3, RD-13) | `UPDATE pk 1→2` 뒤 `DELETE pk=2` 를 역순 실행하면 되살린 행의 ROWID 가 바뀌어 앞 원복이 0행이 된다 | 엔진 한 줄 |
+| RD-24 | DDL 뒤 끝은 미커밋 표시가 거짓일 때만 「모름」. 실패한 COMMIT·트랜잭션을 되돌리는 오류처럼 미커밋이 참 → 거짓이 된 문장은 「모름(Statement)」(7.3) | `ALTER SESSION`·구문 단계에서 실패한 DDL 은 커밋하지 않는데 판정을 돌리면 같은 세션이 자기 미커밋 값을 보아 「커밋」으로 잘못 판정한다. ORA-02091 은 트랜잭션 전체를 되돌린다 | `RollbackFlow.EndAfter` |
+| RD-25 | 원복 문장이 있는 묶음에 원복 문장을 만들지 않은 문장이 섞이면 「불완전」(11.2) | 「확정」으로 두면 스크립트로 묶음을 다 되돌린 줄 안다 | 원장 한 줄 |
+| RD-26 | 통로(`IRollbackChannel`)의 서버 오류는 `RollbackChannelException(DbError)` 로 알린다. 취소는 드라이버 명령 취소(13.2) | 엔진이 권한 없음(`DbErrorKind`)과 다른 실패를 가르고 COUNT(*) 10초 제한을 걸려면 공급자 공통 규칙이 필요하다 | 계약 |
+| RD-27 | Begin 이 저장점을 건 뒤 실패·취소되면 엔진이 스스로 `ROLLBACK TO`, Abandon 은 이번 Begin 이 건 저장점이 있을 때만, 원장 이벤트 구독자는 비동기(13.2) | 공급자는 캡처가 없으면 Abandon 을 못 부른다. 내부 저장점 이름이 문장마다 같아 엉뚱한 때 되돌리면 앞 문장의 성공한 변경이 지워진다. 이벤트는 명령 잠금 안에서 난다 | 계약 주석 |
+| RD-28 | 앱 조립은 `RollbackComposition.cs` 안의 `[OrandaService]` 등록 형식으로 하고 `ServiceContainer.Features.cs` 는 고치지 않는다(13.1·13.3). `IStatementCapture.AbandonAsync` 의 매개변수 이름은 `failure`(CA1716) | 앱 어셈블리는 이미 스캔 대상이고, 같은 서비스는 마지막 등록이 이겨 Language·Platform 실구현이 끔 구현을 이긴다 | 조립 파일 |
