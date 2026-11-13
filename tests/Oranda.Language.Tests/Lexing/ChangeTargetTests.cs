@@ -52,7 +52,7 @@ public class ChangeTargetTests
     [InlineData("create table t (id number);")]
     [InlineData("create unique index i on t(id);")]
     [InlineData("create view v as select 1 a from dual;")]
-    [InlineData("truncate table emp;")]
+    [InlineData("truncate cluster c1;")]
     [InlineData("comment on table emp is 'x';")]
     [InlineData("alter session set nls_date_format = 'YYYY';")]
     [InlineData("alter system flush shared_pool;")]
@@ -67,6 +67,26 @@ public class ChangeTargetTests
     [InlineData("drop table &t;")]
     public void Has_no_target_for_non_journal_statements(string sql)
         => Assert.Null(First(sql).ChangeTarget);
+
+    [Theory]
+    [InlineData("truncate table hr.emp;", "HR", "EMP", ChangeOperation.Truncate, DataLossKind.Truncate, "")]
+    [InlineData("drop table scott.emp cascade constraints purge;", "SCOTT", "EMP", ChangeOperation.Drop, DataLossKind.DropPurge, "")]
+    [InlineData("alter table emp drop column memo;", null, "EMP", ChangeOperation.Alter, DataLossKind.DropColumns, "MEMO")]
+    [InlineData("alter table emp drop (memo, \"Note\") cascade constraints;", null, "EMP", ChangeOperation.Alter, DataLossKind.DropColumns, "MEMO,Note")]
+    [InlineData("alter table emp modify (a number) drop column b drop (c, d);", null, "EMP", ChangeOperation.Alter, DataLossKind.DropColumns, "B,C,D")]
+    [InlineData("alter table emp drop column if exists memo;", null, "EMP", ChangeOperation.Alter, DataLossKind.DropColumns, "MEMO")]
+    [InlineData("drop table emp;", null, "EMP", ChangeOperation.Drop, DataLossKind.None, "")]
+    [InlineData("alter table emp drop constraint pk_emp;", null, "EMP", ChangeOperation.Alter, DataLossKind.None, "")]
+    [InlineData("alter table emp drop unused columns;", null, "EMP", ChangeOperation.Alter, DataLossKind.None, "")]
+    [InlineData("alter table emp add (purge number);", null, "EMP", ChangeOperation.Alter, DataLossKind.None, "")]
+    public void Marks_data_loss_ddl(string sql, string? owner, string name, ChangeOperation operation, DataLossKind loss, string columns)
+    {
+        var t = First(sql).ChangeTarget;
+        Assert.NotNull(t);
+        Assert.Equal((owner, name, "TABLE", operation), (t.Owner, t.Name, t.ObjectType, t.Operation));
+        Assert.Equal(loss, t.DataLoss);
+        Assert.Equal(columns, string.Join(',', t.DroppedColumns));
+    }
 
     [Fact]
     public void Existing_classification_is_unchanged()

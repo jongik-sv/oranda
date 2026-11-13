@@ -10,6 +10,8 @@ using Oranda.Core.Execution.Providers;
 using Oranda.Core.Grid;
 using Oranda.Core.History;
 using Oranda.Core.Journal;
+using Oranda.Core.Rollback;
+using Oranda.Core.Rollback.Backup;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Sessions;
 
@@ -155,8 +157,25 @@ internal sealed partial class OracleExecutionService : IExecutionService
             stmt = substituted;
         }
 
-        // 2. 정책 관문. 거부면 드라이버를 부르지 않는다(SAFE-07: 문자열 자체를 보내지 않음). 미리 받은 확인은 치환 뒤 텍스트로 비교한다.
-        var gate = await PolicyGate.DecideAsync(_policy, _interaction, _events, s, stmt, options, ct);
+        // 2. 확인 창 제안(명령 잠금 밖): 데이터가 사라지는 DDL 앞 백업 테이블(RB-44).
+        var extras = ConfirmExtras.None;
+        if (s is OracleSession prepared)
+        {
+            try
+            {
+                if (await OfferBackupAsync(prepared, stmt, ct) is { } backup)
+                {
+                    extras = extras with { Backup = backup };
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return new ExecutionResult(stmt, ExecutionStatus.Cancelled);
+            }
+        }
+
+        // 3. 정책 관문. 거부면 드라이버를 부르지 않는다(SAFE-07: 문자열 자체를 보내지 않음). 미리 받은 확인은 치환 뒤 텍스트로 비교한다.
+        var gate = await PolicyGate.DecideAsync(_policy, _interaction, _events, s, stmt, options, extras, ct);
         switch (gate.Outcome)
         {
             case PolicyGateOutcome.Denied:
@@ -203,7 +222,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         session.SetBusy(true);
         try
         {
-            return await RunOnDriverAsync(session, runtime, stmt, binds, applied, ct);
+            return await RunOnDriverAsync(session, runtime, stmt, binds, applied, gate.Answer, extras, ct);
         }
         finally
         {
@@ -214,17 +233,30 @@ internal sealed partial class OracleExecutionService : IExecutionService
 
     private async Task<ExecutionResult> RunOnDriverAsync(OracleSession session, SessionRuntime runtime, SqlStatement stmt,
                                                          IReadOnlyDictionary<string, BindValue> binds, PolicyDecision? applied,
-                                                         CancellationToken ct)
+                                                         ConfirmAnswer answer, ConfirmExtras extras, CancellationToken ct)
     {
         var conn = session.Connection;
         var kind = ExecutionPolicy.EffectiveKind(stmt);
         var sw = Stopwatch.StartNew();
         OracleCommand? cmd = null;
         OracleDataReader? reader = null;
+        // 확인 창이 고른 백업(RB-44). 이 실행의 제안에서 나온 글만 보낸다(정책 관문을 지나지 않는 글이다).
+        var backupSql = stmt.Kind == StatementKind.Ddl && IsOfferedBackup(extras.Backup, answer.BackupSql) ? answer.BackupSql : null;
+        RollbackStatementSummary? backupLog = null;
         try
         {
             await PrepareSessionAsync(session, runtime, ct);
-            await CaptureBeforeChangeAsync(session, stmt, ct);
+            if (backupSql is not null)
+            {
+                if (await CreateBackupAsync(session, stmt, backupSql, applied, ct) is { } backupFailed)
+                {
+                    return backupFailed with { Elapsed = sw.Elapsed };
+                }
+
+                backupLog = BackupSummary(backupSql); // 원래 DDL 이 실패·취소돼도 백업 테이블이 남았음을 알린다
+            }
+
+            await CaptureBeforeChangeAsync(session, stmt, BackupPlanner.BackupNameOf(backupSql), ct);
 
             cmd = conn.CreateCommand();
             cmd.BindByName = true;
@@ -287,12 +319,16 @@ internal sealed partial class OracleExecutionService : IExecutionService
                 DbmsOutput = output,
                 OutValues = outValues,
                 TransactionPending = pending,
+                Rollback = backupLog,
             };
         }
         catch (Exception ex) when (IsCancellation(ex, ct))
         {
             var pending = await SafeTrackAfterFailureAsync(session, stmt, kind);
-            return new ExecutionResult(stmt, ExecutionStatus.Cancelled) { Elapsed = sw.Elapsed, Policy = applied, TransactionPending = pending };
+            return new ExecutionResult(stmt, ExecutionStatus.Cancelled)
+            {
+                Elapsed = sw.Elapsed, Policy = applied, TransactionPending = pending, Rollback = backupLog,
+            };
         }
         catch (OracleException ex)
         {
@@ -306,11 +342,12 @@ internal sealed partial class OracleExecutionService : IExecutionService
                 Policy = applied,
                 DbmsOutput = output,
                 TransactionPending = pending,
+                Rollback = backupLog,
             };
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or FormatException or InvalidCastException)
         {
-            return Failed(stmt, "ORANDA-EXEC", ex.Message, applied) with { Elapsed = sw.Elapsed };
+            return Failed(stmt, "ORANDA-EXEC", ex.Message, applied) with { Elapsed = sw.Elapsed, Rollback = backupLog };
         }
         finally
         {
@@ -333,7 +370,8 @@ internal sealed partial class OracleExecutionService : IExecutionService
     /// 뒤이은 DDL 의 암시적 커밋과도 섞이지 않는다. 보관 실패(권한·시간 초과·객체 없음)는 일지에 이유만 남기고 실행은 계속한다.
     /// 사용자의 취소만 밖으로 전파한다.
     /// </summary>
-    private async Task CaptureBeforeChangeAsync(OracleSession session, SqlStatement stmt, CancellationToken ct)
+    /// <param name="backupName">이 DDL 앞에서 만든 백업 테이블(<c>스키마.이름</c>). 있으면 일지 요약에 붙인다(설계 9장).</param>
+    private async Task CaptureBeforeChangeAsync(OracleSession session, SqlStatement stmt, string? backupName, CancellationToken ct)
     {
         if (stmt.ChangeTarget is not { } target || stmt.Kind != StatementKind.Ddl)
         {
@@ -349,7 +387,9 @@ internal sealed partial class OracleExecutionService : IExecutionService
                 DbKey = session.DbKey,
                 ServerName = session.Profile.DataSource,
                 Cause = JournalCause.Ddl,
-                StatementSummary = ChangeCapture.Summarize(stmt.Text),
+                StatementSummary = backupName is null
+                    ? ChangeCapture.Summarize(stmt.Text)
+                    : ChangeCapture.Summarize(stmt.Text) + " · 백업 테이블 " + backupName,
             };
             var fallbackOwner = (session.Server.SessionUser ?? session.Profile.User).ToUpperInvariant();
             var entries = await ChangeCapture.CaptureAsync(target, template, fallbackOwner, new OracleDdlSource(session.Connection),

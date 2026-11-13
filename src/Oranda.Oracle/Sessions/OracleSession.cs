@@ -3,7 +3,9 @@ using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
 using Oranda.Core.Execution.Providers;
+using Oranda.Core.Rollback;
 using Oranda.Core.Sessions;
+using Oranda.Oracle.Rollback;
 
 namespace Oranda.Oracle.Sessions;
 
@@ -22,12 +24,14 @@ internal sealed class OracleSession : ISession
     private readonly Timer? _keepAlive;
     private int _state = (int)SessionState.Idle;
     private volatile bool _pending;
+    private int _endInFlight;
     private int _disposed;
 
     public OracleSession(Guid id, ConnectionProfile profile, ServerInfo server, SessionPurpose purpose, string dbKey,
                          OracleConnection connection, IEventBus events, Action<Guid>? onDisposed = null,
-                         Func<ValueTask>? closeConnection = null)
+                         Func<ValueTask>? closeConnection = null, OracleRollbackHooks? rollback = null)
     {
+        Rollback = rollback ?? new OracleRollbackHooks(null, null, events);
         _onDisposed = onDisposed;
         _closeConnection = closeConnection ?? connection.DisposeAsync;
         Id = id;
@@ -65,6 +69,9 @@ internal sealed class OracleSession : ISession
     /// <summary>이 연결에 한 번에 한 명령만 보내게 하는 잠금(D-041). 연결을 쓰는 모든 기능이 함께 쓴다.</summary>
     internal SessionCommandGate CommandGate { get; } = new();
 
+    /// <summary>되돌리기 원장에 트랜잭션 끝을 알리는 자리(설계 7.3). 실행 서비스도 같은 것을 쓴다.</summary>
+    internal OracleRollbackHooks Rollback { get; }
+
     /// <summary>끊김 오류 번호인지(ORA-03113 등).</summary>
     public static bool IsBrokenError(int oraNumber) => BrokenCodes.Contains(oraNumber);
 
@@ -100,16 +107,118 @@ internal sealed class OracleSession : ISession
         return true;
     }
 
-    public async Task CommitAsync(CancellationToken ct)
+    /// <summary>
+    /// 커밋(설계 7.3·7.4·13.5): 한 번의 명령 잠금 안에서 열린 묶음 저장(<see cref="OracleRollbackHooks.BeforeEndAsync"/>) → <c>COMMIT</c> →
+    /// 미커밋 표시 내림 → 커밋 시점 읽기·원장 끝 처리(<see cref="TransactionEndSource.SessionApi"/>).
+    /// COMMIT 이 실패하면 트랜잭션이 남았는지 확인해(<c>LOCAL_TRANSACTION_ID</c>) 끝났으면(ORA-02091 등) 「모름」, 남았으면 알리지 않는다.
+    /// 끊겨서 확인할 수 없으면 「모름」(서버가 커밋했는지 모른다).
+    /// </summary>
+    public Task CommitAsync(CancellationToken ct) => EndTransactionAsync("COMMIT", TransactionEndKind.Commit, ct);
+
+    /// <summary>롤백. 롤백 앞에서는 묶음을 저장하지 않는다(7.4). 끝난 뒤 원장에 알린다. 실패했을 때는 커밋과 같은 규칙.</summary>
+    public Task RollbackAsync(CancellationToken ct) => EndTransactionAsync("ROLLBACK", TransactionEndKind.Rollback, ct);
+
+    private async Task EndTransactionAsync(string sql, TransactionEndKind kind, CancellationToken ct)
     {
-        await ExecAsync("COMMIT", ct);
-        SetPending(false);
+        await CommandGate.EnterAsync(ct);
+        using var scope = BeginEndScope();
+        try
+        {
+            if (kind == TransactionEndKind.Commit)
+            {
+                await Rollback.BeforeEndAsync(this, ct);
+            }
+
+            try
+            {
+                await SendAsync(sql, ct);
+            }
+            catch
+            {
+                if (await TransactionEndedAfterFailureAsync())
+                {
+                    await Rollback.EndAsync(this, TransactionEndKind.Unknown, TransactionEndSource.SessionApi);
+                    scope.Reported();
+                }
+
+                throw;
+            }
+
+            SetPending(false);
+            await Rollback.EndAsync(this, kind, TransactionEndSource.SessionApi);
+            scope.Reported();
+        }
+        finally
+        {
+            CommandGate.Release();
+        }
     }
 
-    public async Task RollbackAsync(CancellationToken ct)
+    /// <summary>
+    /// 실패한 COMMIT·ROLLBACK 뒤 원장에 「모름」 끝을 알려야 하는지(명령 잠금 안). 열린 묶음이 없으면 거짓. 끊겼으면 참, 확인 질의가 실패해도 참.
+    /// 트랜잭션이 남아 있으면 거짓(보내기 전 취소, 끝내지 않은 서버 오류: 원장은 열린 묶음을 그대로 둔다).
+    /// </summary>
+    private async Task<bool> TransactionEndedAfterFailureAsync()
     {
-        await ExecAsync("ROLLBACK", ct);
-        SetPending(false);
+        if (Rollback.Ledger.Open(Id) is null)
+        {
+            return false; // 알릴 묶음이 없다
+        }
+
+        if (State is SessionState.Broken or SessionState.Closed)
+        {
+            return true;
+        }
+
+        try
+        {
+            await using var cmd = Connection.CreateCommand();
+            cmd.CommandText = "SELECT DBMS_TRANSACTION.LOCAL_TRANSACTION_ID FROM dual";
+            var id = await cmd.ExecuteScalarAsync(CancellationToken.None);
+            return id is null or DBNull;
+        }
+        catch (OracleException ex)
+        {
+            ReportFailure(ex);
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 트랜잭션을 끝낼 수 있는 문장을 보내는 동안 켜 두는 범위(명령 잠금 안). 그동안 끊기면 <see cref="MarkBroken"/> 은 원장에 따로 알리지 않고
+    /// 범위를 연 쪽이 끝을 알린다(끊김이 커밋 결과를 「롤백」으로 덮지 않게). 범위가 끝날 때까지 알리지 못했는데 세션이 끊겼으면 그때 「모름」으로 알린다.
+    /// </summary>
+    internal EndScope BeginEndScope()
+    {
+        Interlocked.Increment(ref _endInFlight);
+        return new EndScope(this);
+    }
+
+    /// <summary><see cref="BeginEndScope"/> 의 범위.</summary>
+    internal sealed class EndScope(OracleSession session) : IDisposable
+    {
+        private bool _reported;
+        private int _disposed;
+
+        /// <summary>범위를 연 쪽이 원장에 끝을 알렸다.</summary>
+        public void Reported() => _reported = true;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            {
+                return;
+            }
+
+            if (Interlocked.Decrement(ref session._endInFlight) == 0 && !_reported && session.State == SessionState.Broken)
+            {
+                session.EndOpenGroup(TransactionEndKind.Unknown, TransactionEndSource.SessionBroken);
+            }
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -121,18 +230,23 @@ internal sealed class OracleSession : ISession
 
         _keepAlive?.Dispose();
         Connection.StateChange -= OnConnectionStateChange;
-        Volatile.Write(ref _state, (int)SessionState.Closed);
+        var before = (SessionState)Interlocked.Exchange(ref _state, (int)SessionState.Closed);
 
         // 상태·목록·이벤트를 먼저 반영한다. 연결 닫기는 서버가 응답하지 않으면 끝나지 않으므로(UI 스레드 정지 원인) 그 뒤에 떼어 낸다.
         _onDisposed?.Invoke(Id);
         _events.Publish(new SessionClosed(Id));
+        if (before != SessionState.Broken) // 끊긴 세션은 끊길 때 이미 알렸다
+        {
+            EndOpenGroup(TransactionEndKind.Unknown, TransactionEndSource.SessionClosed); // 닫으며 서버가 한 일(암묵 커밋·롤백)은 모른다(7.3)
+        }
+
         // 명령 잠금은 Dispose 하지 않는다(SessionCommandGate): 닫는 중에도 진행 중인 작업·결과 집합 정리가 놓을 수 있어야 한다.
         await TimedClose.RunAsync(_closeConnection, "세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
     }
 
-    private async Task ExecAsync(string sql, CancellationToken ct)
+    /// <summary>명령 잠금을 쥔 채 문장 하나를 보낸다. 끊김 오류면 세션을 Broken 으로 돌리고 다시 던진다.</summary>
+    private async Task SendAsync(string sql, CancellationToken ct)
     {
-        await CommandGate.EnterAsync(ct);
         try
         {
             await using var cmd = Connection.CreateCommand();
@@ -143,10 +257,34 @@ internal sealed class OracleSession : ISession
         {
             throw;
         }
-        finally
+    }
+
+    /// <summary>
+    /// 세션이 끊기거나 닫힐 때 열린 묶음의 끝을 원장에 알린다(설계 7.3). 열린 묶음이 없거나 커밋·롤백이 진행 중이면(그쪽이 알린다) 하지 않는다.
+    /// 연결을 더 쓰지 않는 끝이라 판정·시점 읽기 없이(<see cref="OracleRollbackHooks.EndAsync"/> 가 끊김·닫힘 출처는 건너뛴다)
+    /// 스레드 풀에 맡긴다: 예외 필터·드라이버 콜백·닫기를 막지 않는다. 원장 실패는 삼킨다.
+    /// </summary>
+    private void EndOpenGroup(TransactionEndKind kind, TransactionEndSource source)
+    {
+        if (Volatile.Read(ref _endInFlight) > 0)
         {
-            CommandGate.Release();
+            return;
         }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (Rollback.Ledger.Open(Id) is not null)
+                {
+                    await Rollback.EndAsync(this, kind, source);
+                }
+            }
+            catch (Exception)
+            {
+                // 원장의 동기 예외도 닫기·끊김 처리를 막지 않는다.
+            }
+        });
     }
 
     private async Task KeepAliveTickAsync()
@@ -208,5 +346,6 @@ internal sealed class OracleSession : ISession
         var hadPending = _pending;
         _pending = false;
         _events.Publish(new SessionBroken(Id, hadPending, error));
+        EndOpenGroup(TransactionEndKind.Rollback, TransactionEndSource.SessionBroken); // 미커밋 변경은 서버가 되돌렸다
     }
 }

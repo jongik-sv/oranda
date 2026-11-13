@@ -3,9 +3,11 @@ using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
+using Oranda.Core.Rollback;
 using Oranda.Core.Security;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Connection;
+using Oranda.Oracle.Rollback;
 
 namespace Oranda.Oracle.Sessions;
 
@@ -16,11 +18,16 @@ internal sealed class OracleSessionManager : ISessionManager
     public const string ModuleName = "Oranda";
 
     private readonly IEventBus _events;
+    private readonly OracleRollbackHooks _rollback;
     private readonly ConcurrentDictionary<Guid, OracleSession> _sessions = new();
 
-    public OracleSessionManager(IEventBus events)
+    /// <param name="events">이벤트 버스</param>
+    /// <param name="capture">되돌리기 캡처 엔진(커밋 시점 읽기). null = 끔</param>
+    /// <param name="ledger">되돌리기 원장(세션의 커밋·롤백·끊김·닫힘을 알린다). null = 끔</param>
+    public OracleSessionManager(IEventBus events, IRollbackCapture? capture = null, IRollbackLedger? ledger = null)
     {
         _events = events;
+        _rollback = new OracleRollbackHooks(capture, ledger, events);
     }
 
     public IReadOnlyList<ISession> Sessions => [.. _sessions.Values];
@@ -53,7 +60,7 @@ internal sealed class OracleSessionManager : ISessionManager
             await ApplyNlsAsync(connection, profile.Nls, ct);
 
             var session = new OracleSession(id, profile, info, purpose, BuildDbKey(info), connection, _events,
-                id => _sessions.TryRemove(id, out _));
+                id => _sessions.TryRemove(id, out _), rollback: _rollback);
             _sessions[id] = session;
             _events.Publish(new SessionOpened(id, profile, info, purpose));
             return session;

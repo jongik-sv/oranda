@@ -161,8 +161,9 @@ internal static class StatementClassifier
         .ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
-    /// ALTER·DROP·CREATE OR REPLACE·RENAME 의 대상(변경 일지용). 종류가 보관 대상이 아니거나(ALTER SESSION·USER 등)
-    /// 새 객체를 만드는 CREATE, TRUNCATE·COMMENT 는 null. 기존 분류 결과에는 영향을 주지 않는다.
+    /// ALTER·DROP·CREATE OR REPLACE·RENAME·TRUNCATE TABLE 의 대상(변경 일지용). 종류가 보관 대상이 아니거나(ALTER SESSION·USER 등)
+    /// 새 객체를 만드는 CREATE, COMMENT·TRUNCATE CLUSTER 는 null. 기존 분류 결과에는 영향을 주지 않는다.
+    /// 데이터가 사라지는 DDL(TRUNCATE TABLE, ALTER TABLE … DROP COLUMN, DROP TABLE … PURGE)은 <see cref="ChangeTarget.DataLoss"/> 를 채운다(되돌리기 지점 설계 9장).
     /// </summary>
     static ChangeTarget? ChangeTargetOf(string text, List<Token> toks, string? w0)
     {
@@ -174,10 +175,25 @@ internal static class StatementClassifier
                     return rename is { Count: 1 } ? new ChangeTarget(null, rename[0], null, ChangeOperation.Rename) : null;
                 }
 
+            case "TRUNCATE" when Is(text, toks, 1, "TABLE"):
+                return ObjectTarget(text, toks, 1, ChangeOperation.Truncate, out _) is { } truncated
+                    ? truncated with { DataLoss = DataLossKind.Truncate }
+                    : null;
             case "ALTER":
-                return ObjectTarget(text, toks, 1, ChangeOperation.Alter);
+                {
+                    var target = ObjectTarget(text, toks, 1, ChangeOperation.Alter, out var next);
+                    return target is { ObjectType: "TABLE" } && DroppedColumns(text, toks, next) is { Count: > 0 } columns
+                        ? target with { DataLoss = DataLossKind.DropColumns, DroppedColumns = columns }
+                        : target;
+                }
+
             case "DROP":
-                return ObjectTarget(text, toks, 1, ChangeOperation.Drop);
+                {
+                    var target = ObjectTarget(text, toks, 1, ChangeOperation.Drop, out var next);
+                    return target is { ObjectType: "TABLE" } && HasWordAtTop(text, toks, next, "PURGE")
+                        ? target with { DataLoss = DataLossKind.DropPurge }
+                        : target;
+                }
             case "CREATE" when Is(text, toks, 1, "OR") && Is(text, toks, 2, "REPLACE"):
                 {
                     var i = 3;
@@ -186,7 +202,7 @@ internal static class StatementClassifier
                         i += w == "NO" ? 2 : 1;
                     }
 
-                    return ObjectTarget(text, toks, i, ChangeOperation.CreateOrReplace);
+                    return ObjectTarget(text, toks, i, ChangeOperation.CreateOrReplace, out _);
                 }
 
             default:
@@ -194,8 +210,100 @@ internal static class StatementClassifier
         }
     }
 
-    static ChangeTarget? ObjectTarget(string text, List<Token> toks, int i, ChangeOperation operation)
+    /// <summary>
+    /// <c>ALTER TABLE t</c> 뒤(<paramref name="i"/>)의 괄호 밖에 있는 모든 <c>DROP COLUMN [IF EXISTS] c</c>·<c>DROP (c1, c2)</c> 가 지울 열(절을 여러 개 이을 수 있다).
+    /// 다른 DROP(CONSTRAINT·PARTITION·UNUSED 등)과 SET UNUSED 는 담지 않는다. 열 목록 모양이 깨졌으면 빈 목록(권하지 않음). 이름 규칙은 <see cref="ReadName"/> 과 같다.
+    /// </summary>
+    static List<string> DroppedColumns(string text, List<Token> toks, int i)
     {
+        var columns = new List<string>();
+        var depth = 0;
+        for (var k = i; k < toks.Count; k++)
+        {
+            var t = toks[k];
+            if (t.Kind == TokenKind.Punct)
+            {
+                if (text[t.Start] == '(') depth++;
+                else if (text[t.Start] == ')') depth--;
+                continue;
+            }
+
+            if (depth != 0 || Word(text, toks, k) != "DROP")
+            {
+                continue;
+            }
+
+            if (Is(text, toks, k + 1, "COLUMN"))
+            {
+                var at = k + 2;
+                if (Is(text, toks, at, "IF") && Is(text, toks, at + 1, "EXISTS"))
+                {
+                    at += 2;
+                }
+
+                if (ReadName(text, toks, at, out var after) is not { Count: 1 } one)
+                {
+                    return [];
+                }
+
+                columns.Add(one[0]);
+                k = after - 1;
+            }
+            else if (k + 1 < toks.Count && toks[k + 1].Kind == TokenKind.Punct && text[toks[k + 1].Start] == '(')
+            {
+                var at = k + 2;
+                while (true)
+                {
+                    if (ReadName(text, toks, at, out var next) is not { Count: 1 } name)
+                    {
+                        return [];
+                    }
+
+                    columns.Add(name[0]);
+                    if (next < toks.Count && toks[next].Kind == TokenKind.Punct && text[toks[next].Start] == ',')
+                    {
+                        at = next + 1;
+                        continue;
+                    }
+
+                    if (next < toks.Count && toks[next].Kind == TokenKind.Punct && text[toks[next].Start] == ')')
+                    {
+                        k = next; // 닫는 괄호까지 읽었다(깊이는 그대로 0)
+                        break;
+                    }
+
+                    return [];
+                }
+            }
+        }
+
+        return columns;
+    }
+
+    /// <summary><paramref name="i"/> 부터 괄호 밖(깊이 0)에 단어 <paramref name="word"/> 가 있는가.</summary>
+    static bool HasWordAtTop(string text, List<Token> toks, int i, string word)
+    {
+        var depth = 0;
+        for (var k = i; k < toks.Count; k++)
+        {
+            var t = toks[k];
+            if (t.Kind == TokenKind.Punct)
+            {
+                if (text[t.Start] == '(') depth++;
+                else if (text[t.Start] == ')') depth--;
+            }
+            else if (depth == 0 && Word(text, toks, k) == word)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static ChangeTarget? ObjectTarget(string text, List<Token> toks, int i, ChangeOperation operation, out int next)
+    {
+        next = i;
         var isPublic = false;
         if (Is(text, toks, i, "PUBLIC"))
         {
@@ -236,7 +344,7 @@ internal static class StatementClassifier
             i += 2;
         }
 
-        var parts = ReadName(text, toks, i, out _);
+        var parts = ReadName(text, toks, i, out next);
         if (parts is null)
         {
             return null;
