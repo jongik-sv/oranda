@@ -30,6 +30,7 @@ public class DbmsDispatchCompositionTests
         typeof(Oranda.Core.Schema.IColumnReorderScripts),
         typeof(IImportValueConverter), // 세션을 받지 않는 값 변환 — 가져오기 대화 상자가 세션 DBMS 로 Get<T>
         typeof(Oranda.Core.Transfer.Copy.ICopyDbmsParts), // 교차 복사 부품 — 복사 디스패처가 두 세션의 DBMS 로 Get<T>
+        typeof(Oranda.Core.Rollback.IRollbackDialect), // 되돌리기 방언 — 시점 비교 런처가 세션 DBMS 로 For<T>(fbfix-1113 FX-01)
     ];
 
     private static ServiceContainer Compose() =>
