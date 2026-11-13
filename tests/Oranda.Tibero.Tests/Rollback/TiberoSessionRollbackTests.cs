@@ -79,25 +79,69 @@ public sealed class TiberoSessionRollbackTests : IDisposable
     }
 
     [Fact]
-    public async Task Failed_commit_does_not_end_the_group_and_the_event_subscriber_can_use_the_session_gate()
+    public async Task Failed_commit_with_the_transaction_still_open_does_not_end_the_group_but_one_that_lost_it_ends_as_unknown()
     {
         _ledger.OpenState = new RollbackOpenState(1, 1, false, false);
-        FakeDriverHost.SetHandler(cmd => cmd.CommandText == TiberoSession.CommitSql ? throw FakeDriverHost.ServerError(-12032, "TBR-12032: deadlock") : -1);
+        var stillOpen = true;
+        FakeDriverHost.SetHandler(cmd => cmd.CommandText == TiberoSession.CommitSql
+            ? throw FakeDriverHost.ServerError(-12032, "TBR-12032: deadlock")
+            : cmd.CommandText == Oranda.Tibero.Execution.TiberoExecutionService.TransactionIdSql ? (stillOpen ? "1.2.3" : null) : -1);
         await using var session = NewSession();
 
         await Assert.ThrowsAnyAsync<Exception>(() => session.CommitAsync(CancellationToken.None));
         Assert.Empty(_ledger.Ends);
 
-        var gateFree = false;
-        _bus.Subscribe<TransactionEnded>(this, _ => gateFree = session.CommandGate.TryEnter() && Release(session));
-        await session.RollbackAsync(CancellationToken.None);
-        Assert.True(gateFree); // 이벤트는 명령 잠금을 놓은 뒤에 난다
+        stillOpen = false;
+        await Assert.ThrowsAnyAsync<Exception>(() => session.CommitAsync(CancellationToken.None));
+        var ended = Assert.Single(_ledger.Ends);
+        Assert.Equal((TransactionEndKind.Unknown, TransactionEndSource.SessionApi), (ended.Kind, ended.Source));
     }
 
-    private static bool Release(TiberoSession session)
+    [Fact]
+    public async Task Broken_session_ends_the_open_group_as_rolled_back_but_a_break_during_commit_ends_it_as_unknown()
     {
-        session.CommandGate.Release();
-        return true;
+        _ledger.OpenState = new RollbackOpenState(1, 1, false, false);
+        FakeDriverHost.SetHandler(_ => throw FakeDriverHost.ServerError(-12001, "TBR-12001: session killed"));
+        await using var duringCommit = NewSession();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => duringCommit.CommitAsync(CancellationToken.None));
+        Assert.Equal(SessionState.Broken, duringCommit.State);
+        var unknown = Assert.Single(_ledger.Ends);
+        Assert.Equal((TransactionEndKind.Unknown, TransactionEndSource.SessionApi), (unknown.Kind, unknown.Source));
+
+        await using var idle = NewSession();
+        await Assert.ThrowsAnyAsync<Exception>(() => Task.Run(async () =>
+        {
+            await idle.CommandGate.EnterAsync(CancellationToken.None);
+            try
+            {
+                await using var cmd = idle.CreateCommand("SELECT 1 FROM DUAL");
+                try
+                {
+                    await cmd.ExecuteScalarAsync();
+                }
+                catch (Exception ex) when (idle.ReportFailure(ex))
+                {
+                    throw;
+                }
+            }
+            finally
+            {
+                idle.CommandGate.Release();
+            }
+        }));
+        await WaitForAsync(() => _ledger.Ends.Count == 2);
+        Assert.Equal((TransactionEndKind.Rollback, TransactionEndSource.SessionBroken), (_ledger.Ends[1].Kind, _ledger.Ends[1].Source));
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        for (var i = 0; i < 200 && !condition(); i++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(condition());
     }
 
     private TiberoSession NewSession()
@@ -107,6 +151,6 @@ public sealed class TiberoSessionRollbackTests : IDisposable
         connection.Open();
         var profile = new ConnectionProfile("t", "u", "h:1/d", Dbms: Dbms.Tibero);
         return new TiberoSession(Guid.NewGuid(), profile, Server, SessionPurpose.Work, "D/-/U", connection, null, _bus, driver: driver,
-            rollback: new TiberoRollbackHooks(_ledger, _capture, _bus));
+            rollback: new TiberoRollbackHooks(_capture, _ledger, _bus));
     }
 }

@@ -27,17 +27,17 @@ internal sealed class TiberoSessionManager : ISessionManager
     private readonly TiberoServerVersionPolicy _policy = new();
     private readonly ConcurrentDictionary<Guid, TiberoSession> _sessions = new();
     private readonly IDriverPathSource? _paths;
-    private readonly TiberoRollbackHooks? _rollback;
+    private readonly TiberoRollbackHooks _rollback;
 
     /// <param name="events">이벤트 버스.</param>
     /// <param name="paths">드라이버 위치(설정). App 이 등록하면 주입되고, 없으면 환경 변수 <c>ORANDA_TIBERO_DRIVER</c> 만 본다.</param>
-    /// <param name="ledger">되돌리기 원장(앱 조립이 등록). 원장과 엔진이 둘 다 있을 때만 세션의 커밋·롤백이 끝을 알린다.</param>
+    /// <param name="ledger">되돌리기 원장(앱 조립이 등록). 없으면 끔 구현.</param>
     /// <param name="capture">되돌리기 엔진(커밋 시점 읽기).</param>
     public TiberoSessionManager(IEventBus events, IDriverPathSource? paths = null, IRollbackLedger? ledger = null, IRollbackCapture? capture = null)
     {
         _events = events;
         _paths = paths;
-        _rollback = ledger is not null && capture is not null ? new TiberoRollbackHooks(ledger, capture, events) : null;
+        _rollback = new TiberoRollbackHooks(capture, ledger, events);
     }
 
     public IReadOnlyList<ISession> Sessions => [.. _sessions.Values];

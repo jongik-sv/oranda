@@ -31,8 +31,8 @@ internal sealed class TiberoSession : ISession
     private readonly Action<Guid>? _onDisposed;
     private readonly Func<ValueTask> _closeConnection;
     private readonly Timer? _keepAlive;
-    private readonly TiberoRollbackHooks? _rollback;
     private int _state = (int)SessionState.Idle;
+    private int _endInFlight;
     private volatile bool _pending;
     private int _disposed;
 
@@ -41,14 +41,14 @@ internal sealed class TiberoSession : ISession
     /// 이 객체의 Commit·Rollback·Dispose 를 부르면 자동 커밋으로 돌아간다(tb-exec 실측) → 세션이 닫힐 때까지 두고 닫을 때만 정리한다(SAFE-04).
     /// </param>
     /// <param name="driver">연결을 만든 드라이버 어댑터. 서버 없는 단위 시험(가짜 연결)만 null.</param>
-    /// <param name="rollback">되돌리기 원장에 세션 API 커밋·롤백을 알리는 자리(설계 13.5 끝). null 이면 알리지 않는다.</param>
+    /// <param name="rollback">되돌리기 원장에 트랜잭션 끝을 알리는 자리(설계 7.3·13.5). null 이면 끔 구현(알리지 않음).</param>
     public TiberoSession(Guid id, ConnectionProfile profile, ServerInfo server, SessionPurpose purpose, string dbKey,
                          DbConnection connection, DbTransaction? transaction, IEventBus events, Action<Guid>? onDisposed = null,
                          Func<ValueTask>? closeConnection = null, TiberoDriver? driver = null, TiberoRollbackHooks? rollback = null)
     {
-        _rollback = rollback;
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(events);
+        Rollback = rollback ?? new TiberoRollbackHooks(null, null, events);
         Driver = driver;
         _onDisposed = onDisposed;
         _closeConnection = closeConnection ?? (() => CloseAsync(connection, transaction));
@@ -89,6 +89,9 @@ internal sealed class TiberoSession : ISession
     /// 서버 없는 단위 시험의 가짜 세션만 null.
     /// </summary>
     internal TiberoDriver? Driver { get; }
+
+    /// <summary>되돌리기 원장에 트랜잭션 끝을 알리는 자리(설계 7.3). 실행 서비스도 같은 것을 쓴다.</summary>
+    internal TiberoRollbackHooks Rollback { get; }
 
     /// <summary>이 연결에 한 번에 한 명령만 보내게 하는 잠금(D-041). 연결을 쓰는 모든 기능이 함께 쓴다. 재진입하지 않는다.</summary>
     internal SessionCommandGate CommandGate { get; } = new();
@@ -151,11 +154,15 @@ internal sealed class TiberoSession : ISession
         return true;
     }
 
-    // 미커밋 플래그는 잠금을 쥔 채 지운다 — 놓은 뒤에 지우면 그 사이 다른 DML 이 켠 플래그까지 지워진다.
-    // 되돌리기 원장(설계 7.3·7.4): 커밋 앞 BeforeEnd, 커밋·롤백 뒤 시점 읽기와 End 를 잠금 안에서 기다리고, 알림 이벤트는 잠금을 놓은 뒤 낸다.
-    public Task CommitAsync(CancellationToken ct) => ExecAsync(CommitSql, TransactionEndKind.Commit, ct);
+    /// <summary>
+    /// 커밋(설계 7.3·7.4·13.5): 한 번의 명령 잠금 안에서 열린 묶음 저장(<see cref="TiberoRollbackHooks.BeforeEndAsync"/>) → <c>COMMIT</c> →
+    /// 미커밋 표시 내림(잠금을 쥔 채 — 놓은 뒤에 지우면 그 사이 다른 DML 이 켠 플래그까지 지워진다) → 커밋 시점 읽기·원장 끝 처리(<see cref="TransactionEndSource.SessionApi"/>).
+    /// COMMIT 이 실패하면 트랜잭션이 남았는지 확인해(<c>LOCAL_TRANSACTION_ID</c>) 끝났으면 「모름」, 남았으면 알리지 않는다. 끊겨서 확인할 수 없으면 「모름」.
+    /// </summary>
+    public Task CommitAsync(CancellationToken ct) => EndTransactionAsync(CommitSql, TransactionEndKind.Commit, ct);
 
-    public Task RollbackAsync(CancellationToken ct) => ExecAsync(RollbackSql, TransactionEndKind.Rollback, ct);
+    /// <summary>롤백. 롤백 앞에서는 묶음을 저장하지 않는다(7.4). 끝난 뒤 원장에 알린다. 실패했을 때는 커밋과 같은 규칙.</summary>
+    public Task RollbackAsync(CancellationToken ct) => EndTransactionAsync(RollbackSql, TransactionEndKind.Rollback, ct);
 
     public async ValueTask DisposeAsync()
     {
@@ -168,7 +175,12 @@ internal sealed class TiberoSession : ISession
         _keepAlive?.Dispose();
 
         Connection.StateChange -= OnConnectionStateChange;
-        Volatile.Write(ref _state, (int)SessionState.Closed);
+        var before = (SessionState)Interlocked.Exchange(ref _state, (int)SessionState.Closed);
+        if (before != SessionState.Broken) // 끊긴 세션은 끊길 때 이미 알렸다
+        {
+            // 닫으면 서버가 미커밋을 롤백한다(RB-13 실측)지만, 닫기 직전 실행 중이던 문장의 결과는 모른다 → 「모름」(7.3).
+            EndOpenGroup(TransactionEndKind.Unknown, TransactionEndSource.SessionClosed);
+        }
 
         // 상태·목록·이벤트를 먼저 반영한다. 연결 닫기는 서버가 응답하지 않으면 끝나지 않을 수 있으므로(UI 스레드 정지 원인) 그 뒤에 떼어 낸다.
         _onDisposed?.Invoke(Id);
@@ -177,18 +189,47 @@ internal sealed class TiberoSession : ISession
         await TimedClose.RunAsync(_closeConnection, "Tibero 세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
     }
 
-    private async Task ExecAsync(string sql, TransactionEndKind kind, CancellationToken ct)
+    private async Task EndTransactionAsync(string sql, TransactionEndKind kind, CancellationToken ct)
     {
         await CommandGate.EnterAsync(ct).ConfigureAwait(false);
-        TransactionEnded? ended = null;
+        using var scope = BeginEndScope();
         try
         {
-            if (_rollback is not null && kind == TransactionEndKind.Commit)
+            if (kind == TransactionEndKind.Commit)
             {
-                await _rollback.BeforeCommitAsync(this, ct).ConfigureAwait(false);
+                await Rollback.BeforeEndAsync(this, ct).ConfigureAwait(false);
             }
 
-            // 드라이버의 *Async 는 동기로 돈다 → 부른 스레드(UI)를 막지 않게 스레드 풀로 옮긴다.
+            try
+            {
+                await SendAsync(sql, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                if (await TransactionEndedAfterFailureAsync().ConfigureAwait(false))
+                {
+                    await Rollback.EndAsync(this, TransactionEndKind.Unknown, TransactionEndSource.SessionApi).ConfigureAwait(false);
+                    scope.Reported();
+                }
+
+                throw;
+            }
+
+            SetPending(false);
+            await Rollback.EndAsync(this, kind, TransactionEndSource.SessionApi).ConfigureAwait(false);
+            scope.Reported();
+        }
+        finally
+        {
+            CommandGate.Release();
+        }
+    }
+
+    /// <summary>명령 잠금을 쥔 채 문장 하나를 보낸다(드라이버 호출은 동기 → 스레드 풀). 끊김 오류면 세션을 Broken 으로 돌리고 다시 던진다.</summary>
+    private async Task SendAsync(string sql, CancellationToken ct)
+    {
+        try
+        {
             await Task.Run(
                 async () =>
                 {
@@ -196,25 +237,118 @@ internal sealed class TiberoSession : ISession
                     await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 },
                 CancellationToken.None).ConfigureAwait(false);
-            SetPending(false);
-            if (_rollback is not null)
-            {
-                ended = await _rollback.AfterEndAsync(this, kind).ConfigureAwait(false);
-            }
         }
         catch (Exception ex) when (ReportFailure(ex))
         {
             throw;
         }
-        finally
+    }
+
+    /// <summary>
+    /// 실패한 COMMIT·ROLLBACK 뒤 원장에 「모름」 끝을 알려야 하는지(명령 잠금 안). 열린 묶음이 없으면 거짓. 끊겼으면 참, 확인 질의가 실패해도 참.
+    /// 트랜잭션이 남아 있으면 거짓(보내기 전 취소, 끝내지 않은 서버 오류: 원장은 열린 묶음을 그대로 둔다).
+    /// </summary>
+    private async Task<bool> TransactionEndedAfterFailureAsync()
+    {
+        if (Rollback.Ledger.Open(Id) is null)
         {
-            CommandGate.Release();
+            return false;
         }
 
-        if (ended is not null)
+        if (State is SessionState.Broken or SessionState.Closed)
         {
-            _rollback!.Publish(ended);
+            return true;
         }
+
+        try
+        {
+            return await Task.Run(async () =>
+            {
+                await using var cmd = CreateCommand(TiberoExecutionService.TransactionIdSql);
+                var id = await cmd.ExecuteScalarAsync(CancellationToken.None).ConfigureAwait(false);
+                return Driver is { } driver ? driver.IsProviderNull(id) : id is null or DBNull;
+            }, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (TiberoErrorClassifier.IsDriverException(ex))
+        {
+            ReportFailure(ex);
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 트랜잭션을 끝낼 수 있는 문장을 보내는 동안 켜 두는 범위(명령 잠금 안). 그동안 끊기면 <see cref="MarkBroken"/> 은 원장에 따로 알리지 않고
+    /// 범위를 연 쪽이 끝을 알린다(끊김이 커밋 결과를 「롤백」으로 덮지 않게, 기록과 끝 알림이 엇갈리지 않게).
+    /// 범위가 끝날 때까지 알리지 못했는데 세션이 끊겼으면 그때 <paramref name="ifBroken"/>(끝낼 수 있는 문장 = 「모름」, 그 밖의 쓰기 = 「롤백」)으로,
+    /// 닫혔으면 「모름」으로 알린다.
+    /// </summary>
+    internal EndScope BeginEndScope(TransactionEndKind ifBroken = TransactionEndKind.Unknown)
+    {
+        Interlocked.Increment(ref _endInFlight);
+        return new EndScope(this, ifBroken);
+    }
+
+    /// <summary><see cref="BeginEndScope"/> 의 범위.</summary>
+    internal sealed class EndScope(TiberoSession session, TransactionEndKind ifBroken) : IDisposable
+    {
+        private bool _reported;
+        private int _disposed;
+
+        /// <summary>범위를 연 쪽이 원장에 끝을 알렸다.</summary>
+        public void Reported() => _reported = true;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            {
+                return;
+            }
+
+            if (Interlocked.Decrement(ref session._endInFlight) == 0 && !_reported)
+            {
+                switch (session.State)
+                {
+                    case SessionState.Broken:
+                        session.EndOpenGroup(ifBroken, TransactionEndSource.SessionBroken);
+                        break;
+                    case SessionState.Closed: // 범위 안에서 닫혔다: 닫기가 건너뛴 알림을 여기서 한다
+                        session.EndOpenGroup(TransactionEndKind.Unknown, TransactionEndSource.SessionClosed);
+                        break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 세션이 끊기거나 닫힐 때 열린 묶음의 끝을 원장에 알린다(설계 7.3). 열린 묶음이 없거나 끝낼 수 있는 문장이 진행 중이면(그쪽이 알린다) 하지 않는다.
+    /// 연결을 더 쓰지 않는 끝이라 판정·시점 읽기 없이(<see cref="TiberoRollbackHooks.EndAsync"/> 가 끊김·닫힘 출처는 건너뛴다)
+    /// 스레드 풀에 맡긴다: 예외 필터·드라이버 콜백·닫기를 막지 않는다. 원장 실패는 삼킨다.
+    /// </summary>
+    private void EndOpenGroup(TransactionEndKind kind, TransactionEndSource source)
+    {
+        if (Volatile.Read(ref _endInFlight) > 0)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (Rollback.Ledger.Open(Id) is not null)
+                {
+                    await Rollback.EndAsync(this, kind, source).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // 원장의 동기 예외도 닫기·끊김 처리를 막지 않는다.
+            }
+        });
     }
 
     internal async Task KeepAliveTickAsync()
@@ -321,5 +455,6 @@ internal sealed class TiberoSession : ISession
         var hadPending = _pending;
         _pending = false;
         _events.Publish(new SessionBroken(Id, hadPending, error));
+        EndOpenGroup(TransactionEndKind.Rollback, TransactionEndSource.SessionBroken); // 미커밋 변경은 서버가 되돌렸다
     }
 }
