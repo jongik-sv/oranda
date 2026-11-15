@@ -74,13 +74,13 @@
     <Border Grid.Row="3" Classes="panel-toolbar" IsVisible="{Binding IsEditMode}">
       <StackPanel Orientation="Horizontal" Spacing="1">
         <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.addRow" Content="행 추가"
-                icons:ButtonIcon.Key="rowAdd" icons:ButtonIcon.IconOnly="True" />
+                icons:ButtonIcon.Key="gridRowAdd" icons:ButtonIcon.IconOnly="True" />
         <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.duplicateRow" Content="행 복제"
-                icons:ButtonIcon.Key="rowDuplicate" icons:ButtonIcon.IconOnly="True" />
+                icons:ButtonIcon.Key="gridRowDuplicate" icons:ButtonIcon.IconOnly="True" />
         <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.pasteRows" Content="행 붙여넣기"
                 icons:ButtonIcon.Key="rowPaste" icons:ButtonIcon.IconOnly="True" />
         <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.deleteRow" Content="행 삭제"
-                icons:ButtonIcon.Key="rowDelete" icons:ButtonIcon.IconOnly="True" />
+                icons:ButtonIcon.Key="gridRowDelete" icons:ButtonIcon.IconOnly="True" />
         <Separator Classes="toolbar" />
         <Button Classes="toolbar" Focusable="False" Tag="oranda.grid.edit.previewDml" Content="반영할 DML 미리보기"
                 IsEnabled="{Binding IsEditDirty}" icons:ButtonIcon.Key="objView" icons:ButtonIcon.IconOnly="True" />
