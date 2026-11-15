@@ -448,6 +448,9 @@ public sealed class GridEditSession
     /// <summary>미리보기 글(GRID-05): 생성 DML 과 바인드 값.</summary>
     public string BuildPreview() => RowDmlBuilder.FormatPreview(BuildChanges().Select(RowDmlBuilder.Build).OfType<RowDml>());
 
+    /// <summary>반영할 생성 DML(바인드 이름 그대로). 운영 확인을 물을지 정책으로 미리 볼 때 쓴다.</summary>
+    public IReadOnlyList<SqlStatement> BuildStatements() => _editor.BuildDml(BuildChanges());
+
     /// <summary>반영. 성공한 행은 변경 목록에서 빠지고, 실패한 행은 남아 <see cref="GridEditRowState.Failed"/> 로 표시된다.</summary>
     public async Task<ApplyResult> ApplyAsync(bool commit, CancellationToken ct)
     {
@@ -458,6 +461,11 @@ public sealed class GridEditSession
         }
 
         var result = await _editor.ApplyAsync(Session, changes, commit, ct).ConfigureAwait(true);
+        if (GridEditConfirmScope.Current is { Declined: true })
+        {
+            return result; // 운영 확인 창에서 취소했다: 실행 엔진이 이번 반영을 되돌렸으므로 편집 상태·안내를 그대로 둔다
+        }
+
         var failed = result.Failures.ToDictionary(f => f.RowIndex);
         var aborted = result.AppliedCount == 0 && failed.Count == changes.Count;
         _failures.Clear();

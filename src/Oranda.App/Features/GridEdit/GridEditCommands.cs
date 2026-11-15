@@ -1,4 +1,5 @@
 using Oranda.App.Features.Execution;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Metadata;
@@ -44,6 +45,12 @@ public static class GridEditCommands
     /// 다른 작업 공간은 바쁨 막대를 본다. null 이면 표시 없이 반영한다.
     /// </summary>
     public static ExecutionState? State { get; set; }
+
+    /// <summary>
+    /// 실행 엔진이 쓰는 정책 관문(실행 화면 설치가 채운다). 반영할 DML 을 운영 확인이 물을지 미리 본다: 물으면 DML 미리보기 창을 띄우지 않고
+    /// 운영 확인 창 하나에 미리보기 글을 싣는다(<see cref="GridEditConfirmScope"/>, 사용자 요청 2026-11-16). null 이면 늘 미리보기 창이다.
+    /// </summary>
+    public static Func<IExecutionPolicy?>? Policy { get; set; }
 
     /// <summary>결과를 만든 세션과 탭의 지금 세션이 다를 때의 안내.</summary>
     internal const string SessionMovedNotice = "이 결과를 만든 세션과 지금 탭의 세션이 다릅니다. 다른 세션의 트랜잭션에 반영하지 않도록 멈췄습니다 — 다시 조회한 뒤 편집하세요.";
@@ -160,12 +167,8 @@ public sealed class GridEditCommandHandler : ICommandHandler
                 s.ResetAll();
                 break;
             case "oranda.grid.edit.previewDml":
-                // 미리보기 창의 「반영」은 커밋 없이 반영한다(취소면 아무것도 하지 않는다).
-                if (!Refused(s) && GridEditCommands.ConfirmPreview is { } show && await show(s.BuildPreview(), false, cancellationToken).ConfigureAwait(true))
-                {
-                    await ApplyConfirmedAsync(s, commit: false, cancellationToken).ConfigureAwait(true);
-                }
-
+                // 미리보기 창의 「반영」은 커밋 없이 반영한다(취소면 아무것도 하지 않는다). 운영 확인이 묻는 접속이면 그 창 하나로 묻는다.
+                await ApplyAsync(s, commit: false, cancellationToken).ConfigureAwait(true);
                 break;
             case "oranda.grid.edit.applyAndCommit":
                 await ApplyAsync(s, commit: true, cancellationToken).ConfigureAwait(true);
@@ -189,7 +192,10 @@ public sealed class GridEditCommandHandler : ICommandHandler
         }
     }
 
-    /// <summary>미리보기 확인을 받은 뒤에만 반영한다(GRID-05).</summary>
+    /// <summary>
+    /// 미리보기 확인을 받은 뒤에만 반영한다(GRID-05). 운영 확인이 물을 반영이면(<see cref="AsksProductionConfirmAsync"/>) 미리보기 창을 건너뛰고
+    /// 운영 확인 창 하나가 미리보기 글·커밋 안내를 보인다(<see cref="GridEditConfirmScope"/>). 그 창에서 취소하면 편집 상태를 그대로 둔다.
+    /// </summary>
     internal static async Task<bool> ApplyAsync(GridEditSession s, bool commit, CancellationToken ct)
     {
         if (!s.IsDirty || GridEditCommands.ConfirmPreview is not { } confirm || Refused(s))
@@ -197,13 +203,53 @@ public sealed class GridEditCommandHandler : ICommandHandler
             return false;
         }
 
-        if (!await confirm(s.BuildPreview(), commit, ct).ConfigureAwait(true))
+        var preview = s.BuildPreview();
+        if (await AsksProductionConfirmAsync(s, ct).ConfigureAwait(true) is { } statements)
+        {
+            var scope = GridEditConfirmScope.Create(preview, commit, s.Session.Profile, statements);
+            await ApplyConfirmedAsync(s, commit, ct, scope).ConfigureAwait(true);
+            return !scope.Declined;
+        }
+
+        if (!await confirm(preview, commit, ct).ConfigureAwait(true))
         {
             return false;
         }
 
         await ApplyConfirmedAsync(s, commit, ct).ConfigureAwait(true);
         return true;
+    }
+
+    /// <summary>
+    /// 반영할 DML 중 하나라도 정책 관문이 확인을 물을지(운영 판정은 정책 그대로: <see cref="IExecutionPolicy"/> 의 판단이 Confirm 이고
+    /// 개발 접속이 아니다 — 정책 관문이 개발 접속의 확인을 생략하는 규칙과 같다). 물으면 반영할 DML, 아니면 null.
+    /// 정책 관문이 없거나 판단에 실패하면 null(미리보기 창).
+    /// </summary>
+    internal static async Task<IReadOnlyList<SqlStatement>?> AsksProductionConfirmAsync(GridEditSession s, CancellationToken ct)
+    {
+        if (GridEditCommands.Policy?.Invoke() is not { } policy || s.Session.Profile.Environment == ConnectionEnvironment.Development)
+        {
+            return null;
+        }
+
+        var ctx = new PolicyContext(s.Session.Profile, s.Session.Server, Oranda.Core.History.HistorySource.GridEdit);
+        try
+        {
+            var statements = s.BuildStatements();
+            foreach (var stmt in statements)
+            {
+                if ((await policy.EvaluateAsync(ctx, stmt, ct).ConfigureAwait(true)).Kind == PolicyDecisionKind.Confirm)
+                {
+                    return statements;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     /// <summary>반영한 뒤 그 행을 찾는 키: 원래 키에 같은 열의 새 값을 덮는다.</summary>
@@ -240,7 +286,8 @@ public sealed class GridEditCommandHandler : ICommandHandler
     }
 
     /// <summary>확인을 받은 변경을 반영한다. 확인 창이 떠 있는 사이 세션이 바뀌었으면 반영하지 않는다.</summary>
-    private static async Task ApplyConfirmedAsync(GridEditSession s, bool commit, CancellationToken ct)
+    /// <param name="scope">운영 확인 한 번의 범위(있으면). 그 창에서 취소했으면 알림·다시 읽기 없이 끝낸다.</param>
+    private static async Task ApplyConfirmedAsync(GridEditSession s, bool commit, CancellationToken ct, GridEditConfirmScope? scope = null)
     {
         if (Refused(s))
         {
@@ -255,7 +302,10 @@ public sealed class GridEditCommandHandler : ICommandHandler
         state?.BeginRun(session.Id, s.Owner); // 반영하는 동안 그 세션은 실행 중(TSK-14-08)
         try
         {
-            result = await s.ApplyAsync(commit, ct).ConfigureAwait(true);
+            using (scope?.Enter()) // 운영 확인 한 번의 범위는 반영 호출 동안만(다시 읽기·알림에는 걸지 않는다)
+            {
+                result = await s.ApplyAsync(commit, ct).ConfigureAwait(true);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -266,6 +316,11 @@ public sealed class GridEditCommandHandler : ICommandHandler
         {
             state?.ApplyTransaction(session.Id, session.HasPendingTransaction);
             state?.EndRun(session.Id);
+        }
+
+        if (scope is { Declined: true })
+        {
+            return; // 운영 확인에서 취소: 반영한 것이 없다(편집 상태 그대로, GridEditSession.ApplyAsync)
         }
 
         // 저장 효과(TSK-13-18): 상태 표시줄 알림 + 반영된 행 잠깐 강조(다시 읽으면 새 그리드에서).

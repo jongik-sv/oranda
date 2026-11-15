@@ -242,6 +242,7 @@ public static class ExecutionCommands
         GridEditCommands.RerunReadOnly ??= (stmt, ct) => Resolve(container).RerunAsync(stmt, ct);
         GridEditCommands.ConfirmPreview ??= (text, commit, ct) => Resolve(container).ConfirmPreviewAsync(text, commit, ct);
         GridEditCommands.Report ??= notice => Resolve(container).ReportGridApply(notice);
+        GridEditCommands.Policy ??= () => container.GetService<IExecutionPolicy>(); // 운영 확인을 물을 반영이면 미리보기 창 없이 확인 창 하나
         ResultGrid.ResultGridCommands.CountRows ??= (stmt, ct) => RowCounter(container).CountAsync(stmt, ct);
         ResultGrid.ResultGridCommands.Filter ??= (request, ct) => FilterRunner(container).RunAsync(request, ct);
         ResultGrid.ResultGridCommands.CountFiltered ??= (request, ct) => FilterRunner(container).CountAsync(request, ct);

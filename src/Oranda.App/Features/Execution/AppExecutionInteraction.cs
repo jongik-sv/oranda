@@ -35,12 +35,24 @@ public sealed class AppExecutionInteraction : IExecutionInteraction
     {
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(decision);
-        var request = new ConfirmRequest(stmt, decision, ProfileProvider?.Invoke())
+
+        // 운영 접속 그리드 반영(GridEditConfirmScope): 미리보기 글과 커밋 안내를 실은 창을 반영 하나에 한 번만 띄운다.
+        // 이번 반영이 만든 DML 만 그 범위로 묻는다(그 밖의 문장은 늘 따로 묻는다).
+        var grid = Oranda.App.Features.GridEdit.GridEditConfirmScope.Current is { } scope && scope.Covers(stmt) ? scope : null;
+        var shown = grid is { Statements: > 1 } many && decision.Message is { Length: > 0 } m
+            ? decision with { Message = m + Environment.NewLine + $"그리드 편집 {many.Statements}문장({many.Verbs})을 이 확인 한 번으로 모두 실행합니다. 원복 경고는 첫 문장 기준입니다." }
+            : decision;
+        var request = new ConfirmRequest(stmt, shown, grid?.Profile ?? ProfileProvider?.Invoke())
         {
             Extras = extras ?? ConfirmExtras.None,
             Rollback = RollbackSettingsProvider?.Invoke() ?? new RollbackSettings(),
+            Preview = grid?.Preview,
+            Notice = grid?.Notice,
+            StatementCount = grid?.Statements ?? 1,
         };
-        return Dialogs.ConfirmChangeAsync(request, ct);
+        return grid is null
+            ? Dialogs.ConfirmChangeAsync(request, ct)
+            : grid.ConfirmAsync(decision, request.Extras, () => Dialogs.ConfirmChangeAsync(request, ct));
     }
 
     public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct)

@@ -103,9 +103,15 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         header.Child = new StackPanel { Children = { title, detail } };
 
         var message = new TextBlock { Text = model.Message, TextWrapping = TextWrapping.Wrap, MaxWidth = 560 };
-        var sql = new SqlCodeView { Text = model.Request.Statement.Text, MaxHeight = 160, MinWidth = 420 };
+        var sql = new SqlCodeView { Text = model.StatementText, MaxHeight = model.Request.Preview is null ? 160 : 320, MinWidth = 420 };
         DialogShell.AutomationName(sql, "실행할 문장");
-        var body = new StackPanel { Margin = new Thickness(16), Spacing = 10, Children = { message, sql } };
+        var body = new StackPanel { Margin = new Thickness(16), Spacing = 10, Children = { message } };
+        if (model.NoticeText is { } notice)
+        {
+            body.Children.Add(new TextBlock { Text = notice, TextWrapping = TextWrapping.Wrap, MaxWidth = 560, Name = "ConfirmNotice" });
+        }
+
+        body.Children.Add(sql);
 
         TextBox? retype = null;
         if (model.RetypeText is { } expected)
@@ -507,7 +513,7 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         DialogShell.AutomationName(box, "DML 미리보기");
         var hint = new TextBlock
         {
-            Text = commit ? "아래 DML 을 실행한 뒤 바로 커밋합니다." : "아래 DML 만 실행하고 커밋하지 않습니다. 커밋 또는 롤백을 해야 확정됩니다.",
+            Text = Oranda.App.Features.GridEdit.GridEditConfirmScope.NoticeFor(commit),
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 520,
         };

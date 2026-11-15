@@ -28,6 +28,7 @@ public sealed partial class GridEditTests : IDisposable
         GridEditCommands.RerunReadOnly = null;
         GridEditCommands.Report = null;
         GridEditCommands.State = null;
+        GridEditCommands.Policy = null;
         Oranda.App.Features.ResultGrid.ResultGridCommands.Active = null;
         Oranda.App.Features.ResultGrid.ResultGridCommands.CopiedRows = null;
     }
@@ -45,14 +46,14 @@ public sealed partial class GridEditTests : IDisposable
         Columns(("EMPNO", ColumnDataKind.Number), ("ENAME", ColumnDataKind.Text), ("SAL", ColumnDataKind.Number));
 
     private Task<GridEditSession> OpenAsync(string sql, ResultColumn[]? cols = null, object?[][]? data = null, bool readOnly = false,
-                                            TableInfo? table = null)
+                                            TableInfo? table = null, ConnectionProfile? profile = null)
     {
         data ??= Data;
         var meta = new OneTableMetadata(table ?? new TableInfo(Emp, [new ColumnInfo("EMPNO", 1, "NUMBER") { IsNullable = false }])
         {
             Constraints = [new ConstraintInfo("PK_EMP", ConstraintKind.PrimaryKey, ["EMPNO"])],
         });
-        var session = _session = new TestSession(readOnly);
+        var session = _session = new TestSession(readOnly, profile);
         return GridEditSession.OpenAsync(new RowEditor(_exec), meta, session,
             new SqlStatement(sql, default, StatementKind.Query) { Verb = "SELECT" }, cols ?? EmpCols,
             (r, c) => data[r][c], () => data.Length, target: null, default);
@@ -430,14 +431,22 @@ public sealed partial class GridEditTests : IDisposable
         /// <summary>DML 문장과 바인드 값 → 영향 행 수(가짜 테이블). 있으면 <see cref="RowsFor"/> 보다 앞선다.</summary>
         public Func<SqlStatement, IReadOnlyDictionary<string, BindValue>, long>? RowsForBinds { get; set; }
 
-        public Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds,
-                                                  ExecutionOptions? options, CancellationToken ct)
+        /// <summary>정책 관문 자리(있으면 문장마다 먼저 부른다). 진행이 아니면 그 상태로 끝내고 기록하지 않는다.</summary>
+        public Func<ISession, SqlStatement, ExecutionOptions?, CancellationToken, Task<ExecutionStatus>>? Gate { get; set; }
+
+        public async Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds,
+                                                        ExecutionOptions? options, CancellationToken ct)
         {
+            if (Gate is { } gate && await gate(s, stmt, options, ct).ConfigureAwait(false) is var status && status != ExecutionStatus.Succeeded)
+            {
+                return new ExecutionResult(stmt, status);
+            }
+
             Calls.Add((stmt, options, binds));
-            return Task.FromResult(new ExecutionResult(stmt, ExecutionStatus.Succeeded)
+            return new ExecutionResult(stmt, ExecutionStatus.Succeeded)
             {
                 RowsAffected = stmt.Kind == StatementKind.Dml ? RowsForBinds?.Invoke(stmt, binds) ?? RowsFor(stmt) : null,
-            });
+            };
         }
 
         public async IAsyncEnumerable<ExecutionResult> ExecuteScriptAsync(ISession s, IReadOnlyList<SqlStatement> stmts, ScriptErrorMode mode,
@@ -448,11 +457,11 @@ public sealed partial class GridEditTests : IDisposable
         }
     }
 
-    internal sealed class TestSession(bool readOnly) : ISession
+    internal sealed class TestSession(bool readOnly, ConnectionProfile? profile = null) : ISession
     {
         public Guid Id { get; } = Guid.NewGuid();
 
-        public ConnectionProfile Profile { get; } = new("dev", "scott", "h:1521/s", ReadOnly: readOnly);
+        public ConnectionProfile Profile { get; } = profile ?? new("dev", "scott", "h:1521/s", ReadOnly: readOnly);
 
         public ServerInfo Server { get; } = new("23.26.0.0.0", "FREE", "h", "s", "FREE", "FREEPDB1", true, 1,
             new ServerCapabilities(false, false, false, false, false));

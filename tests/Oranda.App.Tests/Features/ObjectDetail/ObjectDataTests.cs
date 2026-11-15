@@ -49,6 +49,7 @@ public sealed class ObjectDataTests : IDisposable
         GridEditCommands.Active = null;
         GridEditCommands.ConfirmPreview = null;
         GridEditCommands.Rerun = null;
+        GridEditCommands.Policy = null;
         ResultGridCommands.Filter = null;
         ResultGridCommands.CountFiltered = null;
         ResultGridCommands.CountRows = null;
@@ -199,6 +200,58 @@ public sealed class ObjectDataTests : IDisposable
     }
 
     // ---- 편집 ---------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Production_data_tab_apply_asks_once_in_the_run_confirm_without_preview()
+    {
+        var policy = new ExecutionPolicy();
+        var asked = new List<ConfirmRequest>();
+        var dialogs = new ConfirmOnlyDialogs(asked);
+        var interaction = new AppExecutionInteraction { Dialogs = dialogs };
+        var bus = new Oranda.Core.Events.EventBus();
+        GridEditCommands.Policy = () => policy;
+        var previews = 0;
+        GridEditCommands.ConfirmPreview = (_, _, _) => { previews++; return Task.FromResult(true); };
+        var h = new Harness(profile: new ConnectionProfile("prod-example", "scott", "prod-example:1521/s", Environment: ConnectionEnvironment.Production));
+        h.Engine.Policy = async (s, stmt, ct) =>
+        {
+            var gate = await Oranda.Core.Execution.Providers.PolicyGate.DecideAsync(policy, interaction, bus, s, stmt, new ExecutionOptions(), ct);
+            return gate.Outcome == Oranda.Core.Execution.Providers.PolicyGateOutcome.Proceed ? null : new ExecutionResult(stmt, ExecutionStatus.Cancelled);
+        };
+        await h.LoadAsync();
+        await h.Vm.Data.SetEditingAsync(true);
+        var es = GridEditCommands.Active!;
+        Assert.True(es.SetCell(0, 2, "SCOTT"));
+        Assert.True(es.SetCell(1, 2, "KING"));
+
+        await new GridEditCommandHandler().ExecuteAsync(new CommandContext("oranda.grid.edit.apply", FakeContextKeys.AllTrue), default);
+
+        Assert.Equal(0, previews);
+        var request = Assert.Single(asked);
+        Assert.Contains("-- :v1 = 'SCOTT'", request.Preview, StringComparison.Ordinal);
+        Assert.Contains("-- :v1 = 'KING'", request.Preview, StringComparison.Ordinal);
+        Assert.Equal(2, h.Engine.Calls.Count(c => c.Stmt.Kind == StatementKind.Dml));
+    }
+
+    private sealed class ConfirmOnlyDialogs(List<ConfirmRequest> asked) : IExecutionDialogs
+    {
+        public Task<bool> ConfirmAsync(ConfirmRequest request, CancellationToken ct)
+        {
+            asked.Add(request);
+            return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(
+            IReadOnlyList<string> names, IReadOnlyDictionary<string, string> last, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
+
+        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
+            Task.FromResult(ScriptErrorAction.Stop);
+
+        public Task<UncommittedChoice> AskUncommittedAsync(CancellationToken ct) => Task.FromResult(UncommittedChoice.Cancel);
+
+        public Task<bool> PreviewDmlAsync(string text, CancellationToken ct) => Task.FromResult(true);
+    }
 
     [Fact]
     public async Task Edit_toggle_opens_edit_mode_on_the_current_result_and_apply_rereads_here_not_in_the_editor()
@@ -393,9 +446,9 @@ public sealed class ObjectDataTests : IDisposable
 
     private sealed class Harness
     {
-        public Harness(bool readOnly = false, bool runner = true)
+        public Harness(bool readOnly = false, bool runner = true, ConnectionProfile? profile = null)
         {
-            Session = new TestSession(readOnly);
+            Session = new TestSession(readOnly, profile);
             Vm = new ObjectDetailViewModel(Meta)
             {
                 DataRunner = runner ? s => new ObjectDataRunner(State, Binds, s, () => Engine) : _ => null,
@@ -437,12 +490,20 @@ public sealed class ObjectDataTests : IDisposable
 
         public Func<SqlStatement, ExecutionResult?>? Override { get; set; }
 
+        /// <summary>정책 관문 자리(있으면 쓰기 문장마다 먼저 부른다). 결과를 주면 그것으로 끝낸다.</summary>
+        public Func<ISession, SqlStatement, CancellationToken, Task<ExecutionResult?>>? Policy { get; set; }
+
         /// <summary>채우면 질의 결과를 이 작업이 끝날 때까지 늦춘다.</summary>
         public Task? Gate { get; set; }
 
         public async Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds,
                                                         ExecutionOptions? options, CancellationToken ct)
         {
+            if (Policy is { } policy && stmt.Kind == StatementKind.Dml && await policy(s, stmt, ct) is { } stopped)
+            {
+                return stopped;
+            }
+
             Calls.Add((s, stmt, binds, options));
             if (Override?.Invoke(stmt) is { } overridden)
             {
@@ -503,11 +564,11 @@ public sealed class ObjectDataTests : IDisposable
         }
     }
 
-    private sealed class TestSession(bool readOnly) : ISession
+    private sealed class TestSession(bool readOnly, ConnectionProfile? profile = null) : ISession
     {
         public Guid Id { get; } = Guid.NewGuid();
 
-        public ConnectionProfile Profile { get; } = new("dev", "scott", "h:1521/s", ReadOnly: readOnly);
+        public ConnectionProfile Profile { get; } = profile ?? new("dev", "scott", "h:1521/s", ReadOnly: readOnly);
 
         public ServerInfo Server { get; } = new("23.26.0.0.0", "FREE", "h", "s", "FREE", "FREEPDB1", true, 1,
             new ServerCapabilities(false, false, false, false, false));

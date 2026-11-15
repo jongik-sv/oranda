@@ -37,6 +37,17 @@ public sealed record ConfirmRequest(SqlStatement Statement, PolicyDecision Decis
 
     /// <summary>원복 줄의 보관 일수·SCN 기록 줄을 정하는 지금 설정.</summary>
     public RollbackSettings Rollback { get; init; } = new();
+
+    /// <summary>
+    /// 문장 대신 보일 본문(운영 접속 그리드 반영: DML 미리보기 창이 보이던 글 — 모든 문장과 바인드 값 줄). null 이면 <see cref="Statement"/> 의 글.
+    /// </summary>
+    public string? Preview { get; init; }
+
+    /// <summary>본문 위 안내 한 줄(그리드 반영의 커밋 여부). null 이면 보이지 않는다.</summary>
+    public string? Notice { get; init; }
+
+    /// <summary>이 확인 한 번이 맡는 문장 수(그리드 반영). 2 이상이면 원복 줄이 행 수 대신 문장 수를 보인다(답은 모든 문장에 적용).</summary>
+    public int StatementCount { get; init; } = 1;
 }
 
 /// <summary>
@@ -119,6 +130,12 @@ public sealed partial class ConfirmDialogModel(ConfirmRequest request)
 
     public string Message => Request.Decision.Message ?? "이 문장을 실행합니다.";
 
+    /// <summary>본문 칸의 글: 미리보기가 있으면 그것(그리드 반영), 아니면 실행할 문장.</summary>
+    public string StatementText => Request.Preview ?? Request.Statement.Text;
+
+    /// <summary>본문 위 안내 한 줄(그리드 반영의 커밋 여부). 없으면 null.</summary>
+    public string? NoticeText => string.IsNullOrWhiteSpace(Request.Notice) ? null : Request.Notice;
+
     /// <summary>머리 띠 첫 줄: 접속 이름.</summary>
     public string HeaderTitle => Request.Profile?.Name ?? "접속 없음";
 
@@ -142,9 +159,11 @@ public sealed partial class ConfirmDialogModel(ConfirmRequest request)
     public bool ShowsScriptOption => Offer is { Applicable: true };
 
     /// <summary>확인란 글: 「원복 스크립트 만들기 (예상 1,240행)」 또는 「(예상 행 수 알 수 없음)」.</summary>
-    public string ScriptOptionText => Offer?.EstimatedRows is { } rows
-        ? $"원복 스크립트 만들기 (예상 {rows.ToString("N0", CultureInfo.CurrentCulture)}행)"
-        : "원복 스크립트 만들기 (예상 행 수 알 수 없음)";
+    public string ScriptOptionText => Request.StatementCount > 1
+        ? $"원복 스크립트 만들기 ({Request.StatementCount.ToString("N0", CultureInfo.CurrentCulture)}문장, 문장마다 기록)"
+        : Offer?.EstimatedRows is { } rows
+            ? $"원복 스크립트 만들기 (예상 {rows.ToString("N0", CultureInfo.CurrentCulture)}행)"
+            : "원복 스크립트 만들기 (예상 행 수 알 수 없음)";
 
     /// <summary>확인란을 바꿀 수 있다. 상한을 넘으면 꺼지고 흐려진다(6.5).</summary>
     public bool ScriptOptionEnabled => Offer is { Applicable: true, OverLimit: false };
