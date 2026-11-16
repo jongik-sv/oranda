@@ -1888,5 +1888,18 @@
   "유효 시간(PERIOD FOR) 플래시백 결과는 되돌릴 수 없습니다.": "A valid-time (PERIOD FOR) Flashback result cannot be restored.",
   "바꿀 것 없음: 지금 값이 고른 행과 같습니다.": "Nothing to change: the current values match the chosen row.",
   "고른 결과 행": "Chosen result row",
-  "열 폭 처음으로": "Reset column widths"
+  "열 폭 처음으로": "Reset column widths",
+  "이 접속만 · 보관된 것만 · 원인 거르기 펼치기·접기": "This connection only · Archived only · Expand/collapse cause filter",
+  "원복 스크립트 열기 — 고른 커밋 묶음의 원복 스크립트를 새 탭에 엽니다(자동으로 실행하지 않습니다)": "Open rollback script — opens the rollback script of the chosen commit group in a new tab (it is not run automatically)",
+  "이 실행 전과 비교… — 기록한 실행 직전 시점과 지금 데이터를 비교해 되돌립니다": "Compare with before this run… — compares the recorded point just before the run with the current data and restores it",
+  "DDL·실행한 문장 복사": "Copy DDL / executed statement",
+  "두 상자 나누기": "Split into two boxes",
+  "원복 스크립트·차이 복사": "Copy rollback script / diff",
+  "SQL 검색 (3자 이상)": "SQL search (3+ characters)",
+  "SQL 검색": "SQL search",
+  "이 접속만 · 상태 거르기 펼치기·접기": "This connection only · Expand/collapse status filter",
+  "지우기 · 모두 비우기": "Delete · Clear all",
+  "더 많은 명령": "More commands",
+  "고른 이력 지우기": "Delete chosen history",
+  "고른 이력의 오류": "Error of chosen history"
 }
