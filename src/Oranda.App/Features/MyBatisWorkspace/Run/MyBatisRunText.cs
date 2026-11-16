@@ -66,5 +66,5 @@ public static class MyBatisRunText
         };
     }
 
-    private static string Quote(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
+    private static string Quote(string text) => Oranda.Core.Text.SqlLiteral.Quote(text);
 }

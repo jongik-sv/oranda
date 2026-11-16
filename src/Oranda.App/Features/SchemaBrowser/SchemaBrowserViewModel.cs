@@ -121,17 +121,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     }
 
     /// <summary>이벤트를 UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
-    public Action<Action> PostToUi { get; set; } = a =>
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            a();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(a);
-        }
-    };
+    public Action<Action> PostToUi { get; set; } = Oranda.App.Shell.UiThread.Post;
 
     /// <summary>지금 보여 주는 세션. 없으면 null.</summary>
     public ISession? CurrentSession { get; private set; }

@@ -482,17 +482,7 @@ public sealed partial class PlanViewModel : ToolPanelViewModelBase, IDisposable
     public CursorRef? LastCursor { get; private set; }
 
     /// <summary>UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
-    public Action<Action> PostToUi { get; set; } = a =>
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            a();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(a);
-        }
-    };
+    public Action<Action> PostToUi { get; set; } = Oranda.App.Shell.UiThread.Post;
 
     /// <summary>지금 옵션의 형식 문자열(툴바 형식 단추에 보인다).</summary>
     public string FormatText => BuildFormat();

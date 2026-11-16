@@ -848,15 +848,5 @@ public sealed class ExecutionState : ObservableObject
     }
 
     /// <summary>버스 이벤트는 어느 스레드에서든 온다. 앱이 떠 있으면 UI 스레드로 옮긴다.</summary>
-    private static void Post(Action action)
-    {
-        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(action);
-        }
-    }
+    private static void Post(Action action) => Oranda.App.Shell.UiThread.PostIfAppRunning(action);
 }

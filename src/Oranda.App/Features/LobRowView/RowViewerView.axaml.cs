@@ -142,9 +142,9 @@ public partial class RowViewerView : UserControl
 
     private async Task CopyAsync(string? text)
     {
-        if (text is not null && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+        if (text is not null)
         {
-            await clipboard.SetTextAsync(text);
+            await Oranda.App.Shell.ClipboardText.SetAsync(this, text);
         }
     }
 }

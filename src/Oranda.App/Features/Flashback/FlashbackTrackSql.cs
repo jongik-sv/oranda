@@ -212,5 +212,5 @@ internal static class FlashbackTrackSql
         };
     }
 
-    private static string Quote(string s) => "'" + s.Replace("'", "''", StringComparison.Ordinal) + "'";
+    private static string Quote(string s) => Oranda.Core.Text.SqlLiteral.Quote(s);
 }

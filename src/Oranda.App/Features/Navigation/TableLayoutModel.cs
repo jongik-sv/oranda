@@ -260,7 +260,7 @@ public static partial class TableLayoutPaste
             return lower ? name.ToLowerInvariant() : name;
         }
 
-        return "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+        return Oranda.Core.Text.SqlIdentifier.QuoteAlways(name);
     }
 
     private static string Qualify(string alias, string name) => alias.Length == 0 ? name : alias + "." + name;

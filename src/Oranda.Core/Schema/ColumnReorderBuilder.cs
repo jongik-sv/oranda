@@ -115,7 +115,7 @@ public static class ColumnReorderBuilder
         sb.AppendLine("BEGIN");
         foreach (var statement in statements)
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"  EXECUTE IMMEDIATE '{statement.Text.Replace("'", "''", StringComparison.Ordinal)}';");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  EXECUTE IMMEDIATE '{Oranda.Core.Text.SqlLiteral.Escape(statement.Text)}';");
         }
 
         sb.Append("END;");
@@ -340,7 +340,7 @@ public static class ColumnReorderBuilder
     private static string Target(DbObjectRef table)
         => SqlIdentifier.QuoteAlways(table.Owner) + "." + SqlIdentifier.QuoteAlways(table.Name);
 
-    private static string Lit(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    private static string Lit(string value) => Oranda.Core.Text.SqlLiteral.Quote(value);
 
     private static SqlStatement Alter(string text) => new(text, default, StatementKind.Ddl) { Verb = "ALTER" };
 

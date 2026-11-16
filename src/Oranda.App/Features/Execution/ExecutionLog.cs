@@ -136,15 +136,5 @@ public sealed class ExecutionLog : ObservableObject
 
     public void ClearMessages() => Messages.Clear();
 
-    private static void Post(Action action)
-    {
-        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(action);
-        }
-    }
+    private static void Post(Action action) => Oranda.App.Shell.UiThread.PostIfAppRunning(action);
 }

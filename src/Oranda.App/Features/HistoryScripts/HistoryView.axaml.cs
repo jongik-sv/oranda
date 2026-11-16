@@ -174,15 +174,17 @@ public partial class HistoryView : UserControl
     {
         var items = SelectedItemsInListOrder();
         var text = format(items);
-        if (text.Length == 0 || DataContext is not HistoryViewModel vm || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        if (text.Length == 0 || DataContext is not HistoryViewModel vm)
         {
             return;
         }
 
         try
         {
-            await clipboard.SetTextAsync(text);
-            vm.StatusMessage = $"{items.Count}건 복사";
+            if (await Oranda.App.Shell.ClipboardText.SetAsync(this, text))
+            {
+                vm.StatusMessage = $"{items.Count}건 복사";
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

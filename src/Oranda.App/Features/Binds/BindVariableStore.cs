@@ -366,7 +366,7 @@ public sealed class BindVariableStore
     private static string Quote(string text)
     {
         var sb = new StringBuilder(text.Length + 2).Append('\'');
-        sb.Append(text.Replace("'", "''", StringComparison.Ordinal));
+        sb.Append(Oranda.Core.Text.SqlLiteral.Escape(text));
         return sb.Append('\'').ToString();
     }
 

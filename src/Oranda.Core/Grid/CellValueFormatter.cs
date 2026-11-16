@@ -102,7 +102,7 @@ public static class CellValueFormatter
     }
 
     /// <summary>SQL 문자열 리터럴(<c>'…'</c>, 작은따옴표는 두 번).</summary>
-    public static string Quote(string s) => "'" + s.Replace("'", "''", StringComparison.Ordinal) + "'";
+    public static string Quote(string s) => Oranda.Core.Text.SqlLiteral.Quote(s);
 
     /// <summary>식별자가 단순 대문자 이름이면 그대로, 아니면 큰따옴표로 감싼다.</summary>
     public static string QuoteIdentifier(string name) => Oranda.Core.Text.SqlIdentifier.Quote(name);

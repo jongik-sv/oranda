@@ -111,17 +111,7 @@ public sealed partial class MyBatisCombosViewModel : ToolPanelViewModelBase
     public ObservableCollection<ComboRowItem> Rows { get; } = [];
 
     /// <summary>UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
-    public Action<Action> PostToUi { get; set; } = a =>
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            a();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(a);
-        }
-    };
+    public Action<Action> PostToUi { get; set; } = Oranda.App.Shell.UiThread.Post;
 
     /// <summary>
     /// 검사 결과 줄을 UI 스레드로 모아 넘기는 간격. 줄마다 넘기면(줄당 약 2 ms) 그리기가 몰려 창이 깜박였다(2026-10-24 사용자 신고).

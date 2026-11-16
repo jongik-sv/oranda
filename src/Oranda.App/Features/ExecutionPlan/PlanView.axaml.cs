@@ -57,9 +57,9 @@ public partial class PlanView : UserControl
         BrowserButton.Click += async (_, _) => await RunAsync(vm => vm.OpenReportInBrowserAsync());
         ReportCopyButton.Click += async (_, _) =>
         {
-            if (DataContext is PlanViewModel { ReportText.Length: > 0 } vm && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            if (DataContext is PlanViewModel { ReportText.Length: > 0 } vm)
             {
-                await clipboard.SetTextAsync(vm.ReportText);
+                await Oranda.App.Shell.ClipboardText.SetAsync(this, vm.ReportText);
             }
         };
     }

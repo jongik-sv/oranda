@@ -117,7 +117,7 @@ public static partial class TuningScripts
     public static string Literal(string value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        return "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+        return Oranda.Core.Text.SqlLiteral.Quote(value);
     }
 
     /// <summary>

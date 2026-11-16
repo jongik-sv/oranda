@@ -235,17 +235,7 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
     public IReadOnlyList<JournalItem> Selection { get; private set; } = [];
 
     /// <summary>이벤트를 UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
-    public Action<Action> PostToUi { get; set; } = a =>
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            a();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(a);
-        }
-    };
+    public Action<Action> PostToUi { get; set; } = Oranda.App.Shell.UiThread.Post;
 
     /// <summary>지금 접속(작업 세션)의 db_key. 없으면 null — 「이 접속만」 을 켜도 전체를 보인다.</summary>
     internal Func<string?>? CurrentDbKeyProvider { get; set; }

@@ -84,10 +84,7 @@ public static class ObjectInfoPopup
         {
             try
             {
-                if (window.Clipboard is { } clipboard)
-                {
-                    await clipboard.SetTextAsync(text.Text ?? string.Empty).ConfigureAwait(true);
-                }
+                await Oranda.App.Shell.ClipboardText.SetAsync(window, text.Text ?? string.Empty).ConfigureAwait(true);
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
             {

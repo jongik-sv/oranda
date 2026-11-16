@@ -152,15 +152,14 @@ public sealed class TableLayoutView : UserControl
     internal async Task<bool> CopySelectionAsync()
     {
         var text = Session.TextFor(SelectedRows);
-        if (text.Length == 0 || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        if (text.Length == 0)
         {
             return false;
         }
 
         try
         {
-            await clipboard.SetTextAsync(text).ConfigureAwait(true);
-            return true;
+            return await Oranda.App.Shell.ClipboardText.SetAsync(this, text).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
         {

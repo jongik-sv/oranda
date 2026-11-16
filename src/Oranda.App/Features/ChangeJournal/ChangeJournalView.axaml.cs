@@ -111,15 +111,14 @@ public partial class ChangeJournalView : UserControl
 
     private async Task CopyAsync(string? text)
     {
-        if (string.IsNullOrEmpty(text) || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        if (string.IsNullOrEmpty(text))
         {
             return;
         }
 
         try
         {
-            await clipboard.SetTextAsync(text);
-            if (DataContext is ChangeJournalViewModel done)
+            if (await Oranda.App.Shell.ClipboardText.SetAsync(this, text) && DataContext is ChangeJournalViewModel done)
             {
                 done.StatusMessage = "복사했다";
             }
