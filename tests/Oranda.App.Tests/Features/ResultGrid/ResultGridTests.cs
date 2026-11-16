@@ -62,7 +62,7 @@ public sealed class ResultGridTests
         var sw = Stopwatch.StartNew();
         while (!cond())
         {
-            Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), "시간 초과");
+            Assert.True(sw.Elapsed < TimeSpan.FromSeconds(30), "시간 초과");
             await Task.Delay(5);
         }
     }

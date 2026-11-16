@@ -120,6 +120,8 @@ public sealed class MyBatisSampleFlowTests
         // 바인드 변수: 행 3개(SAL·COMM·EMPNO). 값이 없으면 if 블록이 꺼져 :sal 이 펼친 SQL 에 없다
         var eval = rig.Hub.ForTab(tab)!;
         rig.Hub.Refresh();
+        // 자동 저장 시나리오는 저장소 목록을 읽은 뒤의 입력부터 만들어진다(느린 러너에서 읽기 전에 입력하면 생기지 않았다): 먼저 읽어 둔다
+        await eval.ReloadScenariosAsync(null);
         Assert.Equal(["COMM", "EMPNO", "SAL"], tab.Binds.Rows.Select(r => r.Name).Order());
         Assert.DoesNotContain(":sal", vm.Sql, StringComparison.Ordinal);
 
@@ -174,6 +176,9 @@ public sealed class MyBatisSampleFlowTests
 
         // 시나리오: 만들기(지금 값 저장) → 값을 바꿔 두 번째 만들기 → 첫 번째 고르면 값이 돌아온다
         await eval.EnsureLoadedAsync();
+        // 자동 저장 시나리오는 값을 입력한 뒤 비동기로 만들어진다: 생길 때까지 기다린다
+        var autoName = Oranda.App.Features.MyBatisWorkspace.Parameters.MyBatisStatementEval.AutoScenarioName;
+        await HeadlessHost.WaitUntil(() => eval.Scenarios.Any(s => s.Name == autoName));
         var first = await eval.AddScenarioAsync("정상 급여");
         Assert.NotNull(first);
         sal.Text = "2500";

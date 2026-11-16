@@ -87,7 +87,15 @@ public sealed partial class CompletionTests
         public async Task FireAndSettleAsync()
         {
             Timers.Fire();
-            await Task.Delay(30);
+            await SettleAsync();
+        }
+
+        /// <summary>타이머가 시작한 자동 열기(문맥 판정·후보 조회·목록 열기)가 끝날 때까지 기다린다. 고정 시간 대기는 느린 CI 러너에서 깨진다.</summary>
+        public static async Task SettleAsync()
+        {
+            var run = CompletionController.Shared.AutoOpenRun;
+            await HeadlessHost.WaitUntil(() => run.IsCompleted);
+            await run;
             Dispatcher.UIThread.RunJobs();
         }
     }
@@ -233,8 +241,7 @@ public sealed partial class CompletionTests
 
             r.Type("p"); // 답이 오기 전에 더 쳤다
             gate.SetResult();
-            await Task.Delay(50);
-            Dispatcher.UIThread.RunJobs();
+            await AutoRig.SettleAsync();
 
             Assert.Null(CompletionController.Shared.CurrentWindow);
         }, gate: gate.Task);

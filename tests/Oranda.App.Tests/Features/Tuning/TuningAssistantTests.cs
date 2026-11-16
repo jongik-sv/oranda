@@ -317,12 +317,12 @@ public class TuningAssistantTests
         var tuning = new FakeTuning { BlockOnCall = 2 };
         var (vm, _, _) = await LoadedAsync(tuning: tuning);
         var run = vm.RunBenchmarkAsync();
-        await tuning.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await tuning.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(60));
         Assert.True(vm.IsBenchmarking);
         Assert.False(vm.CanRunBenchmark);
         Assert.StartsWith("변형 1/", vm.BenchmarkProgress, StringComparison.Ordinal);
         vm.CancelBenchmark();
-        await run.WaitAsync(TimeSpan.FromSeconds(10));
+        await run.WaitAsync(TimeSpan.FromSeconds(60));
         Assert.False(vm.IsBenchmarking);
         Assert.Equal(BenchmarkRowState.Cancelled, vm.BenchmarkRows[0].State);
         Assert.All(vm.BenchmarkRows.Skip(1), r => Assert.Equal("취소됨", r.VerdictText));

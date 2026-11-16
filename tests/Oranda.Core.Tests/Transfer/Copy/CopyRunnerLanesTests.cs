@@ -317,6 +317,13 @@ public sealed class CopyRunnerLanesTests
             ConsistentRead = true,
             ReadPointSupport = TestPoint,
         };
+        // 두 레인이 함께 돌 때까지 첫 배치를 붙들어 한 레인이 테이블 넷을 혼자 끝내지 못하게 한다(느린 러너에서 T2 가 늦게 뜨는 경우).
+        f.Bulk.OnDml = async (_, _) =>
+        {
+            await f.Bulk.ActiveReached(2).WaitAsync(TimeSpan.FromSeconds(3), CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default);
+            await Task.Delay(30, CancellationToken.None);
+            return null;
+        };
 
         var result = await f.RunAsync().WaitAsync(Quick);
 

@@ -240,8 +240,11 @@ public sealed class CompletionController : IDisposable
         var cts = _autoCts = new CancellationTokenSource();
         var guard = new AutoOpenGuard(area, doc, doc.Version, caret, blocked, ++_autoGeneration);
         _autoArea = area;
-        _autoTimer = Schedule(AutoOpenDelay, () => _ = RunAutoOpenAsync(area, tab, guard, cts.Token));
+        _autoTimer = Schedule(AutoOpenDelay, () => AutoOpenRun = RunAutoOpenAsync(area, tab, guard, cts.Token));
     }
+
+    /// <summary>타이머가 마지막으로 시작한 자동 열기 실행. 시험이 고정 시간 대신 이것이 끝나기를 기다린다.</summary>
+    internal Task AutoOpenRun { get; private set; } = Task.CompletedTask;
 
     public void Dispose() => CancelAutoOpen();
 

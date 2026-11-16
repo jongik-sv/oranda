@@ -103,7 +103,7 @@ public sealed class OpencodePluginFileTests : IDisposable
     }
 
     [Fact]
-    public void The_generated_source_is_valid_javascript()
+    public async Task The_generated_source_is_valid_javascript()
     {
         // node 가 없는 환경에서는 건너뛴다(구문 검사만 하고 실행하지 않는다).
         var path = OpencodePluginFile.Write(Path.Combine(_dir, "config"), "p", Tools(), null);
@@ -121,8 +121,21 @@ public sealed class OpencodePluginFileTests : IDisposable
         using (process)
         {
             Assert.NotNull(process);
-            process.WaitForExit(30_000);
-            Assert.True(process.ExitCode == 0, process.StandardError.ReadToEnd());
+            // 느린 러너의 node 첫 실행은 30 초를 넘을 수 있다. 넉넉히 기다리고, 넘으면 죽이고 분명히 실패한다.
+            var stderr = process.StandardError.ReadToEndAsync();
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+            try
+            {
+                await process.WaitForExitAsync(limit.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                process.Kill(entireProcessTree: true);
+                Assert.Fail("node --check 가 180 초 안에 끝나지 않아 죽였다");
+            }
+
+            Assert.True(process.ExitCode == 0, await stderr + await stdout);
         }
     }
 }

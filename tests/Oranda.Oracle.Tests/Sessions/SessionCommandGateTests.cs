@@ -23,7 +23,7 @@ namespace Oranda.Oracle.Tests.Sessions;
 /// </summary>
 public sealed class SessionCommandGateTests
 {
-    private static readonly TimeSpan Quick = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan Quick = TimeSpan.FromSeconds(60);
 
     [Fact]
     public async Task Every_feature_that_talks_to_the_connection_waits_on_the_session_gate()
