@@ -424,11 +424,9 @@ public sealed partial class DockWorkspace
             var inTree = TreeSet();
             var wasEmpty = h.Dock.IsEmpty;
             RestoreOne(h, inTree, lost);
-            if (wasEmpty && _collapses.Find(c => ReferenceEquals(c.Dock, h.Dock)) is { } snapshot)
+            if (wasEmpty)
             {
-                // 이 묶음이 접힐 때 적어 둔 칸 비율만 돌린다(아직 접힌 다른 묶음의 기록은 그대로 둔다).
-                RestoreProportions(inTree, snapshot.Values);
-                _collapses.Remove(snapshot);
+                RestoreCollapse(h.Dock, inTree); // 이 묶음이 접힐 때 적어 둔 칸 비율만 돌린다(아직 접힌 다른 묶음의 기록은 그대로 둔다)
             }
         }
         finally
@@ -465,6 +463,28 @@ public sealed partial class DockWorkspace
         if (h.WasActive || h.Dock.ActiveDockable is null)
         {
             h.Dock.ActiveDockable = h.Tool;
+        }
+    }
+
+    /// <summary>묶음 <paramref name="dock"/> 이 접힐 때 적어 둔 칸 비율이 있으면 돌리고 그 기록을 지운다. <paramref name="inTree"/> 가 없으면 지금 트리로 본다.</summary>
+    private void RestoreCollapse(IToolDock dock, HashSet<IDockable>? inTree = null)
+    {
+        if (_collapses.Find(c => ReferenceEquals(c.Dock, dock)) is { } snapshot)
+        {
+            RestoreProportions(inTree ?? TreeSet(), snapshot.Values);
+            _collapses.Remove(snapshot);
+        }
+    }
+
+    /// <summary>묶음 <paramref name="dock"/> 에 숨긴 창 중 자리(전체 탭 목록 기준)가 <paramref name="after"/> 보다 뒤인 것을 <paramref name="by"/> 칸 옮긴다.</summary>
+    private void ShiftScopedHidden(IToolDock dock, int after, int by)
+    {
+        for (var i = 0; i < _scopedHidden.Count; i++)
+        {
+            if (ReferenceEquals(_scopedHidden[i].Dock, dock) && _scopedHidden[i].Index > after)
+            {
+                _scopedHidden[i] = _scopedHidden[i] with { Index = _scopedHidden[i].Index + by };
+            }
         }
     }
 
@@ -509,24 +529,12 @@ public sealed partial class DockWorkspace
         _scopedHidden.RemoveAll(forgotten.Contains);
         foreach (var gone in forgotten)
         {
-            // 같은 묶음에서 뒤에 숨긴 창의 자리(전체 탭 목록 기준)는 한 칸 당긴다.
-            for (var i = 0; i < _scopedHidden.Count; i++)
-            {
-                if (ReferenceEquals(_scopedHidden[i].Dock, gone.Dock) && _scopedHidden[i].Index > gone.Index)
-                {
-                    _scopedHidden[i] = _scopedHidden[i] with { Index = _scopedHidden[i].Index - 1 };
-                }
-            }
+            ShiftScopedHidden(gone.Dock, after: gone.Index, by: -1); // 같은 묶음에서 뒤에 숨긴 창의 자리(전체 탭 목록 기준)는 한 칸 당긴다
 
             // 묶음에 남은 창이 하나도 없으면(보이는 창·숨긴 창·핀 창 모두) 접혀 있던 그 묶음을 치운다(.ToolToggle.cs). 칸 비율은 접기 전으로 돌린 뒤 물려준다.
-            if (!(gone.Dock.VisibleDockables ?? []).OfType<PanelTool>().Any() && ScopedToolIds(gone.Dock).Ids.Count == 0 && InMainTree(gone.Dock))
+            if (!HasToolTabs(gone.Dock) && ScopedToolIds(gone.Dock).Ids.Count == 0 && InMainTree(gone.Dock))
             {
-                if (_collapses.Find(c => ReferenceEquals(c.Dock, gone.Dock)) is { } snapshot)
-                {
-                    RestoreProportions(TreeSet(), snapshot.Values);
-                    _collapses.Remove(snapshot);
-                }
-
+                RestoreCollapse(gone.Dock);
                 RemoveCell(gone.Dock);
             }
         }
@@ -567,7 +575,7 @@ public sealed partial class DockWorkspace
     /// 아직 접혀 있는 묶음의 기록만. 핀을 빼는 등 Dock 쪽 조작으로 다시 보이게 된 묶음의 기록은 옛 값이라 저장·되돌리기에 쓰지 않는다
     /// (쓰면 보이는 묶음에 접힐 때의 0 이 다시 들어가 높이 0 이 된다).
     /// </summary>
-    private IEnumerable<CollapseSnapshot> LiveCollapses() => _collapses.Where(c => !(c.Dock.VisibleDockables ?? []).OfType<PanelTool>().Any());
+    private IEnumerable<CollapseSnapshot> LiveCollapses() => _collapses.Where(c => !HasToolTabs(c.Dock));
 
     /// <summary>저장할 묶음 탭 목록: 숨긴 창을 원래 자리에 끼운다. 숨긴 창이 활성이었으면 그것이 활성 탭.</summary>
     private (List<string> Ids, string? Active) ScopedToolIds(IToolDock group)

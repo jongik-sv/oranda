@@ -25,6 +25,133 @@ public sealed partial class DockWorkspace
     /// <summary>도구 묶음이 분할 안에서 이 비율보다 작으면 접힌 것(높이·너비 0)으로 본다.</summary>
     private const double MinShownProportion = 0.05;
 
+    public bool IsToolVisible(string toolId) => VisibleToolIds.Contains(toolId);
+
+    /// <summary>도구 창을 보이고 그 탭을 활성으로 한다. 등록되지 않은 ID 면 false.</summary>
+    public bool ShowTool(string toolId) => ShowTool(toolId, keepFloating: true);
+
+    /// <summary>
+    /// <paramref name="keepFloating"/> 이 거짓이면 떠 있는 창도 메인 배치의 규칙 위치로 옮긴다. 보기 메뉴 토글이 쓴다 — 떠 있는 창은
+    /// <see cref="IsToolVisible"/> 가 거짓이라 토글이 「보이기」 로 온다.
+    /// </summary>
+    private bool ShowTool(string toolId, bool keepFloating)
+    {
+        if (_registry.Find(toolId) is not { Kind: ToolPanelKind.Tool } def)
+        {
+            return false;
+        }
+
+        // 이미 보이는 창은 배치를 새로 짓지 않고 그 탭만 앞으로 가져온다. 새로 지으면(Apply → LayoutRebuilt) 도킹 화면 전체를 갈아 끼우고
+        // 메뉴를 다시 만들어 메인 창이 깜박였다(조합 검사·실행 계획을 할 때마다, 2026-10-24 사용자 신고).
+        // - 다른 탭 뒤: 그 묶음의 활성 탭만 바꾼다(아래 LayoutPlanner.ShowTool 이 하는 일과 같다).
+        // - 떠 있는 창: 그 창 안에서 앞으로 가져오고 그 창을 맨 앞으로 올린다. 배치를 다시 짓지 않는다(보기 메뉴 토글은 예전 길, ToggleTool).
+        // - 자동 숨김(핀으로 접힘): 사이드바에서 펼쳐 보인다(핀은 그대로).
+        // - 범위로 잠시 숨김: 그 창만 원래 자리에 되넣는다(같은 묶음의 다른 숨긴 창은 숨긴 채).
+        // - 닫힘·뜬 창(보기 메뉴): 그 창 하나만 규칙 위치 묶음에 끼운다(.ToolToggle.cs). 배치를 다시 짓는 것은 불러오기·기본 배치 몫이다.
+        if (PinnedTool(toolId) is { } pinned && !IsScopedHidden(toolId))
+        {
+            Factory.PreviewPinnedDockable(pinned);
+            return true;
+        }
+
+        if (_tools.TryGetValue(toolId, out var shown) && shown.Owner is IDock owner && !IsScopedHidden(toolId))
+        {
+            var floating = keepFloating ? FloatingWindowOf(shown) : null;
+            if (floating is not null || IsToolVisible(toolId))
+            {
+                var unfolded = floating is null && Unfold(owner, PlaceOf(owner, def.DefaultLocation)); // 높이 0 으로 접힌 묶음이면 펼친다(DK2-01)
+                if (!ReferenceEquals(owner.ActiveDockable, shown) || unfolded)
+                {
+                    owner.ActiveDockable = shown;
+                    LayoutChanged?.Invoke(this, EventArgs.Empty); // 활성 탭도 저장할 배치다
+                }
+
+                (floating?.Host as Avalonia.Controls.Window)?.Activate();
+                return true;
+            }
+        }
+
+        if (TryRestoreScopedTool(toolId, def.DefaultLocation))
+        {
+            return true;
+        }
+
+        var current = LayoutPlanner.Reconcile(Capture(), PlanningPanels());
+        if (TryInsertTool(current, def))
+        {
+            return true; // 그 창 하나만 묶음에 넣었다(배치를 다시 짓지 않아 화면 전체가 깜박이지 않는다, DK-01·DK2)
+        }
+
+        // 여기까지 오면 안 된다(문서 영역이 없는 등 모델이 어긋난 때의 안전망): 예전처럼 배치를 다시 지어 보인다.
+
+        _showingTool = toolId;
+        try
+        {
+            Apply(LayoutPlanner.ShowTool(current, def), keepSplitDocuments: true);
+        }
+        finally
+        {
+            _showingTool = null;
+        }
+
+        return true;
+    }
+
+    public bool HideTool(string toolId)
+    {
+        if (ForgetScopedTool(toolId))
+        {
+            return true; // 잠시 숨긴 창을 「닫기」: 정말 닫힌 것으로 저장된다(나머지는 숨긴 채)
+        }
+
+        if (!IsToolVisible(toolId))
+        {
+            return false;
+        }
+
+        if (TryRemoveTool(toolId))
+        {
+            return true; // 그 창 하나만 뺐다(묶음이 비면 그 묶음만 치운다, DK-01·DK2)
+        }
+
+        // 안전망(모델이 어긋난 때): 예전처럼 배치를 다시 짓는다.
+
+        var current = LayoutPlanner.Reconcile(Capture(), PlanningPanels());
+        Apply(LayoutPlanner.HideTool(current, toolId), keepSplitDocuments: true);
+        return true;
+    }
+
+    public bool ToggleTool(string toolId) => IsToolVisible(toolId) ? !HideTool(toolId) : ShowTool(toolId, keepFloating: false);
+
+    /// <summary>
+    /// 도구 창 탭을 앞으로 가져온다. 이미 보이면 배치를 다시 짓지 않고 그 묶음의 활성 탭만 바꾼다(키보드 포커스는 그대로 —
+    /// 실행 뒤 결과 창을 보여도 편집기에서 이어서 칠 수 있게). 숨겨져 있으면 <see cref="ShowTool"/>.
+    /// </summary>
+    public bool ActivateTool(string toolId)
+    {
+        if (IsScopedHidden(toolId))
+        {
+            RestoreScopedTool(toolId); // 기능이 직접 부르면(컴파일 오류 등) 활성 문서와 상관없이 그 창만 보인다
+        }
+
+        if (PinnedTool(toolId) is not null)
+        {
+            return true; // 핀을 빼 둔 창은 접힌 채 둔다(실행할 때마다 사이드바에서 튀어나오지 않게 — 사용자가 접어 둔 것이다)
+        }
+
+        if (_tools.TryGetValue(toolId, out var tool) && tool.Owner is IDock owner && IsToolVisible(toolId))
+        {
+            if (!ReferenceEquals(owner.ActiveDockable, tool))
+            {
+                owner.ActiveDockable = tool;
+            }
+
+            return true;
+        }
+
+        return ShowTool(toolId);
+    }
+
     /// <summary>
     /// 문서별로 잠시 숨긴 창을 보이라고 했다: 그 창을 원래 자리에 되넣고 앞으로 가져온다. 지금 문서에서 숨길 까닭이 없는 다른 숨긴 창(활성 문서가 없을 때의 SQL 전용 창)도
     /// 함께 되넣는다 — 나머지는 숨긴 채. 잠시 숨긴 창이 아니면 false.
@@ -114,7 +241,7 @@ public sealed partial class DockWorkspace
         Visit(root, d =>
         {
             if (found is null && d is IToolDock { Alignment: var at } group && at == AlignmentOf(location)
-                && !(group.VisibleDockables ?? []).OfType<PanelTool>().Any() && ScopedToolIds(group).Ids.Count == 0)
+                && !HasToolTabs(group) && ScopedToolIds(group).Ids.Count == 0)
             {
                 found = group;
             }
@@ -133,22 +260,14 @@ public sealed partial class DockWorkspace
         var list = live.VisibleDockables ??= Factory.CreateList<IDockable>();
         var wasEmpty = !list.OfType<PanelTool>().Any();
         var fullAt = Math.Max(0, planned.ToList().IndexOf(tool.Id));
-        for (var i = 0; i < _scopedHidden.Count; i++)
-        {
-            // 잠시 숨긴 창의 자리(전체 탭 목록 기준)는 끼운 창보다 뒤면 한 칸 민다.
-            if (ReferenceEquals(_scopedHidden[i].Dock, live) && _scopedHidden[i].Index >= fullAt)
-            {
-                _scopedHidden[i] = _scopedHidden[i] with { Index = _scopedHidden[i].Index + 1 };
-            }
-        }
+        ShiftScopedHidden(live, after: fullAt - 1, by: +1); // 잠시 숨긴 창의 자리(전체 탭 목록 기준)는 끼운 창보다 뒤면 한 칸 민다
 
         var index = planned.Take(fullAt).Count(t => list.Any(d => d.Id == t));
         Factory.InsertDockable(live, tool, Math.Clamp(index, 0, list.Count));
         live.ActiveDockable = tool;
-        if (wasEmpty && _collapses.Find(c => ReferenceEquals(c.Dock, live)) is { } snapshot)
+        if (wasEmpty)
         {
-            RestoreProportions(TreeSet(), snapshot.Values);
-            _collapses.Remove(snapshot);
+            RestoreCollapse(live);
         }
     }
 
@@ -186,13 +305,7 @@ public sealed partial class DockWorkspace
     /// <summary>뜬 창에 문서·도구 창이 하나도 남지 않았으면 닫는다(빈 창이 화면에 남지 않게).</summary>
     private void CloseIfEmpty(IDockWindow window)
     {
-        var left = false;
-        if (window.Layout is { } layout)
-        {
-            Visit(layout, d => left |= d is PanelTool or PanelDocument);
-        }
-
-        if (left)
+        if (window.Layout is { } layout && AnyIn(layout, d => d is PanelTool or PanelDocument))
         {
             return;
         }
@@ -275,7 +388,7 @@ public sealed partial class DockWorkspace
         }
 
         var wrap = Factory.CreateProportionalDock();
-        wrap.Id = "oranda.split." + Guid.NewGuid().ToString("N")[..8];
+        wrap.Id = NewSplitId();
         wrap.Orientation = orientation;
         wrap.Proportion = anchor.Proportion;
         var index = siblings.IndexOf(anchor);
@@ -290,18 +403,6 @@ public sealed partial class DockWorkspace
             top.ActiveDockable = wrap;
             top.DefaultDockable = wrap;
         }
-    }
-
-    /// <summary>문서 영역(나눈 문서 칸이면 그 칸들을 담은 가장 바깥 분할). 문서 영역이 없으면 null.</summary>
-    private IDockable? DocumentsArea()
-    {
-        IDockable? area = DocumentDocks().FirstOrDefault();
-        while (area?.Owner is IProportionalDock parent && IsDocumentsOnly(parent))
-        {
-            area = parent;
-        }
-
-        return area;
     }
 
     /// <summary>
@@ -410,13 +511,7 @@ public sealed partial class DockWorkspace
 
         // 잠시 숨긴 창의 자리(전체 탭 목록 기준, .ScopedTools.cs)는 뺀 창보다 뒤면 한 칸 당긴다.
         var at = ScopedToolIds(group).Ids.IndexOf(toolId);
-        for (var i = 0; i < _scopedHidden.Count; i++)
-        {
-            if (ReferenceEquals(_scopedHidden[i].Dock, group) && _scopedHidden[i].Index > at)
-            {
-                _scopedHidden[i] = _scopedHidden[i] with { Index = _scopedHidden[i].Index - 1 };
-            }
-        }
+        ShiftScopedHidden(group, after: at, by: -1);
 
         Factory.RemoveDockable(tool, collapse: false);
         if (!tabs.OfType<PanelTool>().Any())
@@ -510,129 +605,6 @@ public sealed partial class DockWorkspace
         }
     }
 
-    /// <summary>
-    /// 저장할 때 접힌 묶음의 비율. 묶음 창을 모두 핀으로 접으면 Dock 이 묶음 비율을 0, 문서 칸을 1 로 바꾸고 접기 전 값은 <see cref="IDockable.CollapsedProportion"/> 에 둔다.
-    /// 그대로 0 을 적으면 다시 지을 때 높이 0 묶음이 되므로 접기 전 값(없으면 기본 비율)을 돌려준다. 접히지 않았으면 null.
-    /// </summary>
-    private double? FoldedShare(IDockable child)
-    {
-        // 잠시 숨김 기록이 있으면 그 값(ScopedProportion)을 본다: 이미 접힌 뒤에 적은 기록이면 그것도 0 이다.
-        if (child is not IToolDock group || (group.VisibleDockables ?? []).OfType<PanelTool>().Any()
-            || ScopedProportion(group) is var now && (double.IsNaN(now) || now >= MinShownProportion))
-        {
-            return null;
-        }
-
-        var before = group.CollapsedProportion;
-        return !double.IsNaN(before) && before >= MinShownProportion && before < 1 ? before : DefaultShare(LocationOf(group.Alignment));
-    }
-
-    /// <summary>
-    /// 불러온 배치에서 비율 0(접힘)으로 적힌 도구 묶음을 기본 비율로 되살린다. 몫은 문서 쪽 칸(없으면 가장 큰 칸)에서 뗀다.
-    /// 그 묶음 창이 모두 핀이면 짓고 나서 다시 접히므로 화면은 같고, 핀을 빼거나 창을 켜면 보이는 크기로 나온다(DK2-01).
-    /// </summary>
-    private static DockNode ReviveFoldedGroups(DockNode root)
-    {
-        DockNode Walk(DockNode node)
-        {
-            var kids = node.Children ?? [];
-            if (kids.Count == 0)
-            {
-                return node;
-            }
-
-            var list = kids.Select(Walk).ToList();
-            var folded = new List<(int At, double Share)>();
-            for (var i = 0; i < kids.Count && kids.Count > 1; i++)
-            {
-                if (kids[i].Kind != DockNodeKind.ToolGroup || kids[i].Proportion is not { } p || p >= MinShownProportion)
-                {
-                    continue;
-                }
-
-                var share = DefaultShare(LayoutPlanner.LocationOf(root, kids[i]) ?? DockLocation.Bottom);
-                folded.Add((i, share));
-            }
-
-            // 다른 칸은 같은 비로 줄인다(접힐 때 Dock 이 같은 비로 늘렸다). 비율이 없는 칸이 있으면 접힌 칸만 고친다(Dock 이 지을 때 맞춘다).
-            if (folded.Count > 0)
-            {
-                var rest = Enumerable.Range(0, list.Count).Where(at => !folded.Exists(f => f.At == at)).ToList();
-                var sum = rest.Sum(at => list[at].Proportion ?? double.NaN);
-                if (!double.IsNaN(sum) && sum > 0)
-                {
-                    var total = 1 - folded.Sum(f => f.Share);
-                    foreach (var at in rest)
-                    {
-                        list[at] = list[at] with { Proportion = Math.Round(list[at].Proportion!.Value * total / sum, 4) };
-                    }
-                }
-
-                foreach (var (at, share) in folded)
-                {
-                    list[at] = list[at] with { Proportion = share };
-                }
-            }
-
-            return node with { Children = list };
-        }
-
-        return Walk(root);
-    }
-
-    /// <summary>
-    /// 지을 배치에 틀을 씌운다: 문서 칸이 세로 분할 안이 아니면 자식 하나짜리 세로 분할(문서 열)로, 맨 바깥이 가로 분할이 아니면 자식 하나짜리 가로 분할로 감싼다.
-    /// 그러면 뒤에 아래·오른쪽·왼쪽 묶음을 켤 때 언제나 이 분할들에 형제로만 끼워(<see cref="Beside"/>) 문서 칸 컨트롤을 다시 만들지 않는다.
-    /// 저장(<see cref="Capture"/>)은 자식 하나짜리 분할을 접으므로 배치 파일은 그대로다.
-    /// </summary>
-    private static DockNode WithFrame(DockNode root)
-    {
-        var path = PathTo(root, n => n.Kind == DockNodeKind.Documents);
-        if (path is not null && (path.Count < 2 || path[^2] is not { Kind: DockNodeKind.Split, Orientation: DockOrientation.Vertical }))
-        {
-            var docs = path[^1];
-            var column = new DockNode { Kind = DockNodeKind.Split, Orientation = DockOrientation.Vertical, Proportion = docs.Proportion, Children = [docs with { Proportion = 1 }] };
-            root = ReplaceNode(root, docs, column);
-        }
-
-        return root is { Kind: DockNodeKind.Split, Orientation: DockOrientation.Horizontal }
-            ? root
-            : new DockNode { Kind = DockNodeKind.Split, Orientation = DockOrientation.Horizontal, Proportion = root.Proportion, Children = [root with { Proportion = 1 }] };
-    }
-
-    private static List<DockNode>? PathTo(DockNode node, Func<DockNode, bool> match)
-    {
-        if (match(node))
-        {
-            return [node];
-        }
-
-        foreach (var child in node.Children ?? [])
-        {
-            if (PathTo(child, match) is { } sub)
-            {
-                sub.Insert(0, node);
-                return sub;
-            }
-        }
-
-        return null;
-    }
-
-    private static DockNode ReplaceNode(DockNode node, DockNode target, DockNode replacement) =>
-        ReferenceEquals(node, target) ? replacement
-        : (node.Children ?? []).Count == 0 ? node
-        : node with { Children = [.. node.Children!.Select(c => ReplaceNode(c, target, replacement))] };
-
-    private static bool HasDocuments(DockNode node) => node.Kind == DockNodeKind.Documents || (node.Children ?? []).Any(HasDocuments);
-
-    private static bool ContainsDocuments(IDockable dockable)
-    {
-        var found = false;
-        Visit(dockable, d => found |= d is IDocumentDock);
-        return found;
-    }
-
     private static double DefaultShare(DockLocation location) => location switch
     {
         DockLocation.Right => LayoutPlanner.RightProportion,
@@ -653,17 +625,6 @@ public sealed partial class DockWorkspace
         Alignment.Bottom => DockLocation.Bottom,
         _ => DockLocation.Left,
     };
-
-    private bool InMainTree(IDockable dockable)
-    {
-        var found = false;
-        if (Layout is not null)
-        {
-            Visit(Layout, d => found |= ReferenceEquals(d, dockable));
-        }
-
-        return found;
-    }
 
     private static IEnumerable<DockNode> ToolGroups(DockNode node) =>
         node.Kind == DockNodeKind.ToolGroup ? [node] : (node.Children ?? []).SelectMany(ToolGroups);
