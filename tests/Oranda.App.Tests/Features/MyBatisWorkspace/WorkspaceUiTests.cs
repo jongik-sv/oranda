@@ -35,13 +35,7 @@ public sealed class WorkspaceUiTests : IDisposable
         }
     }
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(3);
 
     [Fact]
     public Task Opening_a_mapper_lists_its_statements_opens_a_picked_one_and_marks_edits() => Ui.Run(async () =>

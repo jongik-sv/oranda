@@ -17,13 +17,7 @@ public class DockScopedToolsTests
     private const string History = "oranda.panel.history";
     private const string Detail = "oranda.panel.objectDetail";
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(3);
 
     /// <summary>결과·메시지·실행 이력을 아래 묶음에 함께 두고(결과 활성) SQL 문서 하나, 상세 문서 하나를 연다.</summary>
     private static (PanelDocument Sql, PanelDocument Detail) Setup(DockWorkspace ws)

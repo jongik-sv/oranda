@@ -236,13 +236,7 @@ public class TuningStatsHeadlessTests
         }
     });
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     /// <summary>라이트·다크 PNG 를 <c>ORANDA_RENDER_DIR</c> 아래에 쓴다(없으면 아무것도 안 한다).</summary>
     private static void Render(Window window, string name, int width, int height)

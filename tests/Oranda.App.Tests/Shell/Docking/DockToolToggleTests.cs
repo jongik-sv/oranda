@@ -45,13 +45,7 @@ public class DockToolToggleTests
 
     private static readonly string[] LeftTools = ["oranda.panel.schemaBrowser", "oranda.panel.scripts"];
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 5; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(5);
 
     private static ShellHarness UserLayoutShell()
     {

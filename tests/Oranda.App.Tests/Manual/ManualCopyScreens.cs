@@ -43,13 +43,7 @@ public sealed class ManualCopyScreens : IDisposable
     private static DateTimeOffset Local(int year, int month, int day, int hour, int minute, int second = 0) =>
         new(new DateTime(year, month, day, hour, minute, second, DateTimeKind.Unspecified));
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 6; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(6);
 
     private static void Settle(Window window)
     {

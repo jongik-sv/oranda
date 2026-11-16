@@ -72,13 +72,7 @@ public sealed class ScriptsFindFlowTests(ITestOutputHelper output) : IDisposable
         return (Path.Combine(_dir, "work"), Path.Combine(_dir, "shared"));
     }
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static async Task Search(ScriptsView view, ScriptsViewModel vm, string text, bool content)
     {

@@ -257,13 +257,7 @@ public sealed class ErrorClearOnRunTests
         window.Close();
     });
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static void Render(Window window, string name, int width, int height)
     {

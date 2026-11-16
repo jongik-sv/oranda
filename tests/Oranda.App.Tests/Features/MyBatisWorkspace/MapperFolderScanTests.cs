@@ -7,6 +7,7 @@ using Oranda.App.Features.MyBatisWorkspace.Hooks;
 using Oranda.App.Features.MyBatisWorkspace.Workspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Language.MyBatis;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
@@ -31,13 +32,7 @@ public sealed class MapperFolderScanTests : IDisposable
         }
     }
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(3);
 
     private static string Mapper(string ns, int statements = 2) =>
         $"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<mapper namespace=\"{ns}\">\n"

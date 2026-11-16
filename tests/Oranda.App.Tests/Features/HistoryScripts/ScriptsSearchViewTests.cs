@@ -293,13 +293,7 @@ public sealed class ScriptsSearchViewTests : IDisposable
 
     // ---- Headless 화면 ----
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static (Window Window, ScriptsView View) Show(ScriptsViewModel vm, int width = 380, int height = 520)
     {

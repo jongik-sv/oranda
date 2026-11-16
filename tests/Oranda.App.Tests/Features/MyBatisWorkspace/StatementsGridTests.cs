@@ -11,6 +11,7 @@ using Oranda.App.Features.MyBatisWorkspace.Workspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Testing.MyBatis;
 using Oranda.App.Tests.Shell.Controls;
 
@@ -35,13 +36,7 @@ public sealed class StatementsGridTests : IDisposable
 
     private static readonly int[] RenderWidths = [340, 480];
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(3);
 
     private static async Task<(SqlEditorHost Host, MyBatisStatementsViewModel Vm, MyBatisStatementsView View, Window Window)> ShowAsync(string path)
     {

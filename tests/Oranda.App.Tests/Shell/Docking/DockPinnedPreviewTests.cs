@@ -19,13 +19,7 @@ public class DockPinnedPreviewTests
     private const string Messages = "oranda.panel.messages";
     private const string Results = "oranda.panel.results";
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 5; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(5);
 
     private static IRootDock Root(DockWorkspace ws) => (IRootDock)ws.Layout!;
 

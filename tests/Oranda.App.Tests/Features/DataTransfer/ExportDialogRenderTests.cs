@@ -54,13 +54,7 @@ public sealed partial class ExportDialogRenderTests : IDisposable
     [GeneratedRegex("[가-힣]")]
     private static partial Regex Hangul();
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 6; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(6);
 
     /// <summary>폭을 바꾼 뒤 고급 칸 펼침 전환(애니메이션)까지 끝나게 렌더 타이머를 넉넉히 돌린다.</summary>
     private static void Settle(Window window)

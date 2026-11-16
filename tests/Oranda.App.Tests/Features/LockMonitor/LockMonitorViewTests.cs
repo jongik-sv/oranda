@@ -23,13 +23,7 @@ public class LockMonitorViewTests
     private const int W = 1360;
     private const int H = 780;
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static (Window Window, LockMonitorView View) Show(LockMonitorViewModel vm, int width = W, int height = H)
     {

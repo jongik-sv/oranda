@@ -401,13 +401,7 @@ public sealed class TableFinderTests : IDisposable
 
     // ── 창 그리기 ─────────────────────────────────────────────
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 6; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(6);
 
     private static void Settle(Window window)
     {

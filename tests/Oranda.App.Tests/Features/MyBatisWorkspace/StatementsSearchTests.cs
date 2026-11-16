@@ -11,6 +11,7 @@ using Oranda.App.Features.MyBatisWorkspace.Workspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Testing.MyBatis;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
@@ -30,13 +31,7 @@ public sealed class StatementsSearchTests : IDisposable
         }
     }
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(3);
 
     private string WriteEmp()
     {

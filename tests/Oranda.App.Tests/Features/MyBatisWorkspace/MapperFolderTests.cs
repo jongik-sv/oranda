@@ -10,6 +10,7 @@ using Oranda.App.Features.MyBatisWorkspace.Workspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.MyBatis;
 using Oranda.Core.Shell;
 using Oranda.Language.MyBatis;
@@ -67,13 +68,7 @@ public sealed class MapperFolderTests : IDisposable
 
     private string EmpPath => Path.Combine(_root, "hr", "EmpMapper.xml");
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(3);
 
     // 「문장」 창 화면을 창에 띄워 그 화면이 만든 폴더 트리를 꺼낸다(모드 View 는 화면마다 만든다).
     private static (Window Window, MapperFolderTreeView Tree) ShowTree(MyBatisStatementsViewModel vm)

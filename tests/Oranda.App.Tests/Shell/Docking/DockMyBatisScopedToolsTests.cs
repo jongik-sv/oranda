@@ -19,13 +19,7 @@ public class DockMyBatisScopedToolsTests
     private const string Detail = "oranda.panel.objectDetail";
     private const string SqlEditor = "oranda.panel.sqlEditor";
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(3);
 
     private static SqlWorkspaceViewModel NewWorkspace(string id) => new(new SqlEditorHost(), id, id);
 

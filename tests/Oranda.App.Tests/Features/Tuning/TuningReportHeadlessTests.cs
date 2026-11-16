@@ -7,6 +7,7 @@ using Avalonia.VisualTree;
 using Oranda.App.Features.Tuning.Assistant;
 using Oranda.App.Features.Tuning.Report;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 
 namespace Oranda.App.Tests.Features.Tuning;
@@ -20,13 +21,7 @@ namespace Oranda.App.Tests.Features.Tuning;
 [Collection("UiLanguage")]
 public sealed class TuningReportHeadlessTests
 {
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static TuningReportDialog Show(TuningReportDialogViewModel vm)
     {

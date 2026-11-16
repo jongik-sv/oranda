@@ -29,13 +29,7 @@ public sealed class DataCopyRenderTests : IDisposable
 
     public void Dispose() => UiText.Current = _previousText;
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 6; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(6);
 
     private static void Settle(Window window)
     {

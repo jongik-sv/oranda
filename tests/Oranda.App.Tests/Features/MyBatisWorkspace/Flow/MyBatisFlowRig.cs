@@ -102,13 +102,7 @@ internal sealed class MyBatisFlowRig : IDisposable
         return (view, window);
     }
 
-    public static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    public static void Pump() => HeadlessHost.Pump(3);
 
     /// <summary>
     /// 라이트·다크 PNG 를 <c>ORANDA_RENDER_DIR</c> 아래에 쓴다(환경 변수가 없으면 아무것도 안 한다).

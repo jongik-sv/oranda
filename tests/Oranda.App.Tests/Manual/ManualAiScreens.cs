@@ -26,13 +26,7 @@ namespace Oranda.App.Tests.Manual;
 [Collection("UiLanguage")]
 public sealed class ManualAiScreens
 {
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static T Named<T>(Visual root, string name)
         where T : Control => ManualCapture.Find<T>(root, c => c.Name == name);

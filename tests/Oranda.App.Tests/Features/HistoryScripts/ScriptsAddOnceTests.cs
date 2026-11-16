@@ -40,13 +40,7 @@ public sealed class ScriptsAddOnceTests : IDisposable
         return path;
     }
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     /// <summary>열기 알림이 비동기로 끝날 때까지 UI 작업을 돌린다(늦게 생기는 탭까지 본다).</summary>
     private static async Task Settle()

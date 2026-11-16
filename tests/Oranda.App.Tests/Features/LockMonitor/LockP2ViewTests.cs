@@ -21,13 +21,7 @@ public class LockP2ViewTests
     private const int W = 1360;
     private const int H = 820;
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 6; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(6);
 
     private static LockHarness New(ServerCapabilities? caps = null) =>
         new(caps, new ConnectionProfile("MESPRD", "mesadm", "h:1521/s", Environment: ConnectionEnvironment.Production) { Id = Guid.NewGuid() });

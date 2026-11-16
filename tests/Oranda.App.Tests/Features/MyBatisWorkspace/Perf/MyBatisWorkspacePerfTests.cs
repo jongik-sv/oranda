@@ -9,6 +9,7 @@ using Oranda.App.Features.MyBatisWorkspace.Statements;
 using Oranda.App.Features.MyBatisWorkspace.Workspace;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Xunit.Abstractions;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace.Perf;
@@ -36,13 +37,7 @@ public sealed class MyBatisWorkspacePerfTests(ITestOutputHelper output) : IDispo
         }
     }
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 3; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(3);
 
     [Fact]
     [Trait("Category", "Perf")]

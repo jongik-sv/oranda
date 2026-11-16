@@ -655,13 +655,7 @@ public class DdlExtractTargetsTests(ITestOutputHelper output)
         Row("TRIGGER", "TRG_EMP_AUDIT", ddl: new DateTime(2026, 10, 5, 13, 0, 0)),
     ];
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static (Window Window, DdlExtractView View) Show(DdlExtractViewModel vm, int width = 1000, int height = 600)
     {

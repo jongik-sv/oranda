@@ -884,13 +884,7 @@ public sealed class FeatureSettingsViewTests
         return new SettingsViewModel(settings, text, sqlFormat: page, featureGate: gate ?? new FakeFeatureGate());
     }
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static (SettingsWindow Window, FeatureSettingsView View) Open(SettingsViewModel vm)
     {

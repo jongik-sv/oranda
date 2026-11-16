@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using Oranda.App.Features.Tuning.Assistant;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Controls;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 using Oranda.Language.Tuning;
 
@@ -22,13 +23,7 @@ public sealed class TuningAssistantHeadlessTests
     private const int Width = 1280;
     private const int Height = 820;
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static (TuningAssistantView View, Window Window) Show(TuningAssistantViewModel vm)
     {

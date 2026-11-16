@@ -48,13 +48,7 @@ public sealed class NewScriptViewTests : IDisposable
         return vm;
     }
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     // ---- 대상 폴더(모델) ----
 

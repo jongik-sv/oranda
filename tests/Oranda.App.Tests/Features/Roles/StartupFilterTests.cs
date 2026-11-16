@@ -462,13 +462,7 @@ namespace Oranda.App.Tests.Features.Roles
             return (vm, watcher);
         }
 
-        private static void Pump()
-        {
-            for (var i = 0; i < 6; i++)
-            {
-                Dispatcher.UIThread.RunJobs();
-            }
-        }
+        private static void Pump() => HeadlessHost.Pump(6);
 
         /// <summary>
         /// <c>ORANDA_RENDER_DIR</c> 가 있으면 칩 + 안내 플라이아웃 본문을 라이트·다크 PNG 로 쓴다(헤드리스는 팝업을 창 그림에 넣지 않으므로 본문을 따로 올린다).
@@ -645,13 +639,7 @@ namespace Oranda.App.Tests.Features.Roles
             }
         });
 
-        private static void Pump()
-        {
-            for (var i = 0; i < 6; i++)
-            {
-                Dispatcher.UIThread.RunJobs();
-            }
-        }
+        private static void Pump() => HeadlessHost.Pump(6);
     }
 
     /// <summary>

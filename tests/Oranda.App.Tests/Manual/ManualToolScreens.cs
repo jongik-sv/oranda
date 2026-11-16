@@ -39,13 +39,7 @@ public sealed class ManualToolScreens
     /// <summary>화면에 경로가 보이므로 임시 폴더 이름이나 PC 사용자 이름이 나오지 않는 고정 예시 폴더를 쓴다.</summary>
     private static readonly string ExampleFolder = Path.GetFullPath("/tmp/acme-hr");
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
+    private static void Pump() => HeadlessHost.Pump(4);
 
     private static T Named<T>(Visual root, string name)
         where T : Control => ManualCapture.Find<T>(root, c => c.Name == name);
