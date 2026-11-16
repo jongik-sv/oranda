@@ -32,6 +32,10 @@ public partial class DockHostView : UserControl
         InitializeComponent();
         DataContextChanged += (_, _) => Attach(DataContext as DockWorkspace);
 
+        // DockControl 은 화면에 붙을 때 배치를 다시 초기화하며 핀 창의 Owner 를 root 로 바꾼다: 원래 묶음으로 돌린다(DK2-01).
+        DockRoot.AttachedToVisualTree += (_, _) => _workspace?.RepairPinnedOwners();
+        DockRoot.Loaded += (_, _) => _workspace?.RepairPinnedOwners();
+
         // 미리보기 탭의 머리글을 두 번 누르면 고정한다(VS Code 와 같다).
         DockRoot.AddHandler(DoubleTappedEvent, OnDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
     }

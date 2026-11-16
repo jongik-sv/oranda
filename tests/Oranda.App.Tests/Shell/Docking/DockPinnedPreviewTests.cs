@@ -286,7 +286,7 @@ public class DockPinnedPreviewTests
     });
 
     [Fact]
-    public Task Closing_the_last_tab_of_a_group_still_rebuilds_the_layout() => HeadlessHost.Run(() =>
+    public Task Closing_the_last_tab_of_a_group_removes_only_that_group() => HeadlessHost.Run(() =>
     {
         using var h = new ShellHarness();
         var ws = h.Get<DockWorkspace>();
@@ -301,8 +301,9 @@ public class DockPinnedPreviewTests
             Pump();
         }
 
-        Assert.True(rebuilt > 0); // 묶음이 비면 칸을 접어야 하므로 다시 짓는다
+        Assert.Equal(0, rebuilt); // 묶음이 비어도 다시 짓지 않고 그 묶음만 치운다(DK2)
         Assert.False(ws.IsToolVisible("oranda.panel.binds"));
+        Assert.Null(group.Owner);
     });
 
     [Fact]

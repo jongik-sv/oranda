@@ -345,24 +345,7 @@ public sealed partial class DockWorkspace
             // targets 는 보이는 도구 창이 있던 묶음이라 여기서 빈 묶음은 방금 접힌 것이다: 옛 접힘의 기록이 있어도 그 위에 새로 적는다.
             foreach (var dock in targets.Select(t => t.Dock).Distinct().Where(d => d.IsEmpty))
             {
-                _collapses.RemoveAll(c => ReferenceEquals(c.Dock, dock));
-                var values = new Dictionary<IDockable, double>(ReferenceEqualityComparer.Instance);
-                _collapses.Add(new CollapseSnapshot(dock, values));
-                IDockable node = dock;
-                while (node.Owner is IDock parent)
-                {
-                    foreach (var child in (parent.VisibleDockables ?? []).Where(c => c is not IProportionalDockSplitter))
-                    {
-                        values[child] = child.Proportion;
-                    }
-
-                    if (!parent.IsEmpty)
-                    {
-                        break;
-                    }
-
-                    node = parent;
-                }
+                SnapshotCollapse(dock); // .ToolToggle.cs
             }
         }
         finally
@@ -405,12 +388,13 @@ public sealed partial class DockWorkspace
         try
         {
             var inTree = TreeSet();
+            var saved = EarliestProportions(); // 되넣기 전에 읽는다(되넣은 묶음의 기록은 「아직 접힘」 이 아니게 된다)
             foreach (var h in _scopedHidden.OrderBy(h => h.Index).ToList())
             {
                 RestoreOne(h, inTree, lost);
             }
 
-            RestoreProportions(inTree, EarliestProportions());
+            RestoreProportions(inTree, saved);
         }
         finally
         {
@@ -502,7 +486,7 @@ public sealed partial class DockWorkspace
     private Dictionary<IDockable, double> EarliestProportions()
     {
         var merged = new Dictionary<IDockable, double>(ReferenceEqualityComparer.Instance);
-        foreach (var collapse in _collapses)
+        foreach (var collapse in LiveCollapses())
         {
             foreach (var (dockable, p) in collapse.Values)
             {
@@ -516,13 +500,39 @@ public sealed partial class DockWorkspace
     /// <summary>「닫기」(<see cref="HideTool"/>)가 숨긴 창을 가리키면 기록에서 빼기만 한다 — 그 창은 정말 닫힌 것으로 저장되고, 나머지는 숨긴 채다.</summary>
     private bool ForgetScopedTool(string toolId)
     {
-        var removed = _scopedHidden.RemoveAll(h => string.Equals(h.Tool.Id, toolId, StringComparison.Ordinal)) > 0;
-        if (removed)
+        var forgotten = _scopedHidden.FindAll(h => string.Equals(h.Tool.Id, toolId, StringComparison.Ordinal));
+        if (forgotten.Count == 0)
         {
-            LayoutChanged?.Invoke(this, EventArgs.Empty);
+            return false;
         }
 
-        return removed;
+        _scopedHidden.RemoveAll(forgotten.Contains);
+        foreach (var gone in forgotten)
+        {
+            // 같은 묶음에서 뒤에 숨긴 창의 자리(전체 탭 목록 기준)는 한 칸 당긴다.
+            for (var i = 0; i < _scopedHidden.Count; i++)
+            {
+                if (ReferenceEquals(_scopedHidden[i].Dock, gone.Dock) && _scopedHidden[i].Index > gone.Index)
+                {
+                    _scopedHidden[i] = _scopedHidden[i] with { Index = _scopedHidden[i].Index - 1 };
+                }
+            }
+
+            // 묶음에 남은 창이 하나도 없으면(보이는 창·숨긴 창·핀 창 모두) 접혀 있던 그 묶음을 치운다(.ToolToggle.cs). 칸 비율은 접기 전으로 돌린 뒤 물려준다.
+            if (!(gone.Dock.VisibleDockables ?? []).OfType<PanelTool>().Any() && ScopedToolIds(gone.Dock).Ids.Count == 0 && InMainTree(gone.Dock))
+            {
+                if (_collapses.Find(c => ReferenceEquals(c.Dock, gone.Dock)) is { } snapshot)
+                {
+                    RestoreProportions(TreeSet(), snapshot.Values);
+                    _collapses.Remove(snapshot);
+                }
+
+                RemoveCell(gone.Dock);
+            }
+        }
+
+        LayoutChanged?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     /// <summary>배치를 새로 짓기 시작: 짓는 동안(옛 문서 영역에서 문서를 빼는 등) 생기는 활성 변경으로 숨기지 않게 막는다. 숨기던 중이었는지 돌려준다.</summary>
@@ -551,7 +561,13 @@ public sealed partial class DockWorkspace
 
     /// <summary>저장할 비율: 숨겨서 접힌 칸과 그 형제는 숨기기 직전 값.</summary>
     private double ScopedProportion(IDockable dockable) =>
-        _collapses.Select(c => c.Values).FirstOrDefault(v => v.ContainsKey(dockable)) is { } saved ? saved[dockable] : dockable.Proportion;
+        LiveCollapses().Select(c => c.Values).FirstOrDefault(v => v.ContainsKey(dockable)) is { } saved ? saved[dockable] : dockable.Proportion;
+
+    /// <summary>
+    /// 아직 접혀 있는 묶음의 기록만. 핀을 빼는 등 Dock 쪽 조작으로 다시 보이게 된 묶음의 기록은 옛 값이라 저장·되돌리기에 쓰지 않는다
+    /// (쓰면 보이는 묶음에 접힐 때의 0 이 다시 들어가 높이 0 이 된다).
+    /// </summary>
+    private IEnumerable<CollapseSnapshot> LiveCollapses() => _collapses.Where(c => !(c.Dock.VisibleDockables ?? []).OfType<PanelTool>().Any());
 
     /// <summary>저장할 묶음 탭 목록: 숨긴 창을 원래 자리에 끼운다. 숨긴 창이 활성이었으면 그것이 활성 탭.</summary>
     private (List<string> Ids, string? Active) ScopedToolIds(IToolDock group)
