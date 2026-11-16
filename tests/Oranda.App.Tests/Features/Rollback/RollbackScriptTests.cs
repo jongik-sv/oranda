@@ -89,11 +89,101 @@ public sealed class RollbackScriptTests
         Assert.Contains("커밋하지 않았습니다", summary.Text, StringComparison.Ordinal);
         Assert.Equal(0, session.Commits);
 
-        var derived = Assert.Single(ledger.Derived);
-        Assert.Equal(RollbackOrigin.RollbackRun, derived.Origin);
-        Assert.Equal(318, derived.OriginGroupId);
-        Assert.Single(derived.Record.Steps); // 1행을 되돌린 문장만
+        // 실제로 실행한(성공한) 문장마다 기록 한 건: 글 = 실행한 원복 문장, 반대 문장 = 1행을 되돌린 문장만. 충돌로 실패한 INSERT 는 남기지 않는다.
+        Assert.Equal(2, ledger.Derived.Count);
+        Assert.All(ledger.Derived, d => Assert.Equal((RollbackOrigin.RollbackRun, 318L), (d.Origin, d.OriginGroupId)));
+        Assert.Equal([exec.Sent[1].Text, exec.Sent[2].Text], ledger.Derived.Select(d => d.Record.Text));
+        Assert.Equal([1, 0], ledger.Derived.Select(d => d.Record.Steps.Count));
+        Assert.Equal([1L, 0L], ledger.Derived.Select(d => d.Record.RowsAffected ?? -1));
     }
+
+    [Fact]
+    public async Task Rollback_run_journals_each_executed_statement_with_its_text_and_the_point_read_just_before_it()
+    {
+        var exec = new ScriptedExecution(sql => Rows(sql, 1));
+        var store = new InMemoryRollbackStore();
+        var ledger = new Oranda.Core.Rollback.Ledger.RollbackLedger(store, null);
+        var session = new FakeSession(Prod);
+        var reads = 0;
+        var runner = new RollbackRunner(exec, ledger)
+        {
+            ReverseAll = steps => [.. steps.Reverse().Select(s => new RollbackStep("-- inverse of " + s.Sql))],
+            ReadPoint = (_, _) =>
+            {
+                reads++;
+                Assert.Empty(exec.Sent); // 첫 원복 문장 직전
+                return Task.FromResult<ChangePoint?>(new ChangePoint(48300000, "SCN", T0, "test"));
+            },
+        };
+        var group = Group(Prod.Id);
+        var doc = new RollbackScriptDocument(RollbackScriptDocument.CurrentSchemaVersion, 318,
+        [
+            St(1, "UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = :p WHERE CATEGORY_ID = 3",
+                "UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 25900\n WHERE PRODUCT_ID = 1001 AND UNIT_PRICE = 28490",
+                "UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 4300\n WHERE PRODUCT_ID = 1040 AND UNIT_PRICE = 4730"),
+        ]);
+
+        await runner.RunAsync(session, group, doc, null, default);
+        await ledger.EndAsync(new TransactionEnded(session.Id, TransactionEndKind.Commit, TransactionEndSource.SessionApi), default);
+
+        Assert.Equal(1, reads);
+        var saved = Assert.Single(store.Groups);
+        Assert.Equal((RollbackOrigin.RollbackRun, 318L), (saved.Origin, saved.OriginGroupId));
+        Assert.Equal(48300000, saved.BasePoint?.Number); // 시점 칸·「이 실행 전과 비교」의 기준
+        Assert.Equal(RollbackScriptState.Confirmed, saved.State);
+        Assert.Equal(2, saved.Statements.Count); // 원복 문장 두 개 = 두 줄
+        Assert.All(saved.Statements, s => Assert.Equal(new DbObjectRef("SAMPLE", "PRODUCTS", "TABLE"), s.Table));
+        Assert.Equal([DmlVerb.Update, DmlVerb.Update], saved.Statements.Select(s => s.Verb));
+        var texts = store.Document(saved.Id)!.Statements.Select(s => s.Text).ToList();
+        Assert.Equal([exec.Sent[0].Text, exec.Sent[1].Text], texts); // 머리 주석이 아니라 실행한 문장 원문
+        Assert.Contains("UNIT_PRICE = 25900", texts[0], StringComparison.Ordinal);
+        // 평문 저장소에 남는 목록 요약은 값을 가린다(RD-10). 값은 암호화 문서의 원문에만.
+        Assert.Equal("UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = ? WHERE PRODUCT_ID = ? AND UNIT_PRICE = ?", saved.Statements[0].Summary);
+        Assert.DoesNotContain(saved.Statements, s => s.Summary.Contains("25900", StringComparison.Ordinal));
+
+        // 변경 일지: 문장 줄 원인 = 「원복 실행(#318)」, 첫 줄 시점 = 실행 직전 SCN.
+        var item = new Oranda.App.Features.ChangeJournal.RollbackGroupItem(saved);
+        var rows = saved.Statements.Select(s => new Oranda.App.Features.ChangeJournal.RollbackStatementItem(item, s)).ToList();
+        Assert.Equal(["원복 실행(#318)", "원복 실행(#318)"], rows.Select(r => r.CauseText));
+        Assert.Equal("48300000", rows[0].PointText);
+        Assert.Equal("SCN 48300000", item.PointText);
+    }
+
+    [Fact]
+    public async Task Undoing_a_rollback_run_replays_real_inverses_last_first_and_a_multi_row_change_makes_the_group_incomplete()
+    {
+        var exec = new ScriptedExecution(sql => Rows(sql, sql.Contains("2002", StringComparison.Ordinal) ? 2 : 1));
+        var store = new InMemoryRollbackStore();
+        var ledger = new Oranda.Core.Rollback.Ledger.RollbackLedger(store, null);
+        var session = new FakeSession(Prod);
+        var runner = new RollbackRunner(exec, ledger); // Core 의 실제 반대 문장
+        var doc = new RollbackScriptDocument(RollbackScriptDocument.CurrentSchemaVersion, 318,
+        [
+            St(1, "UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 1",
+                "UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 25900 WHERE PRODUCT_ID = 1001 AND UNIT_PRICE = 1",
+                "UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 4300 WHERE PRODUCT_ID = 1040 AND UNIT_PRICE = 1",
+                "UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 700 WHERE PRODUCT_ID = 2002 AND UNIT_PRICE = 1"),
+        ]);
+
+        await runner.RunAsync(session, Group(Prod.Id), doc, null, default);
+        await ledger.EndAsync(new TransactionEnded(session.Id, TransactionEndKind.Commit, TransactionEndSource.SessionApi), default);
+
+        var saved = Assert.Single(store.Groups);
+        Assert.Equal(3, saved.Statements.Count);
+        Assert.Equal(RollbackScriptState.Incomplete, saved.State); // 2행을 바꾼 문장은 반대 문장을 만들지 않는다
+        Assert.Contains("영향 행 2", saved.StateReason, StringComparison.Ordinal);
+        var replay = RollbackRunner.Order(store.Document(saved.Id)!, saved).Select(o => o.Step.Sql).ToList();
+        Assert.Equal(2, replay.Count);
+        Assert.Contains("PRODUCT_ID = 1040", replay[0], StringComparison.Ordinal); // 마지막에 실행한 문장의 반대 문장이 먼저
+        Assert.Contains("UNIT_PRICE = 1", replay[0], StringComparison.Ordinal);
+        Assert.Contains("PRODUCT_ID = 1001", replay[1], StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("UPDATE \"T2\" SET NAME = 'O''Brien', N1 = -12.5E+3 WHERE ID = 7", "UPDATE \"T2\" SET NAME = ?, N1 = -? WHERE ID = ?")]
+    [InlineData("INSERT INTO S.T (C_1, D) VALUES (TO_DATE('2026-11-16', 'YYYY-MM-DD'), 0)", "INSERT INTO S.T (C_1, D) VALUES (TO_DATE(?, ?), ?)")]
+    public void Rollback_run_summary_masks_values_but_keeps_names(string sql, string expected) =>
+        Assert.Equal(expected, RollbackRunner.MaskValues(sql));
 
     [Fact]
     public async Task Run_on_production_asks_once_and_needs_an_open_session()

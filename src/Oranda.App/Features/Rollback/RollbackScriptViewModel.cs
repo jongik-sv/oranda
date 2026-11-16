@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oranda.App.Features.PointCompare;
 using Oranda.App.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Execution;
@@ -107,6 +108,9 @@ public sealed partial class RollbackScriptViewModel : ToolPanelViewModelBase
 
     internal Func<IRollbackLedger?> Ledger { get; set; } = () => null;
 
+    /// <summary>원복 실행 직전 시점(SCN·TSN) 읽기(<see cref="RollbackRunner.ReadPoint"/>). 셸은 방언의 시점 질의를 실행 엔진으로 보낸다. null = 읽지 않음.</summary>
+    internal Func<ISession, CancellationToken, Task<ChangePoint?>>? PointReader { get; set; }
+
     internal IRollbackScriptDialogs Dialogs { get; set; } = RollbackScriptDialogs.Current;
 
     /// <summary>새 SQL 편집기 탭을 연다(글, 접속 프로필). 셸은 SQL 편집기 호스트를 쓴다.</summary>
@@ -124,6 +128,43 @@ public sealed partial class RollbackScriptViewModel : ToolPanelViewModelBase
         RunState = () => Oranda.App.Features.Execution.ExecutionState.For(services.GetService(typeof(Oranda.Core.Events.IEventBus)) as Oranda.Core.Events.IEventBus);
         Execution = () => services.GetService(typeof(IExecutionService)) as IExecutionService;
         Ledger = () => services.GetService(typeof(IRollbackLedger)) as IRollbackLedger;
+        PointReader = (session, ct) => ReadPointAsync(services, session, ct);
+    }
+
+    /// <summary>
+    /// 일반 실행과 같은 방언 시점 질의(<see cref="IRollbackDialect.PointQueries"/>, 차례대로 첫 성공)를 기록 없이 실행 엔진으로 보낸다.
+    /// 설정 「시점 기록」을 껐거나 방언이 없으면 읽지 않는다.
+    /// </summary>
+    private static async Task<ChangePoint?> ReadPointAsync(IServiceProvider services, ISession session, CancellationToken ct)
+    {
+        var settings = services.GetService(typeof(Oranda.App.Shell.Settings.SettingsService)) as Oranda.App.Shell.Settings.SettingsService;
+        if (settings?.Current.Rollback.RecordPoint == false
+            || Oranda.App.Features.DbmsServices.For<IRollbackDialect>(services, session) is not { } dialect
+            || services.GetService(typeof(IExecutionService)) is not IExecutionService execution)
+        {
+            return null;
+        }
+
+        var options = new ExecutionOptions { Source = Oranda.Core.History.HistorySource.Editor, SkipHistory = true, Recording = ChangeRecording.None };
+        foreach (var sql in dialect.PointQueries)
+        {
+            try
+            {
+                var stmt = new SqlStatement(sql, default, StatementKind.Query) { Verb = "SELECT" };
+                var r = await execution.ExecuteAsync(session, stmt, new Dictionary<string, BindValue>(), options, ct).ConfigureAwait(false);
+                if (r is { Status: ExecutionStatus.Succeeded, ResultSet: { } rs }
+                    && SessionPointCompareDb.ToLong((await Oranda.App.Features.Flashback.FlashbackRunner.ReadAllAsync(rs, ct).ConfigureAwait(false)).First0()) is { } n)
+                {
+                    return new ChangePoint(n, dialect.PointName, DateTimeOffset.UtcNow, sql);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // 다음 방법
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -192,7 +233,7 @@ public sealed partial class RollbackScriptViewModel : ToolPanelViewModelBase
                     Results.Add(r);
                 }
             });
-            var runner = new RollbackRunner(execution, Ledger()) { ReverseAll = ReverseAll };
+            var runner = new RollbackRunner(execution, Ledger()) { ReverseAll = ReverseAll, ReadPoint = PointReader };
             var summary = await Task.Run(() => runner.RunAsync(session, Group, Document, progress, cts.Token), CancellationToken.None).ConfigureAwait(true);
             Results.Clear();
             foreach (var r in summary.Steps.Where(r => r.Outcome != RollbackStepOutcome.Reverted))

@@ -369,7 +369,7 @@ public sealed class RollbackLedger : IRollbackLedger
     };
 
     private static RollbackStatementInfo Info(OpenStatement s) =>
-        new(s.Seq, s.Record.ExecutedAt, s.Record.Verb, s.Record.Table, ChangeCapture.Summarize(s.Record.Text), s.Record.RowsAffected,
+        new(s.Seq, s.Record.ExecutedAt, s.Record.Verb, s.Record.Table, s.Record.Summary ?? ChangeCapture.Summarize(s.Record.Text), s.Record.RowsAffected,
             s.Record.BeforePoint, s.Invalidated ? RollbackScriptState.Invalid : s.Record.State,
             s.Invalidated ? s.InvalidReason : s.Record.IncompleteReason ?? ReasonText(s.Record.Reason),
             s.Record.Steps.Count, s.Invalidated)

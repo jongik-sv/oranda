@@ -45,6 +45,12 @@ public sealed record RollbackStatementRecord
     /// <summary>사용자가 쓴 글(치환 뒤). 파일에만 저장.</summary>
     public required string Text { get; init; }
 
+    /// <summary>
+    /// 목록 요약(<see cref="RollbackStatementInfo.Summary"/>, 평문 저장소에 남는다). null = <see cref="Text"/> 의 첫 줄.
+    /// 원복 실행처럼 글에 실제 행 값이 든 기록은 값을 가린 요약을 준다(RD-10).
+    /// </summary>
+    public string? Summary { get; init; }
+
     public IReadOnlyList<RollbackBind> Binds { get; init; } = [];
 
     public DmlVerb Verb { get; init; }

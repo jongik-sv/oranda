@@ -166,7 +166,10 @@ public sealed class RollbackStatementItem(RollbackGroupItem parent, RollbackStat
 
     public string ObjectText => Statement.Table is { } t ? RollbackGroupItem.Name(t) : string.Empty;
 
-    public string CauseText => "DML 실행";
+    /// <summary>「DML 실행」. 원복 실행이 만든 묶음의 문장은 「원복 실행(#18)」(되돌린 묶음 번호).</summary>
+    public string CauseText => Parent.Group is { Origin: RollbackOrigin.RollbackRun, OriginGroupId: { } origin }
+        ? $"원복 실행(#{origin.ToString(CultureInfo.InvariantCulture)})"
+        : "DML 실행";
 
     /// <summary>가린 문장 요약 한 줄.</summary>
     public string SummaryText => string.Join(' ', (Statement.Summary ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
