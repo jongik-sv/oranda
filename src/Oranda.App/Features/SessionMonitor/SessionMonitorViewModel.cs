@@ -16,6 +16,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Metadata;
 using Oranda.Core.Monitoring;
+using Oranda.Core.Monitoring.Providers;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
 
@@ -144,17 +145,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     public IExecutionService? Execution { get; set; }
 
     /// <summary>UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
-    public Action<Action> PostToUi { get; set; } = a =>
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            a();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(a);
-        }
-    };
+    public Action<Action> PostToUi { get; set; } = UiThread.Post;
 
     /// <summary>지금 쓰는 모니터 세션. 열리지 않았으면 null.</summary>
     public ISession? MonitorSession => _session;
@@ -185,7 +176,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            StatusText = "모니터 세션을 열지 못했습니다: " + FirstLine(ex.Message);
+            StatusText = "모니터 세션을 열지 못했습니다: " + MonitorRows.FirstLine(ex.Message);
             return;
         }
 
@@ -217,7 +208,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            StatusText = "모니터 세션을 열지 못했습니다: " + FirstLine(ex.Message);
+            StatusText = "모니터 세션을 열지 못했습니다: " + MonitorRows.FirstLine(ex.Message);
             return;
         }
 
@@ -576,7 +567,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     /// </summary>
     private void ShowFailure(Exception ex, ISession session, bool isSessionChange = false)
     {
-        StatusText = FirstLine(ex.Message);
+        StatusText = MonitorRows.FirstLine(ex.Message);
         if (!MonitorAccessState.IsPrivilegeError(ex))
         {
             return;
@@ -585,7 +576,7 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         if (isSessionChange)
         {
             // 종료·연결 끊기는 목록을 읽을 권한(SELECT_CATALOG_ROLE)이 아니라 ALTER SYSTEM 이 모자란 것이다 — 목록·자동 새로 고침·선택은 그대로 두고 상태 줄에만 알린다.
-            StatusText = "세션 종료 권한(ALTER SYSTEM)이 없습니다 · " + FirstLine(ex.Message);
+            StatusText = "세션 종료 권한(ALTER SYSTEM)이 없습니다 · " + MonitorRows.FirstLine(ex.Message);
             return;
         }
 
@@ -737,12 +728,6 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
     };
 
     private static string Cut(string s, int width) => s.Length <= width ? s : s[..(width - 1)] + "…";
-
-    private static string FirstLine(string message)
-    {
-        var i = message.IndexOf('\n', StringComparison.Ordinal);
-        return (i < 0 ? message : message[..i]).Trim();
-    }
 }
 
 /// <summary>세션 목록 한 줄.</summary>

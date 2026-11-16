@@ -37,7 +37,6 @@ internal static class TuningText
     public static string FirstLine(string message)
     {
         ArgumentNullException.ThrowIfNull(message);
-        var i = message.IndexOf('\n', StringComparison.Ordinal);
-        return (i < 0 ? message : message[..i]).Trim();
+        return Oranda.Core.Monitoring.Providers.MonitorRows.FirstLine(message);
     }
 }

@@ -8,6 +8,7 @@ using Oranda.Core.Catalog;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Monitoring;
+using Oranda.Core.Monitoring.Providers;
 using Oranda.Core.Sessions;
 
 namespace Oranda.App.Features.BlockerAlert;
@@ -432,7 +433,7 @@ public sealed class BlockerWatcher : IDisposable
         }
         catch (Exception ex) when (MonitorAccessState.IsPrivilegeError(ex))
         {
-            TurnOff(epoch, BlockerDisabledReason.NoPrivilege, "V$ 조회 권한이 없어 막고 있는 세션 감시를 끈다: " + FirstLine(ex.Message));
+            TurnOff(epoch, BlockerDisabledReason.NoPrivilege, "V$ 조회 권한이 없어 막고 있는 세션 감시를 끈다: " + MonitorRows.FirstLine(ex.Message));
             await CloseMonitorNowAsync().ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is CatalogQueryNotFoundException or NotSupportedException)
@@ -442,7 +443,7 @@ public sealed class BlockerWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            _log("막고 있는 세션 조회 실패(다음 주기에 다시 시도): " + FirstLine(ex.Message));
+            _log("막고 있는 세션 조회 실패(다음 주기에 다시 시도): " + MonitorRows.FirstLine(ex.Message));
             await CloseMonitorNowAsync().ConfigureAwait(false);
         }
         finally
@@ -575,7 +576,7 @@ public sealed class BlockerWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            _log("모니터 세션을 닫지 못했다: " + FirstLine(ex.Message));
+            _log("모니터 세션을 닫지 못했다: " + MonitorRows.FirstLine(ex.Message));
         }
     }
 
@@ -644,11 +645,5 @@ public sealed class BlockerWatcher : IDisposable
         return _offVisible && _off is BlockerDisabledReason.NoPrivilege or BlockerDisabledReason.NoCredential
             ? new BlockerAlertState(BlockerAlertKind.Disabled) { Reason = _off }
             : BlockerAlertState.Hidden;
-    }
-
-    private static string FirstLine(string message)
-    {
-        var i = message.IndexOf('\n', StringComparison.Ordinal);
-        return (i < 0 ? message : message[..i]).Trim();
     }
 }

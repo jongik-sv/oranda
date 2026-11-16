@@ -1,3 +1,4 @@
+using Oranda.App.Shell;
 using System.Collections.Generic;
 using System.ComponentModel;
 using Avalonia.Controls;
@@ -43,9 +44,9 @@ public partial class ChildCursorsView : UserControl
         AccessBanner.OtherAccountRequested += (_, _) => _ = _bound?.OpenWithOtherAccountAsync();
         CopyButton.Click += async (_, _) =>
         {
-            if (_bound?.BuildCopyText() is { Length: > 0 } text && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            if (_bound?.BuildCopyText() is { Length: > 0 } text)
             {
-                await clipboard.SetTextAsync(text).ConfigureAwait(true);
+                await ClipboardText.SetAsync(this, text);
             }
         };
         SqlIdBox.KeyDown += (_, e) =>

@@ -1,3 +1,4 @@
+using Oranda.App.Shell;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -47,9 +48,9 @@ public partial class TableStatsView : UserControl
         ScriptButton.Click += (_, _) => _bound?.OpenGatherScript();
         CopyButton.Click += async (_, _) =>
         {
-            if (_bound?.BuildCopyText() is { Length: > 0 } text && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            if (_bound?.BuildCopyText() is { Length: > 0 } text)
             {
-                await clipboard.SetTextAsync(text).ConfigureAwait(true);
+                await ClipboardText.SetAsync(this, text);
             }
         };
         ShareSwitch.SelectionChanged += (_, _) =>

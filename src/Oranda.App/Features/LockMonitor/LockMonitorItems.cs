@@ -1,3 +1,4 @@
+using Oranda.Core.Text;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -459,8 +460,7 @@ public static class LockHints
         var dot = ownerDotName.IndexOf('.', StringComparison.Ordinal);
         var owner = dot < 0 ? string.Empty : ownerDotName[..dot];
         var name = dot < 0 ? ownerDotName : ownerDotName[(dot + 1)..];
-        static string Q(string s) => "'" + s.Replace("'", "''", StringComparison.Ordinal) + "'";
-        return (owner.Length > 0 ? "   AND c.owner = " + Q(owner) + "\n" : string.Empty, Q(name));
+        return (owner.Length > 0 ? "   AND c.owner = " + SqlLiteral.Quote(owner) + "\n" : string.Empty, SqlLiteral.Quote(name));
     }
 
     private static LockTreeItem Root(LockTreeItem i)

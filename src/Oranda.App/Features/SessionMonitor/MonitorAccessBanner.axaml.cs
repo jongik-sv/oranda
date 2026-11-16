@@ -1,3 +1,4 @@
+using Oranda.App.Shell;
 using System;
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
@@ -13,9 +14,9 @@ public partial class MonitorAccessBanner : UserControl
         OtherAccountButton.Click += (_, _) => OtherAccountRequested?.Invoke(this, EventArgs.Empty);
         CopyGrantButton.Click += async (_, _) =>
         {
-            if (DataContext is MonitorAccessState { GrantSql: { } sql } && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            if (DataContext is MonitorAccessState { GrantSql: { } sql })
             {
-                await clipboard.SetTextAsync(sql);
+                await ClipboardText.SetAsync(this, sql);
             }
         };
     }

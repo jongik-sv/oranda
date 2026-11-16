@@ -1,3 +1,4 @@
+using Oranda.App.Shell;
 using System;
 using System.ComponentModel;
 using System.IO;
@@ -92,9 +93,9 @@ public partial class TraceViewerView : UserControl
 
     private async Task CopyAsync(string? text)
     {
-        if (!string.IsNullOrEmpty(text) && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+        if (!string.IsNullOrEmpty(text))
         {
-            await clipboard.SetTextAsync(text);
+            await ClipboardText.SetAsync(this, text);
         }
     }
 

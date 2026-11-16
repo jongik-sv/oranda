@@ -1,3 +1,5 @@
+using Oranda.Core.Monitoring;
+using Oranda.Core.Monitoring.Providers;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -244,7 +246,7 @@ public sealed partial class SqlMonitorViewModel
     internal static string Describe(Exception ex) => ex switch
     {
         NotSupportedException or NotImplementedException => "이 서버 연결에서는 아직 이 조회를 쓸 수 없습니다.",
-        _ => FirstLine(ex.Message),
+        _ => MonitorRows.FirstLine(ex.Message),
     };
 
     /// <summary>모니터 세션이 바뀌었다(열림·닫힘·다른 접속).</summary>

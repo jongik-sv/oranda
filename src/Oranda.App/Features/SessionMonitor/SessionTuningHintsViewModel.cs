@@ -1,3 +1,4 @@
+using Oranda.Core.Monitoring.Providers;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -145,7 +146,7 @@ public sealed partial class SessionTuningHintsViewModel : ObservableObject
         {
             if (failure is not null)
             {
-                StatusText = "튜닝 추천을 검사하지 못했습니다: " + FirstLine(failure.Message)
+                StatusText = "튜닝 추천을 검사하지 못했습니다: " + MonitorRows.FirstLine(failure.Message)
                     + (MonitorAccessState.IsPrivilegeError(failure) ? " — gv$sqlstats 조회 권한이 필요합니다." : string.Empty);
                 return;
             }
@@ -214,11 +215,5 @@ public sealed partial class SessionTuningHintsViewModel : ObservableObject
                 ? $"세션 {session.KeyText} 의 SQL {session.SqlId}: 검사 결과 없음(활성 아님 또는 공유 풀에 없음)"
                 : $"세션 {session.KeyText} 의 SQL {session.SqlId}: 아직 검사하지 않았습니다.";
         }
-    }
-
-    private static string FirstLine(string message)
-    {
-        var i = message.IndexOf('\n', StringComparison.Ordinal);
-        return (i < 0 ? message : message[..i]).Trim();
     }
 }

@@ -13,6 +13,7 @@ using Oranda.App.Features.SessionMonitor;
 using Oranda.App.Shell;
 using Oranda.Core.Connection;
 using Oranda.Core.Monitoring;
+using Oranda.Core.Monitoring.Providers;
 using Oranda.Core.Plans;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
@@ -173,17 +174,7 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
     public MonitorAccessState Access { get; } = new();
 
     /// <summary>UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
-    public Action<Action> PostToUi { get; set; } = a =>
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            a();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(a);
-        }
-    };
+    public Action<Action> PostToUi { get; set; } = UiThread.Post;
 
     public ISession? MonitorSession => _session;
 
@@ -222,7 +213,7 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            StatusText = "모니터 세션을 열지 못했습니다: " + FirstLine(ex.Message);
+            StatusText = "모니터 세션을 열지 못했습니다: " + MonitorRows.FirstLine(ex.Message);
             return;
         }
 
@@ -254,7 +245,7 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            StatusText = "모니터 세션을 열지 못했습니다: " + FirstLine(ex.Message);
+            StatusText = "모니터 세션을 열지 못했습니다: " + MonitorRows.FirstLine(ex.Message);
             return;
         }
 
@@ -525,7 +516,7 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
     /// </summary>
     private void ShowFailure(Exception ex, ISession session)
     {
-        StatusText = FirstLine(ex.Message);
+        StatusText = MonitorRows.FirstLine(ex.Message);
         if (!MonitorAccessState.IsPrivilegeError(ex))
         {
             return;
@@ -607,11 +598,5 @@ public sealed partial class SqlMonitorViewModel : ToolPanelViewModelBase, IDispo
         var open = _session is not null;
         keys.Set("monitorSqlOpen", open);
         keys.Set("monitorSqlSelected", open && SelectedSql is not null);
-    }
-
-    private static string FirstLine(string message)
-    {
-        var i = message.IndexOf('\n', StringComparison.Ordinal);
-        return (i < 0 ? message : message[..i]).Trim();
     }
 }

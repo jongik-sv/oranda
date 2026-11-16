@@ -1,3 +1,4 @@
+using Oranda.App.Shell;
 using System;
 using System.Threading.Tasks;
 using Avalonia;
@@ -83,11 +84,11 @@ public partial class TuningAssistantView : UserControl
 
     private async Task CopyAsync(string? text)
     {
-        if (string.IsNullOrEmpty(text) || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        if (string.IsNullOrEmpty(text))
         {
             return;
         }
 
-        await clipboard.SetTextAsync(text).ConfigureAwait(true);
+        await ClipboardText.SetAsync(this, text);
     }
 }

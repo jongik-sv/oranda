@@ -1,3 +1,4 @@
+using Oranda.App.Shell;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
@@ -103,9 +104,9 @@ public partial class SqlMonitorView : UserControl
         AwrCompareCloseButton.Click += (_, _) => _bound?.Awr.ClearComparison();
         ControlsCopyGrantButton.Click += async (_, _) =>
         {
-            if (_bound?.Controls.GrantSql is { Length: > 0 } sql && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            if (_bound?.Controls.GrantSql is { Length: > 0 } sql)
             {
-                await clipboard.SetTextAsync(sql).ConfigureAwait(true);
+                await ClipboardText.SetAsync(this, sql);
             }
         };
         ClassBar.SizeChanged += (_, _) => RebuildClassBar();

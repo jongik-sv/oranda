@@ -1,3 +1,4 @@
+using Oranda.Core.Monitoring.Providers;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -162,17 +163,7 @@ public sealed partial class TuningAssistantViewModel : ToolPanelViewModelBase
     public Action<string>? OpenInNewEditor { get; set; }
 
     /// <summary>UI 스레드로 넘기는 방법. 시험은 바로 실행하도록 바꾼다.</summary>
-    public Action<Action> PostToUi { get; set; } = a =>
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            a();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(a);
-        }
-    };
+    public Action<Action> PostToUi { get; set; } = UiThread.Post;
 
     public TuningAssistantInput? Input => _input;
 
@@ -363,7 +354,7 @@ public sealed partial class TuningAssistantViewModel : ToolPanelViewModelBase
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ErrorText = FirstLine(ex.Message);
+            ErrorText = MonitorRows.FirstLine(ex.Message);
             StatusText = L("계획을 받지 못했습니다: ", "Could not get the plan: ") + ErrorText;
         }
         finally
@@ -431,7 +422,7 @@ public sealed partial class TuningAssistantViewModel : ToolPanelViewModelBase
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ErrorText = FirstLine(ex.Message);
+            ErrorText = MonitorRows.FirstLine(ex.Message);
             StatusText = L("분석하지 못했습니다: ", "Analysis failed: ") + ErrorText;
         }
         finally
@@ -704,7 +695,7 @@ public sealed partial class TuningAssistantViewModel : ToolPanelViewModelBase
                     catch (Exception ex) when (ex is not OutOfMemoryException)
                     {
                         row.State = BenchmarkRowState.Failed;
-                        row.VerdictText = L("실패: ", "Failed: ") + FirstLine(ex.Message);
+                        row.VerdictText = L("실패: ", "Failed: ") + MonitorRows.FirstLine(ex.Message);
                         break;
                     }
                 }
@@ -888,10 +879,4 @@ public sealed partial class TuningAssistantViewModel : ToolPanelViewModelBase
 #pragma warning disable CA1863
     private static string F(string ko, string en, params object?[] args) => string.Format(CultureInfo.InvariantCulture, L(ko, en), args);
 #pragma warning restore CA1863
-
-    private static string FirstLine(string message)
-    {
-        var i = message.IndexOf('\n', StringComparison.Ordinal);
-        return (i < 0 ? message : message[..i]).Trim();
-    }
 }
