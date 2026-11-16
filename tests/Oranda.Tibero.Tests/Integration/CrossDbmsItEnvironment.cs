@@ -74,7 +74,7 @@ internal sealed class CrossDbmsItEnvironment : IAsyncDisposable
 
         var oracleBulk = NewOracle<IBulkExecutionService>("Oranda.Oracle.Execution.OracleBulkExecutionService", Policy, ui, Events);
         TiberoBulk = new TiberoBulkExecutionService(Policy, ui, Events);
-        var oracleExecution = NewOracle<IExecutionService>("Oranda.Oracle.Execution.OracleExecutionService", Policy, ui, Events, null, 500, false, null);
+        var oracleExecution = NewOracle<IExecutionService>("Oranda.Oracle.Execution.OracleExecutionService", Policy, ui, Events, null, 500, false, null, null);
         var oracleMetadata = NewOracle<IMetadataProvider>("Oranda.Oracle.Metadata.OracleMetadataProvider", new MemoryMetadataCache(), Events, Timeout.InfiniteTimeSpan);
         selector.Add(Dbms.Oracle, () => oracleBulk)
                 .Add(Dbms.Oracle, () => oracleExecution)
@@ -86,7 +86,7 @@ internal sealed class CrossDbmsItEnvironment : IAsyncDisposable
         // 원본·대상 부품 벌(xdb-copy XC2): 앱 조립과 같이 「되살리기」 부품에는 키 없는 대량 실행(디스패처)을 준다.
         _parts[Dbms.Oracle] = NewOracle<ICopyDbmsParts>("Oranda.Oracle.Transfer.Copy.OracleCopyParts", Bulk).Parts;
         _parts[Dbms.Tibero] = new TiberoCopyParts(Bulk).Parts;
-        _oracleManager = NewOracle<ISessionManager>("Oranda.Oracle.Sessions.OracleSessionManager", Events);
+        _oracleManager = NewOracle<ISessionManager>("Oranda.Oracle.Sessions.OracleSessionManager", Events, null, null);
     }
 
     public TiberoItSessions Tibero { get; }
