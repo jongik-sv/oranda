@@ -67,15 +67,15 @@ public sealed class ConnectionComboViewModel : ViewModelBase
     {
         _container = container;
         _router = router ?? (() => SessionRouter.Find(container));
-        events?.Subscribe<SessionOpened>(this, _ => Post(Refresh));
-        events?.Subscribe<SessionClosed>(this, _ => Post(Refresh));
-        events?.Subscribe<SessionBroken>(this, _ => Post(Refresh));
+        events?.Subscribe<SessionOpened>(this, _ => UiThread.PostIfAppRunning(Refresh));
+        events?.Subscribe<SessionClosed>(this, _ => UiThread.PostIfAppRunning(Refresh));
+        events?.Subscribe<SessionBroken>(this, _ => UiThread.PostIfAppRunning(Refresh));
         if (container is not null)
         {
             PerContainer.AddOrUpdate(container, this);
         }
 
-        UiText.WatchLanguage((_, _) => Post(() => Refresh(rebuild: true))); // 항목 글(끊김·환경 칩)도 다시 만든다
+        UiText.WatchLanguage((_, _) => UiThread.PostIfAppRunning(() => Refresh(rebuild: true))); // 항목 글(끊김·환경 칩)도 다시 만든다
         Refresh();
     }
 
@@ -303,18 +303,6 @@ public sealed class ConnectionComboViewModel : ViewModelBase
     private static void Defer(Action action)
     {
         if (Application.Current is null)
-        {
-            action();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(action);
-        }
-    }
-
-    private static void Post(Action action)
-    {
-        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
         {
             action();
         }

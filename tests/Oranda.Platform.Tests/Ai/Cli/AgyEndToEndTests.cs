@@ -11,6 +11,7 @@ using Oranda.Core.Ai.Protocol;
 using Oranda.Core.Connection;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -31,20 +32,13 @@ public sealed class AgyEndToEndTests : IDisposable
         "invoke_subagent", "define_subagent", "manage_subagents", "schedule", "send_message", "generate_image", "run_workflow", "ask_question",
     ];
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-agy-e2e-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-agy-e2e-");
 
     public AgyEndToEndTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [AgyEndToEndFact]

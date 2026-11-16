@@ -16,21 +16,14 @@ public sealed class AiProfileSettingsFileTests : IDisposable
 {
     private const string ProfileId = "11111111-2222-3333-4444-555555555555";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-aiprofile-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-aiprofile-");
     private readonly FakeEventBus _bus = new();
 
     public AiProfileSettingsFileTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     private AppDataPaths Paths => new(_dir);
@@ -129,7 +122,7 @@ public sealed class AiProfileSettingsFileTests : IDisposable
         await WriteSettingsAsync("{ 이건 json 이 아니다");
         var store = NewStore();
         var cli = new CliDriver(new FakeRunTokens(), new FakeGate(), new FixedBridgeEndpoint("pipe"), Paths, store);
-        var router = new RoutingAiDriver(store, new FakeCredentialStore(), cli, new NoServices());
+        var router = new RoutingAiDriver(store, new FakeCredentialStore(), cli, new ServiceBag());
         var request = new AiRequest("질문", new AiContext("p", null, AiAccessLevel.Plan));
         await store.LoadAsync(default); // 앱 시작 때의 첫 읽기: 손상 파일을 옮기고 기본값으로 시작
 
@@ -210,10 +203,5 @@ public sealed class AiProfileSettingsFileTests : IDisposable
 
         Assert.Equal(id, loaded.ActiveProfileId);
         Assert.Equal(profile, Assert.Single(loaded.Profiles));
-    }
-
-    private sealed class NoServices : IServiceProvider
-    {
-        public object? GetService(Type serviceType) => null;
     }
 }

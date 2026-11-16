@@ -1,25 +1,20 @@
 using System.Text.Json.Nodes;
 using Oranda.Core.Connection;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
 // 소유: TSK-03-04. connections.json 읽기·쓰기·검증(data-model 2.2).
 public sealed class ConnectionStoreTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-conn-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-conn-");
 
     public ConnectionStoreTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-        }
+        _dir.Dispose();
     }
 
     private ConnectionStore NewStore() => new(new AppDataPaths(_dir), []);

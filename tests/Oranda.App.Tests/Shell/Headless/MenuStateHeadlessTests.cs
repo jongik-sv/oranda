@@ -51,8 +51,6 @@ public class MenuStateHeadlessTests
 
     private static MenuItem EmptyNotice(MenuItem menu) => Items(menu).OfType<MenuItem>().Single(i => i.Classes.Contains("menu-empty"));
 
-    private static void Settle() => Dispatcher.UIThread.RunJobs();
-
     [Fact]
     public Task Monitor_menu_hides_tab_only_commands_until_a_monitor_is_open() => HeadlessHost.Run(() =>
     {
@@ -64,7 +62,7 @@ public class MenuStateHeadlessTests
         Assert.False(EmptyNotice(monitor).IsVisible);
 
         keys.Set("monitorSessionOpen", true);
-        Settle();
+        HeadlessHost.Pump();
         var kill = Command(h, "monitor", "oranda.monitor.killSession");
         Assert.True(kill.IsVisible);
         Assert.False(kill.Command!.CanExecute(null));
@@ -76,11 +74,11 @@ public class MenuStateHeadlessTests
 
         // 행을 고르면 다음 이유(권한), 모니터를 닫으면 다시 숨는다.
         keys.Set("monitorSessionSelected", true);
-        Settle();
+        HeadlessHost.Pump();
         Assert.Equal("ALTER SYSTEM 권한이 필요합니다", ToolTip.GetTip(kill));
         keys.Set("monitorSessionOpen", false);
         keys.Set("monitorSessionSelected", false);
-        Settle();
+        HeadlessHost.Pump();
         Assert.False(kill.IsVisible);
     });
 
@@ -101,7 +99,7 @@ public class MenuStateHeadlessTests
         var keys = h.Get<ContextKeyService>();
         keys.Set("hasSession", true);
         keys.Set("readOnlySession", true);
-        Settle();
+        HeadlessHost.Pump();
         Assert.Null(ToolTip.GetTip(Command(h, "database", "oranda.db.info")));
         Assert.Equal("읽기 전용 접속이나 조회 전용 Role 에서는 쓸 수 없습니다", ToolTip.GetTip(Command(h, "database", "oranda.schema.compileInvalid")));
     });
@@ -112,14 +110,14 @@ public class MenuStateHeadlessTests
         using var h = new ShellHarness();
         var wiring = h.Services.GetService<IEnumerable<Oranda.Core.Composition.IStartupTask>>()!.OfType<SqlEditorDockWiring>().Single();
         await wiring.RunAsync(default);
-        Settle();
+        HeadlessHost.Pump();
         var result = Top(h, "result");
         var notice = EmptyNotice(result);
         if (h.Get<IContextKeys>().Evaluate("sqlDocActive"))
         {
             // 시작 때 SQL 탭이 이미 열렸으면 모두 닫고 본다.
             await h.Get<ICommandRegistry>().ExecuteAsync("oranda.file.closeAll", h.Get<IContextKeys>());
-            Settle();
+            HeadlessHost.Pump();
         }
 
         Assert.True(notice.IsVisible);
@@ -128,7 +126,7 @@ public class MenuStateHeadlessTests
         Assert.Empty(VisibleCommandIds(result));
 
         await h.Get<ICommandRegistry>().ExecuteAsync("oranda.file.newSqlEditor", h.Get<IContextKeys>());
-        Settle();
+        HeadlessHost.Pump();
         Assert.False(notice.IsVisible);
         Assert.Contains("oranda.grid.exportExcel", VisibleCommandIds(result));
         Assert.Equal("쿼리 결과가 있어야 쓸 수 있습니다", ToolTip.GetTip(Command(h, "result", "oranda.grid.exportExcel")));
@@ -148,7 +146,7 @@ public class MenuStateHeadlessTests
         Assert.Equal("DB 에 접속해야 쓸 수 있습니다", info.ToolTip);
 
         h.Get<ContextKeyService>().Set("monitorSessionOpen", true);
-        Settle();
+        HeadlessHost.Pump();
         Assert.True(Find("oranda.monitor.killSession").IsVisible);
         Assert.Equal("세션 목록에서 행을 고르세요", Find("oranda.monitor.killSession").ToolTip);
 
@@ -227,11 +225,11 @@ public class MenuStateHeadlessTests
         using var h = new ShellHarness();
         var wiring = h.Services.GetService<IEnumerable<Oranda.Core.Composition.IStartupTask>>()!.OfType<SqlEditorDockWiring>().Single();
         await wiring.RunAsync(default);
-        Settle();
+        HeadlessHost.Pump();
         if (h.Get<IContextKeys>().Evaluate("sqlDocActive"))
         {
             await h.Get<ICommandRegistry>().ExecuteAsync("oranda.file.closeAll", h.Get<IContextKeys>());
-            Settle();
+            HeadlessHost.Pump();
         }
 
         var subs = Items(Top(h, "result")).OfType<MenuItem>().Where(m => m.ItemsSource is not null && !m.Classes.Contains("menu-empty")).ToList();
@@ -240,7 +238,7 @@ public class MenuStateHeadlessTests
         Assert.All(Items(Top(h, "result")).OfType<Separator>(), s => Assert.False(s.IsVisible));
 
         await h.Get<ICommandRegistry>().ExecuteAsync("oranda.file.newSqlEditor", h.Get<IContextKeys>());
-        Settle();
+        HeadlessHost.Pump();
         Assert.All(subs, m => Assert.True(m.IsVisible));
         Assert.True(Command(h, "result", "oranda.grid.edit.addRow").IsVisible);
         Assert.NotNull(ToolTip.GetTip(Command(h, "result", "oranda.grid.edit.addRow"))); // 하위 메뉴 안 회색 명령도 이유 툴팁
@@ -255,13 +253,13 @@ public class MenuStateHeadlessTests
 
         h.Get<Oranda.App.Shell.Docking.DockWorkspace>().OpenDocument("oranda.panel.plsqlEditor");
         keys.SetFocusSlot("schema"); // 작업 공간 라우터가 아직 없어 실제 plsqlDocActive 는 꺼진 채이고(주 메뉴는 도킹에서 직접 채운다), 포커스는 스키마 트리로 옮겨 갔다
-        Settle();
+        HeadlessHost.Pump();
         Top(h, "edit").IsSubMenuOpen = true;
-        Settle();
+        HeadlessHost.Pump();
         Assert.False(keys.Evaluate("plsqlDocActive"));
         Assert.Contains("oranda.edit.find", VisibleCommandIds(Top(h, "edit")));
         Top(h, "edit").IsSubMenuOpen = false;
-        Settle();
+        HeadlessHost.Pump();
     });
 
     [Fact]

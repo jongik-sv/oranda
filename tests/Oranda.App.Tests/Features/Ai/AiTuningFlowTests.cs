@@ -368,7 +368,7 @@ public class AiTuningFlowTests
     {
         var chat = new AiChatViewModel();
         var driver = Driver();
-        var flow = new AiTuningFlow(new NoStatementEditor(), driver, chat, (_, _, _) => { });
+        var flow = new AiTuningFlow(new FakeEditorContext(), driver, chat, (_, _, _) => { });
 
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
@@ -640,7 +640,7 @@ public class AiTuningFlowTests
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         Assert.Equal(0, flow.Generation); // 가림 불가로 거부
 
-        var noStatement = new AiTuningFlow(new NoStatementEditor(), Driver(), chat, (_, _, _) => { });
+        var noStatement = new AiTuningFlow(new FakeEditorContext(), Driver(), chat, (_, _, _) => { });
         await noStatement.StartAsync(new TuningStartChoice(true, true, "default"), Context);
         Assert.Equal(0, noStatement.Generation); // 문장 없음으로 거부
 
@@ -658,15 +658,6 @@ public class AiTuningFlowTests
         await flow.StartAsync(new TuningStartChoice(true, true, "default"), Context);
 
         AssertChatHidesOriginal(chat);
-    }
-
-    private sealed class NoStatementEditor : IEditorContext
-    {
-        public EditorSnapshot? GetActiveDocument() => null;
-
-        public SqlStatement? GetCurrentStatement() => null;
-
-        public Task<bool> ProposeEditAsync(TextEdit edit, CancellationToken ct) => Task.FromResult(false);
     }
 
     private const string Commented = "SELECT * /* 주문 상태 */ FROM tb_order -- 운영 점검\nWHERE stat_cd = '10'";

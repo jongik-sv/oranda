@@ -11,20 +11,14 @@ namespace Oranda.Platform.Tests.Storage;
 // 소유: TSK-03-01. 경로·JSON 공통·settings.json.
 public sealed partial class SettingsStoreTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-test-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-test-");
     private readonly FakeEventBus _bus = new();
 
     public SettingsStoreTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-        }
+        _dir.Dispose();
     }
 
     private AppDataPaths Paths => new(_dir);
@@ -53,7 +47,7 @@ public sealed partial class SettingsStoreTests : IDisposable
     [Fact]
     public void Environment_variable_overrides_data_directory()
     {
-        var dir = AppDataPaths.ResolveDataDirectory(k => k == "ORANDA_DATA_DIR" ? _dir : null);
+        var dir = AppDataPaths.ResolveDataDirectory(k => k == "ORANDA_DATA_DIR" ? _dir.Path : null);
         Assert.Equal(_dir, dir);
     }
 

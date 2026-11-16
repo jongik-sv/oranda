@@ -5,6 +5,7 @@ using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.Execution;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Sessions;
@@ -25,7 +26,7 @@ public sealed class MultiConnectionTests
         var outcome = await fx.Service.ConnectAsync(profile, null, CancellationToken.None);
         Assert.True(outcome.IsConnected, outcome.Message);
         fx.Events.Publish(new SessionOpened(outcome.Session!.Id, outcome.Session.Profile, outcome.Session.Server, SessionPurpose.Work));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         return outcome.Session;
     }
 
@@ -181,13 +182,13 @@ public sealed class MultiConnectionTests
         tabA.ConnectionProfileId = a.Profile.Id;
 
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Same(a, rig.Fx.Service.ActiveSession);
         Assert.Equal(a.Id, rig.State.SessionId);
         Assert.Same(a, rig.Router.ShownSession);
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Same(b, rig.Fx.Service.ActiveSession);
         Assert.Equal(b.Id, rig.State.SessionId);
     });
@@ -216,10 +217,10 @@ public sealed class MultiConnectionTests
         await ConnectAsync(rig.Fx, await SaveAsync(rig.Fx, "b"));
         tabA.ConnectionProfileId = a.Profile.Id;
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         await rig.Fx.Service.DisconnectAsync(a, CancellationToken.None);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Null(rig.Router.SessionFor(tabA));
         Assert.Equal(a.Profile.Id, rig.Router.MissingProfileOf(tabA));
@@ -519,7 +520,7 @@ public sealed class MultiConnectionTests
         Assert.StartsWith("scott@b", status.Text, StringComparison.Ordinal);
 
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Same(a, combo.Selected?.Session);
         Assert.StartsWith("scott@a", status.Text, StringComparison.Ordinal);
         Assert.Same(tabB, rig.Host.Tabs[^1]);
@@ -535,7 +536,7 @@ public sealed class MultiConnectionTests
         var combo = new ConnectionComboViewModel(rig.Fx.Events, router: () => rig.Router);
 
         combo.Selected = combo.Items[0];
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal(a.Profile.Id, tab.ConnectionProfileId);
         Assert.Same(a, rig.Fx.Service.ActiveSession);
@@ -596,12 +597,12 @@ public sealed class MultiConnectionTests
         var view = new ConnectionComboView { DataContext = vm };
         var window = new Avalonia.Controls.Window { Width = 400, Height = 100, Content = view };
         window.Show();
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal(2, view.Combo.ItemCount);
         Assert.Equal(1, view.Combo.SelectedIndex);
         Assert.True(vm.OpenList());
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.True(view.Combo.IsDropDownOpen);
         window.Close();
 
@@ -621,11 +622,11 @@ public sealed class MultiConnectionTests
         var b = new FakeSession(Profile("b"));
         bus.Publish(new SessionOpened(a.Id, a.Profile, a.Server, SessionPurpose.Work));
         bus.Publish(new SessionOpened(b.Id, b.Profile, b.Server, SessionPurpose.Work));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         bus.Publish(new TransactionStateChanged(a.Id, true));
         state.BeginRun(b.Id);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal(b.Id, state.SessionId); // 마지막에 연 것이 지금 접속
         Assert.False(state.TxnPending);
@@ -639,19 +640,11 @@ public sealed class MultiConnectionTests
     });
 
     /// <summary>UI 스레드면 밀린 UI 작업(접속 서비스 이벤트를 옮긴 것)을 처리한다.</summary>
-    private static void Pump()
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     private static async Task WaitAsync(Func<bool> condition)
     {
         for (var i = 0; i < 200 && !condition(); i++)
         {
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             await Task.Delay(10);
         }
 

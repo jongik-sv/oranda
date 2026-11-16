@@ -259,14 +259,6 @@ public sealed class AiChatProgressTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
         var scroll = view.FindControl<ScrollViewer>("ConversationScroll")!;
-        void Settle()
-        {
-            for (var i = 0; i < 4; i++)
-            {
-                window.UpdateLayout();
-                Dispatcher.UIThread.RunJobs();
-            }
-        }
 
         bool AtEnd() => scroll.Offset.Y + scroll.Viewport.Height >= scroll.Extent.Height - 1;
 
@@ -276,19 +268,19 @@ public sealed class AiChatProgressTests
             rig.Vm.AddAssistantText($"긴 답변 {i}");
         }
 
-        Settle();
+        HeadlessHost.Settle(window);
         Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
         Assert.True(AtEnd());
 
         scroll.Offset = new Avalonia.Vector(0, 0); // 사용자가 위로 올려 읽는다
-        Settle();
+        HeadlessHost.Settle(window);
         rig.Vm.AddAssistantText("더 온 글");
-        Settle();
+        HeadlessHost.Settle(window);
         Assert.Equal(0, scroll.Offset.Y);
 
         rig.Vm.EndTurn();
         rig.Vm.BeginTurn("이어서"); // 새로 보내면 맨 아래로 돌아간다
-        Settle();
+        HeadlessHost.Settle(window);
         Assert.True(AtEnd());
         window.Close();
     });

@@ -72,8 +72,8 @@ public sealed partial class SessionRouter
         _state = state;
         _dedicated = dedicated;
         _bus = bus;
-        connections.ActiveSessionChanged += (_, _) => Post(OnActiveSessionChanged);
-        connections.Connected += (_, session) => Post(() => OnConnected(session));
+        connections.ActiveSessionChanged += (_, _) => UiThread.PostIfAppRunning(OnActiveSessionChanged);
+        connections.Connected += (_, session) => UiThread.PostIfAppRunning(() => OnConnected(session));
         host.ActiveChanged += (_, _) => OnActiveTabChanged();
         host.TabOpened += (_, tab) => OnTabOpened(tab);
         host.WorkspaceClosed += (_, ws) => OnWorkspaceClosed(ws);
@@ -99,7 +99,7 @@ public sealed partial class SessionRouter
         {
             if (e.Section == "workspace")
             {
-                Post(OnSessionSettingChanged);
+                UiThread.PostIfAppRunning(OnSessionSettingChanged);
             }
         });
 
@@ -839,17 +839,5 @@ public sealed partial class SessionRouter
     {
         _state.RefreshShown(); // 세션은 그대로여도 함께 쓰는 작업 공간 수·활성 작업 공간이 바뀌었을 수 있다(상태 표시줄 글·sessionBusyElsewhere)
         Changed?.Invoke(this, EventArgs.Empty);
-    }
-
-    private static void Post(Action action)
-    {
-        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(action);
-        }
     }
 }

@@ -4,12 +4,13 @@ using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Security;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai;
 
 public sealed class SqliteAgentAuditStoreTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-audit-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-audit-");
     private readonly Guid _p1 = Guid.NewGuid();
     private readonly Guid _p2 = Guid.NewGuid();
 
@@ -18,14 +19,7 @@ public sealed class SqliteAgentAuditStoreTests : IDisposable
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     private string DbFile => Path.Combine(_dir, "oranda.db");

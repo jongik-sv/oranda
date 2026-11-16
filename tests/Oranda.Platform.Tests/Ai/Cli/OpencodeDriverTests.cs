@@ -8,6 +8,7 @@ using Oranda.Core.Connection;
 using Oranda.Platform.Ai;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -21,7 +22,7 @@ public sealed class OpencodeDriverTests : IDisposable
     private const string Home = "/home/x";
     private const string SessionId = "ses_e5b124059ffeAppIM3ZV7gwvYH";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-opencode-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-opencode-");
     private readonly FakeRunTokens _tokens = new();
     private readonly FakeGate _gate = new();
     private readonly FakeLauncher _launcher = new();
@@ -47,14 +48,7 @@ public sealed class OpencodeDriverTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     private static Action<string> ReadyFor(params string[] tools) =>

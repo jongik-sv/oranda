@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Oranda.Core.Metadata;
 using Oranda.Core.Settings;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
@@ -10,21 +11,14 @@ public sealed class MetadataCacheTests : IDisposable
 {
     private const string Key = "FREE/FREEPDB1/APP";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-test-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-test-");
 
     public MetadataCacheTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     private string RawConnectionString => $"Data Source={DbFile};Pooling=False";

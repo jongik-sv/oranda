@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Features.Ai.Tuning;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Ai.Contracts;
 
 namespace Oranda.App.Tests.Features.Ai;
@@ -47,14 +48,6 @@ public sealed class AiChatStyleTests
 
         > 적용 전 확인: PROC_SEQ 가 같은 행이 여럿이면 PROC_CD·시각이 원문과 같은지
         """;
-
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
 
     [Fact]
     public void Tool_cards_of_a_turn_are_grouped_under_one_summary_line_that_is_open_while_running_and_folds_at_the_end()
@@ -149,7 +142,7 @@ public sealed class AiChatStyleTests
 
         var window = new Window { Width = 400, Height = 1160, Content = new AiChatView { DataContext = vm } };
         window.Show();
-        Pump();
+        HeadlessHost.Pump(4);
         window.UpdateLayout();
         try
         {
@@ -180,7 +173,7 @@ public sealed class AiChatStyleTests
             foreach (var (variant, suffix) in new[] { (ThemeVariant.Light, "light"), (ThemeVariant.Dark, "dark") })
             {
                 Application.Current!.RequestedThemeVariant = variant;
-                Pump();
+                HeadlessHost.Pump(4);
                 window.UpdateLayout();
                 if (string.IsNullOrEmpty(dir))
                 {
@@ -232,9 +225,9 @@ public sealed class AiChatStyleTests
 
         var window = new Window { Width = 300, Height = 700, Content = new AiChatView { DataContext = vm } };
         window.Show();
-        Pump();
+        HeadlessHost.Pump(4);
         window.UpdateLayout();
-        Pump();
+        HeadlessHost.Pump(4);
         window.UpdateLayout();
         try
         {

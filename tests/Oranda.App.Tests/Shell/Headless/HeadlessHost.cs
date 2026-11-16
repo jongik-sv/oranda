@@ -61,6 +61,34 @@ public static class HeadlessHost
         Oranda.App.Features.Localization.LiteralTranslator.Install(new Oranda.App.Shell.ShellText(language: "ko"));
     }
 
+    /// <summary>UI 스레드의 대기 작업을 <paramref name="rounds"/> 번 비운다. UI 스레드에서만 부른다(아니면 소유 스레드 예외).</summary>
+    public static void Pump(int rounds = 1)
+    {
+        for (var i = 0; i < rounds; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary><see cref="Pump"/> 와 같되, 지금 스레드가 UI 스레드가 아니면 아무것도 하지 않는다(본문이 <see cref="Run(Func{Task})"/> 밖일 수 있는 시험용).</summary>
+    public static void PumpIfOnUiThread()
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>창 배치를 갱신하고 대기 작업을 비우기를 <paramref name="rounds"/> 번 되풀이한다(배치가 몇 단계에 걸쳐 끝나는 화면용).</summary>
+    public static void Settle(Avalonia.Controls.Window window, int rounds = 4)
+    {
+        for (var i = 0; i < rounds; i++)
+        {
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     /// <summary>
     /// 조건이 될 때까지 기다린다(시간 제한은 부하 큰 PC 용으로 넉넉히, 정상 경로는 바로 끝난다). UI 스레드에서 불렀을 때만 UI 작업을 직접 처리한다.
     /// 시험 본문이 <see cref="Run(Func{Task})"/> 밖(xunit 스레드)이면 RunJobs 가 소유 스레드 예외를 내므로 조건만 기다린다.

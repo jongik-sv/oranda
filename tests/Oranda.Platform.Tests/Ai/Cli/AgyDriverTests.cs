@@ -9,6 +9,7 @@ using Oranda.Core.Connection;
 using Oranda.Platform.Ai;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -17,7 +18,7 @@ public sealed class AgyDriverTests : IDisposable
 {
     private const string Conversation = "11111111-2222-3333-4444-555555555555";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-agy-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-agy-");
     private readonly string _home;
     private readonly FakeRunTokens _tokens = new();
     private readonly FakeGate _gate = new();
@@ -32,14 +33,7 @@ public sealed class AgyDriverTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

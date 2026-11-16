@@ -10,6 +10,7 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Tests.Features.Execution;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 using Oranda.Core.Sessions;
 
@@ -48,7 +49,7 @@ public sealed class MultiSessionUiTests
             var profile = await Fx.Service.SaveProfileAsync(new ConnectionProfile(name, "scott", "localhost:1521/FREEPDB1"), null, false, default);
             var outcome = await Fx.Service.ConnectAsync(profile, "pw-" + name, default);
             Assert.True(outcome.IsConnected, outcome.Message);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             return outcome.Session!;
         }
 
@@ -81,14 +82,6 @@ public sealed class MultiSessionUiTests
         public void Dispose() => Fx.Dispose();
     }
 
-    private static void Pump()
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     // ---------- 툴바 콤보 ----------
 
     [Fact]
@@ -103,7 +96,7 @@ public sealed class MultiSessionUiTests
         var combo = new ConnectionComboViewModel(rig.Fx.Events, router: () => rig.Router);
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         combo.Refresh();
 
         Assert.Equal(["1 - scott@a", "1 - scott@a (2)"], combo.Items.Select(i => i.Label));
@@ -127,11 +120,11 @@ public sealed class MultiSessionUiTests
         var (wsA, tabA, _, _) = rig.TwoWorkspaces();
         await rig.Router.PrepareAsync(tabA);
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var combo = new ConnectionComboViewModel(rig.Fx.Events, router: () => rig.Router);
 
         Assert.Equal(SessionSelect.Selected, await combo.ChooseAsync(combo.Entries[^1]));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         var opened = rig.Router.SessionFor(tabA)!;
         Assert.NotSame(a, opened);
@@ -170,7 +163,7 @@ public sealed class MultiSessionUiTests
         }
 
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var combo = new ConnectionComboViewModel(rig.Fx.Events, router: () => rig.Router);
         var row = combo.Entries[^1];
 
@@ -190,29 +183,29 @@ public sealed class MultiSessionUiTests
         await rig.ConnectAsync();
         var (_, tabA, _, tabB) = rig.TwoWorkspaces();
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal("연결됨", rig.State.ShownSessionText); // 작업 공간 하나·세션 하나면 WP-14 전과 같다
 
         await rig.Router.PrepareAsync(tabA);
         Assert.Equal("연결됨", rig.State.ShownSessionText);
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal("새 세션 · 첫 실행 때 연결", rig.State.ShownSessionText); // 아직 세션이 없다(「연결됨」 이 아니다)
 
         await rig.Router.PrepareAsync(tabB);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal("워크스페이스 세션 · 연결됨", rig.State.ShownSessionText);
 
         var wsC = rig.Host.NewWorkspace();
         rig.Host.Active = wsC.Tabs[0];
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         await rig.Router.SelectAsync(rig.Router.SessionFor(tabB)!); // C 가 B 의 세션을 함께 쓴다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal("공유 세션 · 다른 워크스페이스 1개와 함께 · 연결됨", rig.State.ShownSessionText);
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal("공유 세션 · 다른 워크스페이스 1개와 함께 · 연결됨", rig.State.ShownSessionText);
         Assert.Equal(2, rig.Router.WorkspacesOn(rig.Router.SessionFor(tabB)!).Count);
     });
@@ -229,12 +222,12 @@ public sealed class MultiSessionUiTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id); // A 가 실행을 시작했다
         Assert.False(rig.State.ShownBusyElsewhere); // 자기 실행이면 지금처럼 실행이 꺼진다
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.True(rig.State.ShownBusy);
         Assert.True(rig.State.ShownBusyElsewhere); // 실행 명령을 켜 두는 문맥 키(sessionBusyElsewhere)
 
@@ -248,7 +241,7 @@ public sealed class MultiSessionUiTests
         Assert.Null(wsA.BusyNotice);
 
         rig.State.EndRun(a.Id); // 앞 실행이 끝나면 막대는 저절로 닫힌다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Null(wsB.BusyNotice);
         Assert.False(rig.State.ShownBusyElsewhere);
     });
@@ -263,10 +256,10 @@ public sealed class MultiSessionUiTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var reruns = 0;
 
         Assert.True(rig.Router.OfferNewSession(tabB, () =>
@@ -284,7 +277,7 @@ public sealed class MultiSessionUiTests
             return Task.CompletedTask;
         }));
         await wsB.BusyNotice!.RunInNewSession();
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal(1, reruns);
         Assert.Null(wsB.BusyNotice);
@@ -305,7 +298,7 @@ public sealed class MultiSessionUiTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id); // B 자신의 실행
 
         Assert.False(rig.Router.OfferNewSession(tabB, () => Task.CompletedTask));
@@ -328,18 +321,18 @@ public sealed class MultiSessionUiTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabB; // 세션을 여는 사이 B 로 옮겨 갔다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id, wsA); // 실행 컨트롤러는 실행한 탭의 작업 공간을 넘긴다
 
         Assert.True(rig.State.ShownBusyElsewhere); // B 에서는 남의 실행
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.False(rig.State.ShownBusyElsewhere); // A 에서는 자기 실행: 실행 꺼짐·취소 켜짐
         Assert.False(rig.Router.OfferNewSession(tabA, () => Task.CompletedTask));
         rig.State.EndRun(a.Id);
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(); // PL/SQL 실행 창처럼 작업 공간 밖의 실행: 시작한 쪽을 모른다
         Assert.False(rig.State.ShownBusyElsewhere);
         rig.State.EndRun();
@@ -355,7 +348,7 @@ public sealed class MultiSessionUiTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal("연결됨", rig.State.ShownSessionText); // 세션이 하나면 범위 글을 붙이지 않는다
 
         rig.State.BeginRun(a.Id, wsA);
@@ -377,7 +370,7 @@ public sealed class MultiSessionUiTests
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabB;
         var tabB2 = rig.Host.NewDocument();
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id, wsA);
         var reruns = 0;
         Assert.True(rig.Router.OfferNewSession(tabB, () =>
@@ -388,7 +381,7 @@ public sealed class MultiSessionUiTests
         var notice = wsB.BusyNotice!;
 
         Assert.True(await rig.Host.CloseAsync(tabB, default)); // 막대가 떠 있는 사이 그 탭을 닫았다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         await notice.RunInNewSession();
 
         Assert.Equal(0, reruns); // 닫은 탭의 글을 실행하지 않는다
@@ -396,10 +389,10 @@ public sealed class MultiSessionUiTests
         Assert.Single(rig.Service.SessionsOf(a.Profile.Id)); // 다른 탭의 작업 공간을 옮기지도 않았다
 
         rig.Host.Active = tabB2;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.True(rig.Router.OfferNewSession(tabB2, () => Task.CompletedTask));
         Assert.NotNull(await rig.Router.NewSessionAsync()); // 콤보 「새 세션」 으로 옮겼다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Null(wsB.BusyNotice); // 더는 쓰지 않는 세션의 안내는 닫는다
         rig.State.EndRun(a.Id);
     });
@@ -412,12 +405,12 @@ public sealed class MultiSessionUiTests
         var (_, tabA, _, _) = rig.TwoWorkspaces();
         await rig.Router.PrepareAsync(tabA);
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var combo = new ConnectionComboViewModel(rig.Fx.Events, router: () => rig.Router);
         Assert.False(combo.IsDropDownOpen);
 
         combo.Selected = combo.Entries[^1]; // 닫힌 콤보에서 화살표·휠로 넘어갔다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Single(rig.Service.SessionsOf(a.Profile.Id));
         Assert.Same(a, combo.Selected?.Session);
@@ -436,30 +429,30 @@ public sealed class MultiSessionUiTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var bar = new SessionBusyBar { DataContext = wsB };
         var window = new Window { Width = 900, Height = 120, Content = new StackPanel { Children = { bar } } };
         window.Show();
         try
         {
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.False(bar.IsVisible);
 
             Assert.True(rig.Router.OfferNewSession(tabB, () => Task.CompletedTask));
             Assert.True(bar.IsVisible);
             Assert.Equal(wsB.BusyNotice!.Text, bar.Text);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Render(window, "busybar");
             bar.WaitButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.False(bar.IsVisible);
             Assert.Null(wsB.BusyNotice);
 
             window.Content = null; // 떼어 낸 막대는 작업 공간을 보지 않는다
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.True(rig.Router.OfferNewSession(tabB, () => Task.CompletedTask));
             Assert.False(bar.IsVisible);
         }
@@ -477,7 +470,7 @@ public sealed class MultiSessionUiTests
         var (_, tabA, wsB, tabB) = rig.TwoWorkspaces();
         await rig.Router.PrepareAsync(tabA);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var status = new SessionStatusViewModel(rig.Fx.Events);
         var statusView = new SessionStatusView { DataContext = status };
         var combo = new ConnectionComboViewModel(rig.Fx.Events, router: () => rig.Router);
@@ -486,27 +479,27 @@ public sealed class MultiSessionUiTests
         window.Show();
         try
         {
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.Equal("새 세션 · 첫 실행 때 연결", status.Text);
             Render(window, "status-pending");
 
             await rig.Router.PrepareAsync(tabB);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.Equal("워크스페이스 세션 · 연결됨", status.Text);
             Render(window, "status-own");
 
             var wsC = rig.Host.NewWorkspace();
             rig.Host.Active = wsC.Tabs[0];
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             await rig.Router.SelectAsync(rig.Router.SessionFor(tabB)!);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.Equal("공유 세션 · 다른 워크스페이스 1개와 함께 · 연결됨", status.Text);
             Render(window, "status-shared");
 
             rig.Host.Active = tabB;
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             combo.IsDropDownOpen = true; // 헤드리스는 펼친 목록을 창의 덧그림 층에 그린다
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.Equal(["1 - scott@a", "1 - scott@a (2)", "새 세션 — scott@a (3)"], combo.Entries.Select(i => i.Label));
             Assert.Same(combo.Entries, comboView.Combo.ItemsSource);
             Render(window, "combo");
@@ -528,7 +521,7 @@ public sealed class MultiSessionUiTests
         window.Show();
         try
         {
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             var box = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window).OfType<CheckBox>().Single(c => c.Name == "SessionPerWorkspaceBox");
             Assert.Equal("워크스페이스마다 새 세션", box.Content);
             Assert.True(box.IsChecked);

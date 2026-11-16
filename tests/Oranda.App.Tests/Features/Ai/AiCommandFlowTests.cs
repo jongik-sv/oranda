@@ -473,7 +473,9 @@ public class AiCommandFlowTests
             Launcher = new AiTuningLauncher(new Services(new()
             {
                 [typeof(IEventBus)] = bus,
-                [typeof(IEditorContext)] = new LauncherEditor(tabConnection),
+                [typeof(IEditorContext)] = new FakeEditorContext(
+                    () => new EditorSnapshot(Guid.NewGuid(), Cursor, new TextRange(0, 0), 0) { ConnectionProfileId = tabConnection },
+                    () => Statement(Cursor)),
                 [typeof(IAiDriver)] = Driver,
             }))
             {
@@ -488,15 +490,6 @@ public class AiCommandFlowTests
         public AiChatViewModel Chat { get; } = new();
 
         public AiTuningLauncher Launcher { get; }
-    }
-
-    private sealed class LauncherEditor(Guid? tabConnection) : IEditorContext
-    {
-        public EditorSnapshot? GetActiveDocument() => new(Guid.NewGuid(), Cursor, new TextRange(0, 0), 0) { ConnectionProfileId = tabConnection };
-
-        public SqlStatement? GetCurrentStatement() => Statement(Cursor);
-
-        public Task<bool> ProposeEditAsync(TextEdit edit, CancellationToken ct) => Task.FromResult(false);
     }
 
     [Fact]

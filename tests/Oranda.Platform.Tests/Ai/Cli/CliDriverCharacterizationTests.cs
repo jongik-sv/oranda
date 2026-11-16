@@ -6,6 +6,7 @@ using Oranda.Core.Settings;
 using Oranda.Platform.Ai.Bridge;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -21,7 +22,7 @@ public sealed class CliDriverCharacterizationTests : IDisposable
     private const string Result =
         """{"type":"result","subtype":"success","is_error":false,"session_id":"s1","result":"done"}""";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-clidriver-char-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-clidriver-char-");
     private readonly FakeRunTokens _tokens = new();
     private readonly FakeGate _gate = new();
     private readonly FakeLauncher _launcher = new();
@@ -30,14 +31,7 @@ public sealed class CliDriverCharacterizationTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

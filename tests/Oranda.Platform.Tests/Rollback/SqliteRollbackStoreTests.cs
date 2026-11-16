@@ -17,7 +17,7 @@ public sealed class SqliteRollbackStoreTests : IDisposable
     private const string Secret = "Hunter2xyz";
     private const string Db = "FREE/FREEPDB1/APP";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-rollback-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-rollback-");
     private readonly InMemoryCredentialStore _credentials = new();
     private readonly ManualTimeProvider _time = new(new DateTimeOffset(2026, 11, 13, 9, 0, 0, TimeSpan.Zero));
 
@@ -26,14 +26,7 @@ public sealed class SqliteRollbackStoreTests : IDisposable
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     private string DbFile => Path.Combine(_dir, "oranda.db");

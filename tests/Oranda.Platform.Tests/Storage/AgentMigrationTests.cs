@@ -1,25 +1,20 @@
 using Microsoft.Data.Sqlite;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
 // 소유: ai-contract. 마이그레이션 0004(history CHECK 에 'Agent' 추가 + agent_audit).
 public sealed class AgentMigrationTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-agentmig-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-agentmig-");
 
     public AgentMigrationTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-        }
+        _dir.Dispose();
     }
 
     [Fact]

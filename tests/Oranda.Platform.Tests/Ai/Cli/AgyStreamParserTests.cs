@@ -4,26 +4,20 @@ using Oranda.Core.Ai.Gate;
 using Oranda.Core.Connection;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
 /// <summary>탐침에서 녹화한 agy stream-json 표본(Fixtures/agy-*.jsonl)으로 읽기 규칙과 잠금 감시를 고정한다.</summary>
 public sealed class AgyStreamParserTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-agy-parser-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-agy-parser-");
 
     public AgyStreamParserTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

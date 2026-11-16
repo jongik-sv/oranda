@@ -9,12 +9,13 @@ using Oranda.Core.Storage;
 using Oranda.Platform.Ai.Bridge;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
 public sealed class CliDriverTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-clidriver-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-clidriver-");
     private readonly FakeRunTokens _tokens = new();
     private readonly FakeGate _gate = new();
     private readonly FakeLauncher _launcher = new();
@@ -23,14 +24,7 @@ public sealed class CliDriverTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

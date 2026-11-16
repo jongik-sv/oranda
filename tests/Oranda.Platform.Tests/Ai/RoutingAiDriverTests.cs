@@ -10,6 +10,7 @@ using Oranda.Core.Settings;
 using Oranda.Platform.Ai;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai;
 
@@ -39,7 +40,7 @@ public sealed class RoutingAiDriverTests
     private RoutingAiDriver Create(IApiAiDriver? api = null, ICredentialStore? credentials = null)
     {
         var cli = new CliDriver(new FakeRunTokens(), new FakeGate(), new FixedBridgeEndpoint("pipe"), new AppDataPaths(Path.GetTempPath()), _settings);
-        return new RoutingAiDriver(_settings, credentials ?? _credentials, cli, new Services(api));
+        return new RoutingAiDriver(_settings, credentials ?? _credentials, cli, new ServiceBag().Add<IApiAiDriver>(api));
     }
 
     private void Use(AiDriverKind driver, Guid? active = null, params AiLlmProfile[] profiles) =>
@@ -384,11 +385,6 @@ public sealed class RoutingAiDriverTests
         Assert.Contains(registered, r => r.ServiceType == typeof(CliDriver) && r.Type == typeof(CliDriver));
     }
 
-    private sealed class Services(IApiAiDriver? api) : IServiceProvider
-    {
-        public object? GetService(Type serviceType) => serviceType == typeof(IApiAiDriver) ? api : null;
-    }
-
     private sealed class ThrowingCredentialStore : ICredentialStore
     {
         public Task SaveAsync(string key, ReadOnlyMemory<byte> secret) => Task.CompletedTask;
@@ -412,7 +408,7 @@ public sealed class RoutingAiDriverSystemCliTests
     private RoutingAiDriver Create(IReadOnlyList<AiSystemCliInfo> clis, params ISystemCliAiDriver[] drivers)
     {
         var cli = new CliDriver(new FakeRunTokens(), new FakeGate(), new FixedBridgeEndpoint("pipe"), new AppDataPaths(Path.GetTempPath()), _settings);
-        return new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new CliServices(drivers)) { SystemClis = clis };
+        return new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new ServiceBag().Add<IEnumerable<ISystemCliAiDriver>>(drivers)) { SystemClis = clis };
     }
 
     private void Use(string? cliId, Guid? profileId = null) =>
@@ -457,7 +453,7 @@ public sealed class RoutingAiDriverSystemCliTests
     public async Task The_default_table_keeps_codex_and_antigravity_closed_on_a_hand_edited_setting()
     {
         var cli = new CliDriver(new FakeRunTokens(), new FakeGate(), new FixedBridgeEndpoint("pipe"), new AppDataPaths(Path.GetTempPath()), _settings);
-        var driver = new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new CliServices());
+        var driver = new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new ServiceBag().Add<IEnumerable<ISystemCliAiDriver>>([]));
 
         foreach (var id in new[] { AiProfilePresets.CodexCliId, AiProfilePresets.AntigravityCliId })
         {
@@ -627,10 +623,6 @@ public sealed class RoutingAiDriverSystemCliTests
         }
     }
 
-    private sealed class CliServices(params ISystemCliAiDriver[] drivers) : IServiceProvider
-    {
-        public object? GetService(Type serviceType) => serviceType == typeof(IEnumerable<ISystemCliAiDriver>) ? drivers : null;
-    }
 }
 
 /// <summary>활성 대상이 Codex CLI 일 때(주입한 표에서 사용 가능으로 켠 경우) 라우터가 실제 Codex 드라이버까지 보내고 Claude 전용 값을 비우는지 확인한다.</summary>
@@ -639,7 +631,7 @@ public sealed class RoutingToCodexDriverTests : IDisposable
     // Windows 는 이름.exe 를 찾으므로(SystemCliExecutable) 대역 실행 파일 이름도 맞춘다.
     private static readonly string FakeCodex = Path.Combine("/fake/bin", OperatingSystem.IsWindows() ? "codex.exe" : "codex");
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-route-codex-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-route-codex-");
     private readonly FakeSettingsStore _settings = new();
     private readonly Oranda.Platform.Tests.Ai.Cli.FakeLauncher _launcher = new();
 
@@ -647,14 +639,7 @@ public sealed class RoutingToCodexDriverTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

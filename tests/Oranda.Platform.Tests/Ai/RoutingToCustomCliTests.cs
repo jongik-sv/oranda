@@ -7,6 +7,7 @@ using Oranda.Core.Settings;
 using Oranda.Platform.Ai;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai;
 
@@ -33,7 +34,7 @@ public sealed class RoutingToCustomCliTests
     private RoutingAiDriver Create(ICustomCliAiDriver? custom)
     {
         var cli = new CliDriver(new FakeRunTokens(), new FakeGate(), new FixedBridgeEndpoint("pipe"), new AppDataPaths(Path.GetTempPath()), _settings);
-        return new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new Services(custom));
+        return new RoutingAiDriver(_settings, new FakeCredentialStore(), cli, new ServiceBag().Add<ICustomCliAiDriver>(custom));
     }
 
     // 화면에서 명령을 확인한 요청(라우터는 확인한 명령이 있어야 보낸다).
@@ -228,10 +229,5 @@ public sealed class RoutingToCustomCliTests
             await Task.CompletedTask;
             yield return new AiFinal("답", null, null);
         }
-    }
-
-    private sealed class Services(ICustomCliAiDriver? custom) : IServiceProvider
-    {
-        public object? GetService(Type serviceType) => serviceType == typeof(ICustomCliAiDriver) ? custom : null;
     }
 }

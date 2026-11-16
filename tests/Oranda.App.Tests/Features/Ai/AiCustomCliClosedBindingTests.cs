@@ -64,13 +64,13 @@ public sealed class AiCustomCliClosedBindingTests
             var profile = await Fx.Service.SaveProfileAsync(new ConnectionProfile(name, "scott", "localhost:1521/FREEPDB1", Environment: environment), null, false, default);
             var outcome = await Fx.Service.ConnectAsync(profile, "pw", default);
             Assert.True(outcome.IsConnected, outcome.Message);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Host.EnsureWorkspace();
             var tab = Host.NewDocument();
             tab.Document.Text = "select 1 from dual";
             Host.Active = tab;
             Assert.Equal(SessionSelect.Selected, await Router.SelectAsync(outcome.Session!));
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             return outcome.Session!;
         }
 
@@ -83,7 +83,7 @@ public sealed class AiCustomCliClosedBindingTests
             Registry.SqlDocumentActive = () => false;
             Router.ActiveDocument = () => new FakeDocument(session);
             Registry.Refocus();
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
         }
 
         /// <summary>대화 창에서 글을 보내고 대화 줄에 결과(안내나 답)가 생길 때까지 기다린다.</summary>
@@ -135,14 +135,6 @@ public sealed class AiCustomCliClosedBindingTests
         }
     }
 
-    private static void Pump()
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     [Fact]
     public Task A_closed_production_tab_blocks_a_custom_cli_general_chat() => Ui.Run(async () =>
     {
@@ -150,7 +142,7 @@ public sealed class AiCustomCliClosedBindingTests
         await rig.UseCustomCliAsync();
         var session = await rig.TabOnAsync("prod", ConnectionEnvironment.Production);
         await rig.Fx.Service.DisconnectAsync(session, CancellationToken.None); // 탭은 운영 접속에 묶인 채 접속만 닫혔다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal(session.Profile.Id, rig.Router.ShownMissing);
 
         await rig.SendAsync("이 테이블에서 뭘 지워도 돼?");
@@ -167,7 +159,7 @@ public sealed class AiCustomCliClosedBindingTests
         var session = await rig.TabOnAsync("gone", ConnectionEnvironment.Development);
         await rig.Fx.Service.DisconnectAsync(session, CancellationToken.None);
         await rig.Fx.Service.DeleteProfileAsync(session.Profile.Id, CancellationToken.None); // 환경을 알 수 없다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         await rig.SendAsync("질문");
 
@@ -182,7 +174,7 @@ public sealed class AiCustomCliClosedBindingTests
         await rig.UseCustomCliAsync();
         var session = await rig.TabOnAsync("dev", ConnectionEnvironment.Development);
         await rig.Fx.Service.DisconnectAsync(session, CancellationToken.None);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         await rig.SendAsync("질문");
 
@@ -196,7 +188,7 @@ public sealed class AiCustomCliClosedBindingTests
         using var rig = new Rig(); // 기본 설정 = Claude Code
         var session = await rig.TabOnAsync("prod", ConnectionEnvironment.Production);
         await rig.Fx.Service.DisconnectAsync(session, CancellationToken.None);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         await rig.SendAsync("질문");
 

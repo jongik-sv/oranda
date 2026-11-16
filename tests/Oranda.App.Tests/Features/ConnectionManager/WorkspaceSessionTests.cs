@@ -5,6 +5,7 @@ using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.Execution;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Sessions;
@@ -43,7 +44,7 @@ public sealed class WorkspaceSessionTests
             var profile = await Fx.Service.SaveProfileAsync(new ConnectionProfile(name, "scott", "localhost:1521/FREEPDB1"), null, false, default);
             var outcome = await Fx.Service.ConnectAsync(profile, "pw-" + name, default);
             Assert.True(outcome.IsConnected, outcome.Message);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             return outcome.Session!;
         }
 
@@ -59,14 +60,6 @@ public sealed class WorkspaceSessionTests
         public void Dispose() => Fx.Dispose();
     }
 
-    private static void Pump()
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     // ---------- 접속 서비스: 같은 DB 에 세션 더 열기 ----------
 
     [Fact]
@@ -76,7 +69,7 @@ public sealed class WorkspaceSessionTests
         var a = await rig.ConnectAsync();
 
         var outcome = await rig.Service.OpenSessionAsync(a.Profile.Id, default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.True(outcome.IsConnected, outcome.Message);
         var extra = outcome.Session!;
@@ -122,7 +115,7 @@ public sealed class WorkspaceSessionTests
         var extra = (await rig.Service.OpenSessionAsync(a.Profile.Id, default)).Session!;
 
         await rig.Service.DisconnectAsync(a, default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal([extra, b], rig.Service.Sessions); // 같은 자리(1번)에 더 연 세션이 올라왔다
         Assert.Same(extra, rig.Service.SessionOf(a.Profile.Id));
@@ -130,7 +123,7 @@ public sealed class WorkspaceSessionTests
         Assert.Equal(SessionState.Closed, a.State);
 
         await rig.Service.DisconnectAsync(extra, default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal([b], rig.Service.Sessions);
         var again = await rig.Service.OpenSessionAsync(a.Profile.Id, default);
         Assert.False(again.IsConnected); // 접속이 없으면 더 열 수 없다(비밀번호도 메모리에서 지웠다)
@@ -144,7 +137,7 @@ public sealed class WorkspaceSessionTests
         var extra = (await rig.Service.OpenSessionAsync(a.Profile.Id, default)).Session!;
 
         await rig.Service.DisconnectAsync(extra, default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal([a], rig.Service.SessionsOf(a.Profile.Id));
         Assert.Same(a, rig.Service.ActiveSession);
@@ -196,17 +189,17 @@ public sealed class WorkspaceSessionTests
         rig.State.BeginRun(a.Id); // A 가 오래 도는 중
 
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.True(rig.State.ShownBusy);
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.True(rig.State.FocusedPending);
         Assert.False(rig.State.ShownBusy); // sessionBusy 는 세션 기준: B 는 아직 자기 세션이 없고 A 의 실행에 막히지 않는다
         Assert.False(rig.State.ShownTxnPending);
 
         Assert.True(await rig.Router.PrepareAsync(tabB));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var sessionB = rig.Router.SessionFor(tabB)!;
         Assert.False(rig.State.IsBusy(sessionB.Id));
         Assert.Equal(sessionB.Id, rig.State.FocusedSessionId);
@@ -226,7 +219,7 @@ public sealed class WorkspaceSessionTests
         rig.State.BeginRun(a.Id);
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Same(a, rig.Router.SessionFor(tabB));
         Assert.Single(rig.Service.SessionsOf(a.Profile.Id));
@@ -267,7 +260,7 @@ public sealed class WorkspaceSessionTests
 
         // A 가 B 의 세션을 고른다: 다 대 일(트랜잭션도 함께). A 의 이전 세션(접속)은 닫지 않는다.
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(sessionB));
         Assert.Same(sessionB, rig.Router.SessionFor(tabA));
         Assert.Equal([wsA, wsB], rig.Router.WorkspacesOn(sessionB));
@@ -301,11 +294,11 @@ public sealed class WorkspaceSessionTests
         var sessionB = rig.Router.SessionFor(tabB)!;
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(a)); // B 가 접속의 세션으로 옮긴다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         await Task.Delay(50);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         // 아무도 안 쓰게 된 추가 세션도 사용자가 닫을 때까지 남는다(콤보로 다시 오갈 수 있게).
         Assert.True(rig.Service.IsOpen(sessionB));
@@ -313,7 +306,7 @@ public sealed class WorkspaceSessionTests
         Assert.Empty(rig.Router.WorkspacesOn(sessionB));
 
         Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(sessionB));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Same(sessionB, rig.Router.SessionFor(tabB));
     });
 
@@ -325,19 +318,19 @@ public sealed class WorkspaceSessionTests
         var (_, tabA, _, tabB) = rig.TwoWorkspaces();
         await rig.Router.PrepareAsync(tabA);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         await rig.Router.PrepareAsync(tabB);
         var s2 = rig.Router.SessionFor(tabB)!;
         var s3 = await rig.Router.NewSessionAsync();
         var s4 = await rig.Router.NewSessionAsync();
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal(4, rig.Service.SessionsOf(a.Profile.Id).Count);
         Assert.Same(s4, rig.Router.SessionFor(tabB));
 
         foreach (var pick in new[] { s2, a, s3!, s4!, a })
         {
             Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(pick));
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.Same(pick, rig.Router.SessionFor(tabB));
             Assert.Null(rig.Router.MissingProfileOf(tabB));
             Assert.Same(pick, rig.Router.ShownSession);
@@ -357,7 +350,7 @@ public sealed class WorkspaceSessionTests
         var sessionB = rig.Router.SessionFor(tabB)!;
 
         await rig.Service.DisconnectAsync(sessionB, default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal(a.Profile.Id, rig.Router.MissingProfileOf(tabB)); // 다른 세션으로 몰래 실행하지 않는다
         Assert.Null(rig.Router.SessionFor(tabB));
@@ -367,7 +360,7 @@ public sealed class WorkspaceSessionTests
         Assert.Equal(2, rig.Fx.Sessions.Calls.Count);
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.True(rig.State.FocusedNothing);
         var connected = 0;
         var back = await rig.Router.ReconnectAsync(a.Profile.Id, () => { connected++; return Task.FromResult<ISession?>(null); });
@@ -390,7 +383,7 @@ public sealed class WorkspaceSessionTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         await rig.Service.DisconnectAsync(rig.Router.SessionFor(tabB)!, default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.NotNull(rig.Router.MissingProfileOf(tabB));
 
         rig.Router.UseConnection(tabB, a);
@@ -444,9 +437,9 @@ public sealed class WorkspaceSessionTests
         Assert.Same(a, rig.Router.SessionFor(tab));
 
         rig.Fx.Events.Publish(new SessionBroken(a.Id, false, null));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var again = await rig.Service.ConnectAsync(a.Profile, "pw-a", default); // 끊긴 접속을 다시 열면 같은 자리에 새 세션
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.True(again.IsConnected, again.Message);
         Assert.NotSame(a, again.Session);
@@ -564,11 +557,11 @@ public sealed class WorkspaceSessionTests
         var (wsA, tabA, _, tabB) = rig.TwoWorkspaces();
         await rig.Router.PrepareAsync(tabA);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.True(rig.State.FocusedPending);
 
         Assert.True(await rig.Host.TryCloseWorkspaceAsync(wsA, default));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Same(tabB, rig.Host.Active);
         Assert.False(rig.State.FocusedPending); // 접속의 세션을 이제 아무도 안 쓴다: 첫 실행 때 그것을 차지한다
@@ -625,7 +618,7 @@ public sealed class WorkspaceSessionTests
         var sessionB = rig.Router.SessionFor(tabB)!;
         var wsC = rig.Host.NewWorkspace();
         rig.Host.Active = wsC.Tabs[0];
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         await rig.Router.SelectAsync(sessionB); // C 가 B 의 세션을 함께 쓴다
         rig.State.ApplyTransaction(sessionB.Id, true);
         var asked = 0;
@@ -636,7 +629,7 @@ public sealed class WorkspaceSessionTests
         };
 
         Assert.True(await rig.Host.TryCloseWorkspaceAsync(wsB, default));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal(0, asked); // 함께 쓰는 세션은 닫지 않으므로 묻지 않는다
         Assert.True(rig.Service.IsOpen(sessionB));
@@ -661,7 +654,7 @@ public sealed class WorkspaceSessionTests
         var calls = rig.Fx.Sessions.Calls.Count;
         var restored = rig.Host.Restore(saved with { Id = "restored", Session = "own" });
         rig.Host.Active = restored.Tabs.FirstOrDefault() ?? rig.Host.NewDocument();
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal(WorkspaceSessionMode.Own, restored.SessionMode);
         Assert.Equal(calls, rig.Fx.Sessions.Calls.Count); // 복원·활성만으로는 세션을 열지 않는다
@@ -705,7 +698,7 @@ public sealed class WorkspaceSessionTests
         while (!condition())
         {
             Assert.True(DateTime.UtcNow < until, "조건이 5초 안에 맞지 않았다.");
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             await Task.Delay(10);
         }
     }

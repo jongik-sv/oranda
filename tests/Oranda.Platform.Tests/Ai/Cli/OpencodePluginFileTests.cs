@@ -3,24 +3,18 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oranda.Core.Ai.Protocol;
 using Oranda.Platform.Ai.Cli;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
 /// <summary>생성하는 플러그인: 토큰이 없고, 도구 목록·파이프·표식 경로가 JSON 상수로 들어가며, 파일 권한이 실행 사용자 전용이다.</summary>
 public sealed class OpencodePluginFileTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-oc-plugin-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-oc-plugin-");
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     private static List<AgentToolInfo> Tools() =>

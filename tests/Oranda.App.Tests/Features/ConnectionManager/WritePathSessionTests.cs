@@ -1,3 +1,4 @@
+using Oranda.App.Tests.Shell.Headless;
 using System.Runtime.CompilerServices;
 using Avalonia.Threading;
 using Oranda.App.Features.ConnectionManager;
@@ -54,7 +55,7 @@ public sealed class WritePathSessionTests
             var profile = await Fx.Service.SaveProfileAsync(new ConnectionProfile(name, "scott", "localhost:1521/FREEPDB1"), null, false, default);
             var outcome = await Fx.Service.ConnectAsync(profile, "pw-" + name, default);
             Assert.True(outcome.IsConnected, outcome.Message);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             return outcome.Session!;
         }
 
@@ -70,7 +71,7 @@ public sealed class WritePathSessionTests
             var b = Router.SessionFor(tabB)!;
             Assert.NotSame(a, b);
             Host.Active = tabB;
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             return (a, tabA, b, tabB, wsB);
         }
 
@@ -85,14 +86,6 @@ public sealed class WritePathSessionTests
             GridEditCommands.State = null;
             HistoryScriptsCommands.Notify = null;
             Fx.Dispose();
-        }
-    }
-
-    private static void Pump()
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.RunJobs();
         }
     }
 

@@ -22,19 +22,12 @@ public sealed class RollbackStorePerfTests(ITestOutputHelper output) : IDisposab
     private const int Steps = 100_000;
     private const string Db = "FREE/FREEPDB1/SAMPLE";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-rollback-perf-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-rollback-perf-");
 
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

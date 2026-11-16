@@ -22,15 +22,6 @@ public class AiTuningFlowImageTests
 
     private static readonly AiContext Context = new("DEV-ERP", ConnectionEnvironment.Production, AiAccessLevel.Query);
 
-    private sealed class FakeEditor : IEditorContext
-    {
-        public EditorSnapshot? GetActiveDocument() => null;
-
-        public SqlStatement? GetCurrentStatement() => new(Statement, new TextRange(0, Statement.Length), StatementKind.Query);
-
-        public Task<bool> ProposeEditAsync(TextEdit edit, CancellationToken ct) => Task.FromResult(false);
-    }
-
     private sealed class RecordingDriver : IAiDriver
     {
         public List<AiRequest> Requests { get; } = [];
@@ -96,7 +87,7 @@ public class AiTuningFlowImageTests
         {
             var h = new Harness { Mask = mask };
             h.Flow = new AiTuningFlow(
-                new FakeEditor(), h.Driver, h.Chat, (_, _, _) => { },
+                FakeEditorContext.WithStatement(Statement), h.Driver, h.Chat, (_, _, _) => { },
                 masker: vault ? new PassThroughMasker() : null,
                 maskRequired: _ => h.Mask,
                 refreshContext: (context, token) => h.Refresh is { } refresh ? refresh(context, token) : Task.FromResult<AiContext?>(context),
@@ -251,7 +242,7 @@ public class AiTuningFlowImageTests
     public async Task Claude_code_conversations_expect_no_profile()
     {
         var driver = new RecordingDriver();
-        var flow = new AiTuningFlow(new FakeEditor(), driver, new AiChatViewModel(), (_, _, _) => { }, settings: () => new AiSettings());
+        var flow = new AiTuningFlow(FakeEditorContext.WithStatement(Statement), driver, new AiChatViewModel(), (_, _, _) => { }, settings: () => new AiSettings());
 
         await flow.StartAsync(new TuningStartChoice(false, false, "default"), Context);
 

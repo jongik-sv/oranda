@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Oranda.Platform.Ai.Cli;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -8,20 +9,13 @@ public sealed class OpencodeSessionCheckTests : IDisposable
 {
     private const string Id = "ses_e5b124059ffeAppIM3ZV7gwvYH";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-oc-check-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-oc-check-");
 
     public OpencodeSessionCheckTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     private static Task<Oranda.Core.Ai.Contracts.AiError?> Verify(string? exported)

@@ -1,22 +1,16 @@
 using Oranda.Platform.Ai.Cli;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
 /// <summary>agy 에이전트 파일: 필수 잠금 필드, YAML 값 이스케이프, 파일 권한.</summary>
 public sealed class AgyAgentFileTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-agy-file-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-agy-file-");
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

@@ -7,6 +7,7 @@ using Oranda.Core.Settings;
 using Oranda.Platform.Ai;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -15,7 +16,7 @@ public sealed class ClaudeProfileRunTests : IDisposable
 {
     private const string Key = "sk-test-secret-key-1234567890";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-cliprofile-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-cliprofile-");
     private readonly FakeRunTokens _tokens = new();
     private readonly FakeGate _gate = new();
     private readonly FakeLauncher _launcher = new();
@@ -24,14 +25,7 @@ public sealed class ClaudeProfileRunTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using Oranda.App.Shell;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
@@ -33,9 +34,9 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
     {
         _container = container;
         _router = router ?? (() => SessionRouter.Find(container));
-        events?.Subscribe<SessionOpened>(this, e => Post(() => Opened(e)));
-        events?.Subscribe<SessionClosed>(this, e => Post(() => Closed(e.SessionId)));
-        UiText.WatchLanguage((_, _) => Post(Changed)); // 언어가 바뀌면 글자를 다시 만든다
+        events?.Subscribe<SessionOpened>(this, e => UiThread.Post(() => Opened(e)));
+        events?.Subscribe<SessionClosed>(this, e => UiThread.Post(() => Closed(e.SessionId)));
+        UiText.WatchLanguage((_, _) => UiThread.Post(Changed)); // 언어가 바뀌면 글자를 다시 만든다
     }
 
     public bool IsVisible => true;
@@ -232,18 +233,6 @@ public sealed class ConnectionStatusViewModel : ViewModelBase, IStatusBarItem
         OnPropertyChanged(nameof(EnvironmentColor));
         OnPropertyChanged(nameof(ToolTip));
         OnPropertyChanged(nameof(CanReconnect));
-    }
-
-    private static void Post(Action a)
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            a();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(a);
-        }
     }
 }
 

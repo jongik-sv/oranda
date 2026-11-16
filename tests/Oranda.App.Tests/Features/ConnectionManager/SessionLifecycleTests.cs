@@ -5,6 +5,7 @@ using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Features.Execution;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Sessions;
@@ -42,7 +43,7 @@ public sealed class SessionLifecycleTests
             var profile = await Fx.Service.SaveProfileAsync(new ConnectionProfile(name, "scott", "localhost:1521/FREEPDB1"), null, false, default);
             var outcome = await Fx.Service.ConnectAsync(profile, "pw-" + name, default);
             Assert.True(outcome.IsConnected, outcome.Message);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             return outcome.Session!;
         }
 
@@ -57,21 +58,13 @@ public sealed class SessionLifecycleTests
         public void Dispose() => Fx.Dispose();
     }
 
-    private static void Pump()
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     private static async Task WaitAsync(Func<bool> condition)
     {
         var until = DateTime.UtcNow.AddSeconds(5);
         while (!condition())
         {
             Assert.True(DateTime.UtcNow < until, "조건이 5초 안에 맞지 않았다.");
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             await Task.Delay(10);
         }
     }
@@ -86,17 +79,17 @@ public sealed class SessionLifecycleTests
         var (_, tabA, _, tabB) = rig.TwoWorkspaces();
         await rig.Router.PrepareAsync(tabA); // A → a
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         await rig.Router.PrepareAsync(tabB); // B → s2
         var s2 = rig.Router.SessionFor(tabB)!;
         rig.State.ApplyTransaction(s2.Id, true); // B 의 미커밋
         rig.Router.ConfirmSwitch = (_, _) => Task.FromResult(true); // 「그대로 두고 바꾸기」
         var s3 = await rig.Router.NewSessionAsync(); // B → s3, s2 는 미커밋을 쥔 채 아무도 안 쓴다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Same(s3, rig.Router.SessionFor(tabB));
 
         await rig.Service.DisconnectAsync(a, default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Same(s2, rig.Service.SessionOf(a.Profile.Id)); // 접속 서비스는 그대로 올린다(콤보 번호 자리)
         Assert.Equal(a.Profile.Id, rig.Router.MissingProfileOf(tabA)); // A 는 「접속 안 됨」: B 가 남긴 미커밋 세션으로 몰래 옮기지 않는다
@@ -117,10 +110,10 @@ public sealed class SessionLifecycleTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         var extra = (await rig.Service.OpenSessionAsync(a.Profile.Id, default)).Session!;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         await rig.Service.DisconnectAsync(a, default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Same(extra, rig.Service.SessionOf(a.Profile.Id));
         Assert.Null(rig.Router.SessionFor(tabA)); // 먼저 물은 쪽만 따라가지 않는다: 둘 다 같은 결과
@@ -140,9 +133,9 @@ public sealed class SessionLifecycleTests
         await rig.Router.PrepareAsync(tabB);
 
         rig.Fx.Events.Publish(new SessionBroken(a.Id, false, null));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var again = await rig.Service.ConnectAsync(a.Profile, "pw-a", default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.True(again.IsConnected, again.Message);
         Assert.Same(again.Session, rig.Router.SessionFor(tabA));
@@ -160,13 +153,13 @@ public sealed class SessionLifecycleTests
         await rig.Router.PrepareAsync(tabB);
         var s2 = rig.Router.SessionFor(tabB)!;
         await rig.Service.DisconnectAsync(a, default); // s2 가 접속 자리로 올라온다(B 는 원래 s2 를 썼다)
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Same(s2, rig.Router.SessionFor(tabB));
 
         rig.Fx.Events.Publish(new SessionBroken(s2.Id, false, null));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var again = await rig.Service.ConnectAsync(a.Profile, "pw-a", default);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.NotSame(s2, again.Session);
         Assert.Same(again.Session, rig.Router.SessionFor(tabB)); // 같은 자리에 다시 연 접속은 따른다
@@ -192,7 +185,7 @@ public sealed class SessionLifecycleTests
         Assert.Same(a, rig.Router.SessionFor(tabA));
 
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var back = await rig.Router.ReconnectAsync(a.Profile.Id, () => Task.FromResult<ISession?>(null));
         Assert.Same(a, back);
         Assert.True(await rig.Router.PrepareAsync(tabB));
@@ -269,10 +262,10 @@ public sealed class SessionLifecycleTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var reruns = 0;
         Assert.True(rig.Router.OfferNewSession(tabB, () =>
         {
@@ -290,7 +283,7 @@ public sealed class SessionLifecycleTests
         gate.SetResult();
         await first;
         await second;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal(1, reruns); // 같은 SQL 을 두 번 보내지 않는다
         Assert.Equal(calls + 1, rig.Fx.Sessions.Calls.Count);
@@ -309,16 +302,16 @@ public sealed class SessionLifecycleTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         rig.Host.Active = tabA;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var bar = new SessionBusyBar { DataContext = wsB };
         var window = new Window { Width = 900, Height = 120, Content = new StackPanel { Children = { bar } } };
         window.Show();
         try
         {
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.True(rig.Router.OfferNewSession(tabB, () => Task.CompletedTask));
             Assert.True(bar.RunInNewButton.IsEnabled);
 
@@ -332,7 +325,7 @@ public sealed class SessionLifecycleTests
             rig.Fx.Sessions.OpenGate = gate;
 
             bar.RunInNewButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.False(bar.RunInNewButton.IsEnabled); // 누르는 즉시 꺼진다
 
             rig.Fx.Sessions.OpenGate = null;
@@ -355,7 +348,7 @@ public sealed class SessionLifecycleTests
         var (_, tabA, wsB, tabB) = rig.TwoWorkspaces();
         await rig.Router.PrepareAsync(tabA);
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         rig.Fx.Sessions.OpenGate = gate;
         var calls = rig.Fx.Sessions.Calls.Count;
@@ -368,7 +361,7 @@ public sealed class SessionLifecycleTests
         var s1 = await first;
         var s2 = await second;
         Assert.True(await run);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.NotNull(s1);
         Assert.Same(s1, s2);
@@ -385,20 +378,20 @@ public sealed class SessionLifecycleTests
         var (_, tabA, _, tabB) = rig.TwoWorkspaces();
         await rig.Router.PrepareAsync(tabA);
         var other = (await rig.Service.OpenSessionAsync(a.Profile.Id, default)).Session!;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         rig.Fx.Sessions.OpenGate = gate;
         var prepare = rig.Router.PrepareAsync(tabB); // 자기 세션을 여는 중
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal(SessionSelect.Selected, await rig.Router.SelectAsync(other)); // 그 사이 콤보로 고른다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.Fx.Sessions.OpenGate = null;
         gate.SetResult();
         Assert.True(await prepare);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Same(other, rig.Router.SessionFor(tabB)); // 사용자가 고른 묶음을 덮지 않는다
         await WaitAsync(() => rig.Service.SessionsOf(a.Profile.Id).Count == 2); // 막 연 세션은 버려 두지 않고 닫는다
@@ -417,9 +410,9 @@ public sealed class SessionLifecycleTests
         await rig.Router.PrepareAsync(tabA);
         await rig.Router.PrepareAsync(tabB);
         var other = (await rig.Service.OpenSessionAsync(a.Profile.Id, default)).Session!;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         rig.State.BeginRun(a.Id, wsB); // B 가 시작한 실행(A 도 같은 세션을 쓴다)
 
         Assert.Equal(SessionSelect.Busy, await rig.Router.SelectAsync(other));
@@ -466,7 +459,7 @@ public sealed class SessionLifecycleTests
 
         answer = true;
         Assert.True(await rig.Router.DisconnectAsync(a));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Empty(rig.Service.SessionsOf(a.Profile.Id)); // 추가 세션이 접속 자리로 올라오지 않는다
         Assert.False(rig.Service.IsOpen(s2));
         Assert.False(rig.Service.IsOpen(s3));
@@ -485,7 +478,7 @@ public sealed class SessionLifecycleTests
         var s2 = rig.Router.SessionFor(tabB)!;
 
         Assert.True(await rig.Router.DisconnectAsync(s2));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
 
         Assert.Equal([a], rig.Service.SessionsOf(a.Profile.Id));
         Assert.Same(a, rig.Router.SessionFor(tabA));
@@ -505,7 +498,7 @@ public sealed class SessionLifecycleTests
         Assert.Same(wsB, rig.Host.WorkspaceOf(tabB2));
         tabB2.ConnectionProfileId = null; // 접속 없이 만든 탭(복원·접속 전 탭)
         rig.Host.Active = tabB;
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         await rig.Router.PrepareAsync(tabB);
         var s2 = rig.Router.SessionFor(tabB)!;
         Assert.NotSame(a, s2);
@@ -515,7 +508,7 @@ public sealed class SessionLifecycleTests
 
         tabB2.ConnectionProfileId = null;
         rig.Host.Active = tabB2; // 활성이 될 때도 채운다
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal(a.Profile.Id, tabB2.ConnectionProfileId);
         Assert.Same(s2, rig.Router.SessionFor(tabB2));
 

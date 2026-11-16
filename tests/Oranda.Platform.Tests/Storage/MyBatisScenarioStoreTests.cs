@@ -1,13 +1,14 @@
 using Microsoft.Data.Sqlite;
 using Oranda.Core.MyBatis;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
 // 소유: TSK-02-03. 시나리오 저장소(재시작·순서·id 따라감·옮김·비밀 값·한글·읽기 전용).
 public sealed class MyBatisScenarioStoreTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-mbscn-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-mbscn-");
     private readonly string _mapper;
 
     public MyBatisScenarioStoreTests()
@@ -19,14 +20,7 @@ public sealed class MyBatisScenarioStoreTests : IDisposable
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     private string DbFile => Path.Combine(_dir, "oranda.db");

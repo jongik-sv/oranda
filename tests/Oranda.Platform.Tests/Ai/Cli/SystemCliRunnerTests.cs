@@ -4,13 +4,14 @@ using Oranda.Core.Ai.Gate;
 using Oranda.Core.Connection;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
 /// <summary>CLI 종류와 무관한 실행 골격(<see cref="SystemCliRunner"/>·<see cref="SystemCliRun"/>)을 고정한다.</summary>
 public sealed class SystemCliRunnerTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-syscli-runner-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-syscli-runner-");
     private readonly FakeRunTokens _tokens = new();
     private readonly FakeGate _gate = new();
     private readonly FakeLauncher _launcher = new();
@@ -19,14 +20,7 @@ public sealed class SystemCliRunnerTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Fact]

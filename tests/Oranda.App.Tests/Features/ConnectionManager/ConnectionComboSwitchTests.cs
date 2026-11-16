@@ -7,6 +7,7 @@ using Oranda.App.Shell;
 using Oranda.App.Shell.Features;
 using Oranda.App.Tests.Features.Execution;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
@@ -27,16 +28,8 @@ public sealed class ConnectionComboSwitchTests
         var outcome = await fx.Service.ConnectAsync(profile, null, CancellationToken.None);
         Assert.True(outcome.IsConnected, outcome.Message);
         fx.Events.Publish(new SessionOpened(outcome.Session!.Id, outcome.Session.Profile, outcome.Session.Server, SessionPurpose.Work));
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         return outcome.Session;
-    }
-
-    private static void Pump()
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
     }
 
     private sealed class RouterRig : IDisposable
@@ -291,20 +284,20 @@ public sealed class ConnectionComboSwitchTests
             Assert.True(keys.Evaluate(monitorOn)); // Oracle 탭
 
             rig.Registry.Attach(tiberoTab, new FakeSession(new ConnectionProfile("tb", "SYS", "h:8629/s", Dbms: Dbms.Tibero)));
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.Same(current, rig.Fx.Service.ActiveSession); // 전용 세션 탭은 지금 접속을 바꾸지 않는다
             Assert.False(keys.Evaluate(monitorOn)); // 그래도 보이는 탭이 Tibero 라서 영역 키가 Tibero 기준
             Assert.False(keys.Evaluate(planOn));
             Assert.False(keys.Evaluate(noDisconnectOff)); // DISCONNECT 문장이 카탈로그에 없는 DBMS 는 연결 끊기 메뉴가 꺼진다(P6)
 
             rig.Host.Active = oracleTab; // 활성 탭이 바뀌면 키도 따라간다(지금 접속은 처음부터 Oracle)
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.True(keys.Evaluate(monitorOn));
             Assert.True(keys.Evaluate(planOn));
             Assert.True(keys.Evaluate(noDisconnectOff)); // Oracle 은 그대로 켜짐
 
             rig.Host.Active = tiberoTab;
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Assert.False(keys.Evaluate(monitorOn));
         }
         finally
@@ -460,7 +453,7 @@ public sealed class ConnectionComboSwitchTests
             foreach (var (variant, tone) in new[] { (Avalonia.Styling.ThemeVariant.Light, "light"), (Avalonia.Styling.ThemeVariant.Dark, "dark") })
             {
                 Avalonia.Application.Current!.RequestedThemeVariant = variant;
-                Pump();
+                HeadlessHost.PumpIfOnUiThread();
                 window.UpdateLayout();
                 var size = new Avalonia.PixelSize((int)Math.Ceiling(window.Bounds.Width), (int)Math.Ceiling(window.Bounds.Height));
                 using var bmp = new Avalonia.Media.Imaging.RenderTargetBitmap(size);
@@ -473,7 +466,7 @@ public sealed class ConnectionComboSwitchTests
         finally
         {
             Avalonia.Application.Current!.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Default;
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
         }
     }
 }

@@ -19,15 +19,6 @@ public class AiIndexReviewTests
     private const string CoilTable = "APSUSER.TB_APS_COIL_INST";
     private const string MoTable = "APSUSER.TB_APS_MO_INST";
 
-    private sealed class FixedEditor(string text) : IEditorContext
-    {
-        public EditorSnapshot? GetActiveDocument() => null;
-
-        public SqlStatement? GetCurrentStatement() => new(text, new TextRange(0, text.Length), StatementKind.Query);
-
-        public Task<bool> ProposeEditAsync(TextEdit edit, CancellationToken ct) => Task.FromResult(false);
-    }
-
     private sealed class ScriptedDriver(params AiEvent[] events) : IAiDriver
     {
         public AiDriverCapabilities Capabilities { get; } = new(false, true, true, false, true);
@@ -181,7 +172,7 @@ public class AiIndexReviewTests
         var chat = new AiChatViewModel();
         var tabs = new List<string>();
         var flow = new AiTuningFlow(
-            new FixedEditor("SELECT 1 FROM dual"), driver, chat, (_, text, _) => tabs.Add(text),
+            FakeEditorContext.WithStatement("SELECT 1 FROM dual"), driver, chat, (_, text, _) => tabs.Add(text),
             readIndexes: (_, table, _) => Task.FromResult<IReadOnlyList<IndexColumnsRow>?>(
                 table == "TB_APS_COIL_INST" ? [new("IX_APS_COIL_INST_T1", ["MTL_MO_NO"])] : []));
 
@@ -205,7 +196,7 @@ public class AiIndexReviewTests
         var driver = new ScriptedDriver(new AiFinal(null, JsonDocument.Parse(json).RootElement.Clone(), "s"));
         var chat = new AiChatViewModel();
         var flow = new AiTuningFlow(
-            new FixedEditor("SELECT 1 FROM dual"), driver, chat, (_, _, _) => { },
+            FakeEditorContext.WithStatement("SELECT 1 FROM dual"), driver, chat, (_, _, _) => { },
             readIndexes: (_, table, _) => Task.FromResult<IReadOnlyList<IndexColumnsRow>?>(
                 table == "TB_APS_COIL_INST" ? [new("IX_APS_COIL_INST_T1", ["MTL_MO_NO"])] : []));
 

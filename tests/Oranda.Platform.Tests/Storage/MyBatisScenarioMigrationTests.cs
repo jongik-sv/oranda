@@ -1,25 +1,20 @@
 using Microsoft.Data.Sqlite;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
 // 소유: TSK-01-02. 마이그레이션 0003(mybatis_scenario 빈 표).
 public sealed class MyBatisScenarioMigrationTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-mbscenario-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-mbscenario-");
 
     public MyBatisScenarioMigrationTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-        }
+        _dir.Dispose();
     }
 
     [Fact]

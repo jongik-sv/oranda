@@ -68,13 +68,13 @@ public sealed class AiLauncherRouterTests
             var profile = await Fx.Service.SaveProfileAsync(new ConnectionProfile(name, "scott", "localhost:1521/FREEPDB1"), null, false, default);
             var outcome = await Fx.Service.ConnectAsync(profile, "pw", default);
             Assert.True(outcome.IsConnected, outcome.Message);
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             Host.EnsureWorkspace();
             var tab = Host.NewDocument();
             tab.Document.Text = "select 'TAB-LITERAL' from t";
             Host.Active = tab;
             Assert.Equal(SessionSelect.Selected, await Router!.SelectAsync(outcome.Session!));
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
             return outcome.Session!;
         }
 
@@ -84,7 +84,7 @@ public sealed class AiLauncherRouterTests
             Registry!.SqlDocumentActive = () => panel is null;
             Router!.ActiveDocument = () => panel;
             Registry.Refocus();
-            Pump();
+            HeadlessHost.PumpIfOnUiThread();
         }
 
         public void Dispose()
@@ -202,14 +202,6 @@ public sealed class AiLauncherRouterTests
         public void Attach(ISession session) => UseSession(session);
     }
 
-    private static void Pump()
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     [Fact]
     public Task The_general_scope_reads_the_real_router_for_an_active_sql_tab_and_for_a_plsql_document() => Ui.Run(async () =>
     {
@@ -234,7 +226,7 @@ public sealed class AiLauncherRouterTests
         var profile = await rig.Fx.Service.SaveProfileAsync(new ConnectionProfile("a", "scott", "localhost:1521/FREEPDB1"), null, false, default);
         var outcome = await rig.Fx.Service.ConnectAsync(profile, "pw", default);
         Assert.True(outcome.IsConnected, outcome.Message);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         ExecutionState.For(rig.Fx.Events).FocusPending(outcome.Session!.Profile); // 보이는 접속은 있으나 라우터가 없다
 
         var scope = await rig.Launcher.GeneralContextAsync(CancellationToken.None);
@@ -276,7 +268,7 @@ public sealed class AiLauncherRouterTests
         var other = await rig.Fx.Service.SaveProfileAsync(new ConnectionProfile("b", "scott", "localhost:1521/FREEPDB1"), null, false, default);
         var b = await rig.Fx.Service.ConnectAsync(other, "pw", default);
         Assert.True(b.IsConnected, b.Message);
-        Pump();
+        HeadlessHost.PumpIfOnUiThread();
         Assert.Equal(SessionSelect.Selected, await rig.Router!.SelectAsync(b.Session!)); // 탭은 접속 b 로 옮겨진다
         Assert.Equal(b.Session!.Profile.Id, rig.Host.Active!.ConnectionProfileId);
         ExecutionState.For(rig.Fx.Events).FocusPending(a.Profile); // 보이는 접속은 a: 탭(b)과 어긋난다

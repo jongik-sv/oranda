@@ -11,6 +11,7 @@ using Oranda.Core.Connection;
 using Oranda.Platform.Ai.Bridge;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -26,7 +27,7 @@ public sealed class CodexEndToEndTests : IDisposable
 {
     private static readonly string[] AllowedBare = ["list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource", "request_user_input"];
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-codex-e2e-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-codex-e2e-");
     private readonly string _codexHome;
     private readonly Dictionary<string, string?> _savedEnv = [];
 
@@ -49,14 +50,7 @@ public sealed class CodexEndToEndTests : IDisposable
             Environment.SetEnvironmentVariable(name, value);
         }
 
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [CodexEndToEndFact]

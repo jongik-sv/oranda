@@ -9,6 +9,7 @@ using Oranda.Core.Connection;
 using Oranda.Platform.Ai.Bridge;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 using Xunit.Abstractions;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
@@ -21,18 +22,11 @@ namespace Oranda.Platform.Tests.Ai.Cli;
 /// </summary>
 public sealed class AgyCancelPropagationTests(ITestOutputHelper output) : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-agy-cancel-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-agy-cancel-");
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     /// <summary>

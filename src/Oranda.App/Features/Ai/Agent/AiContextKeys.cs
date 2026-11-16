@@ -60,17 +60,17 @@ public sealed class AiContextKeys(IServiceProvider services) : IStartupTask
         {
             if (e.Section == "ai")
             {
-                Post(Sync);
+                UiThread.Post(Sync);
             }
         });
 
         // 저장은 스레드 풀에서 끝날 수 있다: 사전도 UI 스레드에서 바꾼다.
-        _savedSubscription = bus.Subscribe<ConnectionProfileSaved>(this, e => Post(() =>
+        _savedSubscription = bus.Subscribe<ConnectionProfileSaved>(this, e => UiThread.Post(() =>
         {
             _saved[e.Profile.Id] = e.Profile;
             Sync();
         }));
-        state.PropertyChanged += (_, _) => Post(Sync);
+        state.PropertyChanged += (_, _) => UiThread.Post(Sync);
         Sync();
     }
 
@@ -89,17 +89,5 @@ public sealed class AiContextKeys(IServiceProvider services) : IStartupTask
         keys.Set(ConfiguredKey, configured);
         keys.Set(AccessOnKey, level != AiAccessLevel.Off);
         keys.Set(AccessPlanKey, level >= AiAccessLevel.Plan);
-    }
-
-    private static void Post(Action action)
-    {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(action);
-        }
     }
 }

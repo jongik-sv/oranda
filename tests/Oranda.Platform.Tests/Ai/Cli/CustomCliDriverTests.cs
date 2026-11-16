@@ -5,6 +5,7 @@ using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Settings;
 using Oranda.Platform.Ai.Cli;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -24,7 +25,7 @@ public sealed class CustomCliDriverTests : IDisposable
 
     private static readonly JsonElement Schema = JsonDocument.Parse("""{"type":"object","required":["a"],"properties":{"a":{"type":"string"}}}""").RootElement.Clone();
 
-    private readonly string _temp = Path.Combine(Path.GetTempPath(), "oranda-custom-cli-test-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _temp = new("oranda-custom-cli-test-");
     private readonly FakeLauncher _launcher = new();
     private string[] _environmentNames = [];
 
@@ -32,14 +33,7 @@ public sealed class CustomCliDriverTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_temp, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _temp.Dispose();
     }
 
     private CustomCliDriver Create(TimeSpan? timeout = null) =>

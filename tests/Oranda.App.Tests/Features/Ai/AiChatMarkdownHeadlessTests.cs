@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Schemas;
 
@@ -54,19 +55,11 @@ public sealed class AiChatMarkdownHeadlessTests
         ```
         """;
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     private static Window Show(AiChatViewModel vm)
     {
         var window = new Window { Width = 460, Height = 760, Content = new AiChatView { DataContext = vm } };
         window.Show();
-        Pump();
+        HeadlessHost.Pump(4);
         window.UpdateLayout();
         return window;
     }
@@ -79,7 +72,7 @@ public sealed class AiChatMarkdownHeadlessTests
             foreach (var (variant, suffix) in new[] { (ThemeVariant.Light, "light"), (ThemeVariant.Dark, "dark") })
             {
                 Application.Current!.RequestedThemeVariant = variant;
-                Pump();
+                HeadlessHost.Pump(4);
                 window.UpdateLayout();
                 if (string.IsNullOrEmpty(dir))
                 {
@@ -185,13 +178,13 @@ public sealed class AiChatMarkdownHeadlessTests
             Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ProposalChange" && t.IsEffectivelyVisible && t.Text == "−88%"); // 벤치마크 없는 카드엔 없다
             Shots(window, "proposals");
             review.Command!.Execute(review.CommandParameter);
-            Pump();
+            HeadlessHost.Pump(4);
             window.UpdateLayout();
             Assert.Equal(1, reopened);
             Assert.Equal(2, window.GetVisualDescendants().OfType<TextBlock>().Count(t => t.Name == "AppliedMark" && t.IsEffectivelyVisible));
 
             toggle.IsChecked = true; // 머리 줄을 누르면 카드 목록이 펼쳐진다
-            Pump();
+            HeadlessHost.Pump(4);
             window.UpdateLayout();
 
             var texts = window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
@@ -211,7 +204,7 @@ public sealed class AiChatMarkdownHeadlessTests
 
             cards[0].IsExpanded = true;
             cards[2].IsExpanded = true;
-            Pump();
+            HeadlessHost.Pump(4);
             window.UpdateLayout();
             var details = window.GetVisualDescendants().OfType<SelectableTextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text ?? string.Empty).ToList();
             Assert.Contains(details, t => t.Contains("tool: get_tuning_context", StringComparison.Ordinal) && t.Contains("reason: sql_unsafe", StringComparison.Ordinal));

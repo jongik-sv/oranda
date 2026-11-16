@@ -10,6 +10,7 @@ using Oranda.Core.Storage;
 using Oranda.Platform.Ai.Bridge;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
@@ -20,7 +21,7 @@ namespace Oranda.Platform.Tests.Ai.Cli;
 [Collection(RealClaudeGroup.Name)]
 public sealed class ClaudeEndToEndTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-e2e-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-e2e-");
 
     private static readonly JsonSerializerOptions RecordOptions = new()
     {
@@ -32,14 +33,7 @@ public sealed class ClaudeEndToEndTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [EndToEndFact]

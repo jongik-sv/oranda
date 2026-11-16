@@ -1,24 +1,18 @@
 using Oranda.Platform.Ai.Cli;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Ai.Cli;
 
 /// <summary>시스템 CLI 버전 읽기와 미검증 버전 안내(공용 부분).</summary>
 public sealed class SystemCliVersionTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-version-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-version-");
 
     public SystemCliVersionTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // 임시 폴더 정리 실패는 무시한다.
-        }
+        _dir.Dispose();
     }
 
     [Theory]

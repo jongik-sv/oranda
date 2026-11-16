@@ -10,6 +10,7 @@ using Avalonia.VisualTree;
 using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Shell.Keymaps;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.Shell.Headless;
 
 namespace Oranda.App.Tests.Features.Ai;
 
@@ -40,19 +41,11 @@ public sealed class AiChatSelectionTests
         끝 문단
         """;
 
-    private static void Pump()
-    {
-        for (var i = 0; i < 4; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
     private static Window Show(AiChatViewModel vm, double height = 900)
     {
         var window = new Window { Width = 460, Height = height, Content = new AiChatView { DataContext = vm } };
         window.Show();
-        Pump();
+        HeadlessHost.Pump(4);
         window.UpdateLayout();
         return window;
     }
@@ -87,17 +80,17 @@ public sealed class AiChatSelectionTests
     private static void Drag(Window window, Point from, Point to)
     {
         window.MouseDown(from, MouseButton.Left);
-        Pump();
+        HeadlessHost.Pump(4);
         // 중간 자리를 거쳐 가야 칸 사이 빈 곳도 지난다.
         for (var i = 1; i <= 4; i++)
         {
             var step = new Point(from.X + ((to.X - from.X) * i / 4), from.Y + ((to.Y - from.Y) * i / 4));
             window.MouseMove(step, RawInputModifiers.LeftMouseButton);
-            Pump();
+            HeadlessHost.Pump(4);
         }
 
         window.MouseUp(to, MouseButton.Left);
-        Pump();
+        HeadlessHost.Pump(4);
         window.UpdateLayout();
     }
 
@@ -111,7 +104,7 @@ public sealed class AiChatSelectionTests
         string? text = "before";
         for (var i = 0; i < 200 && text == "before"; i++)
         {
-            Pump();
+            HeadlessHost.Pump(4);
             text = await window.Clipboard!.TryGetTextAsync();
             if (text == "before")
             {
@@ -136,7 +129,7 @@ public sealed class AiChatSelectionTests
             foreach (var (variant, suffix) in new[] { (ThemeVariant.Light, "light"), (ThemeVariant.Dark, "dark") })
             {
                 Application.Current!.RequestedThemeVariant = variant;
-                Pump();
+                HeadlessHost.Pump(4);
                 window.UpdateLayout();
                 var size = new PixelSize((int)Math.Ceiling(window.Bounds.Width), (int)Math.Ceiling(window.Bounds.Height));
                 using var bmp = new RenderTargetBitmap(size);
@@ -175,7 +168,7 @@ public sealed class AiChatSelectionTests
             // 빈 곳을 누르면 선택이 풀린다.
             window.MouseDown(new Point(window.Bounds.Width - 4, window.Bounds.Height - 200), MouseButton.Left);
             window.MouseUp(new Point(window.Bounds.Width - 4, window.Bounds.Height - 200), MouseButton.Left);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.False(ViewOf(window).Selection.HasSpanSelection);
             Assert.All(new[] { first, second, third }, b => Assert.Equal(b.SelectionStart, b.SelectionEnd));
         }
@@ -201,12 +194,12 @@ public sealed class AiChatSelectionTests
             var down = At(window, third, 0.9); // 앞 드래그의 시작 자리와 겹치면 연달아 누름(두 번 누름)으로 센다
             window.MouseDown(down, MouseButton.Left);
             window.MouseMove(AtPx(window, first, 30), RawInputModifiers.LeftMouseButton);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.True(ViewOf(window).Selection.HasSpanSelection);
             window.MouseMove(AtPx(window, third, 30), RawInputModifiers.LeftMouseButton);
-            Pump();
+            HeadlessHost.Pump(4);
             window.MouseUp(AtPx(window, third, 30), MouseButton.Left);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.False(ViewOf(window).Selection.HasSpanSelection);
             Assert.Equal(first.SelectionStart, first.SelectionEnd);
             Assert.Equal(second.SelectionStart, second.SelectionEnd);
@@ -284,7 +277,7 @@ public sealed class AiChatSelectionTests
             string? text = "before";
             for (var i = 0; i < 200 && text == "before"; i++)
             {
-                Pump();
+                HeadlessHost.Pump(4);
                 text = await window.Clipboard!.TryGetTextAsync();
                 await Task.Delay(10);
             }
@@ -304,7 +297,7 @@ public sealed class AiChatSelectionTests
         var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, true);
         var properties = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
         block.RaiseEvent(new PointerPressedEventArgs(block, pointer, window, at, 0, properties, KeyModifiers.None, clickCount));
-        Pump();
+        HeadlessHost.Pump(4);
     }
 
     [Fact]
@@ -343,7 +336,7 @@ public sealed class AiChatSelectionTests
             var caret = second.SelectionStart;
             Assert.True(caret > 0 && caret < TextOf(second).Length);
             window.MouseMove(At(window, third, 0.98), RawInputModifiers.LeftMouseButton);
-            Pump();
+            HeadlessHost.Pump(4);
             var expected = TextOf(second)[caret..] + "\n\n" + TextOf(third);
             Assert.Equal(expected, ViewOf(window).Selection.SelectedText());
             window.MouseUp(At(window, third, 0.98), MouseButton.Left);
@@ -369,7 +362,7 @@ public sealed class AiChatSelectionTests
             // 스트리밍처럼 글이 바뀌어 통째로 다시 그려진다.
             var view = window.GetVisualDescendants().OfType<MarkdownView>().Single();
             view.Markdown = Paragraphs + "\n\n넷째 문단입니다.";
-            Pump();
+            HeadlessHost.Pump(4);
             window.UpdateLayout();
             Assert.False(ViewOf(window).Selection.HasSpanSelection);
             Assert.Equal(string.Empty, ViewOf(window).Selection.SelectedText());
@@ -379,10 +372,10 @@ public sealed class AiChatSelectionTests
             window.MouseDown(At(window, again, 0.0), MouseButton.Left);
             window.MouseMove(AtPx(window, Block(window, "둘째"), 30), RawInputModifiers.LeftMouseButton);
             view.Markdown = Paragraphs;
-            Pump();
+            HeadlessHost.Pump(4);
             window.MouseMove(AtPx(window, Block(window, "셋째"), 30), RawInputModifiers.LeftMouseButton);
             window.MouseUp(AtPx(window, Block(window, "셋째"), 30), MouseButton.Left);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.False(ViewOf(window).Selection.IsDragging);
             Drag(window, At(window, Block(window, "첫째"), 0.1), At(window, Block(window, "셋째"), 0.98));
             Assert.EndsWith("\n\n둘째 문단입니다.\n\n셋째 문단입니다.", ViewOf(window).Selection.SelectedText(), StringComparison.Ordinal); // 첫 칸은 가운데부터
@@ -411,12 +404,12 @@ public sealed class AiChatSelectionTests
             for (var i = 0; i < 100 && scroll.Offset.Y < 200; i++)
             {
                 await Task.Delay(30);
-                Pump();
+                HeadlessHost.Pump(4);
             }
 
             Assert.True(scroll.Offset.Y >= 200, $"offset {scroll.Offset.Y}");
             window.MouseUp(bottom, MouseButton.Left);
-            Pump();
+            HeadlessHost.Pump(4);
             var selected = ViewOf(window).Selection.SelectedText();
             Assert.StartsWith("문단 01 입니다.\n\n문단 02", selected, StringComparison.Ordinal);
             Assert.True(selected.Split("\n\n").Length > 8, selected);
@@ -443,9 +436,9 @@ public sealed class AiChatSelectionTests
             for (var i = 0; i < 3; i++)
             {
                 vm.Entries[^1] = new ChatAssistantEntry("새 답 시작" + new string('.', i + 1));
-                Pump();
+                HeadlessHost.Pump(4);
                 await Task.Delay(20);
-                Pump();
+                HeadlessHost.Pump(4);
             }
 
             Assert.Equal(Paragraphs, ViewOf(window).Selection.SelectedText());
@@ -454,7 +447,7 @@ public sealed class AiChatSelectionTests
             vm.Entries.RemoveAt(vm.Entries.Count - 2);
             for (var i = 0; i < 20 && ViewOf(window).Selection.HasSpanSelection; i++)
             {
-                Pump();
+                HeadlessHost.Pump(4);
                 await Task.Delay(20);
             }
 
@@ -479,7 +472,7 @@ public sealed class AiChatSelectionTests
             string? text = "before";
             for (var i = 0; i < 200 && text == "before"; i++)
             {
-                Pump();
+                HeadlessHost.Pump(4);
                 text = await window.Clipboard!.TryGetTextAsync();
                 await Task.Delay(10);
             }
@@ -502,7 +495,7 @@ public sealed class AiChatSelectionTests
             Drag(window, At(window, Block(window, "첫째"), 0.0), At(window, Block(window, "셋째"), 0.98));
             Assert.True(ViewOf(window).Selection.HasSpanSelection);
             vm.Entries.Clear();
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.False(ViewOf(window).Selection.HasSpanSelection);
             return Task.CompletedTask;
         }
@@ -525,9 +518,9 @@ public sealed class AiChatSelectionTests
         {
             var scroll = ScrollOf(window);
             scroll.Offset = new Vector(0, 300);
-            Pump();
+            HeadlessHost.Pump(4);
             window.UpdateLayout();
-            Pump();
+            HeadlessHost.Pump(4);
 
             var visible = window.GetVisualDescendants().OfType<SelectableTextBlock>()
                 .Where(b => TextOf(b).StartsWith("문단", StringComparison.Ordinal))
@@ -559,11 +552,11 @@ public sealed class AiChatSelectionTests
             for (var i = 0; i < 10; i++)
             {
                 await Task.Delay(40);
-                Pump();
+                HeadlessHost.Pump(4);
             }
 
             window.MouseUp(at, MouseButton.Left);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.Equal(0, scroll.Offset.Y);
             Assert.False(ViewOf(window).Selection.HasSpanSelection);
         }
@@ -601,7 +594,7 @@ public sealed class AiChatSelectionTests
             var draft = window.GetVisualDescendants().OfType<TextBox>().First(t => t.Name == "DraftBox");
             draft.Text = "쓰던 글";
             draft.Focus();
-            Pump();
+            HeadlessHost.Pump(4);
 
             // 글자 위를 누를 때와 같게 시작 칸이 초점을 가져간다(복사 키가 대화 영역을 지나야 macOS 시스템 메뉴 경로도 닿는다). 입력칸 글은 그대로.
             Drag(window, At(window, Block(window, "첫째"), 0.0), At(window, Block(window, "셋째"), 0.98));
@@ -612,7 +605,7 @@ public sealed class AiChatSelectionTests
             // 입력칸으로 초점이 가면 여러 칸 선택은 풀리고, 입력칸은 자기 복사를 한다.
             draft.Focus();
             draft.SelectAll();
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.False(ViewOf(window).Selection.HasSpanSelection);
             Assert.Equal("쓰던 글", await CopyAsync(window));
         }
@@ -638,14 +631,14 @@ public sealed class AiChatSelectionTests
             var gap = second.TranslatePoint(new Point(second.Bounds.Width / 2, second.Bounds.Height + 5), window)!.Value;
             window.MouseDown(gap, MouseButton.Right);
             window.MouseUp(gap, MouseButton.Right);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.True(ViewOf(window).Selection.HasSpanSelection);
 
             // 선택 밖(넷째 칸 아래 빈 곳)을 오른쪽 클릭하면 지워진다.
             var outside = new Point(window.Bounds.Width - 6, window.Bounds.Height - 220);
             window.MouseDown(outside, MouseButton.Right);
             window.MouseUp(outside, MouseButton.Right);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.False(ViewOf(window).Selection.HasSpanSelection);
             return Task.CompletedTask;
         }
@@ -664,21 +657,21 @@ public sealed class AiChatSelectionTests
         {
             window.MouseDown(At(window, Block(window, "첫째"), 0.0), MouseButton.Left);
             window.MouseMove(AtPx(window, Block(window, "둘째"), 30), RawInputModifiers.LeftMouseButton);
-            Pump();
+            HeadlessHost.Pump(4);
 
             // 끄는 동안 마지막 항목이 토큰마다 바뀐다(운영: Replace). 끌기는 이어진다.
             for (var n = 0; n < 4; n++)
             {
                 vm.Entries[^1] = new ChatAssistantEntry("스트리밍 답 하나" + new string('.', n + 1));
-                Pump();
+                HeadlessHost.Pump(4);
                 await Task.Delay(30);
-                Pump();
+                HeadlessHost.Pump(4);
                 Assert.True(ViewOf(window).Selection.IsDragging, $"token {n}");
             }
 
             window.MouseMove(AtPx(window, Block(window, "셋째"), 30), RawInputModifiers.LeftMouseButton);
             window.MouseUp(AtPx(window, Block(window, "셋째"), 30), MouseButton.Left);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.False(ViewOf(window).Selection.IsDragging);
             var selected = ViewOf(window).Selection.SelectedText();
             Assert.Contains("둘째 문단입니다.\n\n", selected, StringComparison.Ordinal);
@@ -700,12 +693,12 @@ public sealed class AiChatSelectionTests
             // 시작 칸이 마지막 항목 안에 있는 채로 그 항목이 바뀐다.
             window.MouseDown(At(window, Block(window, "스트리밍 답 하나"), 0.0), MouseButton.Left);
             window.MouseMove(AtPx(window, Block(window, "스트리밍 답 둘"), 30), RawInputModifiers.LeftMouseButton);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.True(ViewOf(window).Selection.IsDragging);
             vm.Entries[^1] = new ChatAssistantEntry("스트리밍 답 하나\n\n스트리밍 답 둘 더");
             for (var i = 0; i < 20 && ViewOf(window).Selection.IsDragging; i++)
             {
-                Pump();
+                HeadlessHost.Pump(4);
                 await Task.Delay(20);
             }
 
@@ -713,7 +706,7 @@ public sealed class AiChatSelectionTests
             Assert.Equal(string.Empty, ViewOf(window).Selection.SelectedText());
             window.MouseMove(AtPx(window, Block(window, "앞 문단"), 30), RawInputModifiers.LeftMouseButton);
             window.MouseUp(AtPx(window, Block(window, "앞 문단"), 30), MouseButton.Left);
-            Pump();
+            HeadlessHost.Pump(4);
         }
         finally
         {
@@ -735,7 +728,7 @@ public sealed class AiChatSelectionTests
             first.RaiseEvent(new PointerPressedEventArgs(first, pointer, window, down, 0, new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed), KeyModifiers.None, 1));
             Assert.True(ViewOf(window).Selection.IsDragging);
             window.MouseMove(At(window, third, 0.98), RawInputModifiers.LeftMouseButton);
-            Pump();
+            HeadlessHost.Pump(4);
             first.RaiseEvent(new PointerReleasedEventArgs(first, pointer, window, At(window, third, 0.98), 0, new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased), KeyModifiers.None, MouseButton.Left));
             Assert.False(ViewOf(window).Selection.IsDragging);
             Assert.True(ViewOf(window).Selection.HasSpanSelection);
@@ -745,7 +738,7 @@ public sealed class AiChatSelectionTests
             var at = AtPx(window, second, 5);
             second.RaiseEvent(new PointerPressedEventArgs(second, right, window, at, 0, new PointerPointProperties(RawInputModifiers.RightMouseButton, PointerUpdateKind.RightButtonPressed), KeyModifiers.None, 1));
             second.RaiseEvent(new PointerReleasedEventArgs(second, right, window, at, 0, new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased), KeyModifiers.None, MouseButton.Right));
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.True(ViewOf(window).Selection.HasSpanSelection);
             Assert.Equal(TextOf(second).Length, Math.Abs(second.SelectionEnd - second.SelectionStart));
             return Task.CompletedTask;
@@ -766,11 +759,11 @@ public sealed class AiChatSelectionTests
             window.MouseDown(At(window, Block(window, "첫째"), 0.0), MouseButton.Left);
             window.MouseMove(At(window, Block(window, "둘째"), 0.98), RawInputModifiers.LeftMouseButton);
             vm.AddAssistantText("추가된 답");
-            Pump();
+            HeadlessHost.Pump(4);
             window.UpdateLayout();
             window.MouseMove(At(window, Block(window, "셋째"), 0.98), RawInputModifiers.LeftMouseButton);
             window.MouseUp(At(window, Block(window, "셋째"), 0.98), MouseButton.Left);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.Equal(Paragraphs, ViewOf(window).Selection.SelectedText());
             return Task.CompletedTask;
         }
@@ -789,7 +782,7 @@ public sealed class AiChatSelectionTests
         string? text = old;
         for (var i = 0; i < 100 && text == old; i++)
         {
-            Pump();
+            HeadlessHost.Pump(4);
             text = await window.Clipboard!.TryGetTextAsync();
             if (text == old)
             {
@@ -835,7 +828,7 @@ public sealed class AiChatSelectionTests
             PressOn(window, block, 10, clickCount: 1);
             PressOn(window, block, 10, clickCount: 2);
             block.Focus();
-            Pump();
+            HeadlessHost.Pump(4);
             var word = block.SelectedText;
             Assert.StartsWith("마지막", word, StringComparison.Ordinal);
             Assert.True(word.Length < TextOf(block).Length);
@@ -845,7 +838,7 @@ public sealed class AiChatSelectionTests
             Drag(window, new Point(window.Bounds.Width - 6, window.Bounds.Height - 220), new Point(window.Bounds.Width - 6, window.Bounds.Height - 220));
             await window.Clipboard!.SetTextAsync("before");
             Assert.True(EditKeyScope.TryRoute(window.FocusManager!.GetFocusedElement(), CopyGesture));
-            Pump();
+            HeadlessHost.Pump(4);
             await Task.Delay(100);
             Assert.Equal("before", await window.Clipboard!.TryGetTextAsync());
         }
@@ -872,7 +865,7 @@ public sealed class AiChatSelectionTests
             Drag(window, At(window, Block(window, "첫째"), 0.0), At(window, Block(window, "셋째"), 0.98));
             await window.Clipboard!.SetTextAsync("before");
             ChatTextSelection.CopyFlyout.ShowAt(second);
-            Pump();
+            HeadlessHost.Pump(4);
             Assert.True(item.IsEnabled);
             item.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
             Assert.Equal(Paragraphs, await ClipboardAfterAsync(window, "before"));
