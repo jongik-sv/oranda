@@ -94,7 +94,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
 
         // 조회가 아니면 정책을 묻기 전에 끝낸다(확인 창·드라이버로 가지 않게). 분류가 잘못 붙은 DELETE 가 리더로 실행되지 않게 첫 낱말도 본다(Oracle 과 같다).
         var kind = ExecutionPolicy.EffectiveKind(query);
-        var (first, _) = LeadingWords(query.Text);
+        var (first, _) = BulkStatements.LeadingWords(query.Text);
         if (kind != StatementKind.Query || first is not ("SELECT" or "WITH"))
         {
             throw new BulkDeniedException(new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.None,
@@ -145,7 +145,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(options);
-        Validate(stmt, columns, rows);
+        BulkStatements.Validate(stmt, columns, rows);
 
         if (rows.Count == 0 && columns.Count > 0)
         {
@@ -501,7 +501,7 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
     }
 
     /// <summary>행 수를 검사하는 문장: 첫 낱말 INSERT 이고 VALUES 꼴, 또는 MERGE(CopySqlBuilder 가 만드는 두 모양: WHEN MATCHED 가 있으면 upsert, 없으면 키 열만).</summary>
-    private static RowCountCheck RowCountCheckOf(string text) => LeadingWords(text).First switch
+    private static RowCountCheck RowCountCheckOf(string text) => BulkStatements.LeadingWords(text).First switch
     {
         "INSERT" when ValuesKeyword().IsMatch(text) => RowCountCheck.Insert,
         "MERGE" => WhenMatchedKeyword().IsMatch(text) ? RowCountCheck.Merge : RowCountCheck.MergeKeyOnly,
@@ -705,108 +705,18 @@ internal sealed partial class TiberoBulkExecutionService : IBulkExecutionService
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     }
 
-    /// <summary>호출 한 번에 <see cref="StatementExecuted"/> 하나(Oracle 과 같다).</summary>
-    private BulkResult Publish(ISession s, SqlStatement stmt, ExecutionOptions options, BulkResult result, TimeSpan elapsed, bool pending)
-    {
-        var executed = new ExecutionResult(stmt, result.Status)
-        {
-            Elapsed = elapsed,
-            RowsAffected = result.Status == ExecutionStatus.Succeeded ? result.RowsAffected : null,
-            Error = result.Error,
-            Policy = result.Policy,
-            TransactionPending = pending,
-        };
-        _events.Publish(new StatementExecuted(s.Id, stmt, executed, options));
-        return result;
-    }
+    private BulkResult Publish(ISession s, SqlStatement stmt, ExecutionOptions options, BulkResult result, TimeSpan elapsed, bool pending) =>
+        BulkStatements.Publish(_events, s, stmt, options, result, elapsed, pending);
 
     private static BulkResult Failed(string code, string message, PolicyDecision? applied) =>
         new(ExecutionStatus.Failed, 0) { Error = new DbError(code, message) { Dbms = Dbms.Tibero }, Policy = applied };
 
-    private static void Validate(SqlStatement stmt, IReadOnlyList<BulkColumn> columns, IReadOnlyList<object?[]> rows)
-    {
-        // 분류가 불확실하면 EffectiveKind 는 DML 이 되므로, 붙은 분류와 실효 분류를 모두 본다.
-        var rejected = stmt.Kind is StatementKind.Ddl or StatementKind.SqlPlus ? stmt.Kind : ExecutionPolicy.EffectiveKind(stmt);
-        if (rejected is StatementKind.Ddl or StatementKind.SqlPlus)
-        {
-            throw new ArgumentException($"대량 실행 경로는 {rejected} 문장을 받지 않습니다. IExecutionService 로 실행하세요.", nameof(stmt));
-        }
-
-        if (columns.Count == 0 && rows.Count > 1)
-        {
-            throw new ArgumentException("바인드 열이 없는 문장은 한 번만 실행합니다.", nameof(rows));
-        }
-
-        for (var r = 0; r < rows.Count; r++)
-        {
-            if (rows[r] is null || rows[r].Length != columns.Count)
-            {
-                throw new ArgumentException($"{r}번째 행의 값 수가 열 수({columns.Count})와 다릅니다.", nameof(rows));
-            }
-        }
-    }
-
     /// <summary>
-    /// 읽기 전용 프로필에서 지나는 글: SET TRANSACTION·COMMIT·ROLLBACK(<see cref="IsTransactionControlText"/>), 또는 앞뒤 공백을 뺀 글이
+    /// 읽기 전용 프로필에서 지나는 글: SET TRANSACTION·COMMIT·ROLLBACK(<see cref="BulkStatements.IsTransactionControlText"/>), 또는 앞뒤 공백을 뺀 글이
     /// <see cref="TiberoExecutionService.ReadOnlyBlock"/> 과 글자 그대로 같은 것(복사 방언이 그 글을 그대로 보낸다).
     /// </summary>
     internal static bool IsReadOnlySafeText(string text) =>
-        IsTransactionControlText(text) || string.Equals(text.Trim(), TiberoExecutionService.ReadOnlyBlock, StringComparison.Ordinal);
-
-    /// <summary>SET TRANSACTION, COMMIT, ROLLBACK(ROLLBACK TO SAVEPOINT 포함). Oracle <c>OracleBulkExecutionService</c> 와 같은 규칙(TB1 설계 3.4: 복사).</summary>
-    internal static bool IsTransactionControlText(string text) => LeadingWords(text) switch
-    {
-        ("SET", "TRANSACTION") => true,
-        ("COMMIT" or "ROLLBACK", _) => true,
-        _ => false,
-    };
-
-    /// <summary>
-    /// 글의 앞 두 낱말(대문자). 앞의 공백·주석(<c>--</c>, <c>/* */</c>)·여는 괄호를 건너뛴다. 낱말이 없으면 null.
-    /// 분류(<see cref="SqlStatement.Kind"/>)를 한 번 더 확인하는 데만 쓴다(Oracle 과 같은 규칙).
-    /// </summary>
-    internal static (string? First, string? Second) LeadingWords(string text)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-        var i = 0;
-        var first = NextWord(text, ref i);
-        var second = first is null ? null : NextWord(text, ref i);
-        return (first, second);
-    }
-
-    private static string? NextWord(string text, ref int i)
-    {
-        while (i < text.Length)
-        {
-            var c = text[i];
-            if (char.IsWhiteSpace(c) || c == '(')
-            {
-                i++;
-            }
-            else if (c == '-' && i + 1 < text.Length && text[i + 1] == '-')
-            {
-                var nl = text.IndexOf('\n', i);
-                i = nl < 0 ? text.Length : nl + 1;
-            }
-            else if (c == '/' && i + 1 < text.Length && text[i + 1] == '*')
-            {
-                var close = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                i = close < 0 ? text.Length : close + 2;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        var start = i;
-        while (i < text.Length && (char.IsLetter(text[i]) || text[i] == '_'))
-        {
-            i++;
-        }
-
-        return i > start ? text[start..i].ToUpperInvariant() : null;
-    }
+        BulkStatements.IsTransactionControlText(text) || string.Equals(text.Trim(), TiberoExecutionService.ReadOnlyBlock, StringComparison.Ordinal);
 
     private static TiberoSession AsTiberoSession(ISession s) =>
         s as TiberoSession ?? throw new ArgumentException("Oranda Tibero 세션 관리자가 연 세션이 아닙니다.", nameof(s));

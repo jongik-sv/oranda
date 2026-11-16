@@ -9,6 +9,7 @@ using Oranda.Testing.Rollback;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
 using Oranda.Tibero.Tests.Driver;
+using Oranda.Tibero.Tests.Support;
 
 namespace Oranda.Tibero.Tests.Rollback;
 
@@ -204,10 +205,5 @@ public sealed class TiberoExecutionServiceRollbackTests : IDisposable
         {
             return [.. _sent];
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) => ValueTask.FromResult(PolicyDecision.Allowed);
     }
 }

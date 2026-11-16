@@ -20,6 +20,7 @@ using Oranda.Tibero.Execution;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
 using Oranda.Tibero.Tests.Schema;
+using Oranda.Tibero.Tests.Support;
 using Oranda.Tibero.Transfer.Copy;
 
 namespace Oranda.Tibero.Tests.Integration;
@@ -65,7 +66,7 @@ internal sealed class CrossDbmsItEnvironment : IAsyncDisposable
         Tibero = tibero;
         _oracle = oracle;
         Policy = new AllowAll();
-        var ui = new NoQuestions();
+        var ui = ExecutionFakes.NoQuestions();
         var selector = new DbmsServiceTable();
         Bulk = new BulkExecutionServiceDispatcher(selector);
         Execution = new ExecutionServiceDispatcher(selector);
@@ -794,22 +795,6 @@ internal sealed class CrossDbmsItEnvironment : IAsyncDisposable
                 // 다음 시도에서 다시 본다.
             }
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) => ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 }
 

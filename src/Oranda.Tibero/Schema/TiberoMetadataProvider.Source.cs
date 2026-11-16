@@ -1,6 +1,7 @@
 using System.Text;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Tibero.Schema;
 

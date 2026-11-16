@@ -45,11 +45,11 @@ public class TiberoMetadataProviderTests
         object?[] withBytes = ["S", 0m, "VARCHAR", 65532m, null, null, "Y", null, "NO", null, "NO", null, null, 65532m];
         object?[] old = ["S", 0m, "VARCHAR", 65532m, null, null, "Y", null, "NO", null, "NO", null, null];
 
-        var column = TiberoMetadataProvider.ToColumn(withBytes);
+        var column = MetadataRows.ToColumn(withBytes);
 
         Assert.Equal(65532, column.Length);
         Assert.Equal(65532, column.ByteLength);
-        Assert.Null(TiberoMetadataProvider.ToColumn(old).ByteLength);
+        Assert.Null(MetadataRows.ToColumn(old).ByteLength);
         Assert.Contains("byte_length", Oranda.Tibero.Catalog.TiberoEmbeddedCatalog.Load().Get("meta.columns", 6, Oranda.Core.Connection.Dbms.Tibero).Sql, StringComparison.Ordinal);
     }
 

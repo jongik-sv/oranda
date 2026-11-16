@@ -1,4 +1,5 @@
 using System.Text;
+using Oranda.Core.Text;
 
 namespace Oranda.Tibero.Schema;
 
@@ -68,10 +69,8 @@ internal static class TiberoDdlText
     {
         ArgumentException.ThrowIfNullOrEmpty(owner);
         ArgumentException.ThrowIfNullOrEmpty(name);
-        return Quote(owner) + "." + Quote(name);
+        return SqlIdentifier.QuoteAlways(owner) + "." + SqlIdentifier.QuoteAlways(name);
     }
-
-    private static string Quote(string identifier) => "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 
     /// <summary>줄을 잇는다. 줄 끝 줄바꿈이 없는 줄에는 붙인다(사전 뷰마다 다르다).</summary>
     private static string Join(IReadOnlyList<string?> lines)

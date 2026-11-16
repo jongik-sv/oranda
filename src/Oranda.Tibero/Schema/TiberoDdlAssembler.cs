@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Oranda.Core.Text;
 using Oranda.Tibero.Sessions;
 
 namespace Oranda.Tibero.Schema;
@@ -48,7 +49,7 @@ internal static partial class TiberoDdlAssembler
     {
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentNullException.ThrowIfNull(text);
-        var list = columns.Count == 0 ? string.Empty : " (" + string.Join(", ", columns.Select(Quote)) + ")";
+        var list = columns.Count == 0 ? string.Empty : " (" + string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways)) + ")";
         return Statement($"CREATE OR REPLACE FORCE VIEW {TiberoDdlText.Qualified(owner, name)}{list} AS \n  {text.Trim()}", terminator);
     }
 
@@ -80,9 +81,9 @@ internal static partial class TiberoDdlAssembler
     {
         ArgumentException.ThrowIfNullOrEmpty(owner);
         ArgumentException.ThrowIfNullOrEmpty(targetName);
-        var target = string.IsNullOrEmpty(targetOwner) ? Quote(targetName) : TiberoDdlText.Qualified(targetOwner, targetName);
+        var target = string.IsNullOrEmpty(targetOwner) ? SqlIdentifier.QuoteAlways(targetName) : TiberoDdlText.Qualified(targetOwner, targetName);
         var head = string.Equals(owner, "PUBLIC", StringComparison.Ordinal)
-            ? "CREATE OR REPLACE PUBLIC SYNONYM " + Quote(name)
+            ? "CREATE OR REPLACE PUBLIC SYNONYM " + SqlIdentifier.QuoteAlways(name)
             : "CREATE OR REPLACE SYNONYM " + TiberoDdlText.Qualified(owner, name);
         return Statement(head + " FOR " + target, terminator);
     }
@@ -156,7 +157,7 @@ internal static partial class TiberoDdlAssembler
         ArgumentNullException.ThrowIfNull(index);
         var type = index.IndexType ?? string.Empty;
         var kind = index.IsUnique ? "UNIQUE " : HasTypeWord(type, "BITMAP") ? "BITMAP " : string.Empty;
-        var list = string.Join(", ", index.Columns.Select(c => (c.Expression?.Trim() ?? Quote(c.Name!)) + (c.Descending ? " DESC" : string.Empty)));
+        var list = string.Join(", ", index.Columns.Select(c => (c.Expression?.Trim() ?? SqlIdentifier.QuoteAlways(c.Name!)) + (c.Descending ? " DESC" : string.Empty)));
         var reverse = type.EndsWith("/REV", StringComparison.OrdinalIgnoreCase) ? " REVERSE" : string.Empty;
         return Statement(
             $"CREATE {kind}INDEX {TiberoDdlText.Qualified(index.Owner, index.Name)} ON {TiberoDdlText.Qualified(index.TableOwner, index.TableName)} ({list}){reverse}",
@@ -238,7 +239,7 @@ internal static partial class TiberoDdlAssembler
                 "U" => "UNIQUE (" + ColumnList(c.Columns) + ")",
                 _ => "CHECK (" + (c.Condition ?? string.Empty).Trim() + ")",
             };
-            result.Add(Statement($"ALTER TABLE {target} ADD CONSTRAINT {Quote(c.Name)} {body} {State(c)}", terminator));
+            result.Add(Statement($"ALTER TABLE {target} ADD CONSTRAINT {SqlIdentifier.QuoteAlways(c.Name)} {body} {State(c)}", terminator));
         }
 
         foreach (var c in constraints.Where(c => c.Type == "R"))
@@ -249,7 +250,7 @@ internal static partial class TiberoDdlAssembler
                 continue;
             }
 
-            var refTarget = c.RefOwner is null ? Quote(c.RefTable) : TiberoDdlText.Qualified(c.RefOwner, c.RefTable);
+            var refTarget = c.RefOwner is null ? SqlIdentifier.QuoteAlways(c.RefTable) : TiberoDdlText.Qualified(c.RefOwner, c.RefTable);
             var onDelete = c.DeleteRule switch
             {
                 "CASCADE" => " ON DELETE CASCADE",
@@ -257,7 +258,7 @@ internal static partial class TiberoDdlAssembler
                 _ => string.Empty,
             };
             result.Add(Statement(
-                $"ALTER TABLE {target} ADD CONSTRAINT {Quote(c.Name)} FOREIGN KEY ({ColumnList(c.Columns)}) REFERENCES {refTarget} ({ColumnList(c.RefColumns!)}){onDelete} {State(c)}",
+                $"ALTER TABLE {target} ADD CONSTRAINT {SqlIdentifier.QuoteAlways(c.Name)} FOREIGN KEY ({ColumnList(c.Columns)}) REFERENCES {refTarget} ({ColumnList(c.RefColumns!)}){onDelete} {State(c)}",
                 terminator));
         }
 
@@ -272,12 +273,12 @@ internal static partial class TiberoDdlAssembler
         var target = TiberoDdlText.Qualified(owner, table);
         if (!string.IsNullOrEmpty(tableComment))
         {
-            result.Add(Statement($"COMMENT ON TABLE {target} IS {Literal(tableComment)}", terminator));
+            result.Add(Statement($"COMMENT ON TABLE {target} IS {SqlLiteral.Quote(tableComment)}", terminator));
         }
 
         foreach (var (column, comment) in columns.Where(c => !string.IsNullOrEmpty(c.Comment)))
         {
-            result.Add(Statement($"COMMENT ON COLUMN {target}.{Quote(column)} IS {Literal(comment!)}", terminator));
+            result.Add(Statement($"COMMENT ON COLUMN {target}.{SqlIdentifier.QuoteAlways(column)} IS {SqlLiteral.Quote(comment!)}", terminator));
         }
 
         return result;
@@ -295,7 +296,7 @@ internal static partial class TiberoDdlAssembler
             .GroupBy(r => (Grantee: Text(r[0])!, Privilege: Text(r[1])!))
             .Select(g =>
             {
-                var to = string.Equals(g.Key.Grantee, "PUBLIC", StringComparison.Ordinal) ? "PUBLIC" : Quote(g.Key.Grantee);
+                var to = string.Equals(g.Key.Grantee, "PUBLIC", StringComparison.Ordinal) ? "PUBLIC" : SqlIdentifier.QuoteAlways(g.Key.Grantee);
                 var option = g.Any(r => Text(r[2]) is "YES" or "Y") ? " WITH GRANT OPTION" : string.Empty;
                 return Statement($"GRANT {g.Key.Privilege} ON {target} TO {to}{option}", terminator);
             })];
@@ -329,27 +330,13 @@ internal static partial class TiberoDdlAssembler
         return statements.Count == 0 ? tableDdl : tableDdl + "\n" + string.Join("\n", statements);
     }
 
-    /// <summary>따옴표 식별자(안의 따옴표는 두 번).</summary>
-    internal static string Quote(string identifier)
-    {
-        ArgumentNullException.ThrowIfNull(identifier);
-        return "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
-    }
-
-    /// <summary>작은따옴표 글 리터럴(안의 작은따옴표는 두 번).</summary>
-    internal static string Literal(string value)
-    {
-        ArgumentNullException.ThrowIfNull(value);
-        return "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
-    }
-
     /// <summary>조건 글 전체가 열 하나의 <c>IS NOT NULL</c>(따옴표 이름 q 또는 맨 이름 b).</summary>
     [GeneratedRegex(@"^\s*(?:""(?<q>(?:[^""]|"""")+)""|(?<b>[A-Za-z][A-Za-z0-9_$#]*))\s+IS\s+NOT\s+NULL\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NotNullCondition();
 
     private static string State(DdlConstraint c) => c.Enabled ? "ENABLE" : "DISABLE";
 
-    private static string ColumnList(IEnumerable<string> columns) => string.Join(", ", columns.Select(Quote));
+    private static string ColumnList(IEnumerable<string> columns) => string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways));
 
     private static void AddClause(List<string> parts, string keyword, string? value)
     {

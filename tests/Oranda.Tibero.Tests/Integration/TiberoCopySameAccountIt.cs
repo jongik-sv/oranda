@@ -6,6 +6,7 @@ using Oranda.Core.Transfer.Copy;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Oranda.Tibero.Transfer.Copy;
 
 namespace Oranda.Tibero.Tests.Integration;
@@ -77,8 +78,8 @@ public class TiberoCopySameAccountIt
         var job = Job(owner, table);
         var period = new ResolvedPeriod(null, null);
         var policy = new DenyAndCount(); // 거부가 깨져 문장을 보내려 하면 정책이 막고 호출 수로 드러난다.
-        var bulk = new TiberoBulkExecutionService(policy, new NoQuestions(), it.Events);
-        var execution = new TiberoExecutionService(policy, new NoQuestions(), it.Events, null, dbmsOutput: false);
+        var bulk = new TiberoBulkExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events);
+        var execution = new TiberoExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
 
         // 1. 사전 점검: 같은 DB 에서 대상 표가 원본으로 읽는 표라 오류 하나만, 계획 없음.
         var precheck = new TiberoCopyPrecheckService(bulk, new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync), policy);
@@ -167,17 +168,6 @@ public class TiberoCopySameAccountIt
             Calls++;
             return ValueTask.FromResult(new PolicyDecision(PolicyDecisionKind.Deny, PolicyRule.None, "denied by the test"));
         }
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 
     /// <summary>실행 기록을 시작하면 표시하고 멈추는 가짜(거부가 실행 기록보다 앞서는지 본다).</summary>

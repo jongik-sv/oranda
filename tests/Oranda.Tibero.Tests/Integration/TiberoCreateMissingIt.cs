@@ -8,6 +8,7 @@ using Oranda.Core.Transfer.Copy;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Oranda.Tibero.Transfer.Copy;
 using Xunit.Abstractions;
 
@@ -306,8 +307,8 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
         };
         var period = new ResolvedPeriod(null, null);
         var policy = new AllowAll();
-        var bulk = new TiberoBulkExecutionService(policy, new NoQuestions(), it.Events);
-        var execution = new TiberoExecutionService(policy, new NoQuestions(), it.Events, null, dbmsOutput: false);
+        var bulk = new TiberoBulkExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events);
+        var execution = new TiberoExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
 
         var precheck = new TiberoCopyPrecheckService(bulk, new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync), policy);
         var report = await precheck.RunAsync(sessions, job, period, null, CancellationToken.None);
@@ -516,22 +517,6 @@ public class TiberoCreateMissingIt(ITestOutputHelper output)
 
     private static CopyDecisions NoDecisions() =>
         new(new HashSet<string>(StringComparer.Ordinal), new HashSet<ForeignKeyRef>(), new HashSet<string>(StringComparer.Ordinal), false);
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) => ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
-    }
 
     /// <summary>실행 기록을 버리는 가짜.</summary>
     private sealed class MemoryRunLog : ICopyRunLog

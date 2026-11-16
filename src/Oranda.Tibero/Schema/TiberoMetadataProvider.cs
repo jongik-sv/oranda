@@ -8,6 +8,7 @@ using Oranda.Core.Sessions;
 using Oranda.Core.Storage;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Tibero.Schema;
 
@@ -91,10 +92,10 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         var idxRows = await RunAsync(s, "meta.indexes", binds, ct).ConfigureAwait(false);
         var commentRows = await RunAsync(s, "meta.table_comment", binds, ct).ConfigureAwait(false);
 
-        var info = new TableInfo(table, [.. colRows.Select(ToColumn)])
+        var info = new TableInfo(table, [.. colRows.Select(MetadataRows.ToColumn)])
         {
-            Constraints = BuildConstraints(consRows),
-            Indexes = BuildIndexes(idxRows),
+            Constraints = MetadataRows.BuildConstraints(consRows),
+            Indexes = MetadataRows.BuildIndexes(idxRows),
             Comment = commentRows.Count > 0 ? Str(commentRows[0][0]) : null,
         };
 
@@ -194,7 +195,7 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
     {
         var dbKey = s.DbKey;
         var rows = await RunAsync(s, "meta.objects", ObjectBinds(q), ct).ConfigureAwait(false);
-        return [.. rows.Select(r => ToMeta(dbKey, r, fetchedAt))];
+        return [.. rows.Select(r => MetadataRows.ToMeta(dbKey, r, fetchedAt))];
     }
 
     /// <summary>
@@ -208,101 +209,7 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
     /// <summary>시험이 부른다(보호 멤버 <see cref="IsIgnorableBackgroundRefreshFailure"/> 를 연다).</summary>
     internal bool IsIgnorable(Exception ex) => IsIgnorableBackgroundRefreshFailure(ex);
 
-    private static MetaObject ToMeta(string dbKey, object?[] r, DateTimeOffset fetchedAt) => new()
-    {
-        DbKey = dbKey,
-        Owner = Str(r[0])!,
-        Name = Str(r[1])!,
-        Type = Str(r[2])!,
-        Status = Str(r[3]),
-        LastDdlTime = r[4] is DateTime d ? new DateTimeOffset(DateTime.SpecifyKind(d, DateTimeKind.Utc)) : null,
-        FetchedAt = fetchedAt,
-    };
-
     // ---- 행 → 모델 ----
-
-    private static string? Str(object? v) => TiberoSessionQuery.Str(v);
-
-    private static long? Long(object? v) => TiberoSessionQuery.Long(v);
-
-    private static int? Int(object? v) => v is null ? null : Convert.ToInt32(v, CultureInfo.InvariantCulture);
-
-    private static bool Yes(object? v) => string.Equals(Str(v), "YES", StringComparison.Ordinal);
-
-    /// <summary>
-    /// <c>meta.columns</c> 한 줄 → 열. 열 순서는 Oracle 판과 같다(column_name, position, data_type, data_length, data_precision, data_scale, nullable,
-    /// data_default, virtual_column, identity_flag, hidden_column, domain_name, comments). Tibero 는 identity·domain 이 늘 NULL 이다.
-    /// </summary>
-    internal static ColumnInfo ToColumn(object?[] r)
-    {
-        ArgumentNullException.ThrowIfNull(r);
-        return new ColumnInfo(Str(r[0])!, Int(r[1]) ?? 0, Str(r[2])!)
-        {
-            Length = Int(r[3]),
-            Precision = Int(r[4]),
-            Scale = Int(r[5]),
-            IsNullable = !string.Equals(Str(r[6]), "N", StringComparison.Ordinal),
-            DefaultValue = Str(r[7])?.Trim(),
-            IsVirtual = Yes(r[8]),
-            IsIdentity = Yes(r[9]),
-            IsInvisible = Yes(r[10]),
-            Domain = Str(r[11]),
-            Comment = Str(r[12]),
-            ByteLength = r.Length > 13 ? Int(r[13]) : null, // 문자 열의 data_length(바이트, TR1). 열이 없는 예전 행 모양이면 모름
-        };
-    }
-
-    /// <summary>
-    /// <c>meta.constraints</c> 행(constraint_name, constraint_type, status, search_condition, r_owner, r_table_name, column_name, position, r_constraint_name)
-    /// → 제약 목록. NOT NULL 검사 제약은 SQL 이 거르지만 한 번 더 뺀다(Oracle 과 같은 규칙).
-    /// </summary>
-    internal static List<ConstraintInfo> BuildConstraints(IReadOnlyList<object?[]> rows)
-    {
-        ArgumentNullException.ThrowIfNull(rows);
-        var result = new List<ConstraintInfo>();
-        foreach (var group in rows.GroupBy(r => Str(r[0])!, StringComparer.Ordinal))
-        {
-            var first = group.First();
-            var kind = Str(first[1]) switch
-            {
-                "P" => ConstraintKind.PrimaryKey,
-                "U" => ConstraintKind.Unique,
-                "R" => ConstraintKind.ForeignKey,
-                _ => ConstraintKind.Check,
-            };
-            if (kind == ConstraintKind.Check && IsNotNullCheck(Str(first[3])))
-            {
-                continue;
-            }
-
-            var columns = group.Where(r => r[6] is not null).Select(r => Str(r[6])!).ToList();
-            result.Add(new ConstraintInfo(group.Key, kind, columns)
-            {
-                IsEnabled = string.Equals(Str(first[2]), "ENABLED", StringComparison.Ordinal),
-                Condition = kind == ConstraintKind.Check ? Str(first[3]) : null,
-                ReferencedTable = kind == ConstraintKind.ForeignKey && first[4] is not null && first[5] is not null
-                    ? new DbObjectRef(Str(first[4])!, Str(first[5])!, "TABLE")
-                    : null,
-                ReferencedConstraint = kind == ConstraintKind.ForeignKey && first.Length > 8 ? Str(first[8]) : null,
-            });
-        }
-
-        return result;
-    }
-
-    /// <summary>SQL 의 <c>search_condition LIKE '%IS NOT NULL'</c> 과 같은 판정(대소문자 구분, 끝 일치).</summary>
-    internal static bool IsNotNullCheck(string? condition)
-        => condition is not null && condition.EndsWith("IS NOT NULL", StringComparison.Ordinal);
-
-    /// <summary><c>meta.indexes</c> 행(index_name, uniqueness, index_type, column_name, column_position) → 인덱스 목록.</summary>
-    private static List<IndexInfo> BuildIndexes(IReadOnlyList<object?[]> rows)
-        => [.. rows.GroupBy(r => Str(r[0])!, StringComparer.Ordinal).Select(g => new IndexInfo(
-            g.Key,
-            string.Equals(Str(g.First()[1]), "UNIQUE", StringComparison.Ordinal),
-            [.. g.Select(r => Str(r[3])!)])
-        {
-            IndexType = Str(g.First()[2]),
-        })];
 
     /// <summary>
     /// 멤버(<c>meta.procedures</c>: procedure_name, overload, subprogram_id, object_type)와 인자(<c>meta.arguments</c>: procedure_name, overload, position,

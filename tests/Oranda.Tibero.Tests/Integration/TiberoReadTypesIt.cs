@@ -7,6 +7,7 @@ using Oranda.Core.Grid;
 using Oranda.Tibero.Driver;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 
 namespace Oranda.Tibero.Tests.Integration;
 
@@ -216,7 +217,7 @@ public class TiberoReadTypesIt
     /// <summary>결과 그리드가 쓰는 경로(<see cref="TiberoExecutionService"/> → 결과 집합 첫 페이지)의 행들.</summary>
     private static async Task<List<object?[]>> GridRowsAsync(TiberoItSessions it, TiberoSession s, string sql)
     {
-        var service = new TiberoExecutionService(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: false);
+        var service = new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
         var result = await service.ExecuteAsync(s, new SqlStatement(sql, default, StatementKind.Query), NoBinds, null, CancellationToken.None);
         Assert.Equal(ExecutionStatus.Succeeded, result.Status);
         var resultSet = Assert.IsAssignableFrom<IResultSet>(result.ResultSet);
@@ -237,7 +238,7 @@ public class TiberoReadTypesIt
     /// <summary>대량 읽기 경로(<see cref="TiberoBulkExecutionService.StreamRowsAsync"/>)의 행들.</summary>
     private static async Task<List<object?[]>> BulkRowsAsync(TiberoItSessions it, TiberoSession s, string sql)
     {
-        var service = new TiberoBulkExecutionService(new AllowAll(), new NoQuestions(), it.Events);
+        var service = new TiberoBulkExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events);
         var rows = new List<object?[]>();
         await foreach (var row in service.StreamRowsAsync(s, new SqlStatement(sql, default, StatementKind.Query), NoBinds, ExecutionOptions.Default,
                            CancellationToken.None))
@@ -346,22 +347,5 @@ public class TiberoReadTypesIt
         {
             await SilentAsync(s, $"DROP TABLE {table} CASCADE CONSTRAINTS");
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 }

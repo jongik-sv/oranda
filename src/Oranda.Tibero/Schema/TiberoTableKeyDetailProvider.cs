@@ -1,10 +1,10 @@
-using System.Globalization;
 using System.Text.RegularExpressions;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Tibero.Schema;
 
@@ -78,8 +78,6 @@ internal sealed partial class TiberoTableKeyDetailProvider : ITableKeyDetailProv
         binds[keyBind] = keyName;
         return binds;
     }
-
-    private static int? Int(object? v) => v is null ? null : Convert.ToInt32(v, CultureInfo.InvariantCulture);
 
     [GeneratedRegex("^\"([^\"]+)\"$")]
     private static partial Regex QuotedName();

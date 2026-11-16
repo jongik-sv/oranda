@@ -20,7 +20,7 @@ public class Oracle11ReaderTests
     [InlineData("", false)]
     [InlineData(null, false)]
     public void Not_null_check_matches_the_sql_filter(string? condition, bool expected)
-        => Assert.Equal(expected, OracleMetadataProvider.IsNotNullCheck(condition));
+        => Assert.Equal(expected, MetadataRows.IsNotNullCheck(condition));
 
     [Fact]
     public void Not_null_check_constraints_are_dropped_and_others_kept()
@@ -33,7 +33,7 @@ public class Oracle11ReaderTests
             Cons("CK_한글", "C", "\"이름\" <> ' '"),
         ];
 
-        var result = OracleMetadataProvider.BuildConstraints(rows);
+        var result = MetadataRows.BuildConstraints(rows);
 
         Assert.Equal(["CK_POS", "PK_T", "CK_한글"], result.Select(c => c.Name));
         Assert.Equal("QTY > 0", result[0].Condition);
@@ -43,5 +43,5 @@ public class Oracle11ReaderTests
 
     [Fact]
     public void Empty_constraint_rows_give_empty_list()
-        => Assert.Empty(OracleMetadataProvider.BuildConstraints([]));
+        => Assert.Empty(MetadataRows.BuildConstraints([]));
 }

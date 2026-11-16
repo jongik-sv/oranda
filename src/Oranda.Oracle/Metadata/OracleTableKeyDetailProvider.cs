@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.RegularExpressions;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Catalog;
@@ -7,6 +6,7 @@ using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Oracle.Execution;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Oracle.Metadata;
 
@@ -91,10 +91,6 @@ internal sealed partial class OracleTableKeyDetailProvider : ITableKeyDetailProv
         c.Parameters.Add("name", table.Name);
         c.Parameters.Add(keyBind, keyName);
     }
-
-    private static string? Str(object? v) => v is null ? null : Convert.ToString(v, CultureInfo.InvariantCulture);
-
-    private static int? Int(object? v) => v is null ? null : Convert.ToInt32(v, CultureInfo.InvariantCulture);
 
     [GeneratedRegex("^\"([^\"]+)\"$")]
     private static partial Regex QuotedName();

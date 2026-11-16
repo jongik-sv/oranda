@@ -4,6 +4,7 @@ using Oranda.Core.Grid;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Tests.Integration;
+using Oranda.Tibero.Tests.Support;
 
 namespace Oranda.Tibero.Tests.Execution;
 
@@ -107,7 +108,7 @@ public class TiberoExecutionServiceIt
         }
 
         var session = await it.OpenAsync();
-        var service = new TiberoExecutionService(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: true);
+        var service = new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: true);
 
         var result = await service.ExecuteAsync(session,
             Stmt("BEGIN DBMS_OUTPUT.PUT_LINE('첫 줄'); DBMS_OUTPUT.PUT_LINE(NULL); END;"), NoBinds, null, CancellationToken.None);
@@ -233,7 +234,7 @@ public class TiberoExecutionServiceIt
         }
 
         var session = await it.OpenAsync();
-        var service = new TiberoExecutionService(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: true);
+        var service = new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: true);
         Assert.Equal(ExecutionStatus.Succeeded, (await service.ExecuteAsync(session, Stmt("BEGIN NULL; END;"), NoBinds, null, CancellationToken.None)).Status);
 
         // 서비스를 거치지 않고 버퍼에 한 줄을 넣는다(서비스로 보내면 그 자리에서 거둬 간다).
@@ -303,24 +304,7 @@ public class TiberoExecutionServiceIt
     }
 
     private static TiberoExecutionService NewService(TiberoItSessions it) =>
-        new(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: false);
+        new(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
 
     private static SqlStatement Stmt(string text) => new(text, default, StatementKind.PlSql);
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
-    }
 }

@@ -4,6 +4,7 @@ using Oracle.ManagedDataAccess.Types;
 using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Oracle.Metadata;
 
@@ -280,8 +281,6 @@ internal sealed partial class OracleMetadataProvider
             return null;
         }
     }
-
-    private static long? Long(object? v) => v is null ? null : Convert.ToInt64(v, CultureInfo.InvariantCulture);
 
     /// <summary>DbObjectRef.ObjectType → DBMS_METADATA 객체 유형 이름.</summary>
     internal static string ToMetadataType(string objectType) => objectType.ToUpperInvariant() switch

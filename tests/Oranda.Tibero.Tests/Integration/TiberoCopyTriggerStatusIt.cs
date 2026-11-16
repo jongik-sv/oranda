@@ -5,6 +5,7 @@ using Oranda.Core.Text;
 using Oranda.Core.Transfer.Copy;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Oranda.Tibero.Transfer.Copy;
 using Xunit.Abstractions;
 
@@ -89,8 +90,8 @@ public class TiberoCopyTriggerStatusIt(ITestOutputHelper output)
         };
 
         var policy = new AllowAll();
-        var bulk = new TiberoBulkExecutionService(policy, new NoQuestions(), it.Events);
-        var execution = new TiberoExecutionService(policy, new NoQuestions(), it.Events, null, dbmsOutput: false);
+        var bulk = new TiberoBulkExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events);
+        var execution = new TiberoExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
         var runner = new TiberoCopyRunner(bulk, execution, new NoRunLog());
 
         var (failed, notices) = await runner.RestoreTriggersForTestAsync(session, owner, Table, kept);
@@ -210,23 +211,6 @@ public class TiberoCopyTriggerStatusIt(ITestOutputHelper output)
         {
             session.CommandGate.Release();
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 
     /// <summary>실행기의 트리거 되살리기 단계는 실행 기록을 쓰지 않는다(시험용 통로는 기록 없이 돈다).</summary>

@@ -4,6 +4,8 @@ using System.Text.RegularExpressions;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Core.Text;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Oracle.Metadata;
 
@@ -232,7 +234,7 @@ internal sealed partial class OracleMetadataProvider
     {
         var sb = new StringBuilder();
         sb.Append("CREATE OR REPLACE AND COMPILE JAVA SOURCE NAMED ")
-            .Append(Quote(owner)).Append('.').Append(Quote(longName)).Append(" AS\n");
+            .Append(SqlIdentifier.QuoteAlways(owner)).Append('.').Append(SqlIdentifier.QuoteAlways(longName)).Append(" AS\n");
         foreach (var line in lines)
         {
             var text = line ?? string.Empty;
@@ -245,8 +247,6 @@ internal sealed partial class OracleMetadataProvider
 
         var ddl = sb.ToString().TrimEnd('\r', '\n', ' ', '\t');
         return terminator ? ddl + "\n/" : ddl;
-
-        static string Quote(string name) => "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
     }
 
     /// <summary>JAVA CLASS·JAVA RESOURCE 의 DDL 자리 안내(바이트코드·바이트라 글로 된 DDL 이 없다).</summary>

@@ -7,6 +7,7 @@ using Oranda.Core.Transfer.Copy.CrossDbms;
 using Oranda.Tibero.Driver;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Xunit.Abstractions;
 
 // 측정 시험: 서버가 거부하는 것도 사실이므로 측정 단계는 던지지 않고 번호·메시지를 줄로 남긴다(표 만들기 같은 준비 단계 실패만 시험을 실패시킨다).
@@ -892,7 +893,7 @@ public class TiberoCrossWriteMeasureIt(ITestOutputHelper output)
         return rows;
     }
 
-    private static TiberoBulkExecutionService NewService(TiberoItSessions it) => new(new AllowAll(), new NoQuestions(), it.Events);
+    private static TiberoBulkExecutionService NewService(TiberoItSessions it) => new(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events);
 
     private static string TryBindText(object value, string bindType)
     {
@@ -980,22 +981,5 @@ public class TiberoCrossWriteMeasureIt(ITestOutputHelper output)
         Note($"ddl.default.{label}.value", await TryShowAsync(s, $"SELECT {readExpression} FROM {table}"));
         Note($"ddl.default.{label}.catalog", await TryShowAsync(s,
             $"SELECT COLUMN_NAME, DATA_DEFAULT FROM USER_TAB_COLUMNS WHERE TABLE_NAME = '{table}' AND COLUMN_NAME = '{column}'"));
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 }

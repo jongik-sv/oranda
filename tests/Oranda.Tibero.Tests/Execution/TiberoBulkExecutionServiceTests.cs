@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.Execution.Providers;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
@@ -1035,8 +1036,8 @@ public sealed class TiberoBulkExecutionServiceTests : IDisposable
         Assert.False(TiberoBulkExecutionService.IsReadOnlySafeText(TiberoExecutionService.ReadOnlyBlock.ToLowerInvariant()));
         Assert.False(TiberoBulkExecutionService.IsReadOnlySafeText("BEGIN DELETE FROM T; END;"));
         Assert.False(TiberoBulkExecutionService.IsReadOnlySafeText("INSERT INTO T VALUES (1)"));
-        Assert.Equal(("INSERT", "INTO"), TiberoBulkExecutionService.LeadingWords("-- x\n (insert into t"));
-        Assert.Equal((null, null), TiberoBulkExecutionService.LeadingWords("  "));
+        Assert.Equal(("INSERT", "INTO"), BulkStatements.LeadingWords("-- x\n (insert into t"));
+        Assert.Equal((null, null), BulkStatements.LeadingWords("  "));
     }
 
     /// <summary>3행: 값 있음 / 모두 NULL / 끝값. 열 순서 = <see cref="Columns"/>.</summary>

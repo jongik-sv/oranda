@@ -4,6 +4,7 @@ using Oranda.Core.Metadata;
 using Oranda.Language.Editing;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 
 namespace Oranda.Tibero.Tests.Integration;
 
@@ -213,7 +214,7 @@ public class TiberoRowEditIt
     }
 
     private static TiberoExecutionService NewService(TiberoItSessions it) =>
-        new(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: false);
+        new(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
 
     /// <summary><c>RowEditor</c> 는 Oranda.Language 안의 internal 형식이라 공개 등록(<see cref="IRowEditor"/>)과 같은 모양으로 직접 만든다.</summary>
     private static IRowEditor NewEditor(IExecutionService execution)
@@ -239,22 +240,5 @@ public class TiberoRowEditIt
         {
             session.CommandGate.Release();
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 }

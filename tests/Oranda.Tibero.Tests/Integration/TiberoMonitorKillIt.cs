@@ -6,6 +6,7 @@ using Oranda.Core.Sessions;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Monitoring;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Xunit.Abstractions;
 
 namespace Oranda.Tibero.Tests.Integration;
@@ -184,24 +185,7 @@ public class TiberoMonitorKillIt(ITestOutputHelper output)
     }
 
     private static TiberoExecutionService NewExecution(TiberoItSessions it) =>
-        new(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: false);
+        new(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
 
     private static TiberoMonitorService NewService(TiberoItSessions it) => new(NewExecution(it));
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
-    }
 }

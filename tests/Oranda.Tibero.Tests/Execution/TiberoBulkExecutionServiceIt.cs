@@ -9,6 +9,7 @@ using Oranda.Tibero.Driver;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
 using Oranda.Tibero.Tests.Integration;
+using Oranda.Tibero.Tests.Support;
 using Xunit.Abstractions;
 
 // 측정이 섞인 쓰기 시험: 서버가 거부하는 것도 사실이므로 측정 단계는 던지지 않고 번호·메시지를 찍는다(단정은 설계가 약속한 동작에만 건다).
@@ -1577,28 +1578,11 @@ public class TiberoBulkExecutionServiceIt(ITestOutputHelper output)
     /// <summary>측정 후보 한 줄. <paramref name="Values"/> = 배열 바인드 값(없으면 배열 시험 안 함), <paramref name="Scalars"/> = 스칼라 바인드 값들(문자열 또는 byte[]).</summary>
     private sealed record MeasureCase(string Label, string ColumnType, string Expr, TiberoParamKind Kind, string[]? Values, object[] Scalars, string? ReadbackExpr);
 
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
-    }
-
     private static readonly string BigClob = string.Concat(Enumerable.Repeat("abc가나다", 16_667))[..100_000];
 
     private void Log(string text) => output.WriteLine("TB1 " + text);
 
-    private static TiberoBulkExecutionService NewService(TiberoItSessions it) => new(new AllowAll(), new NoQuestions(), it.Events);
+    private static TiberoBulkExecutionService NewService(TiberoItSessions it) => new(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events);
 
     private static string N(long value) => value.ToString(CultureInfo.InvariantCulture);
 

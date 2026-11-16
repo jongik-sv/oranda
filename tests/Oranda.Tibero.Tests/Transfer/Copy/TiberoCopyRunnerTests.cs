@@ -11,6 +11,7 @@ using Oranda.Tibero.Catalog;
 using Oranda.Tibero.Connection;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Schema;
+using Oranda.Tibero.Tests.Support;
 using Oranda.Tibero.Transfer.Copy;
 
 namespace Oranda.Tibero.Tests.Transfer.Copy;
@@ -28,8 +29,8 @@ public sealed class TiberoCopyRunnerTests
     [Fact]
     public void Subtypes_construct_with_fakes_and_are_registered_under_the_Tibero_key()
     {
-        var bulk = new TiberoBulkExecutionService(new AllowAll(), new NoQuestions(), new EventBus());
-        var execution = new TiberoExecutionService(new AllowAll(), new NoQuestions(), new EventBus(), null, dbmsOutput: false);
+        var bulk = new TiberoBulkExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), new EventBus());
+        var execution = new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), new EventBus(), null, dbmsOutput: false);
 
         var runner = new TiberoCopyRunner(bulk, execution, new SentinelRunLog());
         var precheck = new TiberoCopyPrecheckService(bulk, new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync), new AllowAll());
@@ -51,8 +52,8 @@ public sealed class TiberoCopyRunnerTests
     [Fact]
     public void Subtypes_pass_the_Tibero_parts_to_the_bases()
     {
-        var bulk = new TiberoBulkExecutionService(new AllowAll(), new NoQuestions(), new EventBus());
-        var execution = new TiberoExecutionService(new AllowAll(), new NoQuestions(), new EventBus(), null, dbmsOutput: false);
+        var bulk = new TiberoBulkExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), new EventBus());
+        var execution = new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), new EventBus(), null, dbmsOutput: false);
         var runner = new TiberoCopyRunner(bulk, execution, new SentinelRunLog());
         var precheck = new TiberoCopyPrecheckService(bulk, new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync), new AllowAll());
 
@@ -140,11 +141,11 @@ public sealed class TiberoCopyRunnerTests
     }
 
     private static TiberoCopyRunner NewRunner(ICopyRunLog log) =>
-        new(new TiberoBulkExecutionService(new AllowAll(), new NoQuestions(), new EventBus()),
-            new TiberoExecutionService(new AllowAll(), new NoQuestions(), new EventBus(), null, dbmsOutput: false), log);
+        new(new TiberoBulkExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), new EventBus()),
+            new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), new EventBus(), null, dbmsOutput: false), log);
 
     private static TiberoCopyPrecheckService NewPrecheck() =>
-        new(new TiberoBulkExecutionService(new AllowAll(), new NoQuestions(), new EventBus()),
+        new(new TiberoBulkExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), new EventBus()),
             new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync), new AllowAll());
 
     /// <summary>Tibero 모양 서버 정보: DB_UNIQUE_NAME 없이 DB 이름만, 컨테이너 없음(DbKey = <c>DB이름/-/계정</c>).</summary>
@@ -172,23 +173,6 @@ public sealed class TiberoCopyRunnerTests
 
     private static CopyDecisions Decisions() =>
         new(new HashSet<string>(StringComparer.Ordinal), new HashSet<ForeignKeyRef>(), new HashSet<string>(StringComparer.Ordinal), false);
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
-    }
 
     /// <summary>실행 기록을 시작하면 표시하고 멈추는 가짜: 실행기가 가드를 지나 실제로 일을 시작했는지를 본다.</summary>
     private sealed class SentinelRunLog : ICopyRunLog

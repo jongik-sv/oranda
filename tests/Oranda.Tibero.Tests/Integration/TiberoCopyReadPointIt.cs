@@ -7,6 +7,7 @@ using Oranda.Core.Sessions;
 using Oranda.Core.Transfer.Copy;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Oranda.Tibero.Transfer.Copy;
 using Xunit.Abstractions;
 
@@ -94,7 +95,7 @@ public class TiberoCopyReadPointIt(ITestOutputHelper output)
         await Task.Delay(TimeSpan.FromSeconds(8)); // 표를 만든 직후의 시점으로는 읽지 못할 수 있다(Oracle ORA-01466 과 같은 규칙인지 모름, 프로브 IT 와 같은 기다림)
 
         var policy = new AllowAll();
-        var bulk = new TiberoBulkExecutionService(policy, new NoQuestions(), it.Events);
+        var bulk = new TiberoBulkExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events);
         var codec = new TiberoCopyParts(bulk).Parts.Codec;
         var readOnly = it.Profile() with { ReadOnly = true };
 
@@ -297,22 +298,5 @@ public class TiberoCopyReadPointIt(ITestOutputHelper output)
         {
             session.CommandGate.Release();
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 }

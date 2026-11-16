@@ -9,6 +9,7 @@ using Oranda.Tibero.Catalog;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Plans;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Oranda.Tibero.Tuning;
 using Xunit.Abstractions;
 
@@ -446,7 +447,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
 
     private static TiberoTuningService NewService(TiberoItSessions it)
     {
-        var exec = new TiberoExecutionService(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: false);
+        var exec = new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
         return new TiberoTuningService(exec, new TiberoExecutionPlanService(exec), NewLanguage());
     }
 
@@ -455,22 +456,5 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
     {
         var type = Type.GetType("Oranda.Language.LanguageService, Oranda.Language", throwOnError: true)!;
         return (ILanguageService)Activator.CreateInstance(type)!;
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 }

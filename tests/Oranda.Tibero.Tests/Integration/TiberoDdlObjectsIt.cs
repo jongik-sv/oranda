@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using Oranda.Core.Execution;
 using Oranda.Core.Language;
 using Oranda.Core.Metadata;
+using Oranda.Core.Text;
 using Oranda.Language.Lexing;
 using Oranda.Oracle.Schema;
 using Oranda.Tibero.Schema;
@@ -109,7 +110,7 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
         if (synonym is not null)
         {
             var ddl = await QuietAsync("GetDdlAsync(SYNONYM)", () => provider.GetDdlAsync(session, new DbObjectRef("PUBLIC", synonym, "SYNONYM"), new DdlOptions(), CancellationToken.None));
-            Assert.StartsWith("CREATE OR REPLACE PUBLIC SYNONYM " + TiberoDdlAssembler.Quote(synonym) + " FOR ", ddl, StringComparison.Ordinal);
+            Assert.StartsWith("CREATE OR REPLACE PUBLIC SYNONYM " + SqlIdentifier.QuoteAlways(synonym) + " FOR ", ddl, StringComparison.Ordinal);
         }
     }
 
@@ -393,7 +394,7 @@ public class TiberoDdlObjectsIt(ITestOutputHelper output)
         return count;
     }
 
-    private static string Q(string name) => TiberoDdlAssembler.Quote(name);
+    private static string Q(string name) => SqlIdentifier.QuoteAlways(name);
 
     private static string Q(string owner, string name) => TiberoDdlText.Qualified(owner, name);
 

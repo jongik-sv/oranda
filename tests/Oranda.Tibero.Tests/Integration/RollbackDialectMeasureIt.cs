@@ -8,6 +8,7 @@ using Oranda.Core.Rollback;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Rollback;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Xunit.Abstractions;
 
 namespace Oranda.Tibero.Tests.Integration;
@@ -47,7 +48,7 @@ public class RollbackDialectMeasureIt(ITestOutputHelper output)
         try
         {
             await ExecAsync(s, $"CREATE TABLE {T} (ID NUMBER PRIMARY KEY, NAME VARCHAR2(30))");
-            var service = new TiberoExecutionService(new AllowAll(), new NoQuestions(), it.Events, null, dbmsOutput: false);
+            var service = new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
 
             foreach (var (label, text) in new[]
                      {
@@ -661,22 +662,5 @@ public class RollbackDialectMeasureIt(ITestOutputHelper output)
         {
             await TryAsync(s, $"DROP TABLE {table} PURGE");
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 }

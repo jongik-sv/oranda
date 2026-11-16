@@ -4,6 +4,7 @@ using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Tibero.Results;
 using Oranda.Tibero.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Tibero.Schema;
 

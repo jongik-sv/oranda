@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Oracle.ManagedDataAccess.Client;
+using Oranda.Core.Execution.Providers;
 
 namespace Oranda.Oracle.Execution;
 
@@ -116,7 +117,7 @@ internal static partial class LobWriteBinds
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(lobBindNames);
-        if (OracleBulkExecutionService.LeadingWords(text).First != "INSERT" || !ValuesList().IsMatch(text) || NoLongWord().IsMatch(text))
+        if (BulkStatements.LeadingWords(text).First != "INSERT" || !ValuesList().IsMatch(text) || NoLongWord().IsMatch(text))
         {
             return false;
         }

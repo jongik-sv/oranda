@@ -12,6 +12,7 @@ using Oranda.Testing.Rollback;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Xunit.Abstractions;
 
 namespace Oranda.Tibero.Tests.Integration;
@@ -204,11 +205,6 @@ public class RollbackEndToEndIt(ITestOutputHelper output)
                 await service.ExecuteAsync(session, new SqlStatement($"DROP TABLE {name} PURGE", default, StatementKind.Ddl), NoBinds, null, CancellationToken.None);
             }
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) => ValueTask.FromResult(PolicyDecision.Allowed);
     }
 
     private sealed class ConfirmAll : IExecutionPolicy

@@ -2,6 +2,7 @@ using System.Text;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using static Oranda.Core.Catalog.Providers.CatalogValues;
 
 namespace Oranda.Oracle.Metadata;
 

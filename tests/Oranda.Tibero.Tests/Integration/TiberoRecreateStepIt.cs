@@ -8,6 +8,7 @@ using Oranda.Core.Transfer.Copy;
 using Oranda.Tibero.Execution;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
+using Oranda.Tibero.Tests.Support;
 using Oranda.Tibero.Transfer.Copy;
 using Xunit.Abstractions;
 
@@ -114,8 +115,8 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
         CopyTablePlan Plan(TableRule rule, TableInfo info) => new(rule, info, info, [.. info.Columns.Select(c => c.Name)], ["ID"]);
 
         var policy = new AllowAll();
-        var runner = new TiberoCopyRunner(new TiberoBulkExecutionService(policy, new NoQuestions(), it.Events),
-            new TiberoExecutionService(policy, new NoQuestions(), it.Events, null, dbmsOutput: false), new NoRunLog());
+        var runner = new TiberoCopyRunner(new TiberoBulkExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events),
+            new TiberoExecutionService(policy, ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false), new NoRunLog());
         var (tables, notices) = await QuietAsync("RecreateAndRestoreForTestAsync",
             () => runner.RecreateAndRestoreForTestAsync(new CopySessions(session, session), job, [Plan(parentRule, parentInfo), Plan(childRule, childInfo)]));
         foreach (var notice in notices)
@@ -703,23 +704,6 @@ public class TiberoRecreateStepIt(ITestOutputHelper output)
         {
             session.CommandGate.Release();
         }
-    }
-
-    private sealed class AllowAll : IExecutionPolicy
-    {
-        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
-            ValueTask.FromResult(PolicyDecision.Allowed);
-    }
-
-    private sealed class NoQuestions : IExecutionInteraction
-    {
-        public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct) => Task.FromResult(true);
-
-        public Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
-
-        public Task<ScriptErrorAction> AskScriptErrorAsync(SqlStatement stmt, DbError failure, CancellationToken ct) =>
-            Task.FromResult(ScriptErrorAction.Stop);
     }
 
     /// <summary>시험용 통로는 실행 기록 없이 돈다.</summary>
