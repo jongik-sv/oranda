@@ -588,6 +588,8 @@
                     <SolidColorBrush x:Key="OrandaGridCurrentRowBrush" Color="#1A2F6FDE" />
                     <SolidColorBrush x:Key="OrandaGridRowMarkerBrush" Color="#2F6FDE" />
                     <SolidColorBrush x:Key="OrandaGridNeedsChangeBrush" Color="#FFD8A8" />
+                    <!-- 변경 이력(VERSIONS) 결과: 앞 버전과 값이 다른 칸 바탕(편집 칸 노랑·새 행 초록과 구분되는 보라). -->
+                    <SolidColorBrush x:Key="OrandaGridVersionChangedBrush" Color="#DFCFF7" />
                     <!-- 표 모양 목록(계획·이력·변경 일지·메시지·컴파일 오류): 줄무늬·강조 줄·차이 줄 바탕은 반투명이라 어떤 바탕 위에서도 글자가 읽힌다. -->
                     <SolidColorBrush x:Key="OrandaRowAltBrush" Color="#08000000" />
                     <SolidColorBrush x:Key="OrandaTableSelectionBrush" Color="#D3E5FA" />
@@ -646,6 +648,7 @@
                     <SolidColorBrush x:Key="OrandaGridCurrentRowBrush" Color="#265B9BFF" />
                     <SolidColorBrush x:Key="OrandaGridRowMarkerBrush" Color="#5B9BFF" />
                     <SolidColorBrush x:Key="OrandaGridNeedsChangeBrush" Color="#6B3A10" />
+                    <SolidColorBrush x:Key="OrandaGridVersionChangedBrush" Color="#4A3470" />
                     <SolidColorBrush x:Key="OrandaRowAltBrush" Color="#0BFFFFFF" />
                     <SolidColorBrush x:Key="OrandaTableSelectionBrush" Color="#2E4B6E" />
                     <SolidColorBrush x:Key="OrandaHotRowBrush" Color="#33FFA25C" />

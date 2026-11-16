@@ -315,6 +315,11 @@ public sealed partial class ResultGridControl
                     editBrush = pal.NeedsChange; // 복제한 새 행의 키 열: 반영 전에 바꿔야 한다
                 }
 
+                if (editBrush is null && m.CellChanged is not null && m.IsChangedCell(r, ord))
+                {
+                    editBrush = pal.VersionChanged; // 변경 이력 결과: 앞 버전과 값이 다른 칸
+                }
+
                 if (editBrush is not null)
                 {
                     ctx.FillRectangle(editBrush, new Rect(x, y, w, rh));
@@ -463,6 +468,9 @@ public sealed partial class ResultGridControl
         /// <summary>반영 전에 바꿔야 하는 칸(복제한 새 행의 키 열) 경고 색.</summary>
         public required IBrush NeedsChange { get; init; }
 
+        /// <summary>변경 이력(VERSIONS) 결과에서 앞 버전과 값이 다른 칸 바탕(<see cref="ResultGridModel.CellChanged"/>).</summary>
+        public required IBrush VersionChanged { get; init; }
+
         public required IBrush Text { get; init; }
 
         public required IBrush NullText { get; init; }
@@ -506,6 +514,7 @@ public sealed partial class ResultGridControl
                 CurrentRow = Brush("OrandaGridCurrentRowBrush", 0x1A2F6FDE, 0x265B9BFF),
                 RowMarker = Brush("OrandaGridRowMarkerBrush", 0xFF2F6FDE, 0xFF5B9BFF),
                 NeedsChange = Brush("OrandaGridNeedsChangeBrush", 0xFFFFD8A8, 0xFF6B3A10),
+                VersionChanged = Brush("OrandaGridVersionChangedBrush", 0xFFDFCFF7, 0xFF4A3470),
                 Text = Brush("OrandaGridTextBrush", 0xFF202020, 0xFFDCDDDE),
                 NullText = Brush("OrandaGridNullBrush", 0xFF9AA0A6, 0xFF7C828A),
                 Danger = Brush("OrandaDangerForegroundBrush", 0xFFC42B1C, 0xFFFF6B5E),

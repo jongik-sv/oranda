@@ -72,8 +72,14 @@ public sealed partial class SqlResultPaneViewModel
             _ = m.SetLocalFilterAsync(remapped);
         }
 
+        ResultAttached?.Invoke(this, m);
         UpdateStatus();
     }
+
+    /// <summary>
+    /// 새 결과 모델을 붙인 뒤 부른다(<see cref="Statement"/> 는 이미 정해져 있다). 기능이 칸 강조 등을 꽂는 자리 — 변경 이력(VERSIONS) 결과의 바뀐 칸 바탕(시작 작업이 설치).
+    /// </summary>
+    public static Action<SqlResultPaneViewModel, ResultGridModel>? ResultAttached { get; set; }
 
     /// <summary>다시 조회한 결과의 열에 거르기를 다시 맞춘다(열 이름으로 찾는다). 없어진 열의 조건은 버린다.</summary>
     internal static LocalFilterSpec RemapFilter(LocalFilterSpec spec, IReadOnlyList<ResultColumn> from, IReadOnlyList<ResultColumn> to)

@@ -147,6 +147,7 @@ public sealed class ThemeService : IDisposable
             ["OrandaGridCurrentRowBrush"] = Brush(0x40FFFFFF),
             ["OrandaGridRowMarkerBrush"] = Brush(0xFFFFFF00),
             ["OrandaGridNeedsChangeBrush"] = Brush(0xFFB35C00),
+            ["OrandaGridVersionChangedBrush"] = Brush(0xFF6A1B9A),
         };
     }
 
