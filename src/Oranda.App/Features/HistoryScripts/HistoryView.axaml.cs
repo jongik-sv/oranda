@@ -32,28 +32,14 @@ public partial class HistoryView : UserControl
         DetailSplitter.DragCompleted += (_, _) => RememberDetailHeight();
         DataContextChanged += (_, _) => ObserveViewModel();
         ApplyDetailRow();
-        RerunButton.Click += async (_, _) =>
-        {
-            if (DataContext is HistoryViewModel { Selected: { } item } vm)
-            {
-                await vm.RerunAsync(item);
-            }
-        };
-        ToEditorButton.Click += async (_, _) =>
-        {
-            if (DataContext is HistoryViewModel { Selected: { } item } vm)
-            {
-                await vm.SendToEditorAsync(item);
-            }
-        };
+        RerunButton.Click += OnRerun;
+        NarrowRerunButton.Click += OnRerun;
+        ToEditorButton.Click += OnToEditor;
+        NarrowToEditorButton.Click += OnToEditor;
         DeleteButton.Click += OnDelete;
-        ClearButton.Click += async (_, _) =>
-        {
-            if (DataContext is HistoryViewModel vm)
-            {
-                await vm.ClearAsync(vm.CurrentConnectionOnly);
-            }
-        };
+        NarrowDeleteMenu.Click += OnDelete;
+        ClearButton.Click += OnClear;
+        NarrowClearMenu.Click += OnClear;
         MoreButton.Click += async (_, _) =>
         {
             if (DataContext is HistoryViewModel vm)
@@ -61,13 +47,7 @@ public partial class HistoryView : UserControl
                 await vm.LoadMoreAsync();
             }
         };
-        List.DoubleTapped += async (_, _) =>
-        {
-            if (DataContext is HistoryViewModel { Selected: { } item } vm)
-            {
-                await vm.SendToEditorAsync(item);
-            }
-        };
+        List.DoubleTapped += OnToEditor;
         List.KeyDown += OnListKeyDown;
         ListMenu.Opening += (_, e) =>
         {
@@ -143,6 +123,30 @@ public partial class HistoryView : UserControl
         {
             RememberedDetailHeight = row.ActualHeight;
             row.Height = new GridLength(s_detailHeight);
+        }
+    }
+
+    private async void OnRerun(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is HistoryViewModel { Selected: { } item } vm)
+        {
+            await vm.RerunAsync(item);
+        }
+    }
+
+    private async void OnToEditor(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is HistoryViewModel { Selected: { } item } vm)
+        {
+            await vm.SendToEditorAsync(item);
+        }
+    }
+
+    private async void OnClear(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is HistoryViewModel vm)
+        {
+            await vm.ClearAsync(vm.CurrentConnectionOnly);
         }
     }
 

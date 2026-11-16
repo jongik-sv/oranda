@@ -316,6 +316,32 @@ public class DockToolToggleTests
 
     private static IEnumerable<DockNode> Groups(DockNode n) => n.Kind == DockNodeKind.ToolGroup ? [n] : n.Children.SelectMany(Groups);
 
+    // gc NL-05: 실행 이력의 기본 위치 = 왼쪽 묶음의 탭. 기본 배치에서는 닫혀 있고, 켜면 왼쪽에, 끄면 다시 닫힌 창으로.
+    [Fact]
+    public Task History_starts_closed_and_turns_on_as_a_left_tab() => HeadlessHost.Run(() =>
+    {
+        using var h = new ShellHarness();
+        var ws = h.Get<DockWorkspace>();
+        ws.Activate(ws.OpenDocument("oranda.panel.sqlEditor")!);
+        Pump();
+        Assert.False(ws.IsToolVisible("oranda.panel.history"));
+        Assert.Contains("oranda.panel.history", ws.Capture().HiddenTools);
+
+        Assert.True(ws.ToggleTool("oranda.panel.history"));
+        Pump();
+        AssertShown(h, ws, "oranda.panel.history");
+        var root = ws.Capture().Root!;
+        var group = Groups(root).Single(g => g.Tools.Contains("oranda.panel.history"));
+        Assert.Equal(DockLocation.Left, LayoutPlanner.LocationOf(root, group));
+        Assert.Contains("oranda.panel.schemaBrowser", group.Tools);
+
+        Assert.False(ws.ToggleTool("oranda.panel.history")); // 돌려주는 값 = 바뀐 뒤 보이는지
+        Pump();
+        Assert.False(ws.IsToolVisible("oranda.panel.history"));
+        Assert.Contains("oranda.panel.history", ws.Capture().HiddenTools);
+        Assert.True(ws.IsToolVisible("oranda.panel.schemaBrowser"));
+    });
+
     [Fact]
     public Task A_bottom_group_is_added_under_the_documents_without_touching_other_views() => HeadlessHost.Run(() =>
     {
@@ -338,15 +364,15 @@ public class DockToolToggleTests
         ws.LayoutRebuilt += (_, _) => rebuilt++;
         var views = DockViews(h);
 
-        Assert.True(ws.ToggleTool("oranda.panel.history"));
+        Assert.True(ws.ToggleTool("oranda.panel.changeJournal"));
         Pump();
 
-        AssertShown(h, ws, "oranda.panel.history");
+        AssertShown(h, ws, "oranda.panel.changeJournal");
         Assert.Equal(0, rebuilt);
         var now = DockViews(h);
         Assert.All(views, v => Assert.Same(v.Value, now[v.Key])); // 문서 칸은 세로 분할 안에 남아 있어 형제로만 끼운다
         var root = ws.Capture().Root!;
-        Assert.Equal(DockLocation.Bottom, LayoutPlanner.LocationOf(root, Groups(root).Single(g => g.Tools.Contains("oranda.panel.history"))));
+        Assert.Equal(DockLocation.Bottom, LayoutPlanner.LocationOf(root, Groups(root).Single(g => g.Tools.Contains("oranda.panel.changeJournal"))));
     });
 
     [Fact]

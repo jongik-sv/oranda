@@ -50,7 +50,7 @@ public class LayoutPlannerTests
         Tool("messages", DockLocation.Bottom, 8),
         Tool("output", DockLocation.Bottom, 10),
         Tool("plan", DockLocation.Bottom, 30),
-        Tool("history", DockLocation.Bottom, 40),
+        Tool("history", DockLocation.Left, 40),
         Tool("changeJournal", DockLocation.Bottom, 45),
         Tool("compileErrors", DockLocation.Bottom, 50),
         Tool("outline", DockLocation.Right, 10),
@@ -109,8 +109,15 @@ public class LayoutPlannerTests
         Assert.Equal(DockLocation.Bottom, LayoutPlanner.LocationOf(root, bottom));
         Assert.DoesNotContain(FindGroupsOf(root), g => LayoutPlanner.LocationOf(root, g) == DockLocation.Right);
         Assert.Equal(
-            [Id("plan"), Id("history"), Id("changeJournal"), Id("compileErrors"), Id("outline"), Id("binds"), Id("templates"), Id("rowView")],
+            [Id("history"), Id("plan"), Id("changeJournal"), Id("compileErrors"), Id("outline"), Id("binds"), Id("templates"), Id("rowView")],
             layout.HiddenTools);
+
+        // 실행 이력은 닫혀 있다가 처음 열면 왼쪽 묶음(스키마 브라우저·스크립트)의 탭으로 붙는다.
+        var shown = LayoutPlanner.ShowTool(layout, Real.First(p => p.Id == Id("history")));
+        var left = FindGroup(shown.Root!, Id("history"));
+        Assert.Equal(DockLocation.Left, LayoutPlanner.LocationOf(shown.Root!, left));
+        Assert.Equal([Id("schemaBrowser"), Id("scripts"), Id("mybatisStatements"), Id("history")], left.Tools);
+        Assert.Equal(Id("history"), left.ActiveTool);
         Assert.Contains(LayoutPlanner.RightToolsOpenMigration, layout.Migrations!);
 
         // SQL 탭과 함께 보이는 창(MyBatis 범위 창 2개 제외): 조사 11개 → 왼쪽 2 + 아래 3 = 5.
@@ -135,7 +142,7 @@ public class LayoutPlannerTests
     [Theory]
     [InlineData("plan", DockLocation.Bottom)]
     [InlineData("compileErrors", DockLocation.Bottom)]
-    [InlineData("history", DockLocation.Bottom)]
+    [InlineData("history", DockLocation.Left)]
     [InlineData("binds", DockLocation.Right)]
     [InlineData("templates", DockLocation.Right)]
     public void A_closed_default_tool_opens_at_its_default_location(string name, DockLocation expected)
@@ -252,12 +259,12 @@ public class LayoutPlannerTests
     public void Reconcile_adds_newly_registered_tool_at_its_default_location()
     {
         var saved = LayoutPlanner.CreateDefault(Standard);
-        var withNew = Standard.Append(Tool("history", DockLocation.Bottom, 30)).Append(Tool("rowView", DockLocation.Left, 5)).ToArray();
+        var withNew = Standard.Append(Tool("auditLog", DockLocation.Bottom, 30)).Append(Tool("rowView", DockLocation.Left, 5)).ToArray();
 
         var r = LayoutPlanner.Reconcile(saved, withNew);
 
         var bottom = FindGroup(r.Root!, Id("output"));
-        Assert.Equal([Id("output"), Id("messages"), Id("history")], bottom.Tools);
+        Assert.Equal([Id("output"), Id("messages"), Id("auditLog")], bottom.Tools);
         var left = FindGroup(r.Root!, Id("schemaBrowser"));
         Assert.Contains(Id("rowView"), left.Tools);
     }

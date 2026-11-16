@@ -5,8 +5,159 @@
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.ChangeJournal"
              x:Class="Oranda.App.Features.ChangeJournal.ChangeJournalView"
-             x:DataType="vm:ChangeJournalViewModel">
+             x:DataType="vm:ChangeJournalViewModel"
+             ctl:NarrowLayout.Threshold="{x:Static ctl:NarrowLayout.DefaultThreshold}">
+  <UserControl.Resources>
+    <!-- 넓은 배치의 표 줄(되돌리기 지점 설계 11.1): 접기·아이콘 | 시간 | 객체 | 원인 | 요약 | 영향 행 | 시점 | 원복 스크립트. -->
+    <DataTemplate x:Key="JournalRowTemplate" x:DataType="vm:IJournalRow">
+      <Grid ctl:TableColumns.Row="True" ColumnDefinitions="44,124,200,92,*,76,200,170" ToolTip.Tip="{Binding SummaryText}">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+          <TextBlock Width="12" Classes="dim" Text="{Binding ExpandGlyph}" VerticalAlignment="Center" />
+          <ContentControl VerticalAlignment="Center" IsVisible="{Binding !IsChild}"
+                          Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+        </StackPanel>
+        <TextBlock Grid.Column="1" VerticalAlignment="Center" Classes="mono dim time" Text="{Binding TimeText}"
+                   Classes.child="{Binding IsChild}" />
+        <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" Text="{Binding ObjectText}" />
+        <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" Text="{Binding CauseText}" />
+        <TextBlock Grid.Column="4" Padding="6,0,10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono"
+                   Classes.danger-text="{Binding IsFailure}" Text="{Binding SummaryText}" />
+        <TextBlock Grid.Column="5" Padding="6,0" VerticalAlignment="Center" HorizontalAlignment="Right" Classes="mono" Text="{Binding RowsText}" />
+        <TextBlock Grid.Column="6" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono dim" Text="{Binding PointText}" />
+        <TextBlock Grid.Column="7" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   Classes.warning-text="{Binding IsScriptWarning}" Text="{Binding ScriptText}" />
+      </Grid>
+    </DataTemplate>
+    <!-- 좁은 배치(폭 < 560)의 카드: 1줄 = 접기·아이콘·시간·원인 배지 … 원복 상태 칩 / 2줄 = 객체(굵게) / 3줄 = 요약 · 영향 행(흐리게).
+         묶음 안 문장 줄은 들여 쓴 2줄 카드(객체 줄 없음). 표에서 밀려난 시점·원복 상태 전문은 ToolTip 에 모두 보인다. -->
+    <DataTemplate x:Key="JournalCardTemplate" x:DataType="vm:IJournalRow">
+      <StackPanel Classes="journal-card" Classes.child="{Binding IsChild}" Spacing="2">
+        <ToolTip.Tip>
+          <StackPanel Spacing="2" MaxWidth="480">
+            <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding ObjectText}" IsVisible="{Binding !!ObjectText.Length}" />
+            <TextBlock TextWrapping="Wrap" Text="{Binding SummaryText}" />
+            <TextBlock Text="{Binding RowsText, StringFormat='영향 행: {0}'}" IsVisible="{Binding !!RowsText.Length}" />
+            <TextBlock Text="{Binding PointText, StringFormat='시점: {0}'}" IsVisible="{Binding !!PointText.Length}" />
+            <TextBlock TextWrapping="Wrap" Text="{Binding ScriptText, StringFormat='원복 스크립트: {0}'}" />
+          </StackPanel>
+        </ToolTip.Tip>
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,6,0" IsVisible="{Binding !IsChild}">
+            <TextBlock Width="10" Classes="dim" Text="{Binding ExpandGlyph}" VerticalAlignment="Center" />
+            <ContentControl VerticalAlignment="Center"
+                            Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
+          </StackPanel>
+          <TextBlock Grid.Column="1" Classes="mono dim" VerticalAlignment="Center" Text="{Binding TimeText}" />
+          <Border Grid.Column="2" Classes="badge" Margin="6,0,0,0"
+                  Classes.commit="{Binding CauseText, Converter={x:Static vm:JournalTone.Cause}, ConverterParameter=commit}"
+                  Classes.run="{Binding CauseText, Converter={x:Static vm:JournalTone.Cause}, ConverterParameter=run}"
+                  Classes.ddl="{Binding CauseText, Converter={x:Static vm:JournalTone.Cause}, ConverterParameter=ddl}">
+            <TextBlock Text="{Binding CauseText}" />
+          </Border>
+          <Border Grid.Column="3" Classes="badge" Margin="6,0,0,0" HorizontalAlignment="Right"
+                  Classes.ok="{Binding Converter={x:Static vm:JournalTone.Confirmed}}"
+                  Classes.ddl="{Binding ScriptText, Converter={x:Static vm:JournalTone.Script}, ConverterParameter=ddl}"
+                  Classes.fail="{Binding ScriptText, Converter={x:Static vm:JournalTone.Script}, ConverterParameter=fail}"
+                  Classes.warn="{Binding IsScriptWarning}">
+            <TextBlock TextTrimming="CharacterEllipsis" Text="{Binding ScriptText}" />
+          </Border>
+        </Grid>
+        <TextBlock FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Text="{Binding ObjectText}" IsVisible="{Binding !IsChild}" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0" Classes="dim" TextTrimming="CharacterEllipsis" Classes.danger-text="{Binding IsFailure}" Text="{Binding SummaryText}" />
+          <TextBlock Grid.Column="1" Margin="8,0,0,0" Classes="mono dim" Text="{Binding RowsText, StringFormat='{}{0}행'}" IsVisible="{Binding !!RowsText.Length}" />
+        </Grid>
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
   <UserControl.Styles>
+    <!-- 넓은 배치 ↔ 좁은 배치(NarrowLayout). 같은 ListBox 에 템플릿만 바꾼다(선택·두 번 누르기·다중 선택이 그대로). 아래 두 상자 배치는 창 코드가 바꾼다. -->
+    <Style Selector="ListBox#List">
+      <Setter Property="ItemTemplate" Value="{StaticResource JournalRowTemplate}" />
+    </Style>
+    <Style Selector="vm|ChangeJournalView.narrow ListBox#List">
+      <Setter Property="ItemTemplate" Value="{StaticResource JournalCardTemplate}" />
+    </Style>
+    <Style Selector="Border#NarrowToolbar, Button.pane-copy">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="vm|ChangeJournalView.narrow Border#NarrowToolbar, vm|ChangeJournalView.narrow Button.pane-copy">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="vm|ChangeJournalView.narrow Border#WideToolbar, vm|ChangeJournalView.narrow Border#JournalHeaderBorder">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="GridSplitter#PaneSplitter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="vm|ChangeJournalView.narrow GridSplitter#PaneSplitter">
+      <Setter Property="Background" Value="{DynamicResource OrandaSplitterBrush}" />
+    </Style>
+    <!-- 아래 칸(원복 스크립트·차이): 넓으면 가로 스크롤, 좁으면 줄바꿈(가로로 잘리지 않게). -->
+    <Style Selector="ScrollViewer#DiffScroll">
+      <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+    </Style>
+    <Style Selector="vm|ChangeJournalView.narrow ScrollViewer#DiffScroll">
+      <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+    </Style>
+    <Style Selector="vm|ChangeJournalView.narrow ItemsControl#DiffList TextBlock">
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="StackPanel.journal-card">
+      <Setter Property="Margin" Value="8,5" />
+    </Style>
+    <Style Selector="StackPanel.journal-card.child">
+      <Setter Property="Margin" Value="28,4,8,4" />
+    </Style>
+    <!-- 카드 배지: 테두리·글자를 같은 색으로(라이트·다크 모두 테마별 색이 있다). 커밋 파랑 · 원복 실행 주황 · DDL 보라 · 확정 초록 · 경고 주황 갈색 · 실패 빨강 · 그 밖 회색. -->
+    <Style Selector="Border.badge">
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconNeutralBrush}" />
+      <Setter Property="Background" Value="{DynamicResource OrandaToolbarBackgroundBrush}" />
+    </Style>
+    <Style Selector="Border.badge > TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource OrandaFontSizeSmall}" />
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconNeutralBrush}" />
+    </Style>
+    <Style Selector="Border.badge.commit">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconBlueBrush}" />
+    </Style>
+    <Style Selector="Border.badge.commit > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconBlueBrush}" />
+    </Style>
+    <Style Selector="Border.badge.run">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconOrangeBrush}" />
+    </Style>
+    <Style Selector="Border.badge.run > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconOrangeBrush}" />
+    </Style>
+    <Style Selector="Border.badge.ddl">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconPurpleBrush}" />
+    </Style>
+    <Style Selector="Border.badge.ddl > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconPurpleBrush}" />
+    </Style>
+    <Style Selector="Border.badge.ok">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.badge.ok > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.badge.warn">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.badge.warn > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.badge.fail">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.badge.fail > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" />
+    </Style>
     <!-- 아래 두 칸(DDL·차이)의 제목 띠 -->
     <Style Selector="Border.pane-title">
       <Setter Property="Background" Value="{DynamicResource OrandaPanelHeaderBrush}" />
@@ -27,8 +178,54 @@
     </Style>
   </UserControl.Styles>
   <DockPanel>
+    <!-- 좁은 도구 줄(시안 Main): 1줄 = 검색 + 「필터」 / (펼치면) 칩 줄 = 이 접속만 · 보관된 것만 · 원인 · 대상 / 2줄 = 새로 고침 · 편집기로 | 원복 스크립트 열기 · 이 실행 전과 비교. -->
+    <Border x:Name="NarrowToolbar" DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Spacing="4">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0" x:Name="NarrowSearchBox" Classes="compact search" Margin="0,0,6,0" VerticalAlignment="Center" MinWidth="80"
+                   PlaceholderText="객체 이름·DDL 검색" Text="{Binding SearchText, Mode=TwoWay}" AutomationProperties.Name="객체 이름·DDL 검색">
+            <TextBox.InnerLeftContent>
+              <ContentControl Opacity="0.7" VerticalAlignment="Center"
+                              Content="{Binding Source='find', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+            </TextBox.InnerLeftContent>
+          </TextBox>
+          <ToggleButton Grid.Column="1" Classes="tool" x:Name="NarrowFilterToggle" Content="필터" icons:ButtonIcon.Key="filter" IsChecked="True"
+                        ToolTip.Tip="이 접속만 · 보관된 것만 · 원인 거르기 펼치기·접기" />
+        </Grid>
+        <WrapPanel x:Name="NarrowFilterChips" IsVisible="{Binding #NarrowFilterToggle.IsChecked}">
+          <ToggleButton Classes="tool" Content="이 접속만" icons:ButtonIcon.Key="connect" Margin="0,0,4,4" IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}"
+                        ToolTip.Tip="지금 접속의 변경만 보기" />
+          <ToggleButton Classes="tool" Content="보관된 것만" Margin="0,0,4,4" IsChecked="{Binding OnlySucceeded, Mode=TwoWay}"
+                        ToolTip.Tip="보관에 실패한 줄은 숨기기" />
+          <ComboBox x:Name="NarrowCauseBox" Classes="compact" MinWidth="100" Margin="0,0,4,4" VerticalAlignment="Center"
+                    ItemsSource="{Binding CauseChoices}" SelectedItem="{Binding SelectedCause, Mode=TwoWay}" AutomationProperties.Name="원인 거르기">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:JournalCauseChoice">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <Border Classes="chip" Margin="0,0,4,4" IsVisible="{Binding HasObjectFilter}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="{Binding ObjectFilterText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="220" />
+              <Button Classes="toolbar" x:Name="NarrowClearFilterButton" Content="해제" Padding="1" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True"
+                      ToolTip.Tip="대상 거르기 해제" />
+            </StackPanel>
+          </Border>
+        </WrapPanel>
+        <StackPanel Orientation="Horizontal">
+          <Button Classes="toolbar" x:Name="NarrowRefreshButton" Content="새로 고침" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True" />
+          <Button Classes="toolbar" x:Name="NarrowOpenButton" Content="이 DDL 을 새 편집기에 열기" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True" />
+          <Separator Classes="toolbar" />
+          <Button Classes="toolbar" x:Name="NarrowOpenScriptButton" Content="원복 스크립트 열기" icons:ButtonIcon.Key="fileSql" icons:ButtonIcon.IconOnly="True"
+                  IsEnabled="{Binding CanOpenScript}" ToolTip.Tip="원복 스크립트 열기 — 고른 커밋 묶음의 원복 스크립트를 새 탭에 엽니다(자동으로 실행하지 않습니다)" />
+          <Button Classes="toolbar" x:Name="NarrowCompareButton" Content="이 실행 전과 비교…" icons:ButtonIcon.Key="diff" icons:ButtonIcon.IconOnly="True"
+                  IsEnabled="{Binding CanCompare}" ToolTip.Tip="이 실행 전과 비교… — 기록한 실행 직전 시점과 지금 데이터를 비교해 되돌립니다" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
     <!-- 툴바 한 줄: 검색 · 이 접속만 · 보관된 것만 · (대상 칩) | 새로 고침 · 새 편집기에 열기 -->
-    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+    <Border x:Name="WideToolbar" DockPanel.Dock="Top" Classes="panel-toolbar">
       <WrapPanel>
         <TextBox x:Name="SearchBox" Classes="compact search" Width="240" Margin="0,0,6,0" VerticalAlignment="Center"
                  PlaceholderText="객체 이름·DDL 검색" Text="{Binding SearchText, Mode=TwoWay}">
@@ -71,9 +268,10 @@
     </Border>
     <Grid RowDefinitions="*,5,*">
       <!-- 표(되돌리기 지점 설계 11.1): 접기·아이콘 | 시간 | 객체 | 원인 | 요약 | 영향 행 | 시점 | 원복 스크립트.
-           DDL 보관본·커밋 묶음·묶음 안 문장 줄이 같은 열을 쓴다(IJournalRow). 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns). -->
+           DDL 보관본·커밋 묶음·묶음 안 문장 줄이 같은 열을 쓴다(IJournalRow). 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns).
+           좁은 배치는 같은 목록을 카드로 그린다(머리글 숨김). -->
       <DockPanel Grid.Row="0" ctl:TableColumns.Scope="change-journal">
-        <Border DockPanel.Dock="Top" Classes="grid-header">
+        <Border x:Name="JournalHeaderBorder" DockPanel.Dock="Top" Classes="grid-header">
           <Grid x:Name="JournalHeader" ctl:TableColumns.Header="True" ColumnDefinitions="44,124,200,92,*,76,200,170">
             <TextBlock Grid.Column="1" Padding="6,0" Text="시간" />
             <TextBlock Grid.Column="2" Padding="6,0" Text="객체" />
@@ -85,55 +283,41 @@
           </Grid>
         </Border>
         <ListBox x:Name="List" Classes="table" ItemsSource="{Binding Rows}" SelectionMode="Multiple"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="변경 일지">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:IJournalRow">
-              <Grid ctl:TableColumns.Row="True" ColumnDefinitions="44,124,200,92,*,76,200,170" ToolTip.Tip="{Binding SummaryText}">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
-                  <TextBlock Width="12" Classes="dim" Text="{Binding ExpandGlyph}" VerticalAlignment="Center" />
-                  <ContentControl VerticalAlignment="Center" IsVisible="{Binding !IsChild}"
-                                  Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
-                </StackPanel>
-                <TextBlock Grid.Column="1" VerticalAlignment="Center" Classes="mono dim time" Text="{Binding TimeText}"
-                           Classes.child="{Binding IsChild}" />
-                <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" Text="{Binding ObjectText}" />
-                <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" Text="{Binding CauseText}" />
-                <TextBlock Grid.Column="4" Padding="6,0,10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono"
-                           Classes.danger-text="{Binding IsFailure}" Text="{Binding SummaryText}" />
-                <TextBlock Grid.Column="5" Padding="6,0" VerticalAlignment="Center" HorizontalAlignment="Right" Classes="mono" Text="{Binding RowsText}" />
-                <TextBlock Grid.Column="6" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono dim" Text="{Binding PointText}" />
-                <TextBlock Grid.Column="7" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           Classes.warning-text="{Binding IsScriptWarning}" Text="{Binding ScriptText}" />
-              </Grid>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="변경 일지" />
       </DockPanel>
       <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="Transparent" />
-      <Grid Grid.Row="2" ColumnDefinitions="*,5,*">
+      <!-- 넓은 배치 = 좌우 반반, 좁은 배치 = 위(실행한 문장·DDL) / 분할선 / 아래(원복 스크립트·차이) 세로로 쌓는다(창 코드 ApplyPaneLayout). -->
+      <Grid x:Name="PaneGrid" Grid.Row="2" ColumnDefinitions="*,5,*">
         <!-- 고른 항목의 보관된 DDL -->
-        <DockPanel Grid.Column="0">
+        <DockPanel x:Name="DetailPane" Grid.Column="0">
           <Border DockPanel.Dock="Top" Classes="pane-title">
             <DockPanel>
               <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
                               Content="{Binding Source='fileSql', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
-              <TextBlock Text="{Binding DetailTitle}" TextTrimming="CharacterEllipsis" />
+              <Button DockPanel.Dock="Right" Classes="toolbar pane-copy" x:Name="CopyDetailButton" Content="DDL·실행한 문장 복사" Padding="2"
+                      icons:ButtonIcon.Key="copy" icons:ButtonIcon.IconOnly="True" ToolTip.Tip="DDL·실행한 문장 복사"
+                      IsEnabled="{Binding !!DetailText.Length}" />
+              <TextBlock Text="{Binding DetailTitle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
             </DockPanel>
           </Border>
           <sqled:SqlCodeView x:Name="DetailBox" Text="{Binding DetailText, Mode=OneWay}"
                              Background="{DynamicResource OrandaCodeBackgroundBrush}" AutomationProperties.Name="보관된 DDL" />
         </DockPanel>
-        <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+        <GridSplitter x:Name="PaneSplitter" Grid.Column="1" ResizeDirection="Columns"
+                      AutomationProperties.Name="두 상자 나누기" />
         <!-- 차이: + 새 쪽에만(초록) · − 옛 쪽에만(빨강) -->
-        <DockPanel Grid.Column="2">
+        <DockPanel x:Name="DiffPane" Grid.Column="2">
           <Border DockPanel.Dock="Top" Classes="pane-title">
             <DockPanel>
               <ContentControl DockPanel.Dock="Left" Margin="0,0,6,0" VerticalAlignment="Center"
                               Content="{Binding Source='diff', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
-              <TextBlock Text="{Binding DiffTitle}" TextTrimming="CharacterEllipsis" />
+              <Button DockPanel.Dock="Right" Classes="toolbar pane-copy" x:Name="CopyDiffButton" Content="원복 스크립트·차이 복사" Padding="2"
+                      icons:ButtonIcon.Key="copy" icons:ButtonIcon.IconOnly="True" ToolTip.Tip="원복 스크립트·차이 복사"
+                      IsEnabled="{Binding !!Diff.Count}" />
+              <TextBlock Text="{Binding DiffTitle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
             </DockPanel>
           </Border>
-          <ScrollViewer HorizontalScrollBarVisibility="Auto" Background="{DynamicResource OrandaCodeBackgroundBrush}">
+          <ScrollViewer x:Name="DiffScroll" Background="{DynamicResource OrandaCodeBackgroundBrush}">
             <ItemsControl x:Name="DiffList" ItemsSource="{Binding Diff}" Margin="0,4">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:DiffLine">

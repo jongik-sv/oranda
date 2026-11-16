@@ -557,7 +557,10 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
         Diff.Clear();
         if (!group.CanOpenScript)
         {
-            DiffTitle = "원복 스크립트 없음: " + group.ScriptText;
+            // 상태는 확정·불완전·확인 필요인데 보관 파일이 없는 묶음(지워졌거나 기록하지 못함): 「없음: 확정 · N문장」 은 서로 어긋나 보인다.
+            DiffTitle = group.Group.State is RollbackScriptState.Confirmed or RollbackScriptState.Incomplete or RollbackScriptState.Unverified
+                ? "원복 스크립트를 읽지 못함: 보관된 파일이 없다"
+                : "원복 스크립트 없음: " + group.ScriptText;
         }
         else if (error is not null)
         {

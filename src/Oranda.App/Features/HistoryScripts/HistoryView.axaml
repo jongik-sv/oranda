@@ -6,10 +6,126 @@
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.HistoryScripts"
              x:Class="Oranda.App.Features.HistoryScripts.HistoryView"
-             x:DataType="vm:HistoryViewModel">
+             x:DataType="vm:HistoryViewModel"
+             ctl:NarrowLayout.Threshold="{x:Static ctl:NarrowLayout.DefaultThreshold}">
+  <UserControl.Resources>
+    <!-- 넓은 배치의 표 줄: 시간 | 상태 | 접속 | 경과 | 행 | SQL (+ 오류). 머리글과 같은 열 폭(TableColumns). -->
+    <DataTemplate x:Key="HistoryRowTemplate" x:DataType="vm:HistoryItem">
+      <Grid ctl:TableColumns.Row="True" ColumnDefinitions="128,74,120,72,72,*,Auto" ToolTip.Tip="{Binding FullSql}">
+        <TextBlock Grid.Column="0" Padding="8,0,6,0" VerticalAlignment="Center" Classes="mono dim" Text="{Binding TimeText}" />
+        <StackPanel Grid.Column="1" Margin="6,0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+          <ContentControl VerticalAlignment="Center"
+                          Content="{Binding StatusIconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
+          <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Classes.danger-text="{Binding IsProblem}" />
+        </StackPanel>
+        <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding ProfileName}" />
+        <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" Classes="num" Text="{Binding ElapsedText}" />
+        <TextBlock Grid.Column="4" Padding="6,0" VerticalAlignment="Center" Classes="num" Text="{Binding RowsText}" />
+        <TextBlock Grid.Column="5" Padding="10,0,6,0" VerticalAlignment="Center" Classes="mono" TextTrimming="CharacterEllipsis" sqled:SqlInlineText.Sql="{Binding SqlPreview}" />
+        <TextBlock Grid.Column="6" Padding="6,0,10,0" VerticalAlignment="Center" MaxWidth="320" Classes="danger-text" TextTrimming="CharacterEllipsis"
+                   Text="{Binding ErrorText}" IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </Grid>
+    </DataTemplate>
+    <!-- 좁은 배치(폭 < 560, 왼쪽·오른쪽에 붙였을 때)의 카드: 1줄 = 상태·시간·경과·행 수 … 접속 / 2줄 = SQL 첫 줄 / 3줄 = 오류(있을 때). -->
+    <DataTemplate x:Key="HistoryCardTemplate" x:DataType="vm:HistoryItem">
+      <StackPanel Classes="history-card" Spacing="1" ToolTip.Tip="{Binding FullSql}">
+        <!-- 접속 이름이 남는 칸을 받아 먼저 줄어든다(기본 왼쪽 폭 약 280 에서도 시간·경과·행 수가 보이게). -->
+        <Grid ColumnDefinitions="Auto,*">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+            <ContentControl VerticalAlignment="Center"
+                            Content="{Binding StatusIconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
+            <TextBlock Text="{Binding StatusText}" Classes.danger-text="{Binding IsProblem}" />
+            <TextBlock Classes="mono dim" Text="{Binding TimeText}" />
+            <TextBlock Classes="mono dim" Text="{Binding ElapsedText}" />
+            <TextBlock Classes="mono dim" Text="{Binding RowsText, StringFormat='{}{0}행'}"
+                       IsVisible="{Binding RowsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+          <TextBlock Grid.Column="1" Margin="8,0,0,0" Classes="dim" TextTrimming="CharacterEllipsis" HorizontalAlignment="Right"
+                     Text="{Binding ProfileName}"
+                     IsVisible="{Binding !$parent[ListBox].((vm:HistoryViewModel)DataContext).CurrentConnectionOnly}" />
+        </Grid>
+        <TextBlock Classes="mono" TextTrimming="CharacterEllipsis" sqled:SqlInlineText.Sql="{Binding SqlPreview}" />
+        <TextBlock Classes="danger-text" TextTrimming="CharacterEllipsis" Text="{Binding ErrorText}"
+                   IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+  <UserControl.Styles>
+    <!-- 넓은 배치 ↔ 좁은 배치. 같은 ListBox 를 쓰고 템플릿만 바꾼다(선택·우클릭·키·다중 선택이 그대로). -->
+    <Style Selector="StackPanel.history-card">
+      <Setter Property="Margin" Value="8,4" />
+    </Style>
+    <Style Selector="StackPanel.history-card > TextBlock">
+      <Setter Property="Margin" Value="21,0,0,0" />
+    </Style>
+    <Style Selector="Border#NarrowToolbar">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="vm|HistoryView.narrow Border#NarrowToolbar">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="vm|HistoryView:not(.narrow) Panel#DetailErrorBand">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="vm|HistoryView.narrow Border#WideToolbar, vm|HistoryView.narrow Border#HistoryHeaderBorder">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ListBox#List">
+      <Setter Property="ItemTemplate" Value="{StaticResource HistoryRowTemplate}" />
+    </Style>
+    <Style Selector="vm|HistoryView.narrow ListBox#List">
+      <Setter Property="ItemTemplate" Value="{StaticResource HistoryCardTemplate}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
+    <!-- 좁은 도구 줄(시안 History): 1줄 = 검색 + 「필터」 / (필터를 켜면) 칩 줄 = 이 접속만 · 상태 / 2줄 = 다시 실행 · 편집기로 … 「⋯」(지우기 · 모두 비우기). -->
+    <Border x:Name="NarrowToolbar" DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Spacing="4">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0" x:Name="NarrowSearchBox" Classes="compact search" Margin="0,0,6,0" VerticalAlignment="Center" MinWidth="80"
+                   PlaceholderText="SQL 검색 (3자 이상)" Text="{Binding SearchText, Mode=TwoWay}" AutomationProperties.Name="SQL 검색">
+            <TextBox.InnerLeftContent>
+              <ContentControl Opacity="0.7" VerticalAlignment="Center"
+                              Content="{Binding Source='find', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=14}" />
+            </TextBox.InnerLeftContent>
+          </TextBox>
+          <!-- 처음엔 펼쳐 둔다(이 접속만이 기본으로 켜져 있어 다른 접속 이력이 안 보이는 까닭이 보이게). -->
+          <ToggleButton Grid.Column="1" Classes="tool" x:Name="NarrowFilterToggle" Content="필터" icons:ButtonIcon.Key="filter" IsChecked="True"
+                        ToolTip.Tip="이 접속만 · 상태 거르기 펼치기·접기" />
+        </Grid>
+        <WrapPanel x:Name="NarrowFilterChips" IsVisible="{Binding #NarrowFilterToggle.IsChecked}">
+          <ToggleButton Classes="tool" x:Name="NarrowConnectionToggle" Content="이 접속만" icons:ButtonIcon.Key="connect" Margin="0,0,6,0"
+                        IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}" ToolTip.Tip="지금 접속의 이력만 보기" />
+          <ComboBox x:Name="NarrowStatusBox" Classes="compact" MinWidth="90" VerticalAlignment="Center" ItemsSource="{Binding StatusFilters}"
+                    SelectedItem="{Binding StatusFilter, Mode=TwoWay}" AutomationProperties.Name="상태 거르기">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:HistoryStatusFilter">
+                <TextBlock Text="{Binding Title, StringFormat='상태: {0}'}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </WrapPanel>
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+            <Button Classes="toolbar" x:Name="NarrowRerunButton" Content="다시 실행" icons:ButtonIcon.Key="run" icons:ButtonIcon.IconOnly="True"
+                    ToolTip.Tip="고른 문장 다시 실행 (Enter)" />
+            <Button Classes="toolbar" x:Name="NarrowToEditorButton" Content="편집기로" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True"
+                    ToolTip.Tip="고른 문장을 편집기로 (두 번 누르기)" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="toolbar" x:Name="NarrowMoreMenuButton" Content="⋯" FontWeight="Bold" ToolTip.Tip="지우기 · 모두 비우기"
+                  AutomationProperties.Name="더 많은 명령">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem x:Name="NarrowDeleteMenu" Header="고른 이력 지우기" InputGesture="Delete" />
+                <MenuItem x:Name="NarrowClearMenu" Header="모두 비우기" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </Grid>
+      </StackPanel>
+    </Border>
     <!-- 툴바 한 줄: 검색 · 상태 · 이 접속만 | 다시 실행 · 편집기로 | 지우기 · 모두 비우기 -->
-    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+    <Border x:Name="WideToolbar" DockPanel.Dock="Top" Classes="panel-toolbar">
       <WrapPanel>
         <TextBox x:Name="SearchBox" Classes="compact search" Width="240" Margin="0,0,6,0" VerticalAlignment="Center"
                  PlaceholderText="SQL 검색 (3자 이상 부분 일치)" Text="{Binding SearchText, Mode=TwoWay}">
@@ -55,7 +171,7 @@
         <RowDefinition Height="0" />
       </Grid.RowDefinitions>
       <!-- 표: 시간 | 상태 | 접속 | 경과 | 행 | SQL (+ 오류). 머리글과 줄이 같은 열 폭을 쓴다. 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns). -->
-      <Border Grid.Row="0" Classes="grid-header">
+      <Border x:Name="HistoryHeaderBorder" Grid.Row="0" Classes="grid-header">
         <Grid x:Name="HistoryHeader" ctl:TableColumns.Header="True" ColumnDefinitions="128,74,120,72,72,*,Auto">
           <TextBlock Grid.Column="0" Padding="8,0,6,0" Text="시간" />
           <TextBlock Grid.Column="1" Padding="6,0" Text="상태" />
@@ -74,24 +190,6 @@
             <MenuItem x:Name="CopyRowMenu" Header="줄 전체 복사" />
           </ContextMenu>
         </ListBox.ContextMenu>
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:HistoryItem">
-            <Grid ctl:TableColumns.Row="True" ColumnDefinitions="128,74,120,72,72,*,Auto" ToolTip.Tip="{Binding FullSql}">
-              <TextBlock Grid.Column="0" Padding="8,0,6,0" VerticalAlignment="Center" Classes="mono dim" Text="{Binding TimeText}" />
-              <StackPanel Grid.Column="1" Margin="6,0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                <ContentControl VerticalAlignment="Center"
-                                Content="{Binding StatusIconKey, Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
-                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Classes.danger-text="{Binding IsProblem}" />
-              </StackPanel>
-              <TextBlock Grid.Column="2" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding ProfileName}" />
-              <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" Classes="num" Text="{Binding ElapsedText}" />
-              <TextBlock Grid.Column="4" Padding="6,0" VerticalAlignment="Center" Classes="num" Text="{Binding RowsText}" />
-              <TextBlock Grid.Column="5" Padding="10,0,6,0" VerticalAlignment="Center" Classes="mono" TextTrimming="CharacterEllipsis" sqled:SqlInlineText.Sql="{Binding SqlPreview}" />
-              <TextBlock Grid.Column="6" Padding="6,0,10,0" VerticalAlignment="Center" MaxWidth="320" Classes="danger-text" TextTrimming="CharacterEllipsis"
-                         Text="{Binding ErrorText}" IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}" />
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
       </ListBox>
       <GridSplitter x:Name="DetailSplitter" Grid.Row="2" Height="5" HorizontalAlignment="Stretch" ResizeDirection="Rows"
                     Background="{DynamicResource OrandaSplitterBrush}" AutomationProperties.Name="목록과 고른 문장 나누기"
@@ -100,8 +198,21 @@
       <Border Grid.Row="3" BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="0,1,0,0"
               Background="{DynamicResource OrandaCodeBackgroundBrush}"
               IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
-        <sqled:SqlCodeView x:Name="DetailBox"
-                           Text="{Binding Selected.FullSql, Mode=OneWay}" AutomationProperties.Name="고른 문장" />
+        <DockPanel>
+          <!-- 좁은 배치: 고른 이력에 오류가 있으면 상자 아래 빨간 띠로 오류 전문(카드에서는 한 줄로 잘린다). -->
+          <Panel x:Name="DetailErrorBand" DockPanel.Dock="Bottom">
+            <Border Padding="10,5" BorderThickness="0,1,0,0"
+                    BorderBrush="{DynamicResource OrandaDangerForegroundBrush}" Background="{DynamicResource OrandaDiffRemovedBrush}"
+                    IsVisible="{Binding Selected.ErrorText, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}">
+              <ScrollViewer MaxHeight="56" HorizontalScrollBarVisibility="Disabled">
+                <SelectableTextBlock Classes="danger-text" TextWrapping="Wrap" Text="{Binding Selected.ErrorText}"
+                                     AutomationProperties.Name="고른 이력의 오류" />
+              </ScrollViewer>
+            </Border>
+          </Panel>
+          <sqled:SqlCodeView x:Name="DetailBox"
+                             Text="{Binding Selected.FullSql, Mode=OneWay}" AutomationProperties.Name="고른 문장" />
+        </DockPanel>
       </Border>
     </Grid>
   </DockPanel>

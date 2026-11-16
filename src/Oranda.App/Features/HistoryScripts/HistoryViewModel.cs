@@ -75,7 +75,7 @@ public sealed record HistoryStatusFilter(string Title, HistoryStatus? Status);
 /// <c>oranda.panel.history</c> — 접속별 실행 이력 검색·다시 실행(EXEC-07). 저장소는 <see cref="IHistoryStore"/> 만 쓴다.
 /// 서비스는 처음 쓸 때 꺼낸다(D-006). 새 실행이 끝나면(<c>StatementExecuted</c>) 목록을 잠시 뒤 다시 읽는다.
 /// </summary>
-[OrandaToolPanel("oranda.panel.history", ToolPanelKind.Tool, DockLocation.Bottom, Order = 40)]
+[OrandaToolPanel("oranda.panel.history", ToolPanelKind.Tool, DockLocation.Left, Order = 40)]
 public sealed partial class HistoryViewModel : ToolPanelViewModelBase, IDisposable
 {
     /// <summary>한 번에 읽는 개수.</summary>

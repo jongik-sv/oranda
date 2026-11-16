@@ -39,7 +39,7 @@ public static class LayoutPlanner
 
     /// <summary>
     /// 기본 배치의 아래 묶음에 넣는 도구 창(D-019, TSK-09-05): 조회 결과·메시지·DBMS 출력. 실행 계획·컴파일 오류·바인드 변수는
-    /// 필요할 때 기능이 <c>ActivateTool</c> 로 자기 기본 위치에 열고, 실행 이력·변경 일지는 보기 > 도구 창에서 연다.
+    /// 필요할 때 기능이 <c>ActivateTool</c> 로 자기 기본 위치에 열고, 변경 일지는 보기 > 도구 창에서 연다(실행 이력은 왼쪽 탭, <see cref="DefaultHiddenTools"/>).
     /// </summary>
     public static readonly IReadOnlyList<string> DefaultBottomTools = ["oranda.panel.results", "oranda.panel.messages", "oranda.panel.output"];
 
@@ -51,9 +51,10 @@ public static class LayoutPlanner
 
     /// <summary>
     /// 기본 배치에서 닫아 두는 도구 창(위치와 상관없이 hiddenTools 로 간다). 「세션」 창(TSK-14-04, D-034)은 작업 세션이 2개 이상일 때
-    /// 기능이 보이므로 처음부터 열어 두지 않는다. 저장된 배치에 없는 창이 새로 등록돼도 열지 않고 닫힌 창으로 둔다.
+    /// 기능이 보이므로 처음부터 열어 두지 않는다. 실행 이력은 기본 위치가 왼쪽 탭이지만 보기 > 도구 창에서 열 때까지 닫아 둔다(아래에 있을 때와 같게).
+    /// 저장된 배치에 없는 창이 새로 등록돼도 열지 않고 닫힌 창으로 둔다.
     /// </summary>
-    private static readonly string[] DefaultHiddenTools = ["oranda.panel.sessions"];
+    private static readonly string[] DefaultHiddenTools = ["oranda.panel.sessions", "oranda.panel.history"];
 
     /// <summary>문서 영역 노드는 트리에 정확히 1개이고, 그 노드의 <see cref="DockNode.Tools"/> 는 쓰지 않는다.</summary>
     public static LayoutDocument CreateDefault(IEnumerable<ToolPanelDefinition> panels)
