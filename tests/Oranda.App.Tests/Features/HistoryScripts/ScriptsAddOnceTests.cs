@@ -6,6 +6,7 @@ using Oranda.App.Features.HistoryScripts;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell.Docking;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.HistoryScripts;
 
@@ -17,7 +18,7 @@ public sealed class ScriptsAddOnceTests : IDisposable
     private const string ScriptsId = "oranda.panel.scripts";
     private const string SchemaId = "oranda.panel.schemaBrowser";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-scripts-once-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-scripts-once-");
 
     public ScriptsAddOnceTests() => Directory.CreateDirectory(_dir);
 
@@ -25,7 +26,7 @@ public sealed class ScriptsAddOnceTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

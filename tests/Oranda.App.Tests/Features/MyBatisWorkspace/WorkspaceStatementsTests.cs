@@ -12,6 +12,7 @@ using Oranda.Core.Shell;
 using Oranda.Core.Text;
 using Oranda.Language.MyBatis;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -24,17 +25,14 @@ public sealed class WorkspaceStatementsTests : IDisposable
     private static readonly string[] BadIds = ["1bad", "countEmp"];
     private static readonly string[] ToolbarButtons = ["NewButton", "RenameButton", "DeleteButton", "ExpandButton", "FormatAllButton"];
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbstatements-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbstatements-");
 
     public WorkspaceStatementsTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
         MyBatisStatementExpander.EvaluatorSource = null;
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private string WriteMapper(string text = "", string name = "EmpMapper.xml")

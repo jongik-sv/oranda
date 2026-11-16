@@ -1,4 +1,5 @@
 using Oranda.Core.Transfer.Copy.ExternalLoad;
+using Oranda.Testing;
 
 namespace Oranda.Core.Tests.Transfer.Copy.ExternalLoad;
 
@@ -7,13 +8,13 @@ public sealed class TbLoaderTests : IDisposable
 {
     private const string Password = "Tb#Secret@7!";
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-tbloader-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-tbloader-");
 
     public void Dispose()
     {
         try
         {
-            Directory.Delete(_root, recursive: true);
+            _root.Dispose();
         }
         catch (DirectoryNotFoundException)
         {

@@ -11,20 +11,18 @@ using Oranda.App.Shell.Settings;
 using Oranda.App.Tests.Features.SchemaBrowser;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Templates;
 
 // 템플릿 창 조각 끌기: Windows 에서 DoDragDrop 이 COMException 으로 실패해도 앱이 죽지 않고 상태줄에 안내한다(TSK-07-05).
 public sealed class TemplatesDragTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-tpld-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-tpld-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     [Theory]

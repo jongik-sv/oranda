@@ -10,13 +10,14 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Oranda.App.Features.HistoryScripts;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.HistoryScripts;
 
 // 소유: TSK-10-01. 스크립트 창 검색 — 모델(입력 지연·취소·상태 줄·열기)과 Headless 화면(입력·Esc·Ctrl+F·Enter·PNG).
 public sealed class ScriptsSearchViewTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-ssview-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-ssview-");
 
     public ScriptsSearchViewTests() => Directory.CreateDirectory(_dir);
 
@@ -24,7 +25,7 @@ public sealed class ScriptsSearchViewTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

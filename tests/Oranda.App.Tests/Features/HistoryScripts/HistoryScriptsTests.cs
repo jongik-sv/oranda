@@ -10,13 +10,14 @@ using Oranda.Core.History;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.HistoryScripts;
 
 // 소유: TSK-06-06. 이력 창·스크립트 창·명령(모델 + Headless).
 public sealed class HistoryScriptsTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-scripts-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-scripts-");
 
     public HistoryScriptsTests() => Directory.CreateDirectory(_dir);
 
@@ -24,7 +25,7 @@ public sealed class HistoryScriptsTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

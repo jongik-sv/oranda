@@ -10,6 +10,7 @@ using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Storage;
 using Oranda.Core.Workspaces;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -19,16 +20,13 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 /// </summary>
 public sealed class MyBatisHookSitesTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbhooks-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbhooks-");
 
     public MyBatisHookSitesTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private string WriteMapper()

@@ -15,6 +15,7 @@ using Oranda.Core.MyBatis;
 using Oranda.Core.Shell;
 using Oranda.Language.MyBatis;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -48,7 +49,7 @@ public sealed class MapperFolderTests : IDisposable
         </mapper>
         """;
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbfolder-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbfolder-");
 
     public MapperFolderTests()
     {
@@ -60,10 +61,7 @@ public sealed class MapperFolderTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private string EmpPath => Path.Combine(_root, "hr", "EmpMapper.xml");

@@ -3,13 +3,14 @@ using Oranda.Core.Schema;
 using Oranda.Oracle.Connection;
 using Oranda.Oracle.Schema;
 using Oranda.Oracle.Sessions;
+using Oranda.Testing;
 
 namespace Oranda.Oracle.Tests.Connection;
 
 // 소유: Tibero T1 O4. C4 인터페이스의 Oracle 구현이 기존 정적 도우미와 같은 결과를 내는지 본다. DB 없음.
 public class OracleConnectionServicesTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-o4-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-o4-");
 
     public OracleConnectionServicesTests()
     {
@@ -20,7 +21,7 @@ public class OracleConnectionServicesTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

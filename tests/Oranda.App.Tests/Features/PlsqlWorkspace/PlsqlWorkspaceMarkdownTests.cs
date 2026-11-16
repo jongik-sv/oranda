@@ -13,6 +13,7 @@ using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.PlsqlWorkspace;
 
@@ -24,7 +25,7 @@ public sealed class PlsqlWorkspaceMarkdownTests : IDisposable
 {
     private static readonly Guid ProfileA = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-plsql-md-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-plsql-md-");
 
     public PlsqlWorkspaceMarkdownTests() => Directory.CreateDirectory(_dir);
 
@@ -33,7 +34,7 @@ public sealed class PlsqlWorkspaceMarkdownTests : IDisposable
         PlsqlEditorViewModel.Active = null;
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

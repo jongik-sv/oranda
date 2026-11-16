@@ -14,6 +14,7 @@ using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Testing.MyBatis;
 using Oranda.App.Tests.Shell.Controls;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -22,16 +23,13 @@ public sealed class StatementsGridTests : IDisposable
 {
     private static string? UserMapperPath => Oranda.App.Tests.TestSupport.UserMapper.Path;
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbgrid-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbgrid-");
 
     public StatementsGridTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private static readonly int[] RenderWidths = [340, 480];

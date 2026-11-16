@@ -1,19 +1,17 @@
 using Oranda.Core.Formatting;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
 // 소유: TSK-13-38. 새 서식 옵션(keywordAlign·lineBreaks.groupOrderBy)의 저장·옛 파일 읽기.
 public sealed class FormatterOrangeOptionsStoreTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-fpo-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-fpo-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private FormatterProfileStore NewStore() => new(new AppDataPaths(_root), []);

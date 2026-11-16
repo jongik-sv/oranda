@@ -12,6 +12,7 @@ using Oranda.Core.Grid;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.ResultGrid;
 
@@ -61,21 +62,14 @@ public sealed class GridFontSettingsTests
     [Fact]
     public Task Old_settings_json_without_grid_font_reads_defaults() => HeadlessHost.Run(async () =>
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-gridfont-" + Guid.NewGuid().ToString("N"));
+        using var dir = new TempDirectory("oranda-gridfont-");
         Directory.CreateDirectory(dir);
-        try
-        {
-            await File.WriteAllTextAsync(Path.Combine(dir, "settings.json"), "{\"schemaVersion\":1,\"grid\":{\"pageSize\":300}}");
-            using var h = new ShellHarness(dir);
-            var grid = (await h.Get<ISettingsStore>().LoadAsync(default)).Value.Grid;
-            Assert.Equal(300, grid.PageSize);
-            Assert.Null(grid.FontFamily);
-            Assert.Equal(13, grid.FontSize);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        await File.WriteAllTextAsync(Path.Combine(dir, "settings.json"), "{\"schemaVersion\":1,\"grid\":{\"pageSize\":300}}");
+        using var h = new ShellHarness(dir);
+        var grid = (await h.Get<ISettingsStore>().LoadAsync(default)).Value.Grid;
+        Assert.Equal(300, grid.PageSize);
+        Assert.Null(grid.FontFamily);
+        Assert.Equal(13, grid.FontSize);
     });
 
     [Fact]

@@ -14,6 +14,7 @@ using Oranda.App.Shell.Settings;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Language.Snippets;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Templates;
 
@@ -24,14 +25,11 @@ namespace Oranda.App.Tests.Features.Templates;
 [Collection("UiLanguage")]
 public sealed class TemplatesPanelHeadlessTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-tplh-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-tplh-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private (Window Window, TemplatesView View, TemplatesViewModel Vm, SqlEditorHost Host) Open(IShellText text, double width = 300)

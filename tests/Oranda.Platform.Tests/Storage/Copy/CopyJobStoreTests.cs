@@ -1,20 +1,18 @@
 using Oranda.Core.Transfer.Copy;
 using Oranda.Platform.Storage;
 using Oranda.Platform.Storage.Copy;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage.Copy;
 
 // 복사 작업 파일 저장소: 저장·목록·이름 바꾸기·복제·삭제·가져오기·내보내기.
 public sealed class CopyJobStoreTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-copyjobs-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-copyjobs-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private AppDataPaths Paths => new(_root);

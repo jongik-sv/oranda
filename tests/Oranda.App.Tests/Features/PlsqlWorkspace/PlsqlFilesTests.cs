@@ -6,6 +6,7 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.PlsqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Shell;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.PlsqlWorkspace;
 
@@ -18,7 +19,7 @@ public sealed class PlsqlFilesTests : IDisposable
 {
     private const string Proc = "CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  NULL;\nEND;";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-plsql-files-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-plsql-files-");
 
     public PlsqlFilesTests() => Directory.CreateDirectory(_dir);
 
@@ -27,7 +28,7 @@ public sealed class PlsqlFilesTests : IDisposable
         PlsqlEditorViewModel.Active = null;
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

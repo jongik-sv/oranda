@@ -1,6 +1,7 @@
 using Oranda.Core.Transfer.Copy;
 using Oranda.Platform.Storage;
 using Oranda.Platform.Storage.Copy;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage.Copy;
 
@@ -9,14 +10,11 @@ public sealed class CopyRunLogTests : IDisposable
 {
     private const string JobId = "0123456789abcdef0123456789abcdef";
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-copyruns-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-copyruns-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private AppDataPaths Paths => new(_root);

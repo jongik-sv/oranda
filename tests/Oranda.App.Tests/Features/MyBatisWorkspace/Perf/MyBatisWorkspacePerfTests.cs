@@ -11,6 +11,7 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Xunit.Abstractions;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace.Perf;
 
@@ -27,14 +28,11 @@ public sealed class MyBatisWorkspacePerfTests(ITestOutputHelper output) : IDispo
     private const int OpenLimitMs = 1000;
     private const int StatementLines = 3000;
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbperf-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbperf-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private static void Pump() => HeadlessHost.Pump(3);

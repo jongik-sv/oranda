@@ -13,6 +13,7 @@ using Oranda.Core.MyBatis;
 using Oranda.Core.Shell;
 using Oranda.Language.MyBatis;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -24,7 +25,7 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 public sealed class SaveMergeTests : IDisposable
 {
     private static readonly MapperParser Parser = new();
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbsave-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbsave-");
 
     public SaveMergeTests() => Directory.CreateDirectory(_root);
 
@@ -40,7 +41,7 @@ public sealed class SaveMergeTests : IDisposable
             File.SetAttributes(f, FileAttributes.Normal);
         }
 
-        Directory.Delete(_root, recursive: true);
+        _root.Dispose();
     }
 
     // ---- 줄 diff · 병합 계획(순수 함수) ------------------------------------------------------

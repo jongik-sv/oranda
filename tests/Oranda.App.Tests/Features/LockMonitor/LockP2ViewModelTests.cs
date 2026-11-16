@@ -2,20 +2,18 @@ using Oranda.App.Features.LockMonitor;
 using Oranda.Core.Connection;
 using Oranda.Core.Monitoring;
 using Oranda.Core.Settings;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.LockMonitor;
 
 /// <summary>TSK-05-04 화면 모델: 방치 트랜잭션·데드락 탭, 이력 띠, 임계치 알림·스냅샷·칩 알림, 순환 띠, 알림 설정, 상태(접속·권한).</summary>
 public sealed class LockP2ViewModelTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-lockvm-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-lockvm-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir))
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
+        _dir.Dispose();
     }
 
     /// <summary>프로필마다 이력이 따로 남으므로 시험마다 새 프로필을 쓴다.</summary>

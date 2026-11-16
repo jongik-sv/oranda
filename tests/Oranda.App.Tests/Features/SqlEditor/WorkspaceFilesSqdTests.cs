@@ -1,4 +1,5 @@
 using Oranda.App.Features.SqlEditor;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.SqlEditor;
 
@@ -143,22 +144,15 @@ public sealed class WorkspaceFilesSqdTests
     [Fact]
     public void Load_dispatches_on_the_sqd_extension_and_names_the_workspace_after_the_file()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-sqd-" + Guid.NewGuid().ToString("N"));
+        using var dir = new TempDirectory("oranda-sqd-");
         Directory.CreateDirectory(dir);
-        try
-        {
-            var path = Path.Combine(dir, "월간 작업.SQD");
-            File.WriteAllBytes(path, Sqd(WithHeader("COUNT=1", "NAME=a", "STMT=1", "select 1", "VAR=0")));
-            var read = WorkspaceFiles.Load(path);
+        var path = Path.Combine(dir, "월간 작업.SQD");
+        File.WriteAllBytes(path, Sqd(WithHeader("COUNT=1", "NAME=a", "STMT=1", "select 1", "VAR=0")));
+        var read = WorkspaceFiles.Load(path);
 
-            Assert.Equal("월간 작업", read.Name);
-            Assert.Equal("select 1", Assert.Single(read.Tabs).Text);
-            Assert.True(WorkspaceFiles.IsReadOnlySource(path));
-        }
-        finally
-        {
-            Directory.Delete(dir, true);
-        }
+        Assert.Equal("월간 작업", read.Name);
+        Assert.Equal("select 1", Assert.Single(read.Tabs).Text);
+        Assert.True(WorkspaceFiles.IsReadOnlySource(path));
     }
 
     [Fact]

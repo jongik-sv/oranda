@@ -7,6 +7,7 @@ using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
 using Oranda.Core.Transfer;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.DataTransfer;
 
@@ -14,7 +15,7 @@ namespace Oranda.App.Tests.Features.DataTransfer;
 [Collection("ExcelExportStatics")]
 public sealed class DataTransferTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-transfer-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-transfer-");
 
     public DataTransferTests() => Directory.CreateDirectory(_dir);
 
@@ -22,7 +23,7 @@ public sealed class DataTransferTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

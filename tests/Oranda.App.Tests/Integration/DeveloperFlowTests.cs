@@ -18,6 +18,7 @@ using Oranda.Core.Language;
 using Oranda.Core.Metadata;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Integration;
 
@@ -585,58 +586,51 @@ public sealed class DeveloperFlowTests(ItDb db, ITestOutputHelper output) : ICla
 
         using var rig = new FlowRig(db);
         await rig.ConnectAsync();
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-itest-s7-" + Guid.NewGuid().ToString("N")[..8]);
+        using var dir = new TempDirectory("oranda-itest-s7-");
         Directory.CreateDirectory(dir);
-        try
-        {
-            // 정상: BOM 있는 UTF-8 / BOM 없는 UTF-8 한글 파일을 열고 실행한다.
-            var bom = Path.Combine(dir, "한글bom.sql");
-            var plain = Path.Combine(dir, "plain.sql");
-            await File.WriteAllTextAsync(bom, "select '가나다' as k from dual", new System.Text.UTF8Encoding(true));
-            await File.WriteAllTextAsync(plain, "select '라마바' as k from dual", new System.Text.UTF8Encoding(false));
-            var tab = (await rig.Host.OpenFileAsync(bom, default))!;
-            var tab2 = (await rig.Host.OpenFileAsync(plain, default))!;
-            Assert.False(tab.IsDirty);
-            Assert.Same(tab, await rig.Host.OpenFileAsync(bom, default)); // 같은 파일을 다시 열면 그 탭으로
-            rig.Host.Active = tab;
-            tab.Select(0, 0);
-            await rig.Run("oranda.exec.runStatement");
-            Assert.Equal("가나다", await FlowRig.CellAsync(Assert.Single(((ResultTabsViewModel)tab.ResultPane!).Tabs)));
-            rig.Host.Active = tab2;
-            tab2.Select(0, 0);
-            await rig.Run("oranda.exec.runStatement");
-            Assert.Equal("라마바", await FlowRig.CellAsync(Assert.Single(((ResultTabsViewModel)tab2.ResultPane!).Tabs)));
+        // 정상: BOM 있는 UTF-8 / BOM 없는 UTF-8 한글 파일을 열고 실행한다.
+        var bom = Path.Combine(dir, "한글bom.sql");
+        var plain = Path.Combine(dir, "plain.sql");
+        await File.WriteAllTextAsync(bom, "select '가나다' as k from dual", new System.Text.UTF8Encoding(true));
+        await File.WriteAllTextAsync(plain, "select '라마바' as k from dual", new System.Text.UTF8Encoding(false));
+        var tab = (await rig.Host.OpenFileAsync(bom, default))!;
+        var tab2 = (await rig.Host.OpenFileAsync(plain, default))!;
+        Assert.False(tab.IsDirty);
+        Assert.Same(tab, await rig.Host.OpenFileAsync(bom, default)); // 같은 파일을 다시 열면 그 탭으로
+        rig.Host.Active = tab;
+        tab.Select(0, 0);
+        await rig.Run("oranda.exec.runStatement");
+        Assert.Equal("가나다", await FlowRig.CellAsync(Assert.Single(((ResultTabsViewModel)tab.ResultPane!).Tabs)));
+        rig.Host.Active = tab2;
+        tab2.Select(0, 0);
+        await rig.Run("oranda.exec.runStatement");
+        Assert.Equal("라마바", await FlowRig.CellAsync(Assert.Single(((ResultTabsViewModel)tab2.ResultPane!).Tabs)));
 
-            // 수정 → 저장: 파일에 반영되고 변경 표시가 사라진다.
-            tab.LoadText("select '수정됨' as k from dual", dirty: true);
-            Assert.True(tab.IsDirty);
-            Assert.True(await rig.Host.SaveAsync(tab, default));
-            Assert.False(tab.IsDirty);
-            Assert.Contains("수정됨", await File.ReadAllTextAsync(bom), StringComparison.Ordinal);
+        // 수정 → 저장: 파일에 반영되고 변경 표시가 사라진다.
+        tab.LoadText("select '수정됨' as k from dual", dirty: true);
+        Assert.True(tab.IsDirty);
+        Assert.True(await rig.Host.SaveAsync(tab, default));
+        Assert.False(tab.IsDirty);
+        Assert.Contains("수정됨", await File.ReadAllTextAsync(bom), StringComparison.Ordinal);
 
-            // 작업 공간 저장 → 복원: 탭 수·글·파일 연결·활성 탭이 같다.
-            tab2.LoadText("select 'unsaved draft' from dual", dirty: true);
-            var snapshot = rig.Host.BuildWorkspace();
-            using var other = new SqlEditorHost();
-            other.Restore(snapshot);
-            Assert.Equal(2, other.Tabs.Count);
-            Assert.Contains(other.Tabs, t => t.FilePath == Path.GetFullPath(bom) && t.Text.Contains("수정됨", StringComparison.Ordinal));
-            Assert.Contains(other.Tabs, t => t.FilePath == Path.GetFullPath(plain) && t.Text.Contains("unsaved draft", StringComparison.Ordinal)); // 저장 안 한 글 보존
-            Assert.Equal(tab2.TabId, other.Active!.TabId);
+        // 작업 공간 저장 → 복원: 탭 수·글·파일 연결·활성 탭이 같다.
+        tab2.LoadText("select 'unsaved draft' from dual", dirty: true);
+        var snapshot = rig.Host.BuildWorkspace();
+        using var other = new SqlEditorHost();
+        other.Restore(snapshot);
+        Assert.Equal(2, other.Tabs.Count);
+        Assert.Contains(other.Tabs, t => t.FilePath == Path.GetFullPath(bom) && t.Text.Contains("수정됨", StringComparison.Ordinal));
+        Assert.Contains(other.Tabs, t => t.FilePath == Path.GetFullPath(plain) && t.Text.Contains("unsaved draft", StringComparison.Ordinal)); // 저장 안 한 글 보존
+        Assert.Equal(tab2.TabId, other.Active!.TabId);
 
-            // 오류: 파일이 없어졌을 때 복원은 예외 없이 열리고(빈 문서·변경됨), 없는 파일 열기는 오류를 던진다.
-            File.Delete(plain);
-            var snap2 = new SqlEditorHost();
-            snap2.Restore(rig.Host.BuildWorkspace());
-            Assert.Equal(2, snap2.Tabs.Count);
-            snap2.Dispose();
-            await Assert.ThrowsAnyAsync<IOException>(() => rig.Host.OpenFileAsync(Path.Combine(dir, "none.sql"), default));
-            output.WriteLine("S7-1 OK: 한글 파일 열기·실행·저장·작업 공간 복원(저장 안 한 글 포함)·파일 없어짐");
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        // 오류: 파일이 없어졌을 때 복원은 예외 없이 열리고(빈 문서·변경됨), 없는 파일 열기는 오류를 던진다.
+        File.Delete(plain);
+        var snap2 = new SqlEditorHost();
+        snap2.Restore(rig.Host.BuildWorkspace());
+        Assert.Equal(2, snap2.Tabs.Count);
+        snap2.Dispose();
+        await Assert.ThrowsAnyAsync<IOException>(() => rig.Host.OpenFileAsync(Path.Combine(dir, "none.sql"), default));
+        output.WriteLine("S7-1 OK: 한글 파일 열기·실행·저장·작업 공간 복원(저장 안 한 글 포함)·파일 없어짐");
     });
 
     // ------------------------------------------------------------------------------------------

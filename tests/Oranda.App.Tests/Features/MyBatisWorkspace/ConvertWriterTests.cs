@@ -4,13 +4,14 @@ using Oranda.Core.MyBatis;
 using Oranda.Language.MyBatis;
 using Oranda.Platform.MyBatis;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
 /// <summary>TSK-03-05 J4: 새 매퍼·기존 매퍼 추가 쓰기와 첫 시나리오(임시 폴더, 실제 MapperFileWriter).</summary>
 public sealed class ConvertWriterTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-convert-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-convert-");
 
     public ConvertWriterTests()
     {
@@ -18,7 +19,7 @@ public sealed class ConvertWriterTests : IDisposable
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    public void Dispose() => Directory.Delete(_dir, recursive: true);
+    public void Dispose() => _dir.Dispose();
 
     private static ConvertedStatement Statement(string id, IReadOnlyDictionary<string, MyBatisScenarioValue>? values = null) => new(
         id,

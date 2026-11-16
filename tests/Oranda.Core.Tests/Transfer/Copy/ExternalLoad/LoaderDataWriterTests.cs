@@ -1,19 +1,20 @@
 using System.Text;
 using Oranda.Core.Transfer.Copy.CrossDbms;
 using Oranda.Core.Transfer.Copy.ExternalLoad;
+using Oranda.Testing;
 
 namespace Oranda.Core.Tests.Transfer.Copy.ExternalLoad;
 
 // 소유: XL1. 데이터 파일(필드·감쌈·레코드 끝 0x1E 0x0A)·LOB 파일·키 곁 파일.
 public sealed class LoaderDataWriterTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-loader-writer-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-loader-writer-");
 
     public void Dispose()
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (DirectoryNotFoundException)
         {

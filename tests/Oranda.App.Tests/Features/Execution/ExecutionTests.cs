@@ -22,6 +22,7 @@ using Oranda.Core.History;
 using Oranda.Core.Language;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Execution;
 
@@ -1672,7 +1673,7 @@ public sealed class ExecutionIntegrationTests
 
     private sealed class ItRig : IDisposable
     {
-        private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-exec-it-" + Guid.NewGuid().ToString("N"));
+        private readonly TempDirectory _dir = new("oranda-exec-it-");
         private readonly SqlEditorHost _previousHost = SqlEditorHost.Current;
         private readonly IExecutionDialogs _previousDialogs = ExecutionDialogs.Current;
 
@@ -1740,7 +1741,7 @@ public sealed class ExecutionIntegrationTests
             Container.Dispose();
             try
             {
-                Directory.Delete(_dir, recursive: true);
+                _dir.Dispose();
             }
             catch (IOException)
             {

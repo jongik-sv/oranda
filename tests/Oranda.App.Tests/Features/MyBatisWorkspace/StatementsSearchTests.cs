@@ -13,22 +13,20 @@ using Oranda.App.Shell;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
 /// <summary>「매퍼 쿼리」 창 후속: id 열 넓힘, 상태 칸 툴팁, 검색(쿼리 목록·폴더 트리).</summary>
 public sealed class StatementsSearchTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbsearch-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbsearch-");
 
     public StatementsSearchTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private static void Pump() => HeadlessHost.Pump(3);

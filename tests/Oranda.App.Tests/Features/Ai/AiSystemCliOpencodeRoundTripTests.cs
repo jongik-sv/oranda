@@ -14,6 +14,7 @@ using Oranda.Platform.Ai.Bridge;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
 using Xunit.Abstractions;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Ai;
 
@@ -38,13 +39,13 @@ public sealed class AiSystemCliOpencodeRoundTripTests(ITestOutputHelper output) 
 
     private const string SampleStatement = "SELECT e.empno, e.ename FROM emp e WHERE e.deptno = 10 ORDER BY e.ename";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-opencode-rt-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-opencode-rt-");
 
     public void Dispose()
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

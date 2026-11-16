@@ -1,19 +1,17 @@
 using Oranda.Core.Extensibility;
 using Oranda.Platform.Diagnostics;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Diagnostics;
 
 // 소유: TSK-10-01. 충돌 보고 저장·동의 후 전송.
 public sealed class CrashReportWriterTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-crash-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-crash-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir))
-        {
-            Directory.Delete(_dir, true);
-        }
+        _dir.Dispose();
     }
 
     [Fact]

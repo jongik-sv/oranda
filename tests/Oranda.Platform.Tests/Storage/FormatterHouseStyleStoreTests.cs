@@ -1,19 +1,17 @@
 using Oranda.Core.Formatting;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
 // 소유: TSK-13-43. 기본 제공 「Oranda 기본」 = 하우스 서식, 새 옵션(clauseLayout·lineBreaks.orderBy·align.comparison) 저장·옛 파일 읽기.
 public sealed class FormatterHouseStyleStoreTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-fhs-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-fhs-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private FormatterProfileStore NewStore() => new(new AppDataPaths(_root), []);

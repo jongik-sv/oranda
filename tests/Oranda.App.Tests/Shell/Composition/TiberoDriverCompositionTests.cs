@@ -3,6 +3,7 @@ using Oranda.App.Shell.Composition;
 using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Sessions;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Shell.Composition;
 
@@ -31,19 +32,12 @@ public class TiberoDriverCompositionTests
     {
         using var c = Compose();
         var selector = c.GetRequiredService<IDbmsServiceSelector>();
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-tibero-dir-" + Guid.NewGuid().ToString("N"));
+        using var dir = new TempDirectory("oranda-tibero-dir-");
         Directory.CreateDirectory(dir);
-        try
-        {
-            Assert.DoesNotContain(Dbms.Tibero, DbmsAvailability.Detect(dir, selector));
+        Assert.DoesNotContain(Dbms.Tibero, DbmsAvailability.Detect(dir, selector));
 
-            File.WriteAllBytes(Path.Combine(dir, DbmsAvailability.TiberoAssembly + ".dll"), []);
-            Assert.Contains(Dbms.Tibero, DbmsAvailability.Detect(dir, selector));
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        File.WriteAllBytes(Path.Combine(dir, DbmsAvailability.TiberoAssembly + ".dll"), []);
+        Assert.Contains(Dbms.Tibero, DbmsAvailability.Detect(dir, selector));
     }
 
     [Fact]

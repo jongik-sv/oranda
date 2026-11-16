@@ -6,6 +6,7 @@ using Oranda.App.Tests.Features.MyBatisWorkspace.Fakes;
 using Oranda.Core.MyBatis;
 using Oranda.Language.MyBatis;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -333,29 +334,22 @@ public class LogPasteTests
     [Fact]
     public Task Real_session_opens_the_found_statement_tab_and_uses_unsaved_text() => Oranda.App.Tests.Features.SqlEditor.Ui.Run(async () =>
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-logpaste-" + Guid.NewGuid().ToString("N"));
+        using var dir = new TempDirectory("oranda-logpaste-");
         Directory.CreateDirectory(dir);
-        try
-        {
-            var path = Path.Combine(dir, "EmpMapper.xml");
-            await File.WriteAllTextAsync(path, MapperSamples.EmpMapper);
-            var host = new SqlEditorHost { MyBatisHooks = new MyBatisHooks(openHandler: new MyBatisOpenHandler()) };
-            await host.OpenWorkspaceFileAsync(path, default);
-            var session = host.ActiveWorkspace!.MyBatis!;
-            host.MyBatisHooks = new MyBatisHooks(
-                openHandler: new MyBatisOpenHandler(), statementLocators: [new OpenMapperStatementLocator(() => [session])]);
-            var store = new FakeMyBatisScenarioStore();
+        var path = Path.Combine(dir, "EmpMapper.xml");
+        await File.WriteAllTextAsync(path, MapperSamples.EmpMapper);
+        var host = new SqlEditorHost { MyBatisHooks = new MyBatisHooks(openHandler: new MyBatisOpenHandler()) };
+        await host.OpenWorkspaceFileAsync(path, default);
+        var session = host.ActiveWorkspace!.MyBatis!;
+        host.MyBatisHooks = new MyBatisHooks(
+            openHandler: new MyBatisOpenHandler(), statementLocators: [new OpenMapperStatementLocator(() => [session])]);
+        var store = new FakeMyBatisScenarioStore();
 
-            var result = await new MyBatisLogPasteFlow(host, new MyBatisEvaluator(), store, new PickDialogs())
-                .RunAsync(Pair($"{Logger}.countEmp", "SELECT COUNT(*) FROM EMP", string.Empty), session, CancellationToken.None);
+        var result = await new MyBatisLogPasteFlow(host, new MyBatisEvaluator(), store, new PickDialogs())
+            .RunAsync(Pair($"{Logger}.countEmp", "SELECT COUNT(*) FROM EMP", string.Empty), session, CancellationToken.None);
 
-            Assert.Equal("countEmp", Assert.Single(result!.Opened).StatementId);
-            Assert.Equal("countEmp", host.Active!.Title);
-            Assert.Equal("countEmp", Assert.Single(store.All).StatementId);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        Assert.Equal("countEmp", Assert.Single(result!.Opened).StatementId);
+        Assert.Equal("countEmp", host.Active!.Title);
+        Assert.Equal("countEmp", Assert.Single(store.All).StatementId);
     });
 }

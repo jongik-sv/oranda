@@ -9,6 +9,7 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Language.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -20,16 +21,13 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 /// </summary>
 public sealed class MapperFolderScanTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbscan-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbscan-");
 
     public MapperFolderScanTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private static void Pump() => HeadlessHost.Pump(3);

@@ -4,6 +4,7 @@ using Oranda.Core.Composition;
 using Oranda.Core.Security;
 using Oranda.Core.Storage;
 using Oranda.Platform.Credentials;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Credentials;
 
@@ -13,14 +14,11 @@ public sealed class CredentialStoreTests : IDisposable
     private const string Key = "oranda:conn:0b6f3c1e-1111-4222-8333-444455556666";
     private const string Password = "S3cret-p@ss-유니코드-zq9X";
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-cred-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-cred-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     [Fact]

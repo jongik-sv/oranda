@@ -18,6 +18,7 @@ using Oranda.Core.Rollback;
 using Oranda.Core.Rollback.Compare;
 using Oranda.Core.Text;
 using Oranda.Testing.Rollback;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Manual;
 
@@ -266,45 +267,38 @@ public sealed class ManualRollbackScreens
         }
 
         var (store, _) = await ExampleStoreAsync();
-        var data = Path.Combine(Path.GetTempPath(), "oranda-manual-rb-" + Guid.NewGuid().ToString("N"));
+        using var data = new TempDirectory("oranda-manual-rb-");
         var month = Directory.CreateDirectory(Path.Combine(data, "rollback", "2026-11"));
-        try
+        await using (var file = File.Create(Path.Combine(month.FullName, "00000003.orb")))
         {
-            await using (var file = File.Create(Path.Combine(month.FullName, "00000003.orb")))
-            {
-                file.SetLength(3_250_000); // 「3.1 MB」
-            }
-
-            var settings = new SettingsService(new MemorySettingsStore());
-            var text = new ShellText(language: "ko");
-            var page = new RollbackSettingsPage(settings.Current.Rollback, text, store, new Oranda.Platform.Storage.AppDataPaths(data));
-            await page.RefreshSummaryAsync();
-            var vm = new SettingsViewModel(settings, text, rollback: page) { SelectedTab = SettingsViewModel.RollbackTabIndex };
-            var window = new SettingsWindow { DataContext = vm };
-            window.Show();
-            for (var i = 0; i < 4; i++)
-            {
-                AvaloniaHeadlessPlatform.ForceRenderTimerTick(20); // 탭 전환 애니메이션을 끝낸다
-                Pump();
-                window.UpdateLayout();
-            }
-
-            ManualCapture.Save(window, "settings-rollback",
-            [
-                new(Named<CheckBox>(window, "RollbackRecordPointBox"), 1, -14),
-                new(Named<CheckBox>(window, "RollbackScriptBox"), 2, -14),
-                new(Named<NumericUpDown>(window, "RollbackMaxRowsBox"), 3, -14),
-                new(Named<NumericUpDown>(window, "RollbackRetentionBox"), 4, -14),
-                new(Named<CheckBox>(window, "RollbackWarnMismatchBox"), 5, -14),
-                new(Named<CheckBox>(window, "RollbackBackupBox"), 6, -14),
-                new(Named<Button>(window, "RollbackClearButton"), 7, -14),
-            ]);
-            window.Close();
+            file.SetLength(3_250_000); // 「3.1 MB」
         }
-        finally
+
+        var settings = new SettingsService(new MemorySettingsStore());
+        var text = new ShellText(language: "ko");
+        var page = new RollbackSettingsPage(settings.Current.Rollback, text, store, new Oranda.Platform.Storage.AppDataPaths(data));
+        await page.RefreshSummaryAsync();
+        var vm = new SettingsViewModel(settings, text, rollback: page) { SelectedTab = SettingsViewModel.RollbackTabIndex };
+        var window = new SettingsWindow { DataContext = vm };
+        window.Show();
+        for (var i = 0; i < 4; i++)
         {
-            Directory.Delete(data, recursive: true);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(20); // 탭 전환 애니메이션을 끝낸다
+            Pump();
+            window.UpdateLayout();
         }
+
+        ManualCapture.Save(window, "settings-rollback",
+        [
+            new(Named<CheckBox>(window, "RollbackRecordPointBox"), 1, -14),
+            new(Named<CheckBox>(window, "RollbackScriptBox"), 2, -14),
+            new(Named<NumericUpDown>(window, "RollbackMaxRowsBox"), 3, -14),
+            new(Named<NumericUpDown>(window, "RollbackRetentionBox"), 4, -14),
+            new(Named<CheckBox>(window, "RollbackWarnMismatchBox"), 5, -14),
+            new(Named<CheckBox>(window, "RollbackBackupBox"), 6, -14),
+            new(Named<Button>(window, "RollbackClearButton"), 7, -14),
+        ]);
+        window.Close();
     });
 
     [Fact]

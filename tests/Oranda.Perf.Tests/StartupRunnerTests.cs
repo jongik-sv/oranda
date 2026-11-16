@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Oranda.Perf.Common;
+using Oranda.Testing;
 
 namespace Oranda.Perf.Tests;
 
@@ -176,81 +177,60 @@ public class StartupRunnerTests
     [Fact]
     public void Features_option_writes_the_configuration_before_launch()
     {
-        var data = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            var opt = Options(dataDir: data) with { Features = "viewer" };
-            Assert.True(RunFake("ok", opt).Ok);
-            var seen = File.ReadAllText(Path.Combine(data, "settings-seen.txt"));
-            Assert.Contains("\"roles\":[\"viewer\"]", seen, StringComparison.Ordinal);
+        using var data = new TempDirectory("oranda-perf-test-");
+        var opt = Options(dataDir: data) with { Features = "viewer" };
+        Assert.True(RunFake("ok", opt).Ok);
+        var seen = File.ReadAllText(Path.Combine(data, "settings-seen.txt"));
+        Assert.Contains("\"roles\":[\"viewer\"]", seen, StringComparison.Ordinal);
 
-            // V0(모든 기능 쓰기)는 allFeatures 를 쓴다(D-013).
-            Assert.True(RunFake("ok", Options(dataDir: data) with { Features = "all" }).Ok);
-            Assert.Contains("\"allFeatures\":true", File.ReadAllText(Path.Combine(data, "settings-seen.txt")), StringComparison.Ordinal);
+        // V0(모든 기능 쓰기)는 allFeatures 를 쓴다(D-013).
+        Assert.True(RunFake("ok", Options(dataDir: data) with { Features = "all" }).Ok);
+        Assert.Contains("\"allFeatures\":true", File.ReadAllText(Path.Combine(data, "settings-seen.txt")), StringComparison.Ordinal);
 
-            // 같은 폴더로 default(설정 없음)를 띄우면 앞 구성이 남지 않는다.
-            File.Delete(Path.Combine(data, "settings-seen.txt"));
-            Assert.True(RunFake("ok", Options(dataDir: data) with { Features = "default" }).Ok);
-            Assert.False(File.Exists(Path.Combine(data, "settings-seen.txt")));
-        }
-        finally
-        {
-            Directory.Delete(data, recursive: true);
-        }
+        // 같은 폴더로 default(설정 없음)를 띄우면 앞 구성이 남지 않는다.
+        File.Delete(Path.Combine(data, "settings-seen.txt"));
+        Assert.True(RunFake("ok", Options(dataDir: data) with { Features = "default" }).Ok);
+        Assert.False(File.Exists(Path.Combine(data, "settings-seen.txt")));
     }
 
     [Fact]
     public void Without_features_option_existing_settings_are_left_alone()
     {
-        var data = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            Directory.CreateDirectory(data);
-            File.WriteAllText(Path.Combine(data, "settings.json"), "{\"schemaVersion\":1}");
-            Assert.True(RunFake("ok", Options(dataDir: data)).Ok);
-            Assert.Equal("{\"schemaVersion\":1}", File.ReadAllText(Path.Combine(data, "settings-seen.txt")));
-        }
-        finally
-        {
-            Directory.Delete(data, recursive: true);
-        }
+        using var data = new TempDirectory("oranda-perf-test-");
+        Directory.CreateDirectory(data);
+        File.WriteAllText(Path.Combine(data, "settings.json"), "{\"schemaVersion\":1}");
+        Assert.True(RunFake("ok", Options(dataDir: data)).Ok);
+        Assert.Equal("{\"schemaVersion\":1}", File.ReadAllText(Path.Combine(data, "settings-seen.txt")));
     }
 
     [Fact]
     public void Run_reports_threads_handles_and_only_this_runs_log_lines()
     {
-        var data = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
+        using var data = new TempDirectory("oranda-perf-test-");
+        // 앞 실행이 남긴 줄은 이번 값에 섞이지 않는다.
+        var logs = Path.Combine(data, "logs");
+        Directory.CreateDirectory(logs);
+        File.WriteAllText(Path.Combine(logs, "oranda-20260101.log"), "시작 작업: 돈 99개, 건너뜀 99개\r\n");
+        Environment.SetEnvironmentVariable("FAKE_LOG", "상태 칸 건너뜀: X.BlockerStatusItem|상태 칸: 4개, 건너뜀 1개|시작 작업: 돈 3개, 건너뜀 6개");
+        StartupRun run;
         try
         {
-            // 앞 실행이 남긴 줄은 이번 값에 섞이지 않는다.
-            var logs = Path.Combine(data, "logs");
-            Directory.CreateDirectory(logs);
-            File.WriteAllText(Path.Combine(logs, "oranda-20260101.log"), "시작 작업: 돈 99개, 건너뜀 99개\r\n");
-            Environment.SetEnvironmentVariable("FAKE_LOG", "상태 칸 건너뜀: X.BlockerStatusItem|상태 칸: 4개, 건너뜀 1개|시작 작업: 돈 3개, 건너뜀 6개");
-            StartupRun run;
-            try
-            {
-                run = RunFake("ok", Options(dataDir: data));
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable("FAKE_LOG", null);
-            }
-
-            Assert.True(run.Ok);
-            Assert.Equal(3, run.TasksRan);
-            Assert.Equal(6, run.TasksSkipped);
-            Assert.Equal(4, run.StatusShown);
-            Assert.Equal(1, run.StatusSkipped);
-            if (OperatingSystem.IsWindows())
-            {
-                Assert.True(run.Threads > 0);
-                Assert.True(run.Handles > 0);
-            }
+            run = RunFake("ok", Options(dataDir: data));
         }
         finally
         {
-            Directory.Delete(data, recursive: true);
+            Environment.SetEnvironmentVariable("FAKE_LOG", null);
+        }
+
+        Assert.True(run.Ok);
+        Assert.Equal(3, run.TasksRan);
+        Assert.Equal(6, run.TasksSkipped);
+        Assert.Equal(4, run.StatusShown);
+        Assert.Equal(1, run.StatusSkipped);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(run.Threads > 0);
+            Assert.True(run.Handles > 0);
         }
     }
 
@@ -266,23 +246,16 @@ public class StartupRunnerTests
     [Fact]
     public void ReadLogSince_returns_only_text_after_the_offset_and_survives_missing_dirs()
     {
-        var data = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            Assert.Null(StartupRunner.ReadLogSince(data, 0));
-            var logs = Path.Combine(data, "logs");
-            Directory.CreateDirectory(logs);
-            File.WriteAllText(Path.Combine(logs, "oranda-20260101.log"), "abc");
-            File.WriteAllText(Path.Combine(logs, "oranda-20260102.log"), "def");
-            Assert.Equal("abcdef", StartupRunner.ReadLogSince(data, 0));
-            Assert.Equal("bcdef", StartupRunner.ReadLogSince(data, 1));
-            Assert.Equal("ef", StartupRunner.ReadLogSince(data, 4));
-            Assert.Equal(string.Empty, StartupRunner.ReadLogSince(data, 6));
-        }
-        finally
-        {
-            Directory.Delete(data, recursive: true);
-        }
+        using var data = new TempDirectory("oranda-perf-test-");
+        Assert.Null(StartupRunner.ReadLogSince(data, 0));
+        var logs = Path.Combine(data, "logs");
+        Directory.CreateDirectory(logs);
+        File.WriteAllText(Path.Combine(logs, "oranda-20260101.log"), "abc");
+        File.WriteAllText(Path.Combine(logs, "oranda-20260102.log"), "def");
+        Assert.Equal("abcdef", StartupRunner.ReadLogSince(data, 0));
+        Assert.Equal("bcdef", StartupRunner.ReadLogSince(data, 1));
+        Assert.Equal("ef", StartupRunner.ReadLogSince(data, 4));
+        Assert.Equal(string.Empty, StartupRunner.ReadLogSince(data, 6));
     }
 
     [Fact]

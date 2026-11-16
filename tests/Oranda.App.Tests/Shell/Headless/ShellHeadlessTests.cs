@@ -17,6 +17,7 @@ using Oranda.Core.Connection;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Shell.Headless;
 
@@ -116,66 +117,52 @@ public class ShellHeadlessTests
     [Fact]
     public Task Changed_layout_is_restored_after_restart() => HeadlessHost.Run(async () =>
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-restart-" + Guid.NewGuid().ToString("N"));
-        try
+        using var dir = new TempDirectory("oranda-restart-");
+        LayoutDocument before;
+        using (var h = new ShellHarness(dir))
         {
-            LayoutDocument before;
-            using (var h = new ShellHarness(dir))
-            {
-                var ws = h.Get<DockWorkspace>();
-                ws.ShowTool("oranda.panel.outline");
-                ws.HideTool("oranda.panel.scripts");
-                ws.ShowTool("oranda.panel.history");
-                // 구분선을 끌면 이웃 둘의 비율이 함께 바뀐다(합 1). 왼쪽 묶음의 이웃은 문서·아래 묶음을 담은 가운데 열이고,
-                // 그 오른쪽에 개요 창 묶음이 세로 전체로 붙는다(D-048).
-                var left = FindToolDock(ws.Layout!, "oranda.panel.schemaBrowser");
-                var siblings = ((IDock)left.Owner!).VisibleDockables!.OfType<IDock>().ToList();
-                var middle = siblings.Single(d => !ReferenceEquals(d, left) && d is not IToolDock);
-                var rest = siblings.Where(d => !ReferenceEquals(d, left) && !ReferenceEquals(d, middle)).Sum(d => d.Proportion);
-                left.Proportion = 0.30;
-                middle.Proportion = 0.70 - rest;
-                before = ws.Capture();
-                await h.Get<ShellController>().SaveLayoutAsync(h.Window.CapturePlacement());
-            }
-
-            Assert.True(File.Exists(Path.Combine(dir, "layout.json")));
-
-            using var again = new ShellHarness(dir);
-            var after = again.Get<DockWorkspace>().Capture();
-
-            Assert.True(LayoutPlanner.SameShape(before.Root, after.Root), "재시작 뒤 배치가 같지 않다\n" + Dump(before) + "\n---\n" + Dump(after));
-            Assert.Equal(before.HiddenTools, after.HiddenTools);
-            Assert.Contains("oranda.panel.outline", again.Get<DockWorkspace>().VisibleToolIds);
-            Assert.DoesNotContain("oranda.panel.scripts", again.Get<DockWorkspace>().VisibleToolIds);
-            Assert.Equal(0.30, FindToolDock(again.Get<DockWorkspace>().Layout!, "oranda.panel.schemaBrowser").Proportion, 3);
-            Assert.NotNull(again.Get<ShellController>().SavedWindow);
+            var ws = h.Get<DockWorkspace>();
+            ws.ShowTool("oranda.panel.outline");
+            ws.HideTool("oranda.panel.scripts");
+            ws.ShowTool("oranda.panel.history");
+            // 구분선을 끌면 이웃 둘의 비율이 함께 바뀐다(합 1). 왼쪽 묶음의 이웃은 문서·아래 묶음을 담은 가운데 열이고,
+            // 그 오른쪽에 개요 창 묶음이 세로 전체로 붙는다(D-048).
+            var left = FindToolDock(ws.Layout!, "oranda.panel.schemaBrowser");
+            var siblings = ((IDock)left.Owner!).VisibleDockables!.OfType<IDock>().ToList();
+            var middle = siblings.Single(d => !ReferenceEquals(d, left) && d is not IToolDock);
+            var rest = siblings.Where(d => !ReferenceEquals(d, left) && !ReferenceEquals(d, middle)).Sum(d => d.Proportion);
+            left.Proportion = 0.30;
+            middle.Proportion = 0.70 - rest;
+            before = ws.Capture();
+            await h.Get<ShellController>().SaveLayoutAsync(h.Window.CapturePlacement());
         }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+
+        Assert.True(File.Exists(Path.Combine(dir, "layout.json")));
+
+        using var again = new ShellHarness(dir);
+        var after = again.Get<DockWorkspace>().Capture();
+
+        Assert.True(LayoutPlanner.SameShape(before.Root, after.Root), "재시작 뒤 배치가 같지 않다\n" + Dump(before) + "\n---\n" + Dump(after));
+        Assert.Equal(before.HiddenTools, after.HiddenTools);
+        Assert.Contains("oranda.panel.outline", again.Get<DockWorkspace>().VisibleToolIds);
+        Assert.DoesNotContain("oranda.panel.scripts", again.Get<DockWorkspace>().VisibleToolIds);
+        Assert.Equal(0.30, FindToolDock(again.Get<DockWorkspace>().Layout!, "oranda.panel.schemaBrowser").Proportion, 3);
+        Assert.NotNull(again.Get<ShellController>().SavedWindow);
     });
 
     [Fact]
     public Task Closing_the_main_window_saves_the_layout() => HeadlessHost.Run(async () =>
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-close-" + Guid.NewGuid().ToString("N"));
-        try
+        using var dir = new TempDirectory("oranda-close-");
+        using (var h = new ShellHarness(dir))
         {
-            using (var h = new ShellHarness(dir))
-            {
-                h.Get<DockWorkspace>().HideTool("oranda.panel.output");
-                h.Window.Close();
-                await HeadlessHost.WaitUntil(() => File.Exists(Path.Combine(dir, "layout.json")));
-            }
+            h.Get<DockWorkspace>().HideTool("oranda.panel.output");
+            h.Window.Close();
+            await HeadlessHost.WaitUntil(() => File.Exists(Path.Combine(dir, "layout.json")));
+        }
 
-            using var again = new ShellHarness(dir);
-            Assert.DoesNotContain("oranda.panel.output", again.Get<DockWorkspace>().VisibleToolIds);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        using var again = new ShellHarness(dir);
+        Assert.DoesNotContain("oranda.panel.output", again.Get<DockWorkspace>().VisibleToolIds);
     });
 
     [Fact]
@@ -215,24 +202,17 @@ public class ShellHeadlessTests
     [Fact]
     public Task Corrupt_layout_file_falls_back_to_default_layout() => HeadlessHost.Run(() =>
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-corrupt-" + Guid.NewGuid().ToString("N"));
+        using var dir = new TempDirectory("oranda-corrupt-");
         Directory.CreateDirectory(dir);
-        try
-        {
-            File.WriteAllText(Path.Combine(dir, "layout.json"), "{ not json");
+        File.WriteAllText(Path.Combine(dir, "layout.json"), "{ not json");
 
-            using var h = new ShellHarness(dir);
+        using var h = new ShellHarness(dir);
 
-            Assert.NotNull(h.Get<ShellController>().LayoutNotice);
-            var expected = LayoutPlanner.CreateDefault(h.Get<IToolPanelRegistry>().Panels);
-            var actual = h.Get<DockWorkspace>().Capture();
-            Assert.True(LayoutPlanner.SameShape(expected.Root, actual.Root), Dump(expected) + "\n---\n" + Dump(actual));
-            Assert.Single(Directory.GetFiles(Path.Combine(dir, "backup"), "layout.json.corrupt-*"));
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        Assert.NotNull(h.Get<ShellController>().LayoutNotice);
+        var expected = LayoutPlanner.CreateDefault(h.Get<IToolPanelRegistry>().Panels);
+        var actual = h.Get<DockWorkspace>().Capture();
+        Assert.True(LayoutPlanner.SameShape(expected.Root, actual.Root), Dump(expected) + "\n---\n" + Dump(actual));
+        Assert.Single(Directory.GetFiles(Path.Combine(dir, "backup"), "layout.json.corrupt-*"));
     });
 
     [Fact]
@@ -719,24 +699,17 @@ public class ShellHeadlessTests
     [Fact]
     public Task Window_placement_is_saved_in_dip_with_minimum_size() => HeadlessHost.Run(async () =>
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-place-" + Guid.NewGuid().ToString("N"));
-        try
+        using var dir = new TempDirectory("oranda-place-");
+        using (var h = new ShellHarness(dir))
         {
-            using (var h = new ShellHarness(dir))
-            {
-                Assert.True(h.Window.MinWidth <= 960 && h.Window.MinHeight <= 600);
-                await h.Get<ShellController>().SaveLayoutAsync(h.Window.CapturePlacement());
-            }
+            Assert.True(h.Window.MinWidth <= 960 && h.Window.MinHeight <= 600);
+            await h.Get<ShellController>().SaveLayoutAsync(h.Window.CapturePlacement());
+        }
 
-            using var again = new ShellHarness(dir);
-            var saved = again.Get<ShellController>().SavedWindow!;
-            Assert.True(saved.Width >= 800 && saved.Height >= 500);
-            Assert.Equal(WindowStateKind.Normal, saved.State);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        using var again = new ShellHarness(dir);
+        var saved = again.Get<ShellController>().SavedWindow!;
+        Assert.True(saved.Width >= 800 && saved.Height >= 500);
+        Assert.Equal(WindowStateKind.Normal, saved.State);
     });
 
     private static readonly string[] DialogCommands = ["oranda.tools.settings", "oranda.help.about", "oranda.view.commandPalette"];

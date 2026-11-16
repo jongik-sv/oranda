@@ -18,6 +18,7 @@ using Oranda.Core.Events;
 using Oranda.Core.Sessions;
 using Oranda.Core.Storage;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Sessions;
 
@@ -202,62 +203,55 @@ public sealed class SessionSwitchTests
             host.NewDocument();
         }
 
-        var root = Path.Combine(Path.GetTempPath(), "oranda-msswitch-" + Guid.NewGuid().ToString("N"));
+        using var root = new TempDirectory("oranda-msswitch-");
         Directory.CreateDirectory(root);
-        try
+        var path = Path.Combine(root, "EmpMapper.xml");
+        await File.WriteAllTextAsync(path, MapperSamples.EmpMapper);
+        host.MyBatisHooks = new MyBatisHooks(harness.Services);
+        await host.OpenWorkspaceFileAsync(path, default);
+        await SettleAsync();
+        var mapper = host.ActiveWorkspace!;
+        var tab = Assert.IsType<MyBatisWorkspaceSession>(mapper.MyBatis).OpenStatement("selectEmpList")!;
+        host.Active = tab;
+        await SettleAsync();
+        Assert.Same(mapper, harness.Get<DockWorkspace>().ActiveDocument?.Panel);
+        Assert.True(router.SqlDocumentActive);
+
+        var s2 = (await router.NewSessionAsync())!;
+        var s3 = (await router.NewSessionAsync())!;
+        var s4 = (await router.NewSessionAsync())!;
+        await SettleAsync();
+        Assert.Equal([a, s2, s3, s4], service.SessionsOf(a.Profile.Id));
+        Assert.Same(s4, router.SessionFor(tab));
+
+        var comboView = (ConnectionComboView)harness.Window.FindControl<ContentControl>("ConnectionComboHost")!.Content!;
+        var combo = (ConnectionComboViewModel)comboView.DataContext!;
+        AssertComboShows(comboView, combo, s4, "start");
+
+        // 툴바 콤보: 펼쳐서 고르고 닫는다.
+        foreach (var pick in new[] { s2, a, s3, s4, a })
         {
-            var path = Path.Combine(root, "EmpMapper.xml");
-            await File.WriteAllTextAsync(path, MapperSamples.EmpMapper);
-            host.MyBatisHooks = new MyBatisHooks(harness.Services);
-            await host.OpenWorkspaceFileAsync(path, default);
+            comboView.Combo.IsDropDownOpen = true;
             await SettleAsync();
-            var mapper = host.ActiveWorkspace!;
-            var tab = Assert.IsType<MyBatisWorkspaceSession>(mapper.MyBatis).OpenStatement("selectEmpList")!;
-            host.Active = tab;
+            comboView.Combo.SelectedItem = comboView.Combo.Items.OfType<ConnectionComboItem>().Single(i => !i.IsNewSession && ReferenceEquals(i.Session, pick));
+            comboView.Combo.IsDropDownOpen = false;
             await SettleAsync();
-            Assert.Same(mapper, harness.Get<DockWorkspace>().ActiveDocument?.Panel);
-            Assert.True(router.SqlDocumentActive);
-
-            var s2 = (await router.NewSessionAsync())!;
-            var s3 = (await router.NewSessionAsync())!;
-            var s4 = (await router.NewSessionAsync())!;
-            await SettleAsync();
-            Assert.Equal([a, s2, s3, s4], service.SessionsOf(a.Profile.Id));
-            Assert.Same(s4, router.SessionFor(tab));
-
-            var comboView = (ConnectionComboView)harness.Window.FindControl<ContentControl>("ConnectionComboHost")!.Content!;
-            var combo = (ConnectionComboViewModel)comboView.DataContext!;
-            AssertComboShows(comboView, combo, s4, "start");
-
-            // 툴바 콤보: 펼쳐서 고르고 닫는다.
-            foreach (var pick in new[] { s2, a, s3, s4, a })
-            {
-                comboView.Combo.IsDropDownOpen = true;
-                await SettleAsync();
-                comboView.Combo.SelectedItem = comboView.Combo.Items.OfType<ConnectionComboItem>().Single(i => !i.IsNewSession && ReferenceEquals(i.Session, pick));
-                comboView.Combo.IsDropDownOpen = false;
-                await SettleAsync();
-                Assert.Same(pick, router.SessionFor(tab));
-                Assert.Same(mapper, host.WorkspaceOf(tab));
-                AssertComboShows(comboView, combo, pick, "combo " + router.LabelOf(pick));
-            }
-
-            // 「세션」 창: 두 번 누르기·Enter 와 같은 동작(이 세션 쓰기).
-            using var sessions = new SessionsViewModel(harness.Services);
-            foreach (var pick in new[] { s3, a, s2 })
-            {
-                await sessions.ActivateAsync(sessions.Rows.Single(r => ReferenceEquals(r.Session, pick)));
-                await SettleAsync();
-                Assert.Same(pick, router.SessionFor(tab));
-                AssertComboShows(comboView, combo, pick, "sessions " + router.LabelOf(pick));
-            }
-
-            Assert.Equal(4, service.SessionsOf(a.Profile.Id).Count);
+            Assert.Same(pick, router.SessionFor(tab));
+            Assert.Same(mapper, host.WorkspaceOf(tab));
+            AssertComboShows(comboView, combo, pick, "combo " + router.LabelOf(pick));
         }
-        finally
+
+        // 「세션」 창: 두 번 누르기·Enter 와 같은 동작(이 세션 쓰기).
+        using var sessions = new SessionsViewModel(harness.Services);
+        foreach (var pick in new[] { s3, a, s2 })
         {
-            Directory.Delete(root, recursive: true);
+            await sessions.ActivateAsync(sessions.Rows.Single(r => ReferenceEquals(r.Session, pick)));
+            await SettleAsync();
+            Assert.Same(pick, router.SessionFor(tab));
+            AssertComboShows(comboView, combo, pick, "sessions " + router.LabelOf(pick));
         }
+
+        Assert.Equal(4, service.SessionsOf(a.Profile.Id).Count);
     });
 
     private static async Task DoubleClickAsync(Window window, ListBox list, int index)

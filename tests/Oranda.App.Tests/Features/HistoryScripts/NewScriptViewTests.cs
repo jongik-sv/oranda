@@ -7,6 +7,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Oranda.App.Features.HistoryScripts;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.HistoryScripts;
 
@@ -14,7 +15,7 @@ namespace Oranda.App.Tests.Features.HistoryScripts;
 // ORANDA_RENDER_DIR 가 있으면 상태별 라이트·다크 PNG(newscript-*.png)를 그 폴더에 쓴다.
 public sealed class NewScriptViewTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-newscript-view-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-newscript-view-");
 
     public NewScriptViewTests() => Directory.CreateDirectory(_dir);
 
@@ -22,7 +23,7 @@ public sealed class NewScriptViewTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

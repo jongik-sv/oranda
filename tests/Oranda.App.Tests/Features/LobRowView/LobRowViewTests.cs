@@ -20,7 +20,7 @@ public sealed class LobRowViewTests : IDisposable
 {
     private static readonly DbObjectRef Emp = new("SCOTT", "EMP", "TABLE");
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-lobvm-" + Guid.NewGuid().ToString("N")[..8]);
+    private readonly Oranda.Testing.TempDirectory _dir = new("oranda-lobvm-");
 
     public LobRowViewTests() => Directory.CreateDirectory(_dir);
 
@@ -30,7 +30,7 @@ public sealed class LobRowViewTests : IDisposable
         GridEditCommands.Active = null;
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

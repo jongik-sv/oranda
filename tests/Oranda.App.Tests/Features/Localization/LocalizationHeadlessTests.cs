@@ -19,6 +19,7 @@ using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Localization;
 
@@ -118,28 +119,21 @@ public class LocalizationHeadlessTests
     [Fact]
     public Task Language_setting_survives_a_restart_and_a_system_setting_follows_the_os() => HeadlessHost.Run(async () =>
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-lang-" + Guid.NewGuid().ToString("N"));
-        try
+        using var dir = new TempDirectory("oranda-lang-");
+        using (var h = new ShellHarness(dir))
         {
-            using (var h = new ShellHarness(dir))
-            {
-                await SetLanguageAsync(h, "en");
-                Assert.Contains("\"language\": \"en\"", File.ReadAllText(Path.Combine(dir, "settings.json")));
-            }
-
-            using (var again = new ShellHarness(dir))
-            {
-                Assert.Equal("en", again.Get<IShellText>().Language);
-                Assert.Equal("_File", TopHeaders(again)[0]);
-                await SetLanguageAsync(again, "system");
-                // 시험 프로세스의 OS 언어는 한국어(LocalizationTestSetup)다.
-                Assert.Equal("ko", again.Get<IShellText>().Language);
-                Assert.Equal("파일(_F)", TopHeaders(again)[0]);
-            }
+            await SetLanguageAsync(h, "en");
+            Assert.Contains("\"language\": \"en\"", File.ReadAllText(Path.Combine(dir, "settings.json")));
         }
-        finally
+
+        using (var again = new ShellHarness(dir))
         {
-            Directory.Delete(dir, recursive: true);
+            Assert.Equal("en", again.Get<IShellText>().Language);
+            Assert.Equal("_File", TopHeaders(again)[0]);
+            await SetLanguageAsync(again, "system");
+            // 시험 프로세스의 OS 언어는 한국어(LocalizationTestSetup)다.
+            Assert.Equal("ko", again.Get<IShellText>().Language);
+            Assert.Equal("파일(_F)", TopHeaders(again)[0]);
         }
     });
 

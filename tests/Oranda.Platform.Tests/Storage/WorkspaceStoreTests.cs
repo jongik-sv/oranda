@@ -1,19 +1,17 @@
 using Oranda.Core.Storage;
 using Oranda.Core.Workspaces;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
 // 소유: TSK-04-02. 작업 공간·자동 저장·비정상 종료 복구(data-model 2.6, 4.1).
 public sealed class WorkspaceStoreTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-ws-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-ws-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private IWorkspaceStore NewStore()

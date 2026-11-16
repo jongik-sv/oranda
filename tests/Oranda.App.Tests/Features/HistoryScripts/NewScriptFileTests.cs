@@ -1,12 +1,13 @@
 using Oranda.App.Features.HistoryScripts;
 using Oranda.App.Features.SqlEditor;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.HistoryScripts;
 
 // 소유: TSK-10-02. 새 스크립트 이름 검사·고유 이름·파일 만들기(덮어쓰지 않음)·대상 폴더 판정.
 public sealed class NewScriptFileTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-newscript-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-newscript-");
 
     public NewScriptFileTests() => Directory.CreateDirectory(_dir);
 
@@ -14,7 +15,7 @@ public sealed class NewScriptFileTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

@@ -45,21 +45,14 @@ public sealed class GridFetchSettingsTests
     [Fact]
     public void The_app_registers_the_fetch_settings_for_the_execution_service()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-gfs-" + Guid.NewGuid().ToString("N"));
+        using var dir = new TempDirectory("oranda-gfs-");
         Directory.CreateDirectory(dir);
-        try
-        {
-            using var services = AppComposition.Create(new AppCompositionOptions { DataDirectory = dir });
-            var fetch = services.GetService<IGridFetchSettings>();
+        using var services = AppComposition.Create(new AppCompositionOptions { DataDirectory = dir });
+        var fetch = services.GetService<IGridFetchSettings>();
 
-            Assert.NotNull(fetch);
-            Assert.IsType<GridFetchSettings>(fetch);
-            Assert.Equal(services.GetRequiredService<SettingsService>().Current.Grid.PageSize, fetch.PageSize);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        Assert.NotNull(fetch);
+        Assert.IsType<GridFetchSettings>(fetch);
+        Assert.Equal(services.GetRequiredService<SettingsService>().Current.Grid.PageSize, fetch.PageSize);
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.Core.Workspaces;
 using Oranda.Language.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -41,16 +42,13 @@ public sealed class MyBatisIndentTests : IDisposable
     /// <summary><see cref="Indented"/> 의 문장 id.</summary>
     internal static readonly string[] StatementIds = ["selectMoSpc", "deleteMoSpc", "shallow"];
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbindent-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbindent-");
 
     public MyBatisIndentTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     // ---- 순수 함수 ------------------------------------------------------------------------------

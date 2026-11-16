@@ -12,6 +12,7 @@ using Oranda.App.Features.HistoryScripts;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Xunit.Abstractions;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Integration;
 
@@ -21,7 +22,7 @@ namespace Oranda.App.Tests.Integration;
 /// <summary>스크립트 창 통합 흐름: 폴더 둘 연결 → 이름·내용 검색 → 결과에서 새 스크립트 → 만든 파일이 다시 검색에 잡힌다.</summary>
 public sealed class ScriptsFindFlowTests(ITestOutputHelper output) : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-itest-scripts-" + Guid.NewGuid().ToString("N")[..8]);
+    private readonly TempDirectory _dir = new("oranda-itest-scripts-");
 
     public void Dispose()
     {
@@ -34,7 +35,7 @@ public sealed class ScriptsFindFlowTests(ITestOutputHelper output) : IDisposable
                     File.SetAttributes(d, FileAttributes.Directory); // 숨김 속성을 풀어야 지울 수 있는 환경이 있다
                 }
 
-                Directory.Delete(_dir, recursive: true);
+                _dir.Dispose();
             }
         }
         catch (IOException)

@@ -1,6 +1,7 @@
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Connection;
 using Oranda.Oracle.Connection;
+using Oranda.Testing;
 
 namespace Oranda.Oracle.Tests.Connection;
 
@@ -10,11 +11,11 @@ namespace Oranda.Oracle.Tests.Connection;
 /// </summary>
 public sealed class TnsAdminPerConnectionTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-tns-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-tns-");
 
     public TnsAdminPerConnectionTests() => Directory.CreateDirectory(_root);
 
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    public void Dispose() => _root.Dispose();
 
     [Fact]
     public void Connection_string_carries_the_tns_directory_and_wallet_of_the_profile()

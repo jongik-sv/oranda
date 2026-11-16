@@ -10,20 +10,18 @@ using Oranda.Core.Shell;
 using Oranda.Core.Storage;
 using Oranda.Language.Snippets;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Templates;
 
 /// <summary>TSK-04-07 코드 조각 삽입·탭 이동, 템플릿 창, 키맵 프리셋·사용자 정의·충돌, 설정 내보내기·가져오기.</summary>
 public sealed class TemplatesTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-tpl-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-tpl-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private AppDataPaths Paths(string name) => new(Path.Combine(_root, name));

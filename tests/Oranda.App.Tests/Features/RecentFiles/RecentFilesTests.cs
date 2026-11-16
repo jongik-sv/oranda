@@ -14,6 +14,7 @@ using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Composition;
 using Oranda.Core.Shell;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.RecentFiles;
 
@@ -21,7 +22,7 @@ namespace Oranda.App.Tests.Features.RecentFiles;
 [Collection("GridEditStatics")] // SaveFeedback·MenuItemSources·SqlEditorHost.Current 정적 상태를 함께 쓴다
 public sealed class RecentFilesTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-recent-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-recent-");
 
     public RecentFilesTests() => Directory.CreateDirectory(_root);
 
@@ -29,7 +30,7 @@ public sealed class RecentFilesTests : IDisposable
     {
         try
         {
-            Directory.Delete(_root, recursive: true);
+            _root.Dispose();
         }
         catch (IOException)
         {

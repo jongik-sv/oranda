@@ -5,6 +5,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.Grid;
 using Oranda.Core.Sessions;
 using Oranda.Core.Transfer;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.DataTransfer;
 
@@ -24,7 +25,7 @@ public sealed class ExportDialogTests : IDisposable
 
     private static readonly DateTime Now = new(2026, 10, 25, 9, 8, 7);
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-export-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-export-");
     private readonly List<string> _notes = [];
     private readonly List<string> _opened = [];
     private readonly Action<string>? _oldNotify = DataTransferCommands.Notify;
@@ -52,7 +53,7 @@ public sealed class ExportDialogTests : IDisposable
         ExcelExportPlan.LastOpenAfter = _oldOpenAfter;
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

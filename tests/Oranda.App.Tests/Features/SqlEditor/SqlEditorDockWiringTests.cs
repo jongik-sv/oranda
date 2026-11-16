@@ -1,19 +1,17 @@
 using Oranda.App.Features.SqlEditor;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.SqlEditor;
 
 /// <summary>작업 공간 메뉴가 보이는 저장된 작업 공간 ID 목록.</summary>
 public sealed class SqlEditorDockWiringTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-dw-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-dw-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     [Fact]

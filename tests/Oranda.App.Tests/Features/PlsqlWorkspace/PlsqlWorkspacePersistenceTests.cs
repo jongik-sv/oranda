@@ -7,6 +7,7 @@ using Oranda.App.Tests.Features.PlsqlEditor;
 using Oranda.App.Tests.Features.SchemaBrowser;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Composition;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.PlsqlWorkspace;
 
@@ -16,7 +17,7 @@ namespace Oranda.App.Tests.Features.PlsqlWorkspace;
 /// </summary>
 public sealed class PlsqlWorkspaceStoreTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-plsql-store-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-plsql-store-");
 
     private string Folder => Path.Combine(_root, "plsql-workspaces");
 
@@ -26,7 +27,7 @@ public sealed class PlsqlWorkspaceStoreTests : IDisposable
     {
         try
         {
-            Directory.Delete(_root, recursive: true);
+            _root.Dispose();
         }
         catch (IOException)
         {

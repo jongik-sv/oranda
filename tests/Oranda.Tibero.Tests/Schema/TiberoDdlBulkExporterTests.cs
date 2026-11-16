@@ -1,5 +1,6 @@
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema;
+using Oranda.Testing;
 using Oranda.Tibero.Schema;
 using static Oranda.Tibero.Tests.Schema.SchemaFakes;
 
@@ -8,14 +9,11 @@ namespace Oranda.Tibero.Tests.Schema;
 /// <summary>DDL 일괄 추출 Tibero 판: Core 흐름(<see cref="DdlBulkExport"/>)에 Tibero 기본 유형을 넘기는지, Tibero 제공자의 DDL 이 파일로 나가는지.</summary>
 public sealed class TiberoDdlBulkExporterTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-tb-ddl-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-tb-ddl-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir))
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
+        _dir.Dispose();
     }
 
     [Fact]

@@ -14,6 +14,7 @@ using Oranda.Core.Shell;
 using Oranda.Core.Text;
 using Oranda.Language.MyBatis;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -24,17 +25,14 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 /// </summary>
 public sealed partial class MyBatisFormatAllCommandTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbfmtall-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbfmtall-");
     private readonly List<string> _notices = [];
 
     public MyBatisFormatAllCommandTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     [Fact]

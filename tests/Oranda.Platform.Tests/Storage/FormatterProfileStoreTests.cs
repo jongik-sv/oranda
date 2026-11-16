@@ -2,20 +2,18 @@ using Oranda.Core.Formatting;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.Storage;
 
 // 소유: TSK-05-03. 포매터 프로필 저장·내보내기·가져오기(data-model 2.3).
 public sealed class FormatterProfileStoreTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-fp-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-fp-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private FormatterProfileStore NewStore(string? dir = null) => new(new AppDataPaths(dir ?? _root), []);

@@ -14,6 +14,7 @@ using Oranda.Core.Connection;
 using Oranda.Platform.Ai.Bridge;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Ai;
 
@@ -37,7 +38,7 @@ public sealed class AiSystemCliAgyRoundTripTests : IDisposable
 
     private static readonly JsonSerializerOptions RecordOptions = new() { WriteIndented = true };
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-agy-rt-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-agy-rt-");
 
     public AiSystemCliAgyRoundTripTests() => Directory.CreateDirectory(_dir);
 
@@ -45,7 +46,7 @@ public sealed class AiSystemCliAgyRoundTripTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

@@ -11,6 +11,7 @@ using Oranda.Core.Grid;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
 using Oranda.Core.Transfer;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.DataTransfer;
 
@@ -25,7 +26,7 @@ public sealed class ExcelExportTests : IDisposable
         new(2, "SAL", "NUMBER", ColumnDataKind.Number) { BaseTable = "EMP" },
     ];
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-excel-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-excel-");
     private readonly List<string> _notes = [];
     private readonly Action<string>? _oldNotify = DataTransferCommands.Notify;
     private readonly Func<string, bool> _oldOpen = ExportRunner.OpenFile;
@@ -48,7 +49,7 @@ public sealed class ExcelExportTests : IDisposable
         ExcelExportPlan.LastOpenAfter = _oldOpenAfter;
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

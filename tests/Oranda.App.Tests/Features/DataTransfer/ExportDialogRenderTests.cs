@@ -14,6 +14,7 @@ using Oranda.App.Shell;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Grid;
 using Oranda.Core.Transfer;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.DataTransfer;
 
@@ -27,7 +28,7 @@ public sealed partial class ExportDialogRenderTests : IDisposable
 {
     private readonly IShellText? _previousText = UiText.Current;
     private readonly string? _oldFolder = ExcelExportPlan.LastFolder;
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-export-ui-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-export-ui-");
 
     public ExportDialogRenderTests()
     {
@@ -41,7 +42,7 @@ public sealed partial class ExportDialogRenderTests : IDisposable
         ExcelExportPlan.LastFolder = _oldFolder;
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

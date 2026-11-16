@@ -18,6 +18,7 @@ using Oranda.App.Tests.Features.SqlEditor;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Shell;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
@@ -27,16 +28,13 @@ namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 /// </summary>
 public sealed class WorkspaceEditorTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-mbeditor-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-mbeditor-");
 
     public WorkspaceEditorTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     private async Task<(SqlEditorHost Host, MyBatisWorkspaceSession Session)> OpenAsync(MyBatisHooks hooks)

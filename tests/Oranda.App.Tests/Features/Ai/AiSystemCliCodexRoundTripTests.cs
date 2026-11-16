@@ -13,6 +13,7 @@ using Oranda.Core.Connection;
 using Oranda.Platform.Ai.Bridge;
 using Oranda.Platform.Ai.Cli;
 using Oranda.Platform.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.Ai;
 
@@ -33,7 +34,7 @@ public sealed class AiSystemCliCodexRoundTripTests : IDisposable
 {
     private const string SampleStatement = "SELECT e.empno, e.ename FROM emp e WHERE e.deptno = 10 ORDER BY e.ename";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-codex-rt-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-codex-rt-");
     private readonly Dictionary<string, string?> _savedEnv = [];
 
     public AiSystemCliCodexRoundTripTests() => Directory.CreateDirectory(_dir);
@@ -47,7 +48,7 @@ public sealed class AiSystemCliCodexRoundTripTests : IDisposable
 
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

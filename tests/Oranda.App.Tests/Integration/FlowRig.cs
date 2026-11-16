@@ -12,6 +12,7 @@ using Oranda.Core.History;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
 using Oranda.Core.Storage;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Integration;
 
@@ -21,7 +22,7 @@ namespace Oranda.App.Tests.Integration;
 /// </summary>
 internal sealed class FlowRig : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-itest-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-itest-");
     private readonly SqlEditorHost _previousHost = SqlEditorHost.Current;
     private readonly IExecutionDialogs _previousDialogs = ExecutionDialogs.Current;
 
@@ -142,7 +143,7 @@ internal sealed class FlowRig : IDisposable
         Container.Dispose();
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

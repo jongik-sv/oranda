@@ -9,20 +9,18 @@ using Oranda.App.Features.ExecutionPlan;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Plans;
 using CorePlan = Oranda.Core.Plans.ExecutionPlan;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.ExecutionPlan;
 
 /// <summary>계획 트리 열 너비 조절(p1·p2): 모델(최소·기본·저장 왕복)과 화면(머리글·줄 동시 변경, 끌기·두 번 누르기).</summary>
 public class PlanColumnTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-plan-cols-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-plan-cols-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir))
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
+        _dir.Dispose();
 
         GC.SuppressFinalize(this);
     }

@@ -1,4 +1,5 @@
 using Oranda.Perf.Common;
+using Oranda.Testing;
 
 namespace Oranda.Perf.Tests;
 
@@ -118,16 +119,9 @@ public class StatsTests
         Assert.Contains("| 항목 B | ≤ 16.0 ms | 2 | 55.0 | 60.0 | 60.0 | median | 초과 |", md, StringComparison.Ordinal);
         Assert.Contains("| 항목 C | ≤ 16.0 ms | 0 | - | - | - | - | 미측정 | 창이 필요 |", md, StringComparison.Ordinal);
 
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-perf-test-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            report.WriteTo(dir, "out");
-            Assert.True(File.Exists(Path.Combine(dir, "out.md")));
-            Assert.Contains("\"Exceeded\"", File.ReadAllText(Path.Combine(dir, "out.json")), StringComparison.Ordinal);
-        }
-        finally
-        {
-            Directory.Delete(dir, recursive: true);
-        }
+        using var dir = new TempDirectory("oranda-perf-test-");
+        report.WriteTo(dir, "out");
+        Assert.True(File.Exists(Path.Combine(dir, "out.md")));
+        Assert.Contains("\"Exceeded\"", File.ReadAllText(Path.Combine(dir, "out.json")), StringComparison.Ordinal);
     }
 }

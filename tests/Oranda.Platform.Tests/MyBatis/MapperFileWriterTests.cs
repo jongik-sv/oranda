@@ -1,6 +1,7 @@
 using System.Text;
 using Oranda.Core.MyBatis;
 using Oranda.Platform.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.Platform.Tests.MyBatis;
 
@@ -8,7 +9,7 @@ namespace Oranda.Platform.Tests.MyBatis;
 public sealed class MapperFileWriterTests : IDisposable
 {
     private static readonly byte[] Original = [1, 2, 3, 4];
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-mfw-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-mfw-");
     private readonly MapperFileWriter _writer = new();
 
     public MapperFileWriterTests() => Directory.CreateDirectory(_dir);
@@ -20,7 +21,7 @@ public sealed class MapperFileWriterTests : IDisposable
             File.SetAttributes(f, FileAttributes.Normal);
         }
 
-        Directory.Delete(_dir, recursive: true);
+        _dir.Dispose();
     }
 
     private string P(string name = "m.xml") => Path.Combine(_dir, name);

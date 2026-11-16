@@ -13,14 +13,11 @@ public sealed class RollbackVaultTests : IDisposable
     private static readonly byte[] Plain = Encoding.UTF8.GetBytes("{\"schemaVersion\":1,\"text\":\"UPDATE emp SET sal = 1 -- 값 ünï\"}");
     private static readonly byte[] Aad = Encoding.UTF8.GetBytes("orb1:7:FREE/FREEPDB1/APP");
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-vault-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-vault-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        _root.Dispose();
     }
 
     [Fact]

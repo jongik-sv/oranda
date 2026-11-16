@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Oranda.App.Features.Ai.Chat;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.Testing;
 using SkiaSharp;
 
 namespace Oranda.App.Tests.Features.Ai;
@@ -69,35 +70,28 @@ public class AiChatImageSourcesTests
             return; // sips 는 macOS 에만 있다
         }
 
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-tiff-test-" + Guid.NewGuid().ToString("N"));
+        using var dir = new TempDirectory("oranda-tiff-test-");
         Directory.CreateDirectory(dir);
-        try
+        var png = Path.Combine(dir, "a.png");
+        var tiff = Path.Combine(dir, "a.tiff");
+        File.WriteAllBytes(png, Png(40, 30, SKColors.CornflowerBlue));
+        var start = new System.Diagnostics.ProcessStartInfo("/usr/bin/sips") { RedirectStandardOutput = true, UseShellExecute = false };
+        foreach (var a in new[] { "-s", "format", "tiff", png, "--out", tiff })
         {
-            var png = Path.Combine(dir, "a.png");
-            var tiff = Path.Combine(dir, "a.tiff");
-            File.WriteAllBytes(png, Png(40, 30, SKColors.CornflowerBlue));
-            var start = new System.Diagnostics.ProcessStartInfo("/usr/bin/sips") { RedirectStandardOutput = true, UseShellExecute = false };
-            foreach (var a in new[] { "-s", "format", "tiff", png, "--out", tiff })
-            {
-                start.ArgumentList.Add(a);
-            }
-
-            using (var p = System.Diagnostics.Process.Start(start)!)
-            {
-                p.WaitForExit();
-                Assert.Equal(0, p.ExitCode);
-            }
-
-            var converted = AiImageSources.TiffToPng(File.ReadAllBytes(tiff));
-
-            Assert.NotNull(converted);
-            Assert.Equal("image/png", AiImageNormalizer.SniffMediaType(converted));
-            Assert.Equal((40, 30), (AiImageNormalizer.Normalize(converted!).Image!.Width, AiImageNormalizer.Normalize(converted).Image!.Height));
+            start.ArgumentList.Add(a);
         }
-        finally
+
+        using (var p = System.Diagnostics.Process.Start(start)!)
         {
-            Directory.Delete(dir, recursive: true);
+            p.WaitForExit();
+            Assert.Equal(0, p.ExitCode);
         }
+
+        var converted = AiImageSources.TiffToPng(File.ReadAllBytes(tiff));
+
+        Assert.NotNull(converted);
+        Assert.Equal("image/png", AiImageNormalizer.SniffMediaType(converted));
+        Assert.Equal((40, 30), (AiImageNormalizer.Normalize(converted!).Image!.Width, AiImageNormalizer.Normalize(converted).Image!.Height));
     }
 
     [Fact]

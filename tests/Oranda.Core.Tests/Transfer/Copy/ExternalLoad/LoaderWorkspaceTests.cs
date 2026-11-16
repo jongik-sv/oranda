@@ -1,17 +1,18 @@
 using Oranda.Core.Transfer.Copy.ExternalLoad;
+using Oranda.Testing;
 
 namespace Oranda.Core.Tests.Transfer.Copy.ExternalLoad;
 
 // 소유: XL1. 테이블별 임시 작업 폴더 만들기·지우기·오래된 실행 폴더 정리.
 public sealed class LoaderWorkspaceTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-ws-test-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-ws-test-");
 
     public void Dispose()
     {
         try
         {
-            Directory.Delete(_root, recursive: true);
+            _root.Dispose();
         }
         catch (DirectoryNotFoundException)
         {

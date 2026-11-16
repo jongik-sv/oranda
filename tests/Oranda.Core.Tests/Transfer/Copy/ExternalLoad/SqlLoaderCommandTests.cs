@@ -2,6 +2,7 @@ using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using Oranda.Core.Transfer.Copy.ExternalLoad;
+using Oranda.Testing;
 
 namespace Oranda.Core.Tests.Transfer.Copy.ExternalLoad;
 
@@ -10,7 +11,7 @@ public sealed class SqlLoaderCommandTests : IDisposable
 {
     private const string Password = "Pw#Secret@9!";
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-sqlldr-cmd-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-sqlldr-cmd-");
 
     public SqlLoaderCommandTests() => Directory.CreateDirectory(_dir);
 
@@ -18,7 +19,7 @@ public sealed class SqlLoaderCommandTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (DirectoryNotFoundException)
         {

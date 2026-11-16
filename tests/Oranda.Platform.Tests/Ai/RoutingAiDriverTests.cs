@@ -209,26 +209,19 @@ public sealed class RoutingAiDriverTests
     [Fact]
     public async Task A_settings_reset_signal_survives_a_restart_through_the_marker_file_and_is_taken_once()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "oranda-reset-" + Guid.NewGuid().ToString("N"));
+        using var dir = new TempDirectory("oranda-reset-");
         Directory.CreateDirectory(dir);
-        try
-        {
-            var paths = new AppDataPaths(dir);
-            await File.WriteAllTextAsync(paths.SettingsFile, "{ not json");
+        var paths = new AppDataPaths(dir);
+        await File.WriteAllTextAsync(paths.SettingsFile, "{ not json");
 
-            using (var first = new SettingsStore(paths, new Oranda.Testing.FakeEventBus(), []))
-            {
-                await first.LoadAsync(CancellationToken.None);
-            }
-
-            using var restarted = new SettingsStore(paths, new Oranda.Testing.FakeEventBus(), []);
-            Assert.True(restarted.TryTakeReset());
-            Assert.False(restarted.TryTakeReset());
-        }
-        finally
+        using (var first = new SettingsStore(paths, new Oranda.Testing.FakeEventBus(), []))
         {
-            Directory.Delete(dir, recursive: true);
+            await first.LoadAsync(CancellationToken.None);
         }
+
+        using var restarted = new SettingsStore(paths, new Oranda.Testing.FakeEventBus(), []);
+        Assert.True(restarted.TryTakeReset());
+        Assert.False(restarted.TryTakeReset());
     }
 
     [Fact]

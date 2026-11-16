@@ -1,13 +1,14 @@
 using System.Text;
 using Oranda.App.Features.HistoryScripts;
 using Oranda.App.Features.SqlEditor;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.HistoryScripts;
 
 // 소유: TSK-10-01. ScriptSearch 검색기 단위 시험(이름·내용·한도·취소·인코딩).
 public sealed class ScriptSearchTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-ssearch-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-ssearch-");
 
     public ScriptSearchTests() => Directory.CreateDirectory(_dir);
 
@@ -15,7 +16,7 @@ public sealed class ScriptSearchTests : IDisposable
     {
         try
         {
-            Directory.Delete(_dir, recursive: true);
+            _dir.Dispose();
         }
         catch (IOException)
         {

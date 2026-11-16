@@ -13,13 +13,14 @@ using Oranda.App.Shell.Controls;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Events;
 using Oranda.Core.Journal;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Shell.Controls;
 
 /// <summary>표 열 폭 끌기(TableColumns): 머리글·줄이 함께 바뀜, 최소 폭, * 열 경계, 두 번 누르기, 저장 왕복, 변경 일지·바인드 변수 창.</summary>
 public sealed class TableColumnsTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-table-cols-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-table-cols-");
     private readonly Func<string?> _oldProvider = TableColumns.DataDirectoryProvider;
 
     public TableColumnsTests() => TableColumns.DataDirectoryProvider = () => _dir;
@@ -27,10 +28,7 @@ public sealed class TableColumnsTests : IDisposable
     public void Dispose()
     {
         TableColumns.DataDirectoryProvider = _oldProvider;
-        if (Directory.Exists(_dir))
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
+        _dir.Dispose();
     }
 
     /// <summary>머리글 "60,*,80" + 줄 3개짜리 표. 줄 칸마다 Border 를 둬 칸 자리를 잰다.</summary>

@@ -19,7 +19,7 @@ public sealed class CopyExternalLoadRunnerTests : IDisposable
 {
     private const string Password = "Ld#Secret@42!";
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "oranda-xl-runner-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _root = new("oranda-xl-runner-");
 
     public CopyExternalLoadRunnerTests() => Directory.CreateDirectory(_root);
 
@@ -27,7 +27,7 @@ public sealed class CopyExternalLoadRunnerTests : IDisposable
     {
         try
         {
-            Directory.Delete(_root, recursive: true);
+            _root.Dispose();
         }
         catch (DirectoryNotFoundException)
         {

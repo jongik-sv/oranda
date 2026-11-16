@@ -6,14 +6,11 @@ namespace Oranda.Core.Tests.Grid;
 // 소유: TSK-06-03. 페이지 캐시·메모리 상한·임시 파일.
 public sealed class ResultPageCacheTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-cache-test-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-cache-test-");
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir))
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
+        _dir.Dispose();
     }
 
     private static FakeResultSet Make(int rows, int pageSize)

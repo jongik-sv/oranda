@@ -7,17 +7,18 @@ using Oranda.Core.Execution;
 using Oranda.Language.MyBatis;
 using Oranda.Platform.MyBatis;
 using Oranda.Testing.MyBatis;
+using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.MyBatisWorkspace;
 
 /// <summary>TSK-03-05 J4: 바꾸기 흐름(대화 상자 결과 → 쓰기 → 열기), 대상 매퍼가 열려 있을 때(조정자 답 Q2), 원래 작업 공간 그대로.</summary>
 public sealed class ConvertCommandTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "oranda-convertcmd-" + Guid.NewGuid().ToString("N"));
+    private readonly TempDirectory _dir = new("oranda-convertcmd-");
 
     public ConvertCommandTests() => Directory.CreateDirectory(_dir);
 
-    public void Dispose() => Directory.Delete(_dir, recursive: true);
+    public void Dispose() => _dir.Dispose();
 
     /// <summary>탭 2개(조회·수정)짜리 일반 작업 공간과 가짜 열기 훅을 가진 호스트.</summary>
     private static (SqlEditorHost Host, SqlWorkspaceViewModel Ws, RecordingOpen Open, MessageDialogs Dialogs) NewHost()
