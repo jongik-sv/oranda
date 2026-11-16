@@ -208,15 +208,6 @@ public sealed class CopyRunnerLobPrefetchTests
         }
     }
 
-    private sealed class FakeClassifier : IDbErrorClassifier
-    {
-        public Dbms Dbms => Dbms.Oracle;
-
-        public DbErrorKind Classify(int number) => DbErrorKind.Other;
-
-        public DbError? FromException(Exception exception) => null;
-    }
-
     private sealed class SimpleCodec : IBulkValueCodec
     {
         public bool IsSupported(string serverType) => true;
@@ -257,26 +248,6 @@ public sealed class CopyRunnerLobPrefetchTests
             IReadOnlySet<string> parents, string targetOwner, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<HashSet<string>> RecycleBinAsync(ISession target, string table, CancellationToken ct) => throw new NotSupportedException();
-    }
-
-    private sealed class FakePrecheckDialect : ICopyPrecheckDialect
-    {
-        public bool SupportsReadPrivilege => false;
-
-        public string? RecreateBlockedReason(ISession target) => null;
-
-        public Task<IReadOnlyList<string>> ExtendedStringBlockersAsync(TableInfo source, Func<string, CancellationToken, Task<string?>> targetParameter,
-                                                                       CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>([]);
-
-        public IReadOnlyList<(string CatalogId, string Label)> NotRestoredProbes => [];
-
-        public string RecycleBinNote(string? tablespace) => string.Empty;
-
-        public string? ReadConsistencyParameter => null;
-
-        public (CheckLevel Level, string Message) ReadConsistencyHint(long estimatedSeconds, long? retention) => (CheckLevel.Pass, string.Empty);
-
-        public string ChildRecordFoundError => "ORA-02292";
     }
 
     private sealed class FakeDialect : ICopyDialect

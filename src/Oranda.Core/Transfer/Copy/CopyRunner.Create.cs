@@ -8,7 +8,7 @@ namespace Oranda.Core.Transfer.Copy;
 
 /// <summary>
 /// 복사 실행기의 표 만들기 쪽(xc-ddl): 테이블 다시 만들기·없으면 만들기·만든 표 정리·되살리기, 그리고 표보다 먼저 만드는 시퀀스(SQ1)와
-/// 새 표에 딸린 객체(SQ2). 적재 루프(<c>LoadAllAsync</c>·<c>FlushAsync</c>)는 <c>CopyRunner.cs</c> 에 있다.
+/// 새 표에 딸린 객체(SQ2). 적재 루프(<c>LoadAllAsync</c>·<c>FlushAsync</c>)는 <c>CopyRunner.Load.cs</c> 에 있다.
 /// </summary>
 public partial class CopyRunner
 {

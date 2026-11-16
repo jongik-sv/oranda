@@ -1250,15 +1250,6 @@ public sealed class CopyPrecheckCrossDbmsTests
         public string ChildRecordFoundError => "ORA-02292";
     }
 
-    private sealed class FakeClassifier(Dbms dbms) : IDbErrorClassifier
-    {
-        public Dbms Dbms => dbms;
-
-        public DbErrorKind Classify(int number) => DbErrorKind.Other;
-
-        public DbError? FromException(Exception exception) => null;
-    }
-
     /// <summary>
     /// <paramref name="unsupported"/> 에 든 형식(괄호 앞 이름)은 지원하지 않는 형식이다(읽기도 같다).
     /// <paramref name="crossWritable"/> 에 든 형식은 같은 DBMS 로는 지원하지 않아도 교차 쓰기는 된다(Tibero TIMESTAMP WITH TIME ZONE 처럼).

@@ -481,15 +481,6 @@ public sealed class CopyRunnerCrossDbmsTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FakeRunLog(FakeRunRecord record) : ICopyRunLog
-    {
-        public Task<ICopyRunRecord> BeginAsync(CopyRunHeader header, CancellationToken ct) => Task.FromResult<ICopyRunRecord>(record);
-
-        public Task<IReadOnlyList<UnfinishedRun>> FindUnfinishedAsync(string jobId, CancellationToken ct) => Task.FromResult<IReadOnlyList<UnfinishedRun>>([]);
-
-        public Task MarkRecoveredAsync(string runFile, CancellationToken ct) => Task.CompletedTask;
-    }
-
     /// <summary>조회 id 를 그대로 문장으로 돌려주는 카탈로그(실행기는 쓰지 않고, 점검 서비스가 쓴다).</summary>
     private sealed class NoCatalog : Oranda.Core.Catalog.ISqlCatalog
     {
@@ -528,15 +519,6 @@ public sealed class CopyRunnerCrossDbmsTests
         public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) => ValueTask.FromResult(PolicyDecision.Allowed);
     }
 
-    private sealed class FakeClassifier(Dbms dbms) : IDbErrorClassifier
-    {
-        public Dbms Dbms => dbms;
-
-        public DbErrorKind Classify(int number) => DbErrorKind.Other;
-
-        public DbError? FromException(Exception exception) => null;
-    }
-
     private sealed class FakeRecreateStep : ICopyRecreateStep
     {
         public Task<PreservedDdl> CaptureAsync(ISession target, string owner, string table, CancellationToken ct) => Task.FromResult(PreservedDdl.Empty); // 원본 트리거·권한(SQ2)도 이것으로 읽는다: 없음
@@ -545,65 +527,5 @@ public sealed class CopyRunnerCrossDbmsTests
             IReadOnlySet<string> parents, string targetOwner, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<HashSet<string>> RecycleBinAsync(ISession target, string table, CancellationToken ct) => throw new NotSupportedException();
-    }
-
-    private sealed class FakePrecheckDialect : ICopyPrecheckDialect
-    {
-        public bool SupportsReadPrivilege => false;
-
-        public string? RecreateBlockedReason(ISession target) => null;
-
-        public Task<IReadOnlyList<string>> ExtendedStringBlockersAsync(TableInfo source, Func<string, CancellationToken, Task<string?>> targetParameter,
-                                                                       CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>([]);
-
-        public IReadOnlyList<(string CatalogId, string Label)> NotRestoredProbes => [];
-
-        public string RecycleBinNote(string? tablespace) => string.Empty;
-
-        public string? ReadConsistencyParameter => null;
-
-        public (CheckLevel Level, string Message) ReadConsistencyHint(long estimatedSeconds, long? retention) => (CheckLevel.Pass, string.Empty);
-
-        public string ChildRecordFoundError => "ORA-02292";
-    }
-
-    /// <summary>문장 글만 만드는 방언(값 자리 = <c>:이름</c>).</summary>
-    private sealed class FakeDialect : ICopyDialect
-    {
-        public bool IsServerName(string name, string owner) => CreateTableDdl.IsServerName(name);
-
-        private static SqlStatement Ddl(string text) => new(text, default, StatementKind.Ddl);
-
-        public string BindPlaceholder(string bindName, string serverType) => ":" + bindName;
-
-        public SqlStatement DisableTrigger(string owner, string trigger) => Ddl($"ALTER TRIGGER \"{owner}\".\"{trigger}\" DISABLE");
-
-        public SqlStatement DisableConstraint(DisabledObject fk) => Ddl($"ALTER TABLE \"{fk.Owner}\".\"{fk.Table}\" DISABLE CONSTRAINT \"{fk.Name}\"");
-
-        public SqlStatement DropTable(string owner, string table) => Ddl($"DROP TABLE \"{owner}\".\"{table}\"");
-
-        public SqlStatement NextValues(string owner, string sequence) => throw new NotSupportedException();
-
-        public SqlStatement SetTransactionReadOnly() => new("SET TRANSACTION READ ONLY", default, StatementKind.TransactionControl);
-
-        public SqlStatement Savepoint(string name) => new("SAVEPOINT " + name, default, StatementKind.TransactionControl);
-
-        public SqlStatement RollbackToSavepoint(string name) => new("ROLLBACK TO SAVEPOINT " + name, default, StatementKind.TransactionControl);
-
-        public SqlStatement EnableTrigger(string owner, string trigger) => Ddl($"ALTER TRIGGER \"{owner}\".\"{trigger}\" ENABLE");
-
-        public SqlStatement DropConstraint(DisabledObject fk) => Ddl($"ALTER TABLE \"{fk.Owner}\".\"{fk.Table}\" DROP CONSTRAINT \"{fk.Name}\"");
-
-        public SqlStatement EnableConstraint(DisabledObject fk, bool validate) => Ddl($"ALTER TABLE \"{fk.Owner}\".\"{fk.Table}\" ENABLE CONSTRAINT \"{fk.Name}\"");
-
-        public SqlStatement RecycleBinOn() => throw new NotSupportedException();
-
-        public string RestartIdentity(string owner, string table, string column) => throw new NotSupportedException();
-
-        public string AddForeignKeyWithoutValidation(string addForeignKeyDdl) => addForeignKeyDdl;
-
-        public bool IsParentKeysNotFound(DbError? dbError) => false;
-
-        public bool IsReferencedByForeignKeys(DbError? dbError) => false;
     }
 }

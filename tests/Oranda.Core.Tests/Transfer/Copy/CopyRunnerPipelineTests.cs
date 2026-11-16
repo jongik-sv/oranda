@@ -1188,15 +1188,6 @@ public sealed class CopyRunnerPipelineTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FakeRunLog(EventRecord record) : ICopyRunLog
-    {
-        public Task<ICopyRunRecord> BeginAsync(CopyRunHeader header, CancellationToken ct) => Task.FromResult<ICopyRunRecord>(record);
-
-        public Task<IReadOnlyList<UnfinishedRun>> FindUnfinishedAsync(string jobId, CancellationToken ct) => Task.FromResult<IReadOnlyList<UnfinishedRun>>([]);
-
-        public Task MarkRecoveredAsync(string runFile, CancellationToken ct) => Task.CompletedTask;
-    }
-
     /// <summary>실행 엔진(대상 정리 DELETE 등): <see cref="OnExecute"/> 로 답한다(null = 성공). 토큰을 듣는 명령·듣지 않는 명령을 흉내 낸다.</summary>
     private sealed class ScriptedExecution : IExecutionService
     {
@@ -1283,26 +1274,6 @@ public sealed class CopyRunnerPipelineTests
             IReadOnlySet<string> parents, string targetOwner, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<HashSet<string>> RecycleBinAsync(ISession target, string table, CancellationToken ct) => throw new NotSupportedException();
-    }
-
-    private sealed class FakePrecheckDialect : ICopyPrecheckDialect
-    {
-        public bool SupportsReadPrivilege => false;
-
-        public string? RecreateBlockedReason(ISession target) => null;
-
-        public Task<IReadOnlyList<string>> ExtendedStringBlockersAsync(TableInfo source, Func<string, CancellationToken, Task<string?>> targetParameter,
-                                                                       CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>([]);
-
-        public IReadOnlyList<(string CatalogId, string Label)> NotRestoredProbes => [];
-
-        public string RecycleBinNote(string? tablespace) => string.Empty;
-
-        public string? ReadConsistencyParameter => null;
-
-        public (CheckLevel Level, string Message) ReadConsistencyHint(long estimatedSeconds, long? retention) => (CheckLevel.Pass, string.Empty);
-
-        public string ChildRecordFoundError => "ORA-02292";
     }
 
     private sealed class FakeDialect : ICopyDialect

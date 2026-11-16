@@ -1106,27 +1106,9 @@ public sealed class CopyCreateMissingTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FakeRunLog(FakeRunRecord record) : ICopyRunLog
-    {
-        public Task<ICopyRunRecord> BeginAsync(CopyRunHeader header, CancellationToken ct) => Task.FromResult<ICopyRunRecord>(record);
-
-        public Task<IReadOnlyList<UnfinishedRun>> FindUnfinishedAsync(string jobId, CancellationToken ct) => Task.FromResult<IReadOnlyList<UnfinishedRun>>([]);
-
-        public Task MarkRecoveredAsync(string runFile, CancellationToken ct) => Task.CompletedTask;
-    }
-
     private sealed class NoCatalog : Oranda.Core.Catalog.ISqlCatalog
     {
         public Oranda.Core.Catalog.CatalogQuery Get(string id, ServerInfo server) => throw new NotSupportedException("이 시험은 카탈로그 조회를 쓰지 않는다: " + id);
-    }
-
-    private sealed class FakeClassifier : IDbErrorClassifier
-    {
-        public Dbms Dbms => Dbms.Oracle;
-
-        public DbErrorKind Classify(int number) => DbErrorKind.Other;
-
-        public DbError? FromException(Exception exception) => null;
     }
 
     private sealed class FakeCodec : IBulkValueCodec

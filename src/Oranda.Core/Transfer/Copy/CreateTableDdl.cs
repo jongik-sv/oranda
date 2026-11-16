@@ -91,12 +91,12 @@ public static class CreateTableDdl
 
         if (!string.IsNullOrEmpty(source.Comment))
         {
-            statements.Add($"COMMENT ON TABLE {table} IS {Literal(source.Comment)}");
+            statements.Add($"COMMENT ON TABLE {table} IS {SqlLiteral.Quote(source.Comment)}");
         }
 
         foreach (var c in source.Columns.OrderBy(c => c.Position).Where(c => !string.IsNullOrEmpty(c.Comment)))
         {
-            statements.Add($"COMMENT ON COLUMN {table}.{SqlIdentifier.QuoteAlways(c.Name)} IS {Literal(c.Comment!)}");
+            statements.Add($"COMMENT ON COLUMN {table}.{SqlIdentifier.QuoteAlways(c.Name)} IS {SqlLiteral.Quote(c.Comment!)}");
         }
 
         return (statements, afterLoad);
@@ -273,8 +273,6 @@ public static class CreateTableDdl
     private static string Qualified(string owner, string name) => SqlIdentifier.QuoteAlways(owner) + "." + SqlIdentifier.QuoteAlways(name);
 
     private static string Quoted(IEnumerable<string> columns) => string.Join(", ", columns.Select(SqlIdentifier.QuoteAlways));
-
-    private static string Literal(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     private static string N(int n) => n.ToString(CultureInfo.InvariantCulture);
 }

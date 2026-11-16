@@ -218,68 +218,6 @@ public sealed class CopyPrecheckReadPointTests
         public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) => ValueTask.FromResult(PolicyDecision.Allowed);
     }
 
-    private sealed class FakeClassifier : IDbErrorClassifier
-    {
-        public Dbms Dbms => Dbms.Oracle;
-
-        public DbErrorKind Classify(int number) => DbErrorKind.Other;
-
-        public DbError? FromException(Exception exception) => null;
-    }
-
-    private sealed class FakeCodec : IBulkValueCodec
-    {
-        public bool IsSupported(string serverType) => true;
-
-        public BulkKind KindOf(string serverType) => serverType.StartsWith("VARCHAR", StringComparison.Ordinal) ? BulkKind.Text : BulkKind.Other;
-
-        public BindDataType BindTypeOf(string serverType) => BindDataType.Varchar2;
-
-        public string? ToKeyText(object? value, string serverType) => value?.ToString();
-
-        public object? FromKeyText(string? text, string serverType) => text;
-
-        public long? ToInt64(object? value) => value is long l ? l : null;
-
-        public string? ToText(object? value) => value?.ToString();
-
-        public string? NumberText(object? value) => value is long l ? l.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
-
-        public bool IsZero(object? value) => value is 0L;
-
-        public long ToInt64Exact(object? value) => Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private sealed class FakeRecreateStep : ICopyRecreateStep
-    {
-        public Task<PreservedDdl> CaptureAsync(ISession target, string owner, string table, CancellationToken ct) => Task.FromResult(PreservedDdl.Empty);
-
-        public Task<IReadOnlyList<(string Parent, string Ddl, string? Name)>> SourceForeignKeysAsync(ISession source, string sourceOwner, string table,
-            IReadOnlySet<string> parents, string targetOwner, CancellationToken ct) => Task.FromResult<IReadOnlyList<(string Parent, string Ddl, string? Name)>>([]);
-
-        public Task<HashSet<string>> RecycleBinAsync(ISession target, string table, CancellationToken ct) => throw new NotSupportedException();
-    }
-
-    private sealed class FakePrecheckDialect : ICopyPrecheckDialect
-    {
-        public bool SupportsReadPrivilege => false;
-
-        public string? RecreateBlockedReason(ISession target) => null;
-
-        public Task<IReadOnlyList<string>> ExtendedStringBlockersAsync(TableInfo source, Func<string, CancellationToken, Task<string?>> targetParameter,
-                                                                       CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>([]);
-
-        public IReadOnlyList<(string CatalogId, string Label)> NotRestoredProbes => [];
-
-        public string RecycleBinNote(string? tablespace) => string.Empty;
-
-        public string? ReadConsistencyParameter => null;
-
-        public (CheckLevel Level, string Message) ReadConsistencyHint(long estimatedSeconds, long? retention) => (CheckLevel.Pass, string.Empty);
-
-        public string ChildRecordFoundError => "ORA-02292";
-    }
-
     /// <summary>문장 글만 만드는 방언(값 자리 = <c>:이름</c>) + Oracle 과 같은 꼴의 시점 지정 읽기.</summary>
     private sealed class PointDialect : ICopyDialect
     {

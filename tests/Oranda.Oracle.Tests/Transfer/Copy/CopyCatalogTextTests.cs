@@ -163,9 +163,15 @@ public sealed partial class CopyCatalogTextTests
     private static readonly string[] Sources =
     [
         "src/Oranda.Core/Transfer/Copy/CopyCatalogQueries.cs",
-        "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.Companions.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.Helpers.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.ReadPoint.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.Sequences.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.Table.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyPrecheckService.Tables.cs",
         "src/Oranda.Oracle/Transfer/Copy/OracleCopyPrecheckDialect.cs",
-        "src/Oranda.Core/Transfer/Copy/CopyRunner.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyRunner.Finish.cs",
+        "src/Oranda.Core/Transfer/Copy/CopyRunner.Sequence.cs",
         "src/Oranda.Core/Transfer/Copy/CopyRunner.Create.cs",
         "src/Oranda.Oracle/Transfer/Copy/RecreateStep.cs",
         "src/Oranda.Core/Transfer/Copy/CopyWaitProbe.cs",

@@ -10,27 +10,6 @@ using Oranda.Core.Transfer.Copy;
 
 namespace Oranda.App.Features.DataCopy;
 
-/// <summary>접속 고르기 목록의 한 줄. 운영 접속은 대상으로는 비활성이고 이유를 툴팁으로 알린다(설계 10장).</summary>
-public sealed record ConnectionOption(ConnectionProfile Profile, bool IsEnabled, string? Tooltip)
-{
-    public string Display => $"{Profile.Name} ({Profile.User})";
-}
-
-/// <summary>상세 칸 「대상 계정」 콤보의 한 줄. 고르면 칸 글자가 <see cref="Owner"/> 가 된다(<see cref="ToString"/>).</summary>
-public sealed record TargetOwnerOption(string Owner, string Hint)
-{
-    /// <summary>그 규칙의 기본 대상(<see cref="RuleEditorViewModel.DefaultTargetFor(TableRuleViewModel)"/>)인지. 고르면 다시 기본 계정을 따른다.</summary>
-    public bool IsDefault { get; init; }
-
-    public override string ToString() => Owner;
-}
-
-/// <summary>기간 종류 고르기 목록의 한 줄.</summary>
-public sealed record PeriodKindOption(PeriodKind Kind, string Display);
-
-/// <summary>직접 지정 기간의 끝 날짜 셈. <paramref name="Inclusive"/> 면 끝 날짜까지 들어간다.</summary>
-public sealed record PeriodEndOption(bool Inclusive, string Display);
-
 /// <summary>
 /// 규칙 편집 단계(1단계): 원본·대상 접속, 소유자, 기간, 읽기 일관성, 옵션, 테이블별 규칙. 기간은 상대값으로 저장하고
 /// 작업을 열 때 오늘 날짜로 다시 계산한 날짜를 항상 화면에 보인다(설계 6.4).
@@ -990,23 +969,4 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
         return picked.Count;
     }
-}
-
-/// <summary>전체 기본값 「규칙」: 자동 = 기간이 있고 기간 열이 있는 테이블은 기간, 아니면 모든 행.</summary>
-public enum DefaultKindChoice
-{
-    Auto,
-    All,
-    Period,
-    Exclude,
-}
-
-/// <summary>전체 기본값 「대상 처리」: 자동 = 규칙 종류별 기본값(<see cref="TargetActions.DefaultFor"/>).</summary>
-public enum DefaultActionChoice
-{
-    Auto,
-    DeleteAllInsert,
-    DeleteRangeInsert,
-    AppendOnly,
-    MergeByPk,
 }

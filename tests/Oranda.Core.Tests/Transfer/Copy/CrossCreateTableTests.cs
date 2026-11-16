@@ -829,15 +829,6 @@ public sealed class CrossCreateTableTests
         string? ICopyPrecheckDialect.CreateBlockedReason(ISession target) => createBlocked;
     }
 
-    private sealed class FakeClassifier(Dbms dbms) : IDbErrorClassifier
-    {
-        public Dbms Dbms => dbms;
-
-        public DbErrorKind Classify(int number) => DbErrorKind.Other;
-
-        public DbError? FromException(Exception exception) => null;
-    }
-
     /// <summary>
     /// <paramref name="unsupported"/> 에 든 형식(괄호 앞 이름)은 쓰기를 지원하지 않고, 그중 <paramref name="readable"/> 에 든 형식은 읽을 수 있다.
     /// 이식 값은 그대로 넘긴다.
@@ -897,15 +888,6 @@ public sealed class CrossCreateTableTests
         public Task CompleteAsync(CopyOutcome outcome, CancellationToken ct) => Task.CompletedTask;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class FakeRunLog(FakeRunRecord record) : ICopyRunLog
-    {
-        public Task<ICopyRunRecord> BeginAsync(CopyRunHeader header, CancellationToken ct) => Task.FromResult<ICopyRunRecord>(record);
-
-        public Task<IReadOnlyList<UnfinishedRun>> FindUnfinishedAsync(string jobId, CancellationToken ct) => Task.FromResult<IReadOnlyList<UnfinishedRun>>([]);
-
-        public Task MarkRecoveredAsync(string runFile, CancellationToken ct) => Task.CompletedTask;
     }
 
     /// <summary>문장 글만 만드는 방언. IDENTITY 다음 값 맞추기는 <c>RESTART …</c> 글이다(보냈는지 가린다).</summary>
