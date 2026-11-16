@@ -35,9 +35,6 @@ internal sealed class MyBatisBindSync : IDisposable
         Sync();
     }
 
-    /// <summary>이 동기화가 맡은 행의 파라미터 이름(시험용). 없으면 null.</summary>
-    internal string? ParameterOf(BindVariableRow row) => _managed.GetValueOrDefault(row);
-
     public void Dispose()
     {
         _eval.Changed -= OnEvalChanged;

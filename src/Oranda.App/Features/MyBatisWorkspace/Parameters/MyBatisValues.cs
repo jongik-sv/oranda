@@ -66,18 +66,6 @@ public static partial class MyBatisValues
         };
     }
 
-    /// <summary>
-    /// 값이 없는 파라미터의 처음 종류: foreach collection 이면 목록, 숫자 jdbcType 이면 숫자, 그 밖은 글자.
-    /// 목록 항목 종류도 같은 규칙(숫자 jdbcType 이면 숫자).
-    /// </summary>
-    public static (MyBatisScenarioValueKind Kind, MyBatisScenarioValueKind ItemKind) GuessKind(MyBatisParameter parameter)
-    {
-        ArgumentNullException.ThrowIfNull(parameter);
-        var numeric = IsNumericJdbcType(parameter.JdbcType);
-        var scalar = numeric ? MyBatisScenarioValueKind.Number : MyBatisScenarioValueKind.Text;
-        return (parameter.Usage & MyBatisParameterUsage.Foreach) != 0 ? (MyBatisScenarioValueKind.List, scalar) : (scalar, scalar);
-    }
-
     /// <summary>쓰인 곳 표시(「test · #{}」, 「foreach」, 「${}」). 여럿이면 「 · 」 로 잇는다.</summary>
     public static string UsageText(MyBatisParameter parameter)
     {

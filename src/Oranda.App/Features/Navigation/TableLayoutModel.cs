@@ -90,9 +90,6 @@ public static class TableLayoutAudit
         return patterns.Any(p => Glob(p, name));
     }
 
-    public static bool IsAudit(TableLayoutOptions options, string name)
-        => options.HideAudit && Matches(Parse(options.AuditColumns), name);
-
     // 반복 * 가 있어도 선형으로 끝나는 고전 와일드카드 일치.
     private static bool Glob(string pattern, string text)
     {

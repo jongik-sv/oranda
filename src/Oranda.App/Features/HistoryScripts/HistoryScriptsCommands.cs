@@ -143,9 +143,6 @@ public static class HistoryScriptsCommands
         return result;
     }
 
-    /// <summary>시험용: 통계 플래그를 직접 바꾼다.</summary>
-    internal static void SetStatisticsForTest(bool on) => StatisticsEnabled = on;
-
     internal static void ToggleStatistics() => StatisticsEnabled = !StatisticsEnabled;
 }
 
