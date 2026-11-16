@@ -281,6 +281,59 @@ public sealed class RollbackScriptTests
         Assert.Single(docs);
     }
 
+    [Fact]
+    public async Task Read_point_reads_the_dialect_point_query_only_when_the_record_point_setting_is_on()
+    {
+        var on = await ReadPointWithAsync(recordPoint: true, sql => ResultOf(sql, "48300000"));
+        Assert.Equal(48300000, on.Point!.Number);
+        Assert.Equal("SCN", on.Point.Name);
+        Assert.Single(on.Sent); // 첫 질의가 성공하면 다음 방법은 보내지 않는다
+
+        var off = await ReadPointWithAsync(recordPoint: false, sql => ResultOf(sql, "48300000"));
+        Assert.Null(off.Point);
+        Assert.Empty(off.Sent); // 설정을 끄면 질의 자체를 보내지 않는다
+    }
+
+    [Fact]
+    public async Task Read_point_continues_with_an_empty_point_when_every_point_query_fails()
+    {
+        var failed = await ReadPointWithAsync(recordPoint: true, sql => Failed(sql, DbErrorKind.Other));
+        Assert.Null(failed.Point);
+        Assert.Equal(2, failed.Sent.Count); // 질의 둘 다 시도하고 빈 시점으로 계속
+
+        var thrown = await ReadPointWithAsync(recordPoint: true, sql => sql.Contains("TIMESTAMP_TO_SCN", StringComparison.Ordinal)
+            ? ResultOf(sql, "48300001")
+            : throw new InvalidOperationException("ORA-01031"));
+        Assert.Equal(48300001, thrown.Point!.Number); // 첫 질의가 던지면 다음 방법으로
+    }
+
+    private static ExecutionResult ResultOf(string sql, string value) =>
+        new(new SqlStatement(sql, default, StatementKind.Query), ExecutionStatus.Succeeded) { ResultSet = new OneColumnResult(value) };
+
+    private static async Task<(ChangePoint? Point, List<SqlStatement> Sent)> ReadPointWithAsync(bool recordPoint, Func<string, ExecutionResult> answer)
+    {
+        var exec = new ScriptedExecution(answer);
+        var settings = new Oranda.App.Shell.Settings.SettingsService(new Oranda.App.Tests.Features.Update.MemorySettingsStore());
+        await settings.UpdateAsync(s => s with { Rollback = new RollbackSettings { RecordPoint = recordPoint } });
+        var services = new PointServices(settings, exec, new FakeRollbackDialect());
+        var point = await RollbackScriptViewModel.ReadPointAsync(services, new FakeSession(Prod), default);
+        return (point, exec.Sent);
+    }
+
+    private sealed class PointServices(Oranda.App.Shell.Settings.SettingsService settings, IExecutionService exec, IRollbackDialect dialect)
+        : IServiceProvider, Oranda.Core.Composition.IDbmsServiceSelector
+    {
+        public IReadOnlyCollection<Dbms> AvailableDbms => [Dbms.Oracle];
+
+        public T? Find<T>(Dbms dbms) where T : class => dialect as T;
+
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(Oranda.App.Shell.Settings.SettingsService) ? settings
+            : serviceType == typeof(IExecutionService) ? exec
+            : serviceType == typeof(Oranda.Core.Composition.IDbmsServiceSelector) ? this
+            : null;
+    }
+
     private static ExecutionResult Rows(string sql, long n) =>
         new(new SqlStatement(sql, default, StatementKind.Dml), ExecutionStatus.Succeeded) { RowsAffected = n };
 

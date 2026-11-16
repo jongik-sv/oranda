@@ -260,7 +260,7 @@ internal static class PointCompareLauncher
     }
 
     /// <summary>반영이 1행을 바꾼 문장마다 반대 문장을 묶음으로 기록한다(RD-8). 기록 실패는 반영을 되돌리지 않는다.</summary>
-    private static void RecordDerived(IRollbackLedger? ledger, IEventBus? bus, ISession session, CompareApplyResult result, PointOption point)
+    internal static void RecordDerived(IRollbackLedger? ledger, IEventBus? bus, ISession session, CompareApplyResult result, PointOption point)
     {
         if (ledger is null || result.Executed.Count == 0)
         {
@@ -273,6 +273,7 @@ internal static class PointCompareLauncher
             return;
         }
 
+        var text = string.Join(";" + Environment.NewLine, result.Executed.Select(s => s.Sql));
         try
         {
             ledger.RecordDerived(session.Id, RollbackOrigin.CompareApply, point.GroupId ?? 0, new RollbackStatementRecord
@@ -286,7 +287,8 @@ internal static class PointCompareLauncher
                 Dbms = session.Server.Dbms,
                 Source = Oranda.Core.History.HistorySource.Editor,
                 ExecutedAt = DateTimeOffset.Now,
-                Text = string.Join(";" + Environment.NewLine, result.Executed.Select(s => s.Sql)),
+                Text = text,
+                Summary = Oranda.App.Features.Rollback.RollbackRunner.MaskValues(text), // 반영 문장에는 실제 행 값이 든다: 평문 요약에서는 가리고 원문은 암호화 문서에만(RD-10)
                 Verb = DmlVerb.Other,
                 Table = result.Table,
                 RowsAffected = result.Executed.Count,

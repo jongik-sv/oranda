@@ -135,7 +135,7 @@ public sealed partial class RollbackScriptViewModel : ToolPanelViewModelBase
     /// 일반 실행과 같은 방언 시점 질의(<see cref="IRollbackDialect.PointQueries"/>, 차례대로 첫 성공)를 기록 없이 실행 엔진으로 보낸다.
     /// 설정 「시점 기록」을 껐거나 방언이 없으면 읽지 않는다.
     /// </summary>
-    private static async Task<ChangePoint?> ReadPointAsync(IServiceProvider services, ISession session, CancellationToken ct)
+    internal static async Task<ChangePoint?> ReadPointAsync(IServiceProvider services, ISession session, CancellationToken ct)
     {
         var settings = services.GetService(typeof(Oranda.App.Shell.Settings.SettingsService)) as Oranda.App.Shell.Settings.SettingsService;
         if (settings?.Current.Rollback.RecordPoint == false

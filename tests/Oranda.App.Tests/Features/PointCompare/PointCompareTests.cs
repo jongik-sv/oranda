@@ -151,6 +151,30 @@ public class PointCompareTests
         window.Close();
     });
 
+    [Fact]
+    public void Apply_journal_summary_masks_row_values_while_the_text_keeps_the_original()
+    {
+        var ledger = new RecordingRollbackLedger();
+        var profile = new ConnectionProfile("dev-example", "app", "db:1521/ORCL");
+        var session = new Oranda.App.Tests.Features.Execution.FakeSession(profile);
+        var result = new CompareApplyResult(2, 0, 0, 0, null,
+            [
+                new RollbackStep("UPDATE SAMPLE.PRODUCTS SET PRODUCT_NAME = 'secret-name' WHERE PRODUCT_ID = 1001 AND PRODUCT_NAME = 'old-name'"),
+                new RollbackStep("UPDATE SAMPLE.PRODUCTS SET UNIT_PRICE = 98765 WHERE PRODUCT_ID = 1002 AND UNIT_PRICE = 4321"),
+            ])
+        { Table = Products };
+
+        PointCompareLauncher.RecordDerived(ledger, null, session, result, Group321);
+
+        var record = Assert.Single(ledger.Derived).Record;
+        Assert.Contains("secret-name", record.Text, StringComparison.Ordinal); // 원문은 암호화 문서에만 간다
+        Assert.Contains("98765", record.Text, StringComparison.Ordinal);
+        Assert.NotNull(record.Summary);
+        Assert.DoesNotContain("secret-name", record.Summary, StringComparison.Ordinal); // 문자 값
+        Assert.DoesNotContain("98765", record.Summary, StringComparison.Ordinal); // 숫자 값
+        Assert.Contains("PRODUCT_NAME = ?", record.Summary, StringComparison.Ordinal);
+    }
+
     /// <summary>시안 화면 3 의 축소판: 1001 되돌림, 1007 충돌, 1040 되살림, 2001 지움.</summary>
     private static FakeCompareDb SampleDb(FakeRollbackDialect? dialect = null) => new(dialect ?? new FakeRollbackDialect())
     {
