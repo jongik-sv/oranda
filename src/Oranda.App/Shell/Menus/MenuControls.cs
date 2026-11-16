@@ -28,6 +28,9 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
     /// <summary>창 안 메뉴 막대의 최상위 메뉴마다 묶은 컨트롤(숨김·이유 툴팁·빈 메뉴 안내를 다시 계산할 때 쓴다).</summary>
     private readonly List<Bound> _bar = [];
 
+    /// <summary>창 안 메뉴 막대의 도구 창 체크 항목. 체크는 만들 때가 아니라 메뉴를 열 때 실제 배치에서 다시 읽는다(DK-01).</summary>
+    private readonly List<(MenuItem Item, string PanelId)> _panelToggles = [];
+
     private NativeSet? _building;
 
     /// <summary>툴바 모델 한 마디와 그것을 그린 단추·구분선(<see cref="BuildToolbarItems"/>).</summary>
@@ -135,8 +138,10 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
     /// </summary>
     public IReadOnlyList<Control> BuildMenuBar(IReadOnlyList<MenuNode> bar)
     {
+        WatchLayout();
         _commands.Clear();
         _bar.Clear();
+        _panelToggles.Clear();
         var result = new List<Control>();
         foreach (var top in bar)
         {
@@ -155,7 +160,13 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
             item.ItemsSource = children;
 
             // 문맥 키가 그대로여도 보이는 문서가 바뀌었을 수 있다(PL/SQL 탭 등): 메뉴를 열 때 한 번 더 맞춘다.
-            item.SubmenuOpened += (_, _) => ApplyState(bound);
+            // 도구 창 체크도 연 순간의 실제 배치로 맞춘다: 뜬 창 닫기·핀 창 펼침처럼 메뉴를 다시 만들지 않는 변화가 있다(DK-01).
+            // 「도구 창」 같은 아래 메뉴를 열 때도 SubmenuOpened 가 위로 올라와 여기서 맞춘다.
+            item.SubmenuOpened += (_, _) =>
+            {
+                ApplyState(bound);
+                RefreshPanelChecks();
+            };
             _bar.Add(bound);
             ApplyState(bound);
             result.Add(item);
@@ -333,6 +344,7 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
     /// <param name="windowFocus">이 창에서 포커스를 가진 요소(입력 칸 편집 키 전달용). 없으면 생성자에서 받은 것을 쓴다.</param>
     public NativeMenu CreateNativeRoot(Func<object?>? windowFocus = null)
     {
+        WatchLayout();
         var root = new NativeMenu();
         root.NeedsUpdate += (_, _) => RefreshEnablement();
         _natives[root] = new NativeSet(windowFocus ?? focused ?? (() => null));
@@ -612,6 +624,43 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
         }
     }
 
+    private bool _watchingLayout;
+
+    /// <summary>
+    /// 도구 창 체크(창 안 메뉴 막대·시스템 메뉴)를 지금 배치에 맞춘다(보이는 창 = <see cref="DockWorkspace.IsToolVisible"/>).
+    /// 도구 창을 하나만 넣고 빼면 메뉴를 다시 만들지 않으므로 배치가 바뀔 때마다 부른다.
+    /// </summary>
+    public void RefreshPanelChecks()
+    {
+        if (_panelToggles.Count == 0 && _natives.Values.All(n => n.Panels.Count == 0))
+        {
+            return;
+        }
+
+        var visible = workspace.VisibleToolIds.ToHashSet(StringComparer.Ordinal); // 배치를 한 번만 읽는다
+        foreach (var (item, id) in _panelToggles)
+        {
+            item.IsChecked = visible.Contains(id);
+        }
+
+        foreach (var set in _natives.Values)
+        {
+            foreach (var (item, id) in set.Panels)
+            {
+                item.IsChecked = visible.Contains(id);
+            }
+        }
+    }
+
+    private void WatchLayout()
+    {
+        if (!_watchingLayout)
+        {
+            _watchingLayout = true;
+            workspace.LayoutChanged += (_, _) => RefreshPanelChecks();
+        }
+    }
+
     /// <summary>
     /// 오른쪽 클릭 메뉴 항목. 메뉴를 열 때마다 새로 만들므로 명령은 추적 목록에 넣지 않는다(활성 상태는 만들 때 계산된다).
     /// </summary>
@@ -646,8 +695,17 @@ public sealed class MenuControls(ICommandRegistry registry, IContextKeys keys, F
                         ToggleType = MenuItemToggleType.CheckBox,
                         IsChecked = workspace.IsToolVisible(id),
                     };
-                    item.Click += (_, _) => workspace.ToggleTool(id);
+                    item.Click += (_, _) =>
+                    {
+                        workspace.ToggleTool(id);
+                        item.IsChecked = workspace.IsToolVisible(id); // 체크 상자가 스스로 뒤집은 값이 아니라 실제 결과
+                    };
                     AutomationProperties.SetName(item, n.Title);
+                    if (track)
+                    {
+                        _panelToggles.Add((item, id));
+                    }
+
                     return item;
                 }
 

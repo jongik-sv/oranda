@@ -262,6 +262,7 @@ public sealed class DockDocumentSplitTests
             right.Owner!.Proportion = 0.7;
 
             Assert.True(dock.ShowTool(Sessions));
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
 
             AssertStillSplit(dock, left, right);
@@ -283,6 +284,7 @@ public sealed class DockDocumentSplitTests
             Assert.InRange(before, 0.05, 0.6);
 
             Assert.True(dock.ShowTool(Sessions));
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
             AssertStillSplit(dock, left, right);
 
@@ -348,6 +350,7 @@ public sealed class DockDocumentSplitTests
             Dispatcher.UIThread.RunJobs();
 
             Assert.True(dock.ShowTool(Sessions));
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
 
             AssertStillSplit(dock, left, second);
@@ -361,6 +364,7 @@ public sealed class DockDocumentSplitTests
         using (h)
         {
             Assert.True(dock.ShowTool(Sessions));
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
             AssertStillSplit(dock, left, right);
 
@@ -393,6 +397,7 @@ public sealed class DockDocumentSplitTests
             cell.ActiveDockable = tool; // 끌어 놓으면 그 탭이 활성이 된다(빠진 뒤 칸의 활성 탭이 남은 문서로 바뀌어야 한다)
 
             Assert.True(dock.ShowTool(Sessions)); // 재구성
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
             Assert.False(dock.IsToolVisible("oranda.panel.binds"));
             Assert.DoesNotContain(DocumentDocks(dock).SelectMany(d => d.VisibleDockables ?? []), d => d is PanelTool);
@@ -418,6 +423,7 @@ public sealed class DockDocumentSplitTests
             Assert.True(((IDock)right.Owner!).IsActive); // 전제: 포커스를 가진 칸이 활성으로 표시된다
 
             Assert.True(dock.ShowTool(Sessions));
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
             dock.Factory.SetFocusedDockable((IDock)left.Owner!, left); // 다른 칸을 누른다
             Dispatcher.UIThread.RunJobs();
@@ -445,6 +451,7 @@ public sealed class DockDocumentSplitTests
             Assert.Same(right, dock.ActiveDocument);
 
             Assert.True(dock.ShowTool(Sessions));
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
 
             AssertStillSplit(dock, left, right);
@@ -465,6 +472,7 @@ public sealed class DockDocumentSplitTests
             (list[2], list[4]) = (list[4], list[2]);
 
             Assert.True(dock.ShowTool(Sessions));
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
 
             Assert.Single(DocumentDocks(dock)); // 인접하지 않은 칸은 첫 영역으로 합친다
@@ -501,6 +509,7 @@ public sealed class DockDocumentSplitTests
             Assert.Same(right, dock.ActiveDocument);
 
             Assert.True(dock.ShowTool(Sessions));
+            dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
 
             AssertStillSplit(dock, left, right);

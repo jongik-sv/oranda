@@ -568,7 +568,8 @@ public sealed partial class DockWorkspace
         }
 
         // 핀을 빼 사이드바로 접은 창도 원래 묶음에 적는다(Dock 은 묶음에서 빼되 Owner 는 그 묶음으로 둔다). 다시 지을 때 핀을 다시 뺀다.
-        ids.AddRange(PinnedTools().Where(t => ReferenceEquals(t.Owner, group) && !ids.Contains(t.Id)).Select(t => t.Id));
+        // 사이드바에서 펼친 동안은 Owner 가 미리보기 칸이라 원래 묶음(OriginalOwner)으로 센다 — 안 그러면 펼친 사이 체크가 꺼지고 닫힌 창으로 저장된다(DK-01).
+        ids.AddRange(PinnedTools().Where(t => ReferenceEquals(PinnedHome(t), group) && !ids.Contains(t.Id)).Select(t => t.Id));
 
         return (ids, active);
     }

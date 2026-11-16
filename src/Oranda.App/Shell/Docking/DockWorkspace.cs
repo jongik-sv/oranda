@@ -231,6 +231,7 @@ public sealed partial class DockWorkspace
         var rehide = BeginScopedApply(); // 짓는 동안 생기는 활성 변경은 숨기기 판단에 쓰지 않는다(.ScopedTools.cs)
         try
         {
+            ClosePinnedPreview(); // 펼친 채 지으면 그 창의 OriginalOwner 가 옛 묶음에 남아 다음 펼침·접힘에서 닫힌 창이 된다
             ApplyCore(layout, keepSplitDocuments);
         }
         finally
@@ -347,6 +348,29 @@ public sealed partial class DockWorkspace
     }
 
     private PanelTool? PinnedTool(string toolId) => PinnedTools().FirstOrDefault(t => t.Id == toolId);
+
+    /// <summary>
+    /// 핀 창의 원래 묶음. 사이드바에서 펼친 동안(<see cref="IRootDock.PinnedDock"/> 에 들어 있는 동안) Dock 은 Owner 를 그 미리보기 칸으로 바꾸고
+    /// 원래 묶음을 <see cref="IDockable.OriginalOwner"/> 에 둔다.
+    /// </summary>
+    private IDockable? PinnedHome(PanelTool tool) =>
+        Layout is IRootDock { PinnedDock: { VisibleDockables: { } previewing } } && previewing.Contains(tool) ? tool.OriginalOwner : tool.Owner;
+
+    /// <summary>
+    /// 사이드바에서 펼친 핀 창을 접는다. 펼친 채 배치를 다시 지으면 그 창이 미리보기 칸(배치 트리 밖)에 남아 묶음에도 사이드바에도 없게 된다(DK-01).
+    /// </summary>
+    private void ClosePinnedPreview()
+    {
+        if (Layout is IRootDock { PinnedDock.VisibleDockables.Count: > 0 } root)
+        {
+            Factory.HidePreviewingDockables(root);
+            // 「펼친 채 두기」(KeepPinnedDockableVisible) 창은 위가 건너뛴다: 남은 창은 하나씩 접는다(지금 앱은 그 옵션을 쓰지 않는다).
+            foreach (var left in root.PinnedDock?.VisibleDockables?.ToList() ?? [])
+            {
+                Factory.TogglePreviewPinnedDockable(left);
+            }
+        }
+    }
 
     /// <summary>
     /// 사용자가 나눈 문서 칸 전체를 하나의 분할로 돌려준다(DTO 의 Documents 노드 하나와 대응). 나누지 않았으면 null.
@@ -512,6 +536,11 @@ public sealed partial class DockWorkspace
         }
 
         var current = LayoutPlanner.Reconcile(Capture(), PlanningPanels());
+        if (TryInsertTool(current, def))
+        {
+            return true; // 그 창 하나만 기존 묶음에 넣었다(배치를 다시 짓지 않아 화면 전체가 깜박이지 않는다, DK-01)
+        }
+
         _showingTool = toolId;
         try
         {
@@ -537,10 +566,124 @@ public sealed partial class DockWorkspace
             return false;
         }
 
+        if (TryRemoveTool(toolId))
+        {
+            return true; // 그 창 하나만 묶음에서 뺐다(DK-01)
+        }
+
         var current = LayoutPlanner.Reconcile(Capture(), PlanningPanels());
         Apply(LayoutPlanner.HideTool(current, toolId), keepSplitDocuments: true);
         return true;
     }
+
+    /// <summary>
+    /// 닫힌 도구 창을 배치를 다시 짓지 않고 넣는다: 배치 규칙(<see cref="LayoutPlanner.ShowTool"/>)이 고른 묶음이 지금 화면에 그대로 있으면
+    /// 그 묶음의 그 자리에 창 하나만 끼우고 활성으로 한다. 새 묶음이 필요하거나(기본 위치에 묶음 없음), 창이 아직 다른 곳(뜬 창·핀 사이드바)에 붙어 있거나,
+    /// 문서별로 잠시 숨긴 창이면 false — 부르는 쪽이 지금처럼 배치를 다시 짓는다.
+    /// </summary>
+    private bool TryInsertTool(LayoutDocument current, ToolPanelDefinition def)
+    {
+        if (Layout is null || PinnedTool(def.Id) is not null || IsScopedHidden(def.Id) || current.Root is null)
+        {
+            return false;
+        }
+
+        var tool = GetTool(def.Id);
+        if (tool.Owner is IDock { VisibleDockables: { } held } holder && held.Contains(tool))
+        {
+            if (InMainTree(holder) || FloatingWindowOf(tool) is not null)
+            {
+                return false; // 아직 다른 곳(뜬 창 등)에 붙어 있다
+            }
+
+            held.Remove(tool); // 다시 지을 때 버린 옛 묶음에 남은 참조
+        }
+
+        var planned = LayoutPlanner.ShowTool(current, def);
+        if (ToolGroups(planned.Root!).FirstOrDefault(g => g.Tools.Contains(def.Id)) is not { } target)
+        {
+            return false;
+        }
+
+        var before = target.Tools.Where(t => !string.Equals(t, def.Id, StringComparison.Ordinal)).ToList();
+        IToolDock? live = null;
+        var matches = 0;
+        Visit(Layout, d =>
+        {
+            if (d is IToolDock group && ScopedToolIds(group).Ids.SequenceEqual(before, StringComparer.Ordinal))
+            {
+                live = group;
+                matches++;
+            }
+        });
+        // 문서별로 잠시 숨겨 접힌(보이는 탭이 없는) 묶음은 칸 비율 복원이 얽히므로 다시 짓는 길로 보낸다.
+        if (live is null || matches != 1 || before.Count == 0 || !(live.VisibleDockables ?? []).OfType<PanelTool>().Any())
+        {
+            return false;
+        }
+
+        // × 로 닫은 창(HideToolsOnClose)은 root 의 숨김 목록과 OriginalOwner 에 옛 자리가 남는다: 지우지 않으면 뒤의 핀·펼침이 옛 묶음을 쓴다.
+        if (tool.Owner is IRootDock { HiddenDockables: { } hiddenList })
+        {
+            hiddenList.Remove(tool);
+        }
+
+        tool.OriginalOwner = null;
+        var list = live.VisibleDockables ??= Factory.CreateList<IDockable>();
+        var index = target.Tools.TakeWhile(t => !string.Equals(t, def.Id, StringComparison.Ordinal)).Count(t => list.Any(d => d.Id == t));
+        Factory.InsertDockable(live, tool, Math.Clamp(index, 0, list.Count));
+        live.ActiveDockable = tool;
+        LayoutChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// 보이는 도구 창 하나를 배치를 다시 짓지 않고 뺀다. 그 묶음에 다른 탭이 남을 때만 — 묶음이 비면 칸을 접고 비율을 나눠야 하므로 false(배치를 다시 짓는다).
+    /// </summary>
+    private bool TryRemoveTool(string toolId)
+    {
+        if (!_tools.TryGetValue(toolId, out var tool) || PinnedTool(toolId) is not null
+            || tool.Owner is not IToolDock { VisibleDockables: { } tabs } || !tabs.Contains(tool)
+            || tabs.OfType<PanelTool>().Count() < 2)
+        {
+            return false; // 묶음이 비면 칸을 접어야 하므로 다시 짓는다
+        }
+
+        // 잠시 숨긴 창의 자리(전체 탭 목록 기준, .ScopedTools.cs)는 뺀 창보다 뒤면 한 칸 당긴다.
+        var group = (IToolDock)tool.Owner;
+        var at = ScopedToolIds(group).Ids.IndexOf(toolId);
+        for (var i = 0; i < _scopedHidden.Count; i++)
+        {
+            if (ReferenceEquals(_scopedHidden[i].Dock, group) && _scopedHidden[i].Index > at)
+            {
+                _scopedHidden[i] = _scopedHidden[i] with { Index = _scopedHidden[i].Index - 1 };
+            }
+        }
+
+        Factory.RemoveDockable(tool, collapse: false);
+        LayoutChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// 지금 배치를 그대로 다시 짓는다(분할 문서 칸은 유지). 도구 창을 넣고 빼는 일은 대개 창 하나만 움직이므로, 새 묶음이 필요하거나 묶음이 비어
+    /// 다시 짓는 길(<see cref="ShowTool"/>·<see cref="HideTool"/>)을 시험이 직접 부를 때 쓴다.
+    /// </summary>
+    internal void Rebuild() => Apply(LayoutPlanner.Reconcile(Capture(), PlanningPanels()), keepSplitDocuments: true);
+
+    private bool InMainTree(IDockable dockable)
+    {
+        var found = false;
+        if (Layout is not null)
+        {
+            Visit(Layout, d => found |= ReferenceEquals(d, dockable));
+        }
+
+        return found;
+    }
+
+    private static IEnumerable<DockNode> ToolGroups(DockNode node) =>
+        node.Kind == DockNodeKind.ToolGroup ? [node] : (node.Children ?? []).SelectMany(ToolGroups);
 
     public bool ToggleTool(string toolId) => IsToolVisible(toolId) ? !HideTool(toolId) : ShowTool(toolId, keepFloating: false);
 
