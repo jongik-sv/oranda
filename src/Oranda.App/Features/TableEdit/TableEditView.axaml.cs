@@ -35,6 +35,15 @@ public partial class TableEditView : UserControl
         };
     }
 
+    /// <summary>「신원 없애기」(속성을 못 읽은 신원 열, 설계 18.5).</summary>
+    private void OnDropIdentityClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: ColumnRowViewModel row })
+        {
+            row.DropIdentity();
+        }
+    }
+
     /// <summary>칸에 포커스가 오면 그 칸의 줄을 고른다.</summary>
     private void OnCellFocused(object? sender, RoutedEventArgs e)
     {

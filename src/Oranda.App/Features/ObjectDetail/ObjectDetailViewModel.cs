@@ -350,6 +350,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(target);
 
+        WatchFeatureGate();
         EndTableEdit(); // 다시 열면 편집은 꺼진다(묻는 일은 부르는 쪽: 새로 고침·실행 성공 뒤, 설계 7.1)
         _session = session;
         Target = target;

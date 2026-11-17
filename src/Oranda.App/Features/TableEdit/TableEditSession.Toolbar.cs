@@ -19,7 +19,7 @@ public sealed partial class TableEditSession
 
     /// <summary>지금 보이는 편집 페이지(객체 상세가 구역을 고를 때 맞춘다). 편집 페이지가 아니면 null.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsColumnsPage), nameof(IsConstraintsPage), nameof(IsIndexesPage), nameof(IsDescriptionPage))]
+    [NotifyPropertyChangedFor(nameof(IsColumnsPage), nameof(IsConstraintsPage), nameof(IsIndexesPage), nameof(IsDescriptionPage), nameof(IsPartitionsPage))]
     private TableEditPage? _currentPage;
 
     public bool IsColumnsPage => CurrentPage == TableEditPage.Columns;
@@ -29,6 +29,8 @@ public sealed partial class TableEditSession
     public bool IsIndexesPage => CurrentPage == TableEditPage.Indexes;
 
     public bool IsDescriptionPage => CurrentPage == TableEditPage.Description;
+
+    public bool IsPartitionsPage => CurrentPage == TableEditPage.Partitions;
 
     /// <summary>형식 칸 목록(방언, 설계 7.2).</summary>
     public IReadOnlyList<string> TypeNames => Dialect.TypeNames;
@@ -43,7 +45,12 @@ public sealed partial class TableEditSession
     };
 
     /// <summary>「＋」을 쓸 수 있다(설명 페이지·제한된 테이블은 아님).</summary>
-    public bool CanAdd(TableEditPage page) => !IsRestricted && page is TableEditPage.Columns or TableEditPage.Constraints or TableEditPage.Indexes;
+    public bool CanAdd(TableEditPage page) => page switch
+    {
+        TableEditPage.Columns => AllowsColumnAddDrop,
+        TableEditPage.Constraints or TableEditPage.Indexes => !IsRestricted,
+        _ => false,
+    };
 
     public bool CanMoveUp => SelectedColumn is { } r && CanMoveColumn(r.Key, -1);
 

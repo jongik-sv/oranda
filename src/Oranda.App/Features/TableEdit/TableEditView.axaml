@@ -55,7 +55,7 @@
       <!-- 열 페이지(설계 7.2): # · 이름 · 형식 · 길이 · 소수 · NULL · 기본값 · 가상 식 · 주석 -->
       <DockPanel IsVisible="{Binding IsColumnsPage}">
         <Border DockPanel.Dock="Top" Classes="head" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
-          <Grid ColumnDefinitions="18,34,150,140,56,46,44,120,170,*">
+          <Grid ColumnDefinitions="18,34,150,140,56,46,44,120,170,130,60,48,44,100,*">
             <TextBlock Grid.Column="1" Text="#" />
             <TextBlock Grid.Column="2" Text="이름" />
             <TextBlock Grid.Column="3" Text="형식" />
@@ -64,7 +64,12 @@
             <TextBlock Grid.Column="6" Text="NULL" />
             <TextBlock Grid.Column="7" Text="기본값" />
             <TextBlock Grid.Column="8" Text="가상 식" />
-            <TextBlock Grid.Column="9" Text="주석" />
+            <TextBlock Grid.Column="9" Text="신원" />
+            <TextBlock Grid.Column="10" Text="시작" />
+            <TextBlock Grid.Column="11" Text="증가" />
+            <TextBlock Grid.Column="12" Text="숨김" />
+            <TextBlock Grid.Column="13" Text="도메인" />
+            <TextBlock Grid.Column="14" Text="주석" />
           </Grid>
         </Border>
         <ListBox x:Name="ColumnRows" Classes="edit-rows" ItemsSource="{Binding Columns}" SelectedItem="{Binding SelectedColumn, Mode=TwoWay}"
@@ -73,7 +78,7 @@
             <DataTemplate x:DataType="te:ColumnRowViewModel">
               <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" ToolTip.Tip="{Binding Error}">
                 <Panel>
-                  <Grid ColumnDefinitions="18,34,150,140,56,46,44,120,170,*">
+                  <Grid ColumnDefinitions="18,34,150,140,56,46,44,120,170,130,60,48,44,100,*">
                     <TextBlock Grid.Column="0" Text="{Binding StateMark}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="1" Text="{Binding PositionText}" Margin="4,0" VerticalAlignment="Center" />
                     <TextBox Grid.Column="2" Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditName}"
@@ -85,13 +90,35 @@
                              Text="{Binding LengthText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="길이" />
                     <TextBox Grid.Column="5" Classes="cell" Classes.changed="{Binding IsTypeChanged}" IsEnabled="{Binding CanEditScale}"
                              Text="{Binding ScaleText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="소수" />
-                    <CheckBox Grid.Column="6" Classes="cell" Classes.changed="{Binding IsNullableChanged}" IsEnabled="{Binding CanEditLength}"
+                    <CheckBox Grid.Column="6" Classes="cell" Classes.changed="{Binding IsNullableChanged}" IsEnabled="{Binding CanEditNullable}"
                               IsChecked="{Binding IsNullable}" HorizontalAlignment="Center" AutomationProperties.Name="NULL" />
                     <TextBox Grid.Column="7" Classes="cell" Classes.changed="{Binding IsDefaultChanged}" IsEnabled="{Binding CanEditDefault}"
                              Text="{Binding DefaultValue, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="기본값" />
                     <TextBox Grid.Column="8" Classes="cell" Classes.changed="{Binding IsVirtualChanged}" IsEnabled="{Binding CanEditVirtual}"
                              Text="{Binding VirtualExpression, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="가상 식" />
-                    <TextBox Grid.Column="9" Classes="cell" Classes.changed="{Binding IsCommentChanged}" IsEnabled="{Binding CanEditComment}"
+                    <!-- 신원·숨김·도메인(설계 18.5). 방언이 못 하면 흐리고 이유를 툴팁으로(18.8). 속성을 못 읽은 신원 열은 「신원 없애기」만. -->
+                    <Panel Grid.Column="9" ToolTip.Tip="{Binding IdentityTip}" ToolTip.ShowOnDisabled="True">
+                      <ComboBox Classes="cell" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentity}" IsVisible="{Binding !IsIdentityUnknown}"
+                                SelectedIndex="{Binding IdentityIndex}" HorizontalAlignment="Stretch" AutomationProperties.Name="신원">
+                        <ComboBoxItem Content="없음" />
+                        <ComboBoxItem Content="ALWAYS" />
+                        <ComboBoxItem Content="BY DEFAULT" />
+                        <ComboBoxItem Content="ON NULL" />
+                      </ComboBox>
+                      <Button Classes="tool" Content="신원 없애기" IsVisible="{Binding IsIdentityUnknown}" IsEnabled="{Binding CanDropUnknownIdentity}"
+                              Click="OnDropIdentityClick" AutomationProperties.Name="신원 없애기" />
+                    </Panel>
+                    <TextBox Grid.Column="10" Classes="cell" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentityOptions}"
+                             Text="{Binding IdentityStartText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="신원 시작" />
+                    <TextBox Grid.Column="11" Classes="cell" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentityOptions}"
+                             Text="{Binding IdentityIncrementText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="신원 증가" />
+                    <CheckBox Grid.Column="12" Classes="cell" Classes.changed="{Binding IsInvisibleChanged}" IsEnabled="{Binding CanEditInvisible}"
+                              IsChecked="{Binding IsInvisible}" HorizontalAlignment="Center" ToolTip.Tip="{Binding InvisibleReason}" ToolTip.ShowOnDisabled="True"
+                              AutomationProperties.Name="숨김" />
+                    <TextBox Grid.Column="13" Classes="cell" Classes.changed="{Binding IsDomainChanged}" IsEnabled="{Binding CanEditDomain}"
+                             Text="{Binding Domain, UpdateSourceTrigger=LostFocus}" ToolTip.Tip="{Binding DomainReason}" ToolTip.ShowOnDisabled="True"
+                             AutomationProperties.Name="도메인" />
+                    <TextBox Grid.Column="14" Classes="cell" Classes.changed="{Binding IsCommentChanged}" IsEnabled="{Binding CanEditComment}"
                              Text="{Binding Comment, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="주석" />
                   </Grid>
                   <Rectangle Height="1" Fill="{DynamicResource OrandaIconRedBrush}" VerticalAlignment="Center" IsVisible="{Binding IsDropped}" IsHitTestVisible="False" />
@@ -173,9 +200,19 @@
                              Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
                     <CheckBox Grid.Column="2" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
                               IsChecked="{Binding IsUnique}" HorizontalAlignment="Center" AutomationProperties.Name="유일" />
-                    <TextBlock Grid.Column="3" Text="{Binding KindText}" Margin="4,0" VerticalAlignment="Center" />
+                    <!-- 종류(설계 18.6): NORMAL·FUNCTION-BASED(열 칸에 식)·BITMAP. 그 밖의 종류는 글만(지우기만). -->
+                    <Panel Grid.Column="3" ToolTip.Tip="{Binding KindTip}" ToolTip.ShowOnDisabled="True">
+                      <ComboBox Classes="cell" IsVisible="{Binding !IsDropOnly}" IsEnabled="{Binding CanEditCells}" Classes.changed="{Binding IsDefinitionChanged}"
+                                SelectedIndex="{Binding KindIndex}" HorizontalAlignment="Stretch" AutomationProperties.Name="인덱스 종류">
+                        <ComboBoxItem Content="NORMAL" />
+                        <ComboBoxItem Content="FUNCTION-BASED" />
+                        <ComboBoxItem Content="BITMAP" />
+                      </ComboBox>
+                      <TextBlock Text="{Binding KindText}" IsVisible="{Binding IsDropOnly}" Margin="4,0" VerticalAlignment="Center" />
+                    </Panel>
                     <TextBox Grid.Column="4" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
-                             Text="{Binding ColumnsText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="열" />
+                             Text="{Binding ColumnsText, UpdateSourceTrigger=LostFocus}" ToolTip.Tip="{Binding Error}"
+                             PlaceholderText="열 [DESC], … · 함수 기반은 식도" AutomationProperties.Name="열" />
                     <TextBox Grid.Column="5" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
                              Text="{Binding Tablespace, UpdateSourceTrigger=LostFocus}" PlaceholderText="(기본)" AutomationProperties.Name="테이블스페이스" />
                   </Grid>
@@ -187,8 +224,19 @@
         </ListBox>
       </DockPanel>
 
-      <!-- 설명 페이지: 테이블 주석 -->
+      <!-- 파티션 페이지(설계 18.4, 시안 ⑥) -->
+      <te:TableEditPartitionsView x:Name="PartitionsView" IsVisible="{Binding IsPartitionsPage}" />
+
+      <!-- 설명 페이지: 테이블 이름(바꾸기, 설계 18.1) · 규칙 이름도 바꾸기(TE-38) · 테이블 주석 -->
       <StackPanel IsVisible="{Binding IsDescriptionPage}" Margin="8" Spacing="4">
+        <TextBlock Text="테이블 이름" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBox x:Name="TableNameBox" MinWidth="240" Classes.changed="{Binding IsTableNameChanged}" IsEnabled="{Binding CanRenameTable}"
+                   Text="{Binding TableName, UpdateSourceTrigger=LostFocus}" ToolTip.Tip="{Binding RenameTableReason}" ToolTip.ShowOnDisabled="True"
+                   AutomationProperties.Name="테이블 이름" />
+          <CheckBox x:Name="RenameRuleNamesBox" Content="규칙 이름도 바꾸기" IsVisible="{Binding IsTableNameChanged}" IsChecked="{Binding RenameRuleNames}"
+                    ToolTip.Tip="PK_·UK_·FK_·CK_·IX_ 옛 이름 꼴의 제약·인덱스 이름도 새 이름으로 바꿉니다" />
+        </StackPanel>
         <TextBlock Text="테이블 주석" />
         <TextBox x:Name="TableCommentBox" Classes.changed="{Binding IsTableCommentChanged}" AcceptsReturn="False" IsEnabled="{Binding CanEditTableComment}"
                  Text="{Binding TableComment, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="테이블 주석" />

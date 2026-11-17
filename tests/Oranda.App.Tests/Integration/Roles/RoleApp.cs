@@ -56,10 +56,11 @@ internal static class PrdMatrix
         ("blockerAlert", "OOOOO."),
         ("dbTools", ".O.OO."),
         ("columnReorder", "....O."),
+        ("tableEditor", "OOO.O."), // 테이블 편집(2026-11-17) +1
     ];
 
     /// <summary>조회 전용만 골랐을 때 켤 수 없는 쓰기 전용 기능(PRD 12.3 RL-08).</summary>
-    public static readonly string[] WritesOnly = ["gridEdit", "dataImport", "plsqlEditor", "plsqlWorkspace", "plsqlRun", "columnReorder"];
+    public static readonly string[] WritesOnly = ["gridEdit", "dataImport", "plsqlEditor", "plsqlWorkspace", "plsqlRun", "columnReorder", "tableEditor"];
 
     /// <summary>시작 때 도는 기능(RL-06): 바꾸면 재시작 뒤 반영.</summary>
     public static readonly string[] StartupBound = ["myBatis", "plsqlWorkspace", "blockerAlert", "changeJournal", "changeBundle"];
@@ -149,6 +150,7 @@ internal static class PrdMatrix
         ("oranda.schema.objectSearch", "dbTools"),
         ("oranda.schema.compileInvalid", "dbTools"),
         ("oranda.schema.reorderColumns", "columnReorder"),
+        ("oranda.tableEdit.toggle", "tableEditor"),
         ("oranda.exec.runStatement", null),
         ("oranda.view.commandPalette", null),
         ("oranda.tools.settings", null),

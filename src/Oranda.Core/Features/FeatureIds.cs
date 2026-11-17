@@ -47,6 +47,9 @@ public static class FeatureIds
     public const string DbTools = "dbTools";
     public const string ColumnReorder = "columnReorder";
 
+    /// <summary>테이블 편집기(객체 상세 ✎ 편집·실행, 테이블 편집기 설계 13장). 쓰기 기능.</summary>
+    public const string TableEditor = "tableEditor";
+
     /// <summary>문맥 키 머리. 기능 id 를 붙여 <c>feature.myBatis</c> 처럼 쓴다(TSK-07-02 가 값을 넣는다).</summary>
     public const string ContextKeyPrefix = "feature.";
 
@@ -57,7 +60,7 @@ public static class FeatureIds
         PlsqlEditor, PlsqlWorkspace, PlsqlRun,
         MyBatis,
         PlanAdvanced, SqlMonitor, TuningAssistant, ChildCursors, TableStats, Trace, TuningReport, AiTuning,
-        SessionMonitor, LockMonitor, BlockerAlert, DbTools, ColumnReorder,
+        SessionMonitor, LockMonitor, BlockerAlert, DbTools, ColumnReorder, TableEditor,
     ];
 
     /// <summary>기능의 문맥 키 이름(<c>feature.&lt;id&gt;</c>).</summary>

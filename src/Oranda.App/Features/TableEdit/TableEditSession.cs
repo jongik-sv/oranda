@@ -63,7 +63,7 @@ public sealed partial class TableEditSession : ObservableObject
     public string PreviewText => ScriptError is { } e ? "-- " + e : Script.PreviewText(Environment.NewLine);
 
     /// <summary>고친 것이 있다(버리기 확인 대상).</summary>
-    public bool IsDirty => ScriptError is null ? !Changes.IsEmpty : Draft != Original;
+    public bool IsDirty => (ScriptError is null ? !Changes.IsEmpty : Draft != Original) || IsPartitionDirty;
 
     /// <summary>새 테이블 편집(원본이 빈 모델).</summary>
     public bool IsNewTable => Original.IsNewTable;
@@ -71,10 +71,69 @@ public sealed partial class TableEditSession : ObservableObject
     /// <summary>일반 테이블이 아니다(임시·외부·IOT·클러스터): 열 주석·기본값만 고친다(설계 3장).</summary>
     public bool IsRestricted => Draft.Kind != TableKind.Heap && !IsNewTable;
 
+    /// <summary>
+    /// 특수 테이블 가운데 열 추가·지우기와 테이블 이름 바꾸기가 되는 것(GTT·IOT, 실측 — 설계 18.10). 외부·클러스터는 열 주석·기본값만.
+    /// 제약·인덱스는 어느 특수 테이블에서도 고치지 않는다(Core 검사 계획과 같은 기준).
+    /// </summary>
+    public bool AllowsColumnAddDrop => !IsRestricted || Draft.Kind is TableKind.Temporary or TableKind.Iot;
+
+    /// <summary>테이블 이름을 바꿀 수 있다(일반·GTT·IOT, 방언이 이름 바꾸기를 함, 설계 18.1).</summary>
+    public bool CanRenameTable => !IsNewTable && AllowsColumnAddDrop && RenameTableReason is null;
+
+    /// <summary>테이블 이름 바꾸기를 못 하는 방언 이유(문구). 되면 null.</summary>
+    public string? RenameTableReason => Reason(TableEditFeature.RenameTable);
+
+    /// <summary>방언이 그 기능을 못 하는 이유 문구(설계 18.8). 되면 null.</summary>
+    public string? Reason(TableEditFeature feature) =>
+        Dialect.UnsupportedReasonKey(feature, Context.Server) is { } key ? Oranda.App.Features.Localization.UiText.Get(key, key) : null;
+
     /// <summary>제한 이유(제한이 없으면 빈 글).</summary>
-    public string RestrictionText => IsRestricted
-        ? TableEditText.T($"{KindName(Draft.Kind)} 테이블은 열 주석·기본값만 고칠 수 있습니다", $"Only column comments and defaults can be changed on a {KindName(Draft.Kind)} table")
-        : string.Empty;
+    public string RestrictionText => !IsRestricted ? string.Empty
+        : AllowsColumnAddDrop
+            ? TableEditText.T($"{KindName(Draft.Kind)} 테이블은 열 추가·지우기·주석·기본값과 테이블 이름만 고칠 수 있습니다",
+                              $"On a {KindName(Draft.Kind)} table only adding/dropping columns, comments, defaults and the table name can be changed")
+            : TableEditText.T($"{KindName(Draft.Kind)} 테이블은 열 주석·기본값만 고칠 수 있습니다", $"Only column comments and defaults can be changed on a {KindName(Draft.Kind)} table");
+
+    /// <summary>
+    /// 「설명」 페이지 테이블 이름(기존 테이블 = 이름 바꾸기, 설계 18.1). 새 테이블은 <see cref="SetTableName"/>(규칙 이름 따라 바뀜)을 쓴다.
+    /// </summary>
+    public string TableName
+    {
+        get => TableEditCellText.Show(Draft.Name);
+        set
+        {
+            if (!CanRenameTable || string.Equals(value ?? string.Empty, TableName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var name = TableEditCellText.Parse(value);
+            if (name.Length > 0 && name != Draft.Name)
+            {
+                Update(d => d with { Name = name });
+            }
+            else
+            {
+                OnPropertyChanged(nameof(TableName)); // 빈 이름은 받지 않고 칸을 원래 이름으로 되돌린다
+            }
+        }
+    }
+
+    /// <summary>테이블 이름이 바뀐 칸인가.</summary>
+    public bool IsTableNameChanged => Changes.Renamed;
+
+    /// <summary>「규칙 이름도 바꾸기」(TE-38, 기본 끔): 이름 바꾸기 때 <c>PK_&lt;옛 이름&gt;</c> 꼴 제약·인덱스도 따라 바꾼다.</summary>
+    public bool RenameRuleNames
+    {
+        get => Draft.RenameRuleNames;
+        set
+        {
+            if (value != Draft.RenameRuleNames)
+            {
+                Update(d => d with { RenameRuleNames = value });
+            }
+        }
+    }
 
     /// <summary>아래 줄 요약(「변경 3건」).</summary>
     public string SummaryText => ScriptError is not null ? TableEditText.T("문장을 만들지 못했습니다", "Could not build the statements")
@@ -93,7 +152,7 @@ public sealed partial class TableEditSession : ObservableObject
         get => Draft.Comment;
         set
         {
-            if (!IsRestricted && !string.Equals(Draft.Comment ?? string.Empty, value ?? string.Empty, StringComparison.Ordinal))
+            if (!string.Equals(Draft.Comment ?? string.Empty, value ?? string.Empty, StringComparison.Ordinal))
             {
                 Update(d => d with { Comment = value });
             }
@@ -112,7 +171,10 @@ public sealed partial class TableEditSession : ObservableObject
     internal void RaiseVirtualExpressionEdited(string rowKey) => VirtualExpressionEdited?.Invoke(this, rowKey);
 
     /// <summary>페이지 이름 옆 바뀐 건수(설계 7.1).</summary>
-    public int CountFor(TableEditPage page) => Changes.CountFor(page);
+    public int CountFor(TableEditPage page) => page == TableEditPage.Partitions
+        ? PartitionChanges.Rows.Count + (PartitionChanges.IntervalChanged ? 1 : 0) + (PartitionChanges.Converting ? 1 : 0)
+          + PartitionChanges.Problems.Select(p => p.RowKey).Distinct(StringComparer.Ordinal).Count(k => PartitionChanges.Rows.All(r => r.RowKey != k))
+        : Changes.CountFor(page);
 
     /// <summary>편집 모델을 바꾼다(차이·문장·줄을 다시 만듦).</summary>
     public void Update(Func<TableDraft, TableDraft> change)
@@ -151,7 +213,7 @@ public sealed partial class TableEditSession : ObservableObject
     /// <summary>「＋」 새 열(끝에 붙임). 이름은 비어 있다.</summary>
     public ColumnRowViewModel? AddColumn()
     {
-        if (IsRestricted)
+        if (!AllowsColumnAddDrop)
         {
             return null;
         }
@@ -164,7 +226,7 @@ public sealed partial class TableEditSession : ObservableObject
     /// <summary>새 열은 ↑↓ 로 옮길 수 있다(기존 테이블은 새 열끼리만, TE-1).</summary>
     public bool CanMoveColumn(string rowKey, int delta)
     {
-        if (IsRestricted)
+        if (!AllowsColumnAddDrop)
         {
             return false;
         }
@@ -251,9 +313,9 @@ public sealed partial class TableEditSession : ObservableObject
     /// </summary>
     public void ToggleDrop(string rowKey)
     {
-        if (IsRestricted)
+        if (IsRestricted && !(AllowsColumnAddDrop && Draft.Column(rowKey) is not null))
         {
-            return;
+            return; // 특수 테이블: GTT·IOT 는 열만 지운다
         }
 
         RowOf(rowKey)?.ClearInput();
@@ -326,7 +388,18 @@ public sealed partial class TableEditSession : ObservableObject
     }
 
     /// <summary>모든 편집을 버리고 원본으로.</summary>
-    public void RevertAll() => Update(_ => Original);
+    public void RevertAll()
+    {
+        _partitionDraft = _partitionOriginal;
+        if (Draft == Original)
+        {
+            Recompute();
+        }
+        else
+        {
+            Update(_ => Original);
+        }
+    }
 
     /// <summary>
     /// 테이블 이름을 바꾼다(새 테이블 이름 칸). 규칙 이름(<see cref="ConstraintDraft.IsAutoName"/>)인 제약·인덱스는 새 이름으로 다시 짓는다(설계 7.5).
@@ -384,7 +457,7 @@ public sealed partial class TableEditSession : ObservableObject
         ?? Indexes.FirstOrDefault(r => r.Key == rowKey);
 
     /// <summary>테이블 주석 칸(제한된 테이블은 열 주석·기본값만, 설계 3장).</summary>
-    public bool CanEditTableComment => !IsRestricted;
+    public bool CanEditTableComment => Dialect is not null; // 늘 참: Core 검사 계획이 특수 테이블의 테이블 주석을 막지 않는다
 
     /// <summary>
     /// 화면이 아직 모델에 넣지 않은 칸 입력(칸을 벗어날 때 들어감)을 지금 넣는다. 닫기·끄기·새로 고침·실행·저장 앞에서 부른다 — 쓴 글을 말없이 잃지 않게(설계 4장).
@@ -456,7 +529,20 @@ public sealed partial class TableEditSession : ObservableObject
             ScriptError = ex.Message;
         }
 
+        // 파티션 문장(설계 18.4)을 테이블 이름 바꾸기 앞에 끼운다. 미리보기·실행·저장은 이 합친 목록 하나를 쓴다.
+        var (partitions, partitionError) = BuildPartitionStatements();
+        if (partitionError is not null)
+        {
+            Script = TableEditScript.Empty;
+            ScriptError ??= partitionError;
+        }
+        else if (ScriptError is null)
+        {
+            Script = MergePartitionStatements(Script, partitions);
+        }
+
         SyncRows();
+        SyncPartitionRows();
         OnPropertyChanged(nameof(Changes));
         OnPropertyChanged(nameof(Script));
         OnPropertyChanged(nameof(ScriptError));
@@ -469,6 +555,16 @@ public sealed partial class TableEditSession : ObservableObject
         OnPropertyChanged(nameof(IsRestricted));
         OnPropertyChanged(nameof(RestrictionText));
         OnPropertyChanged(nameof(CanEditTableComment));
+        OnPropertyChanged(nameof(TableName));
+        OnPropertyChanged(nameof(IsTableNameChanged));
+        OnPropertyChanged(nameof(RenameRuleNames));
+        OnPropertyChanged(nameof(CanRenameTable));
+        OnPropertyChanged(nameof(AllowsColumnAddDrop));
+        OnPropertyChanged(nameof(PartitionChanges));
+        OnPropertyChanged(nameof(PartitionDraft));
+        OnPropertyChanged(nameof(IsPartitionDirty));
+        OnPropertyChanged(nameof(CanEditPartitions));
+        OnPropertyChanged(nameof(PartitionLockedReason));
         Recomputed?.Invoke(this, EventArgs.Empty);
     }
 

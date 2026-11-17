@@ -1063,5 +1063,6 @@
   "TableEdit.partition.splitSourceUnavailable": "The partition to split is dropped or cannot be changed, so it cannot be split",
   "TableEdit.partition.hashMerge": "Hash partitions cannot be merged (remove from the end to reduce them)",
   "TableEdit.partition.hashCoalesceLast": "Hash partitions can only be removed from the end (the server removes the last one)",
-  "Panel.oranda.panel.changeBundle": "Change Bundle"
+  "Panel.oranda.panel.changeBundle": "Change Bundle",
+  "Feature.tableEditor": "Table Editor"
 }

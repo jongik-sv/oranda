@@ -1,0 +1,179 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:te="using:Oranda.App.Features.TableEdit"
+             x:Class="Oranda.App.Features.TableEdit.TableEditPartitionsView"
+             x:DataType="te:TableEditSession">
+  <!-- 파티션 페이지(설계 18.4, 시안 ⑥). 위: 방식 · 키 열 · 자동 추가(INTERVAL) · 하위 파티션(보기만). 도구줄: 더하기 · 지우기 · 나누기 · 합치기 · 비우기 · 되돌리기 · 경계 채우기.
+       표: 이름 · 상한값(LESS THAN)/값 목록 · 테이블스페이스 · 행 수(통계). 아래: 데이터가 사라지는 편집의 경고 줄과 문장으로 못 만드는 편집의 이유. -->
+  <UserControl.Styles>
+    <Style Selector="TextBox.cell">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.cell.changed">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
+    </Style>
+    <Style Selector="Border.row.added">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffAddedBrush}" />
+    </Style>
+    <Style Selector="Border.row.dropped">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffRemovedBrush}" />
+    </Style>
+    <Style Selector="Border.row.merged">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="Border.head TextBlock">
+      <Setter Property="Margin" Value="4,2" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ListBox.edit-rows ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="WrapPanel.fields > TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="8,0,4,0" />
+    </Style>
+    <Style Selector="TextBlock.warn">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <!-- 못 고치는 까닭(제한된 테이블 · 정보 없음 · 방언이 못 함). -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding !CanEditPartitions}">
+      <TextBlock x:Name="PartitionLockedText" Text="{Binding PartitionLockedReason}" Margin="4,0" TextWrapping="Wrap" />
+    </Border>
+
+    <!-- 위 줄: 방식 · 키 열 · 자동 추가 · 하위 파티션. -->
+    <WrapPanel DockPanel.Dock="Top" Classes="fields" Margin="0,4">
+      <TextBlock Text="방식" />
+      <TextBlock x:Name="PartitionMethodText" Text="{Binding PartitionMethodText}" IsVisible="{Binding !ShowsPartitionMethodChoice}" FontWeight="SemiBold" />
+      <ComboBox x:Name="PartitionMethodChoice" MinWidth="110" IsVisible="{Binding ShowsPartitionMethodChoice}" IsEnabled="{Binding CanChoosePartitionMethod}"
+                SelectedIndex="{Binding PartitionMethodIndex, Mode=TwoWay}" ToolTip.Tip="{Binding PartitionMethodTip}" ToolTip.ShowOnDisabled="True"
+                AutomationProperties.Name="파티션 방식">
+        <ComboBoxItem Content="없음" />
+        <ComboBoxItem Content="RANGE" />
+        <ComboBoxItem Content="LIST" />
+        <ComboBoxItem Content="HASH" />
+      </ComboBox>
+      <TextBlock Text="키 열" />
+      <TextBox x:Name="PartitionKeyBox" Classes="cell" MinWidth="160" IsEnabled="{Binding CanEditPartitionKeys}"
+               Text="{Binding PartitionKeyText, UpdateSourceTrigger=LostFocus}" PlaceholderText="열, …" AutomationProperties.Name="파티션 키 열" />
+      <TextBlock Text="자동 추가(INTERVAL)" />
+      <TextBox x:Name="PartitionIntervalBox" Classes="cell" MinWidth="220" IsEnabled="{Binding CanEditPartitionInterval}"
+               Text="{Binding PartitionIntervalText, UpdateSourceTrigger=LostFocus}" PlaceholderText="(끔)"
+               ToolTip.Tip="범위 파티션의 자동 추가 간격(예: NUMTOYMINTERVAL(1, 'MONTH')). 비우면 끕니다" AutomationProperties.Name="자동 추가(INTERVAL)" />
+      <TextBlock Text="하위 파티션" />
+      <TextBlock x:Name="SubpartitionText" Text="{Binding SubpartitionText}" Opacity="0.7" ToolTip.Tip="하위 파티션은 보기만 합니다" />
+    </WrapPanel>
+    <TextBlock DockPanel.Dock="Top" x:Name="PartitionHeaderErrorText" Classes="warn" Margin="8,0,8,4" Text="{Binding PartitionHeaderError}"
+               IsVisible="{Binding PartitionHeaderError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <!-- 이 서버에서 못 쓰는 파티션 동작과 이유(설계 18.8 흐리게 + 이유). -->
+    <TextBlock DockPanel.Dock="Top" x:Name="PartitionUnsupportedText" Margin="8,0,8,4" Opacity="0.75" TextWrapping="Wrap" Text="{Binding PartitionUnsupportedText}"
+               IsVisible="{Binding PartitionUnsupportedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <!-- 도구줄. -->
+    <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <Button x:Name="AddPartitionButton" Classes="tool" Content="＋" IsEnabled="{Binding CanAddPartition}"
+                ToolTip.Tip="새 파티션(끝에 붙임 — 범위는 마지막 경계 뒤만)" AutomationProperties.Name="파티션 더하기" />
+        <Button x:Name="DropPartitionButton" Classes="tool" Content="－ 지우기" IsEnabled="{Binding CanDropPartition}"
+                ToolTip.Tip="고른 파티션 지우기(다시 누르면 되살림)" AutomationProperties.Name="파티션 지우기" />
+        <Button x:Name="SplitPartitionButton" Classes="tool" Content="나누기" IsEnabled="{Binding CanSplitPartition}" ToolTip.ShowOnDisabled="True"
+                ToolTip.Tip="고른 파티션을 나눕니다(바로 위에 새 줄 — 나눌 경계를 쓰세요)" AutomationProperties.Name="파티션 나누기" />
+        <Button x:Name="MergePartitionButton" Classes="tool" Content="합치기" IsEnabled="{Binding CanMergePartition}" ToolTip.ShowOnDisabled="True"
+                ToolTip.Tip="고른 파티션을 바로 다음 파티션과 합칩니다(다시 누르면 취소, 해시는 안 됨)" AutomationProperties.Name="파티션 합치기" />
+        <Button x:Name="TruncatePartitionButton" Classes="tool" Content="비우기" IsEnabled="{Binding CanTruncatePartition}"
+                ToolTip.Tip="고른 파티션의 행을 모두 지웁니다(다시 누르면 취소)" AutomationProperties.Name="파티션 비우기" />
+        <Button x:Name="RevertPartitionButton" Classes="tool" Content="↺" IsEnabled="{Binding CanRevertPartition}"
+                ToolTip.Tip="고른 줄을 원래대로" AutomationProperties.Name="줄 되돌리기" />
+        <TextBlock Text="│" VerticalAlignment="Center" Opacity="0.5" Margin="4,0" />
+        <Button x:Name="FillBoundsButton" Classes="tool" Content="경계 채우기…" IsEnabled="{Binding CanFillBounds}" ToolTip.ShowOnDisabled="True"
+                ToolTip.Tip="「2026-01 부터 매월 12개」처럼 범위 파티션 줄을 한꺼번에 만듭니다" AutomationProperties.Name="경계 채우기" />
+      </StackPanel>
+    </Border>
+
+    <!-- 경계 채우기 칸(한 줄): 시작 · 단위 · 개수 · 간격. -->
+    <Border x:Name="BoundFillPanel" DockPanel.Dock="Top" IsVisible="{Binding IsBoundFillOpen}" Padding="4,4"
+            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+      <StackPanel Spacing="2">
+        <WrapPanel Classes="fields">
+          <TextBlock Text="시작" />
+          <TextBox x:Name="BoundFillStartBox" Width="120" Text="{Binding BoundFillStart}" PlaceholderText="2026-01" AutomationProperties.Name="경계 채우기 시작" />
+          <TextBlock Text="단위" />
+          <ComboBox x:Name="BoundFillUnitChoice" MinWidth="80" SelectedIndex="{Binding BoundFillUnitIndex, Mode=TwoWay}" AutomationProperties.Name="경계 채우기 단위">
+            <ComboBoxItem Content="일" />
+            <ComboBoxItem Content="월" />
+            <ComboBoxItem Content="년" />
+            <ComboBoxItem Content="숫자" />
+          </ComboBox>
+          <TextBlock Text="개수" />
+          <TextBox x:Name="BoundFillCountBox" Width="60" Text="{Binding BoundFillCount}" AutomationProperties.Name="경계 채우기 개수" />
+          <TextBlock Text="간격" />
+          <TextBox x:Name="BoundFillStepBox" Width="60" Text="{Binding BoundFillStep}" AutomationProperties.Name="경계 채우기 간격" />
+          <Button x:Name="ApplyBoundFillButton" Content="채우기" Margin="8,0,0,0" ToolTip.Tip="이미 있는 이름의 줄은 건너뜁니다" AutomationProperties.Name="경계 채우기 실행" />
+          <Button x:Name="CloseBoundFillButton" Content="닫기" Margin="4,0,0,0" />
+        </WrapPanel>
+        <TextBlock x:Name="BoundFillErrorText" Classes="warn" Margin="8,0" Text="{Binding BoundFillError}"
+                   IsVisible="{Binding BoundFillError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      </StackPanel>
+    </Border>
+
+    <!-- 아래: 경고 줄(지우기 · 비우기 · 합치기)과 문장으로 못 만드는 편집. -->
+    <StackPanel DockPanel.Dock="Bottom" Margin="8,4" Spacing="2">
+      <ItemsControl x:Name="PartitionProblemList" ItemsSource="{Binding PartitionProblemLines}" IsVisible="{Binding HasPartitionProblems}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="x:String">
+            <TextBlock Classes="warn" Text="{Binding}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <ItemsControl x:Name="PartitionWarningList" ItemsSource="{Binding PartitionWarnings}" IsVisible="{Binding HasPartitionWarnings}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="x:String">
+            <TextBlock Classes="warn" Text="{Binding}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+
+    <!-- 표 머리. -->
+    <Border DockPanel.Dock="Top" Classes="head" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+      <Grid ColumnDefinitions="26,200,*,170,120">
+        <TextBlock Grid.Column="1" Text="이름" />
+        <TextBlock Grid.Column="2" x:Name="BoundHeaderText" Text="{Binding BoundHeaderText}" />
+        <TextBlock Grid.Column="3" Text="테이블스페이스" />
+        <TextBlock Grid.Column="4" Text="행 수(통계)" HorizontalAlignment="Right" />
+      </Grid>
+    </Border>
+    <ListBox x:Name="PartitionRows" Classes="edit-rows" ItemsSource="{Binding PartitionRows}" SelectedItem="{Binding SelectedPartition, Mode=TwoWay}"
+             AutomationProperties.Name="파티션 편집 표">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="te:PartitionRowViewModel">
+          <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" Classes.merged="{Binding IsMergedAway}"
+                  ToolTip.Tip="{Binding Tip}">
+            <Panel>
+              <Grid ColumnDefinitions="26,200,*,170,120">
+                <TextBlock Grid.Column="0" Text="{Binding StateMark}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditName}"
+                         Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
+                <TextBox Grid.Column="2" Classes="cell" IsEnabled="{Binding CanEditBound}"
+                         Text="{Binding BoundText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="경계" />
+                <TextBox Grid.Column="3" Classes="cell" IsEnabled="{Binding CanEditTablespace}"
+                         Text="{Binding Tablespace, UpdateSourceTrigger=LostFocus}" PlaceholderText="(기본)" AutomationProperties.Name="테이블스페이스" />
+                <TextBlock Grid.Column="4" Text="{Binding RowCountText}" Margin="4,0" HorizontalAlignment="Right" VerticalAlignment="Center" />
+              </Grid>
+              <Rectangle Height="1" Fill="{DynamicResource OrandaIconRedBrush}" VerticalAlignment="Center" IsVisible="{Binding IsDropped}" IsHitTestVisible="False" />
+            </Panel>
+          </Border>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

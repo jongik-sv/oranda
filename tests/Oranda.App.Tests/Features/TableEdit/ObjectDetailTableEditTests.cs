@@ -197,13 +197,13 @@ public class ObjectDetailTableEditTests
     [Fact]
     public async Task Special_tables_allow_only_column_comments_and_defaults()
     {
-        var (vm, _, _) = await OpenAsync(TableKind.Temporary);
+        var (vm, _, _) = await OpenAsync(TableKind.Cluster);
         await vm.SetTableEditingAsync(true);
         var edit = vm.TableEdit!;
         var row = edit.Columns[2];
 
         Assert.True(edit.IsRestricted);
-        Assert.Contains("임시", edit.RestrictionText, StringComparison.Ordinal);
+        Assert.Contains("클러스터", edit.RestrictionText, StringComparison.Ordinal);
         Assert.False(row.CanEditName);
         Assert.False(row.CanEditType);
         Assert.False(row.CanEditLength);

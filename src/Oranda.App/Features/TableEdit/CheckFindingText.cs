@@ -19,6 +19,11 @@ public static class CheckFindingText
     public static string Format(CheckFinding finding, bool purgesOnDrop = false)
     {
         ArgumentNullException.ThrowIfNull(finding);
+        if (finding.Subject is null && finding.Code is CheckCode.Irreversible && finding.Detail is { Length: > 0 } line)
+        {
+            return Glyph(finding.Severity) + " " + line; // 이미 문구가 된 줄(파티션 지우기·비우기 행 수)
+        }
+
         var s = finding.Subject is { Length: > 0 } subject ? subject : TableEditText.T("테이블", "table");
         var n = finding.Count?.ToString("N0", CultureInfo.InvariantCulture) ?? "?";
         var detail = finding.Detail is { Length: > 0 } d ? d : null;
@@ -43,6 +48,12 @@ public static class CheckFindingText
             CheckCode.ServerName => TableEditText.T($"{s}: 서버가 지은 이름입니다 — 다른 DB 에서는 이름이 달라 실패합니다", $"{s}: server-generated name — fails on other databases"),
             CheckCode.NotChecked => TableEditText.T($"{s}: 확인 못 함", $"{s}: not checked") + (detail is null ? string.Empty : " — " + detail),
             CheckCode.VirtualRecreated => TableEditText.T($"{s}: 가상 식 변경을 열 지우고 다시 넣기로 합니다", $"{s}: the virtual expression is changed by dropping and re-adding the column"),
+            CheckCode.InvalidDefinition => TableEditText.T($"{s}: 서버가 받지 않는 정의입니다", $"{s}: the server does not accept this definition")
+                                           + (detail is null ? string.Empty : " (" + detail + ")"),
+            CheckCode.DependentsInvalidated => TableEditText.T($"{s}: 이 테이블을 쓰는 뷰·PL/SQL·시노님이 무효가 됩니다", $"{s}: views, PL/SQL and synonyms using this table become invalid")
+                                               + Dependents(finding),
+            CheckCode.ColumnOrderChanges => TableEditText.T($"{s}: 숨김을 바꾸면 열 순서가 바뀝니다(맨 뒤로)", $"{s}: changing visibility moves the column to the end"),
+            CheckCode.SettingIgnored => TableEditText.T($"{s}: 쓴 설정을 문장에 넣지 않습니다", $"{s}: this setting is not used") + (detail is null ? string.Empty : " (" + detail + ")"),
             CheckCode.Unsupported => TableEditText.T($"{s}: 이 서버에서는 할 수 없습니다", $"{s}: not supported on this server") + (detail is null ? string.Empty : " (" + UiText(detail) + ")"),
             _ => s,
         };

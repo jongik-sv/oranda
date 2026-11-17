@@ -46,12 +46,6 @@ public sealed partial class ObjectDetailViewModel
     public IReadOnlyList<FindingRow> TableEditFindingRows =>
         [.. TableEditFindings.Select(f => new FindingRow(CheckFindingText.Format(f, TableEdit?.Dialect.PurgesOnDrop == true), f.ViewRowsSql))];
 
-    /// <summary>「묶음에 넣기 ▾」(설계 7.7). 반영 묶음 서비스(te-bundle <c>IChangeBundleService</c>)가 머지되면 연결한다 — 그 전에는 숨김.</summary>
-    public bool CanAddToBundle => TableEdit is not null && ChangeBundleConnected;
-
-    // te-bundle 의 IChangeBundleService 가 들어오면 서비스가 있을 때 참으로 둔다.
-    internal bool ChangeBundleConnected { get; set; }
-
     /// <summary>「그 행 보기」: 검사가 준 SELECT 를 새 SQL 탭에 연다(이 접속, 실행하지 않음). 열었으면 true.</summary>
     public bool OpenViewRows(string sql)
     {
@@ -68,7 +62,7 @@ public sealed partial class ObjectDetailViewModel
     /// <see cref="ToolPanelViewModelBase"/> 의 IsBusy(DDL 다시 읽기도 씀)와 따로 둔다.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanRunTableEdit), nameof(CanEditTable))]
+    [NotifyPropertyChangedFor(nameof(CanRunTableEdit), nameof(CanEditTable), nameof(CanAddToBundleNow))]
     private bool _isTableEditRunning;
 
     /// <summary>실행 뒤 정리(다시 읽기)가 실패해 서버 구조를 모른다. 새로 고침 전에는 실행을 막는다(이미 반영된 문장을 다시 보내지 않게).</summary>
@@ -196,9 +190,13 @@ public sealed partial class ObjectDetailViewModel
             var table = await ReadTableFreshAsync(meta, session, target, ct);
             var newOriginal = edit.Engine.FromTable(table, edit.Dialect);
             var remaining = TableDraftRebase.Rebase(edit.Original, edit.Draft, result.Script, result.SucceededCount, newOriginal);
+            var partitionsTouched = edit.IsPartitionDirty;
             edit.Reset(newOriginal, remaining);
+            edit.SetPartitions(table); // 파티션 편집은 다시 읽은 상태에서 다시 시작한다(Core 다시 계산은 테이블 모델만)
             _detailStale = true;
-            return null;
+            return partitionsTouched
+                ? TableEditText.T("파티션 편집은 다시 읽은 상태로 돌렸다(남은 파티션 편집은 다시 하세요)", "partition edits were reset to the reloaded state (redo the remaining ones)")
+                : null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

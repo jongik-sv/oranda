@@ -33,11 +33,42 @@ public sealed partial class ObjectDetailViewModel
         "제약" => TableEditPage.Constraints,
         "인덱스" => TableEditPage.Indexes,
         "설명" => TableEditPage.Description,
+        PartitionsTitle => TableEditPage.Partitions,
         _ => null,
     };
 
+    /// <summary>「파티션」 구역 이름(공급자가 파티션 테이블에만 만든다 — 편집 중에는 일반 테이블에도 빈 구역을 끼워 파티션 테이블로 바꾸는 길을 연다, 설계 18.4).</summary>
+    internal const string PartitionsTitle = "파티션";
+
     /// <summary>✎ 편집 토글이 보인다: 대상이 TABLE 이고 편집 페이지를 보고 있다(설계 7.1, <see cref="CanReorderColumns"/> 와 같은 판정 자리).</summary>
-    public bool CanToggleTableEdit => Target is { ObjectType: "TABLE" } && EditPage is not null;
+    /// 기능이 꺼져도 편집 중이면 끌 수 있게 토글은 남긴다(기능 게이트가 바뀌어도 고친 내용을 잃지 않게).
+    public bool CanToggleTableEdit => Target is { ObjectType: "TABLE" } && EditPage is not null && (IsTableEditing || TableEditCommands.IsEnabled(_services));
+
+    private Oranda.Core.Features.IFeatureGate? _watchedGate;
+
+    /// <summary>기능 게이트가 바뀌면(Role·기능 켜고 끄기) ✎ 토글을 다시 알린다(처음 열 때 한 번 구독).</summary>
+    private void WatchFeatureGate()
+    {
+        if (_watchedGate is not null || _services?.GetService(typeof(Oranda.Core.Features.IFeatureGate)) is not Oranda.Core.Features.IFeatureGate gate)
+        {
+            return;
+        }
+
+        _watchedGate = gate;
+        gate.Changed += OnFeatureGateChanged;
+    }
+
+    private void OnFeatureGateChanged(object? sender, EventArgs e) => Oranda.App.Shell.UiThread.PostIfAppRunning(RaiseTableEditProperties);
+
+    /// <summary>문서를 닫을 때 게이트 구독을 푼다(닫힌 탭이 남지 않게).</summary>
+    internal void DetachFeatureGate()
+    {
+        if (_watchedGate is { } gate)
+        {
+            gate.Changed -= OnFeatureGateChanged;
+            _watchedGate = null;
+        }
+    }
 
     /// <summary>편집 표가 읽기 표 대신 보인다(편집 중이고 편집 페이지).</summary>
     public bool IsEditPageShown => IsTableEditing && EditPage is not null;
@@ -53,6 +84,11 @@ public sealed partial class ObjectDetailViewModel
     public bool IsEditingConstraints => IsEditPageShown && EditPage == TableEditPage.Constraints;
 
     public bool IsEditingDescription => IsEditPageShown && EditPage == TableEditPage.Description;
+
+    public bool IsEditingPartitions => IsEditPageShown && EditPage == TableEditPage.Partitions;
+
+    /// <summary>위 도구줄의 줄 단추(＋ － ↑↓ ↺): 열·제약·인덱스·설명 페이지. 파티션 페이지는 그 화면의 도구줄을 쓴다.</summary>
+    public bool ShowsRowToolbar => IsEditPageShown && !IsEditingPartitions;
 
     /// <summary>「＋」「－」을 쓸 수 있다(편집 페이지가 줄 표이고 제한된 테이블이 아님).</summary>
     public bool CanAddRow => TableEdit is { } edit && EditPage is { } page && edit.CanAdd(page);
@@ -164,7 +200,7 @@ public sealed partial class ObjectDetailViewModel
             return true;
         }
 
-        if (Target is not { ObjectType: "TABLE" } target || _session is not { } session || ResolveMeta() is not { } meta)
+        if (Target is not { ObjectType: "TABLE" } target || _session is not { } session || ResolveMeta() is not { } meta || !TableEditCommands.IsEnabled(_services))
         {
             return false;
         }
@@ -183,7 +219,10 @@ public sealed partial class ObjectDetailViewModel
             var engine = TableEditEngine ?? CoreTableEditEngine.Instance;
             var original = engine.FromTable(table, dialect);
             var context = new TableEditContext(dialect.MaxIdentifierBytes(session.Server), session.Profile.Environment, session.Server);
-            TableEdit = new TableEditSession(original, dialect, context, engine);
+            var edit = new TableEditSession(original, dialect, context, engine);
+            edit.SetPartitions(table);
+            TableEdit = edit;
+            EnsurePartitionsSection();
             StatusText = TableEdit.IsRestricted
                 ? TableEdit.RestrictionText
                 : TableEditText.T("편집 중 — 고친 내용은 아래 DDL 로 보입니다", "Editing — your changes appear as DDL below");
@@ -269,6 +308,7 @@ public sealed partial class ObjectDetailViewModel
     internal void EndTableEdit()
     {
         TableEdit = null;
+        RemoveSyntheticPartitionsSection();
         UpdateSectionEditCounts();
     }
 
@@ -300,6 +340,7 @@ public sealed partial class ObjectDetailViewModel
         UpdateSectionEditCounts();
         OnPropertyChanged(nameof(CanSaveTableEditScript));
         OnPropertyChanged(nameof(CanAddRow));
+        OnPropertyChanged(nameof(CanAddToBundleNow));
         OnTableEditStateChanged();
     }
 
@@ -319,10 +360,14 @@ public sealed partial class ObjectDetailViewModel
         OnPropertyChanged(nameof(IsEditingColumns));
         OnPropertyChanged(nameof(IsEditingConstraints));
         OnPropertyChanged(nameof(IsEditingDescription));
+        OnPropertyChanged(nameof(IsEditingPartitions));
+        OnPropertyChanged(nameof(ShowsRowToolbar));
         OnPropertyChanged(nameof(CanAddRow));
         OnPropertyChanged(nameof(CanSaveTableEditScript));
         OnPropertyChanged(nameof(CanRunTableEdit));
         OnPropertyChanged(nameof(RunIsDefault));
+        OnPropertyChanged(nameof(CanAddToBundle));
+        OnPropertyChanged(nameof(CanAddToBundleNow));
         OnPropertyChanged(nameof(IsDevelopmentConnection));
         OnPropertyChanged(nameof(IsProductionConnection));
         OnPropertyChanged(nameof(EnvironmentText));
@@ -342,9 +387,40 @@ public sealed partial class ObjectDetailViewModel
                 "제약" => TableEditPage.Constraints,
                 "인덱스" => TableEditPage.Indexes,
                 "설명" => TableEditPage.Description,
+                PartitionsTitle => TableEditPage.Partitions,
                 _ => (TableEditPage?)null,
             };
             s.EditCount = TableEdit is { } edit && page is { } p ? edit.CountFor(p) : 0;
+        }
+    }
+
+    private ObjectDetailSection? _syntheticPartitions;
+
+    /// <summary>편집 중 「파티션」 구역이 없으면(일반 테이블) 빈 구역을 「인덱스」 뒤에 끼운다.</summary>
+    private void EnsurePartitionsSection()
+    {
+        if (Sections.Any(s => s.Title == PartitionsTitle))
+        {
+            return;
+        }
+
+        _syntheticPartitions = new ObjectDetailSection(new DetailSection(PartitionsTitle, ["항목", "값"],
+            [[TableEditText.T("파티션", "Partitioning"), TableEditText.T("파티션 테이블이 아님", "not partitioned")]]));
+        var after = Sections.FirstOrDefault(s => s.Title == "인덱스");
+        Sections.Insert(after is null ? Sections.Count : Sections.IndexOf(after) + 1, _syntheticPartitions);
+    }
+
+    private void RemoveSyntheticPartitionsSection()
+    {
+        if (_syntheticPartitions is { } s)
+        {
+            if (ReferenceEquals(SelectedSection, s))
+            {
+                SelectedSection = Sections.FirstOrDefault(x => x.Title == "열");
+            }
+
+            Sections.Remove(s);
+            _syntheticPartitions = null;
         }
     }
 

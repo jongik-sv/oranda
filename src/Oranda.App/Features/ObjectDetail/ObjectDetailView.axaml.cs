@@ -54,6 +54,20 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
             }
         };
         OpenEditDdlButton.Click += (_, _) => _vm?.OpenTableEditDdlInEditor();
+        AddToCurrentBundleItem.Click += async (_, _) =>
+        {
+            if (_vm is not null)
+            {
+                await _vm.AddTableEditToBundleAsync(newBundle: false);
+            }
+        };
+        AddToNewBundleItem.Click += async (_, _) =>
+        {
+            if (_vm is not null)
+            {
+                await _vm.AddTableEditToBundleAsync(newBundle: true);
+            }
+        };
         RefreshDetailButton.Click += async (_, _) =>
         {
             if (_vm is not null)

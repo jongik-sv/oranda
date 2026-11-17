@@ -52,7 +52,7 @@
                           IsVisible="{Binding CanToggleTableEdit}" IsEnabled="{Binding !IsBusy}" ToolTip.Tip="상세를 새로 읽습니다(고친 내용이 있으면 먼저 묻습니다)" />
                   <ToggleButton x:Name="TableEditToggle" Classes="tool" Content="✎ 편집" IsVisible="{Binding CanToggleTableEdit}" IsEnabled="{Binding CanEditTable}"
                                 ToolTip.Tip="표에서 고치면 바뀐 만큼의 DDL 이 아래에 보입니다" AutomationProperties.Name="테이블 편집" />
-                  <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsEditPageShown}" IsEnabled="{Binding CanEditTable}">
+                  <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding ShowsRowToolbar}" IsEnabled="{Binding CanEditTable}">
                     <Button x:Name="AddRowButton" Classes="tool" Content="＋" IsVisible="{Binding !IsEditingConstraints}" IsEnabled="{Binding CanAddRow}"
                             ToolTip.Tip="새 줄" AutomationProperties.Name="새 줄" />
                     <Button x:Name="AddConstraintButton" Classes="tool" Content="＋ ▾" IsVisible="{Binding IsEditingConstraints}" IsEnabled="{Binding CanAddRow}"
@@ -93,7 +93,15 @@
                       </StackPanel>
                       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
                         <!-- 「묶음에 넣기 ▾」(설계 7.7): 반영 묶음(te-bundle)이 들어오면 보인다. 자리만 둔다. -->
-                        <Button x:Name="AddToBundleButton" Classes="tool" Content="묶음에 넣기 ▾" IsVisible="{Binding CanAddToBundle}" AutomationProperties.Name="묶음에 넣기" />
+                        <Button x:Name="AddToBundleButton" Classes="tool" Content="묶음에 넣기 ▾" IsVisible="{Binding CanAddToBundle}" IsEnabled="{Binding CanAddToBundleNow}"
+                                ToolTip.Tip="실행하지 않고 위 DDL 을 반영 묶음에 넣습니다(먼저 검사)" AutomationProperties.Name="묶음에 넣기">
+                          <Button.Flyout>
+                            <MenuFlyout>
+                              <MenuItem x:Name="AddToCurrentBundleItem" Header="지금 묶음에 넣기" />
+                              <MenuItem x:Name="AddToNewBundleItem" Header="새 묶음에 넣기…" />
+                            </MenuFlyout>
+                          </Button.Flyout>
+                        </Button>
                         <Button x:Name="SaveScriptButton" Classes="tool" Classes.accent="{Binding IsProductionConnection}" Content="스크립트 저장…"
                                 IsEnabled="{Binding CanSaveTableEditScript}" ToolTip.Tip="이 편집의 DDL 을 .sql 파일로 저장합니다(의뢰용 형식)" AutomationProperties.Name="스크립트 저장" />
                         <!-- 개발·테스트는 「실행」이 기본(강조), 운영은 「스크립트 저장…」을 강조하고 「실행」은 보통 단추(설계 7.7). -->

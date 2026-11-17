@@ -59,14 +59,13 @@ public sealed record TableEditRunResult(TableEditRunOutcome Outcome, IReadOnlyLi
 /// </summary>
 public sealed class TableEditRunner
 {
-    /// <summary>
-    /// 실행 이력의 출처. <c>HistorySource.TableEditor</c>(TE-35)는 te-bundle 이 더한다 — 머지되면 이 값만 바꾼다(그 전에는 스키마 브라우저 출처와 같게 둔다).
-    /// </summary>
-    public static HistorySource Source => HistorySource.SchemaBrowser;
+    /// <summary>실행 이력의 출처(TE-35). 반영 묶음 자동 넣기는 이 출처의 성공한 DDL 을 「지금 묶음」에 넣는다(설계 9.3).</summary>
+    public static HistorySource Source => HistorySource.TableEditor;
 
-    private readonly IExecutionService _exec;
+    private readonly IExecutionService? _exec;
 
-    public TableEditRunner(IExecutionService exec) => _exec = exec ?? throw new ArgumentNullException(nameof(exec));
+    /// <param name="exec">실행 엔진. 검사만 할 때(묶음에 넣기 앞)는 null 이어도 된다.</param>
+    public TableEditRunner(IExecutionService? exec) => _exec = exec;
 
     /// <summary>정책(운영 확인을 한 번으로 모으려고 미리 판단한다). 없으면 미리 묻지 않고 실행 엔진의 관문에 맡긴다.</summary>
     public IExecutionPolicy? Policy { get; init; }
@@ -122,6 +121,7 @@ public sealed class TableEditRunner
             findings = [NotChecked(ex.Message)];
         }
 
+        findings = [.. findings, .. edit.PartitionFindings()]; // 파티션 페이지(설계 18.4)는 Core 검사 계획 밖이라 세션이 더한다
         return [.. findings.OrderBy(f => f.Severity switch { CheckSeverity.Block => 0, CheckSeverity.Warning => 1, _ => 2 })];
     }
 
@@ -138,6 +138,11 @@ public sealed class TableEditRunner
             {
                 Message = edit.ScriptError ?? TableEditText.T("실행할 문장이 없다", "Nothing to run"),
             };
+        }
+
+        if (_exec is null)
+        {
+            return new TableEditRunResult(TableEditRunOutcome.Nothing, [], 0, null) { Message = TableEditText.T("실행 서비스가 없다", "No execution service") };
         }
 
         var findings = await CheckAsync(session, table, edit, ct);

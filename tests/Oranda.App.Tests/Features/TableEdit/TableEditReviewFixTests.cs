@@ -124,15 +124,40 @@ public class TableEditReviewFixTests
     }
 
     [Fact]
-    public void Restricted_tables_do_not_change_the_table_comment()
+    public void Iot_and_gtt_add_and_drop_columns_and_rename_but_keep_existing_columns_and_keys()
     {
+        // 설계 18.10·Core 검사 계획: GTT·IOT 는 열 추가·지우기·테이블 이름 바꾸기가 되고, 기존 열은 주석·기본값만, 제약·인덱스는 안 고친다.
         var edit = CreateSession(TableKind.Iot);
-        Assert.False(edit.CanEditTableComment);
+        Assert.True(edit.AllowsColumnAddDrop);
+        Assert.True(edit.CanRenameTable);
+        Assert.True(edit.CanEditTableComment);
 
-        edit.TableComment = "바꿈";
         edit.Columns[0].Name = "X";
         edit.Columns[0].LengthText = "5";
+        Assert.False(edit.IsDirty); // 기존 열 이름·길이는 그대로
 
+        var added = edit.AddColumn()!;
+        Assert.True(added.CanEditName); // 새 열은 다 고친다
+        added.Name = "NOTE";
+        edit.ToggleDrop(edit.Columns.Single(c => c.Name == "OLD_FLAG").Key);
+        Assert.Null(edit.AddConstraint(ConstraintKind.Check));
+        Assert.Null(edit.AddIndex());
+        edit.TableName = "ORDERS2";
+        edit.TableComment = "바꿈";
+
+        Assert.Equal(2, edit.CountFor(TableEditPage.Columns));
+        Assert.Equal("ORDERS2", edit.Draft.Name);
+        Assert.Equal("바꿈", edit.Draft.Comment);
+    }
+
+    [Fact]
+    public void External_tables_allow_only_column_comments_defaults_and_the_table_comment()
+    {
+        var edit = CreateSession(TableKind.External);
+        Assert.False(edit.AllowsColumnAddDrop);
+        Assert.False(edit.CanRenameTable);
+        Assert.Null(edit.AddColumn());
+        edit.TableName = "X";
         Assert.False(edit.IsDirty);
     }
 

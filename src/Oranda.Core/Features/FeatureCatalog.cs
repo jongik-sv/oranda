@@ -44,6 +44,7 @@ public static class FeatureCatalog
         new(FeatureIds.BlockerAlert, FeatureGroup.Operations, StartupBound: true, false, None),
         new(FeatureIds.DbTools, FeatureGroup.Operations, false, false, None),
         new(FeatureIds.ColumnReorder, FeatureGroup.Operations, false, WritesOnly: true, None),
+        new(FeatureIds.TableEditor, FeatureGroup.Operations, false, WritesOnly: true, None),
     ];
 
     /// <summary>Role 6개와 기본 켬 기능(PRD 12.2 의 ○ 를 그대로 옮김).</summary>
@@ -53,18 +54,19 @@ public static class FeatureCatalog
         [
             FeatureIds.GridEdit, FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.DataImport, FeatureIds.DedicatedSession,
             FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.TableSpec, FeatureIds.ChangeBundle, FeatureIds.PlanAdvanced, FeatureIds.AiTuning,
-            FeatureIds.BlockerAlert,
+            FeatureIds.BlockerAlert, FeatureIds.TableEditor,
         ]),
         new(RoleIds.PlsqlDev,
         [
             FeatureIds.GridEdit, FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.DataImport, FeatureIds.DedicatedSession,
             FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.ChangeBundle, FeatureIds.PlsqlEditor, FeatureIds.PlsqlWorkspace,
-            FeatureIds.PlsqlRun, FeatureIds.PlanAdvanced, FeatureIds.AiTuning, FeatureIds.BlockerAlert, FeatureIds.DbTools,
+            FeatureIds.PlsqlRun, FeatureIds.PlanAdvanced, FeatureIds.AiTuning, FeatureIds.BlockerAlert, FeatureIds.DbTools, FeatureIds.TableEditor,
         ]),
         new(RoleIds.MyBatisDev,
         [
             FeatureIds.GridEdit, FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.DataImport, FeatureIds.ChangeJournal,
             FeatureIds.MyBatisLog, FeatureIds.ChangeBundle, FeatureIds.MyBatis, FeatureIds.PlanAdvanced, FeatureIds.AiTuning, FeatureIds.BlockerAlert,
+            FeatureIds.TableEditor,
         ]),
         new(RoleIds.Tuner,
         [
@@ -78,7 +80,7 @@ public static class FeatureCatalog
             FeatureIds.GridEdit, FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.DataImport, FeatureIds.DedicatedSession,
             FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.TableSpec, FeatureIds.ChangeBundle, FeatureIds.PlsqlEditor, FeatureIds.PlsqlRun,
             FeatureIds.PlanAdvanced, FeatureIds.SqlMonitor, FeatureIds.ChildCursors, FeatureIds.TableStats, FeatureIds.Trace, FeatureIds.AiTuning,
-            FeatureIds.SessionMonitor, FeatureIds.LockMonitor, FeatureIds.BlockerAlert, FeatureIds.DbTools, FeatureIds.ColumnReorder,
+            FeatureIds.SessionMonitor, FeatureIds.LockMonitor, FeatureIds.BlockerAlert, FeatureIds.DbTools, FeatureIds.ColumnReorder, FeatureIds.TableEditor,
         ]),
         new(RoleIds.Viewer, [FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.TableSpec]),
     ];
@@ -115,6 +117,7 @@ public static class FeatureCatalog
         new("BlockerAlert", FeatureIds.BlockerAlert),
         new("DbTools", FeatureIds.DbTools),
         new("ColumnReorder", FeatureIds.ColumnReorder),
+        new("TableEdit", FeatureIds.TableEditor),
     ];
 
     /// <summary>

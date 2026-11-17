@@ -100,6 +100,147 @@ public sealed class ColumnRowViewModel : TableEditRowViewModel
 
     public ColumnDraft Column => _column;
 
+    /// <summary>칸을 고칠 수 있다: 일반 테이블, 또는 GTT·IOT 의 새 열(설계 18.10). 지울 줄은 아님.</summary>
+    public override bool CanEditCells => !IsDropped && (!Session.IsRestricted || (Session.AllowsColumnAddDrop && Session.IsNewRow(Key)));
+
+    // ---- 신원·숨김·도메인(설계 18.5) ----------------------------------------------------
+
+    /// <summary>신원 칸 번호: 0 없음 · 1 ALWAYS · 2 BY DEFAULT · 3 BY DEFAULT ON NULL. 속성을 못 읽은 신원 열은 4(「알 수 없음」, 흐림).</summary>
+    public int IdentityIndex
+    {
+        get => _column.IsIdentityUnknown ? 4 : _column.Identity?.Generation switch
+        {
+            IdentityGeneration.Always => 1,
+            IdentityGeneration.ByDefault => 2,
+            IdentityGeneration.ByDefaultOnNull => 3,
+            _ => 0,
+        };
+        set
+        {
+            if (!CanEditIdentity || value == IdentityIndex || value is < 0 or > 3)
+            {
+                return;
+            }
+
+            Session.UpdateColumn(Key, c => value == 0
+                ? c with { Identity = null, IsIdentityUnknown = false }
+                : c with
+                {
+                    Identity = (c.Identity ?? new IdentityInfo(IdentityGeneration.ByDefault)) with
+                    {
+                        Generation = value switch { 1 => IdentityGeneration.Always, 2 => IdentityGeneration.ByDefault, _ => IdentityGeneration.ByDefaultOnNull },
+                    },
+                });
+        }
+    }
+
+    /// <summary>신원 열인데 속성을 못 읽었다 — 「신원 없애기」만 된다(te-core 권고).</summary>
+    public bool IsIdentityUnknown => _column.IsIdentityUnknown;
+
+    public string IdentityStartText
+    {
+        get => _column.Identity?.StartWith?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        set => SetIdentityNumber(value, IdentityStartText, (i, n) => i with { StartWith = n });
+    }
+
+    public string IdentityIncrementText
+    {
+        get => _column.Identity?.IncrementBy?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        set => SetIdentityNumber(value, IdentityIncrementText, (i, n) => i with { IncrementBy = n });
+    }
+
+    /// <summary>「신원 없애기」(속성을 모르는 신원 열 포함).</summary>
+    public void DropIdentity()
+    {
+        if (CanEditCells && IdentityReason is null && _column.IsIdentityColumn)
+        {
+            Session.UpdateColumn(Key, c => c with { Identity = null, IsIdentityUnknown = false });
+        }
+    }
+
+    public bool IsInvisible
+    {
+        get => _column.IsInvisible;
+        set
+        {
+            if (CanEditInvisible && value != _column.IsInvisible)
+            {
+                Session.UpdateColumn(Key, c => c with { IsInvisible = value });
+            }
+        }
+    }
+
+    public string Domain
+    {
+        get => _column.Domain ?? string.Empty;
+        set
+        {
+            if (!CanEditDomain || SameAsShown(value, Domain))
+            {
+                return;
+            }
+
+            var v = string.IsNullOrWhiteSpace(value) ? null : TableEditCellText.Parse(value);
+            if (!string.Equals(v, _column.Domain, StringComparison.Ordinal))
+            {
+                Session.UpdateColumn(Key, c => c with { Domain = v });
+            }
+        }
+    }
+
+    /// <summary>방언이 신원 열을 못 하는 이유(설계 18.8). 되면 null.</summary>
+    public string? IdentityReason => Session.Reason(TableEditFeature.IdentityColumn);
+
+    public string? InvisibleReason => Session.Reason(TableEditFeature.InvisibleColumn);
+
+    public string? DomainReason => Session.Reason(TableEditFeature.DomainColumn);
+
+    /// <summary>신원 칸: 방언이 되고, 속성을 아는 열(모르면 「신원 없애기」만), 가상 열이 아님.</summary>
+    public bool CanEditIdentity => CanEditCells && IdentityReason is null && !_column.IsIdentityUnknown && !IsVirtual;
+
+    public bool CanEditIdentityOptions => CanEditIdentity && _column.Identity is not null;
+
+    /// <summary>「신원 없애기」 단추(속성을 모르는 신원 열).</summary>
+    public bool CanDropUnknownIdentity => CanEditCells && IdentityReason is null && _column.IsIdentityUnknown;
+
+    public bool CanEditInvisible => CanEditCells && InvisibleReason is null;
+
+    public bool CanEditDomain => CanEditCells && DomainReason is null && !IsVirtual;
+
+    /// <summary>신원 칸 툴팁(못 쓰는 이유 또는 「알 수 없음」 안내).</summary>
+    public string? IdentityTip => IdentityReason
+        ?? (_column.IsIdentityUnknown ? TableEditText.T("서버에서 신원 속성을 읽지 못했습니다. 「신원 없애기」만 됩니다", "The identity attributes could not be read. Only “Drop identity” is possible") : null);
+
+    public bool IsIdentityChanged => _changes.HasFlag(ColumnChange.Identity);
+
+    public bool IsInvisibleChanged => _changes.HasFlag(ColumnChange.Invisible);
+
+    public bool IsDomainChanged => _changes.HasFlag(ColumnChange.Domain);
+
+    private void SetIdentityNumber(string? value, string shown, Func<IdentityInfo, long?, IdentityInfo> apply)
+    {
+        if (!CanEditIdentityOptions || SameAsShown(value, shown))
+        {
+            return;
+        }
+
+        long? n = null;
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (!long.TryParse(value.Trim(), System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            {
+                Error = TableEditText.T("신원 시작·증가는 정수입니다", "Identity start and increment must be whole numbers");
+                OnPropertyChanged(string.Empty);
+                return;
+            }
+
+            n = parsed;
+        }
+
+        Error = null;
+        Session.UpdateColumn(Key, c => c.Identity is { } i ? c with { Identity = apply(i, n) } : c);
+    }
+
     /// <summary>원래 위치(「#」 칸, 편집 중에도 원래 순서). 새 열은 빈 글.</summary>
     public string PositionText => _column.OriginalPosition?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
 
@@ -207,7 +348,7 @@ public sealed class ColumnRowViewModel : TableEditRowViewModel
         get => _column.IsNullable;
         set
         {
-            if (CanEditLength && value != _column.IsNullable)
+            if (CanEditNullable && value != _column.IsNullable)
             {
                 Session.UpdateColumn(Key, c => c with { IsNullable = value });
             }
@@ -271,23 +412,26 @@ public sealed class ColumnRowViewModel : TableEditRowViewModel
 
     public bool IsVirtual => _column.IsVirtual;
 
-    /// <summary>신원 열(TE-7: 속성은 안 고침, 이름·주석은 고침).</summary>
-    public bool IsIdentity => _column.Identity is not null;
+    /// <summary>신원 열(속성을 알든 모르든). 기본값 칸은 흐린다(신원 열은 기본값을 쓰지 않음).</summary>
+    public bool IsIdentity => _column.IsIdentityColumn;
 
     /// <summary>이름 칸(제한 테이블이 아니고 지울 줄이 아님).</summary>
     public bool CanEditName => CanEditCells;
 
-    /// <summary>형식 칸(신원 열 제외). 가상 열은 형식을 비워도 된다.</summary>
-    public bool CanEditType => CanEditCells && !IsIdentity;
+    /// <summary>형식 칸. 가상 열은 형식을 비워도 된다.</summary>
+    public bool CanEditType => CanEditCells;
 
-    /// <summary>길이·NULL 칸(가상 열·신원 열은 흐림).</summary>
-    public bool CanEditLength => CanEditCells && !IsVirtual && !IsIdentity;
+    /// <summary>길이·NULL 칸(가상 열은 흐림). 신원 열의 기본값·NULL 은 Core 검사가 판정한다(설계 18.5).</summary>
+    public bool CanEditLength => CanEditCells && !IsVirtual;
 
     /// <summary>소수 칸(숫자 형식만).</summary>
     public bool CanEditScale => CanEditLength && IsNumeric;
 
     /// <summary>기본값 칸: 제한된 테이블에서도 고칠 수 있다(설계 3장), 가상·신원 열은 흐림.</summary>
     public bool CanEditDefault => !IsDropped && !IsVirtual && !IsIdentity;
+
+    /// <summary>NULL 칸(가상 열은 흐림).</summary>
+    public bool CanEditNullable => CanEditCells && !IsVirtual;
 
     /// <summary>가상 식 칸: 새 열 또는 원래 가상 열만(일반 열을 가상 열로 바꾸는 문장은 없다).</summary>
     public bool CanEditVirtual => CanEditCells && (Session.IsNewRow(Key) || Session.Original.Column(Key)?.IsVirtual == true);
@@ -552,6 +696,53 @@ public sealed class IndexRowViewModel : TableEditRowViewModel
         _ => TableEditText.T("기타", "OTHER"),
     };
 
+    /// <summary>종류 칸 번호: 0 NORMAL · 1 FUNCTION-BASED · 2 BITMAP(설계 18.6). 그 밖의 종류는 3(지우기만).</summary>
+    public int KindIndex
+    {
+        get => _index.Kind switch { IndexKind.Normal => 0, IndexKind.FunctionBased => 1, IndexKind.Bitmap => 2, _ => 3 };
+        set
+        {
+            if (!CanEditCells || value == KindIndex || value is < 0 or > 2)
+            {
+                return;
+            }
+
+            var kind = value switch { 1 => IndexKind.FunctionBased, 2 => IndexKind.Bitmap, _ => IndexKind.Normal };
+            if (ReasonFor(kind) is { } reason)
+            {
+                Error = reason;
+                OnPropertyChanged(string.Empty);
+                return;
+            }
+
+            if (kind != IndexKind.FunctionBased && _index.Columns.Any(c => c.Expression is not null))
+            {
+                // 식을 말없이 버리지 않는다: 식 자리를 먼저 열로 바꾸게 한다.
+                Error = TableEditText.T("식이 있는 인덱스는 먼저 열 칸에서 식을 빼야 일반·비트맵으로 바꿀 수 있습니다", "Remove the expressions from the columns cell before switching to NORMAL or BITMAP");
+                OnPropertyChanged(string.Empty);
+                return;
+            }
+
+            Error = null;
+            Session.UpdateIndex(Key, i => i with { Kind = kind });
+        }
+    }
+
+    /// <summary>방언이 그 종류를 못 만드는 이유(설계 18.8). 되면 null.</summary>
+    private string? ReasonFor(IndexKind kind) => kind switch
+    {
+        IndexKind.FunctionBased => Session.Reason(TableEditFeature.FunctionBasedIndex),
+        IndexKind.Bitmap => Session.Reason(TableEditFeature.BitmapIndex),
+        _ => null,
+    };
+
+    /// <summary>종류 칸 툴팁: 이 서버가 못 만드는 종류와 그 이유.</summary>
+    public string? KindTip => string.Join(Environment.NewLine, new[]
+    {
+        ReasonFor(IndexKind.FunctionBased) is { } f ? "FUNCTION-BASED: " + f : null,
+        ReasonFor(IndexKind.Bitmap) is { } b ? "BITMAP: " + b : null,
+    }.Where(x => x is not null)) is { Length: > 0 } tip ? tip : null;
+
     public string ColumnsText
     {
         get => _columnsInput ?? TableEditCellText.IndexColumnsText(Session.Draft, _index.Columns);
@@ -562,7 +753,7 @@ public sealed class IndexRowViewModel : TableEditRowViewModel
                 return;
             }
 
-            var (columns, unknown) = TableEditCellText.IndexColumns(Session.Draft, value);
+            var (columns, unknown) = TableEditCellText.IndexColumns(Session.Draft, value, allowExpressions: _index.Kind == IndexKind.FunctionBased);
             if (columns is null)
             {
                 _columnsInput = value;
@@ -601,8 +792,8 @@ public sealed class IndexRowViewModel : TableEditRowViewModel
     /// <summary>PK·UK 가 만든 인덱스 — 제약 페이지에서 고친다(흐림, 설계 7.4).</summary>
     public bool IsConstraintIndex => _index.ConstraintName is not null;
 
-    /// <summary>NORMAL 이 아닌 인덱스(함수 기반·비트맵 …)는 지우기만(TE-9).</summary>
-    public bool IsDropOnly => _index.Kind != IndexKind.Normal;
+    /// <summary>NORMAL·함수 기반·비트맵이 아닌 인덱스(도메인·LOB …)는 지우기만(설계 18.6, TE-9 를 뒤집고 남은 것).</summary>
+    public bool IsDropOnly => _index.Kind == IndexKind.Other;
 
     public override bool CanEditCells => base.CanEditCells && !IsConstraintIndex && !IsDropOnly;
 

@@ -243,6 +243,7 @@
     {"id": "oranda.schema.toggleFavorite", "page": "schema/browser"},
     {"id": "oranda.settings.openDrivers", "exclude": "DBMS 드라이버 위치 지정은 공개 매뉴얼에 싣지 않고 사내 배포 안내(docs/user/tibero.md)에서 다룬다(결정25: 공개본에 Tibero 고지 안 넣음)"},
     {"id": "oranda.sqlplus.runFile", "page": "run/execute"},
+    {"id": "oranda.tableEdit.toggle", "page": "schema/browser"},
     {"id": "oranda.tools.dataCopy", "page": "transfer/data-copy"},
     {"id": "oranda.tools.exportSettings", "page": "settings/options"},
     {"id": "oranda.tools.import", "page": "settings/options"},

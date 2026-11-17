@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema.TableEdit;
+using Oranda.Core.Schema.TableEdit.Partitions;
 using Oranda.Core.Sessions;
 
 namespace Oranda.App.Features.TableEdit;
@@ -31,6 +33,15 @@ public interface ITableEditEngine
     /// <summary>검사 실행(<see cref="TableEditCheckRunner.RunAsync"/>).</summary>
     Task<IReadOnlyList<CheckFinding>> RunChecksAsync(
         TableEditCheckPlan plan, DbObjectRef table, ITableEditChecks checks, ISession session, TableEditCheckOptions options, CancellationToken ct);
+
+    /// <summary>파티션 페이지의 차이(<see cref="PartitionDiff.Compute"/>, 설계 18.4).</summary>
+    PartitionChanges DiffPartitions(PartitionTableDraft original, PartitionTableDraft edited, ITableEditDialect dialect, ServerInfo? server) =>
+        PartitionDiff.Compute(original, edited, dialect, server);
+
+    /// <summary>파티션 문장(<see cref="PartitionScriptBuilder.Build"/>). <paramref name="table"/> 은 지금(옛) 테이블 이름.</summary>
+    IReadOnlyList<TableEditStatement> BuildPartitions(string owner, string table, PartitionTableDraft original, PartitionTableDraft edited,
+        ITableEditDialect dialect, ServerInfo? server, IReadOnlyList<string> globalIndexes) =>
+        PartitionScriptBuilder.Build(owner, table, original, edited, dialect, server, globalIndexes);
 }
 
 /// <summary><see cref="ITableEditEngine"/> 기본 구현: Core <c>Oranda.Core.Schema.TableEdit</c> 정적 함수를 그대로 부른다.</summary>

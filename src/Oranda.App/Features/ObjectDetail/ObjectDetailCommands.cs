@@ -96,6 +96,7 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
             {
                 docking.DocumentClosed -= OnClosed;
                 vm.Data.Close();
+                vm.DetachFeatureGate();
             }
         }
 

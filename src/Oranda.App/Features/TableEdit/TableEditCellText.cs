@@ -41,7 +41,10 @@ public static class TableEditCellText
     /// <summary>사전 표기 → 칸에 보일 글(일반 식별자는 그대로, 아니면 큰따옴표).</summary>
     public static string Show(string? name) => string.IsNullOrEmpty(name) ? string.Empty : SqlIdentifier.Quote(name);
 
-    /// <summary>쉼표로 나눈다(큰따옴표 안의 쉼표는 나누지 않음). 빈 조각은 뺀다.</summary>
+    /// <summary>
+    /// 맨 바깥 쉼표로 나눈다(큰따옴표 이름·작은따옴표 리터럴·괄호 안의 쉼표는 나누지 않음 — 함수 기반 인덱스 식 <c>NVL(A, B)</c>·<c>REPLACE(N, ',', '')</c>).
+    /// 빈 조각은 뺀다.
+    /// </summary>
     public static IReadOnlyList<string> SplitList(string? text)
     {
         var parts = new List<string>();
@@ -51,17 +54,35 @@ public static class TableEditCellText
         }
 
         var start = 0;
-        var quoted = false;
+        var doubleQuoted = false;
+        var singleQuoted = false;
+        var depth = 0;
         for (var i = 0; i < text.Length; i++)
         {
-            if (text[i] == '"')
+            var ch = text[i];
+            if (ch == '"' && !singleQuoted)
             {
-                quoted = !quoted;
+                doubleQuoted = !doubleQuoted;
             }
-            else if (text[i] == ',' && !quoted)
+            else if (ch == '\'' && !doubleQuoted)
             {
-                parts.Add(text[start..i]);
-                start = i + 1;
+                singleQuoted = !singleQuoted; // '' 은 닫고 다시 여는 것과 같아 결과가 같다
+            }
+            else if (!doubleQuoted && !singleQuoted)
+            {
+                if (ch == '(')
+                {
+                    depth++;
+                }
+                else if (ch == ')' && depth > 0)
+                {
+                    depth--;
+                }
+                else if (ch == ',' && depth == 0)
+                {
+                    parts.Add(text[start..i]);
+                    start = i + 1;
+                }
             }
         }
 
@@ -106,8 +127,11 @@ public static class TableEditCellText
             (c.Expression ?? (c.ColumnKey is { } k && draft.Column(k) is { } col ? Show(col.Name) : "?")) + (c.Descending ? " DESC" : string.Empty)));
     }
 
-    /// <summary>인덱스 열 글 → 인덱스 열(일반 열만, <c>ASC</c>/<c>DESC</c> 꼬리). 못 찾은 이름이 있으면 null 과 그 조각.</summary>
-    public static (IReadOnlyList<IndexColumnDraft>? Columns, string? Unknown) IndexColumns(TableDraft draft, string? text)
+    /// <summary>
+    /// 인덱스 열 글 → 인덱스 열(<c>ASC</c>/<c>DESC</c> 꼬리). 못 찾은 이름이 있으면 null 과 그 조각. <paramref name="allowExpressions"/> 면(함수 기반 인덱스, 설계 18.6)
+    /// 열 이름이 아닌 조각은 식 자리(<see cref="IndexColumnDraft.Expression"/>)로 둔다.
+    /// </summary>
+    public static (IReadOnlyList<IndexColumnDraft>? Columns, string? Unknown) IndexColumns(TableDraft draft, string? text, bool allowExpressions = false)
     {
         ArgumentNullException.ThrowIfNull(draft);
         var result = new List<IndexColumnDraft>();
@@ -128,6 +152,12 @@ public static class TableEditCellText
             var (keys, unknown) = ColumnKeys(draft, p);
             if (keys is not { Count: 1 })
             {
+                if (allowExpressions && p.Length > 0)
+                {
+                    result.Add(new IndexColumnDraft(null, desc) { Expression = p });
+                    continue;
+                }
+
                 return (null, unknown ?? part);
             }
 

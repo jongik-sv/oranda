@@ -14,17 +14,17 @@ namespace Oranda.Core.Tests.Features;
 public sealed class FeatureCatalogTests
 {
     private static readonly string[] StartupBoundIds = ["plsqlWorkspace", "myBatis", "changeJournal", "blockerAlert", "changeBundle"];
-    private static readonly string[] WritesOnlyIds = ["gridEdit", "dataImport", "plsqlEditor", "plsqlWorkspace", "plsqlRun", "columnReorder"];
+    private static readonly string[] WritesOnlyIds = ["gridEdit", "dataImport", "plsqlEditor", "plsqlWorkspace", "plsqlRun", "columnReorder", "tableEditor"];
     private static readonly string[] ViewerDefaults = [FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.TableSpec];
     private static readonly string[] PlanAdvancedCommands = ["oranda.plan.compare", "oranda.plan.pinForCompare", "oranda.plan.displayCursorOptions"];
 
     // ---- 카탈로그 데이터 ----
 
     [Fact]
-    public void There_are_27_features_and_6_roles_with_unique_ids_in_table_order()
+    public void There_are_28_features_and_6_roles_with_unique_ids_in_table_order() // 27 + 테이블 편집(2026-11-17)
     {
-        Assert.Equal(27, FeatureIds.All.Count);
-        Assert.Equal(27, FeatureIds.All.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(28, FeatureIds.All.Count);
+        Assert.Equal(28, FeatureIds.All.Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(FeatureIds.All, FeatureCatalog.Features.Select(f => f.Id));
 
         Assert.Equal(["sqlDev", "plsqlDev", "myBatisDev", "tuner", "dba", "viewer"], RoleIds.All);
@@ -40,7 +40,7 @@ public sealed class FeatureCatalogTests
             "gridEdit", "lobRowView", "dataExport", "dataImport", "dedicatedSession", "flashback", "changeJournal", "tableSpec", "myBatisLog", "changeBundle",
             "plsqlEditor", "plsqlWorkspace", "plsqlRun", "myBatis",
             "planAdvanced", "sqlMonitor", "tuningAssistant", "childCursors", "tableStats", "trace", "tuningReport", "aiTuning",
-            "sessionMonitor", "lockMonitor", "blockerAlert", "dbTools", "columnReorder",
+            "sessionMonitor", "lockMonitor", "blockerAlert", "dbTools", "columnReorder", "tableEditor",
         ];
         Assert.Equal(expected, FeatureIds.All);
         Assert.Equal("feature.myBatis", FeatureIds.ContextKey(FeatureIds.MyBatis));
@@ -51,7 +51,7 @@ public sealed class FeatureCatalogTests
     public void Role_default_table_is_the_same_as_prd_12_2()
     {
         var prd = ReadPrdRoleTable();
-        Assert.Equal(27, prd.Count);
+        Assert.Equal(28, prd.Count); // 테이블 편집 +1
         Assert.Equal(FeatureIds.All, prd.Keys);
         foreach (var role in FeatureCatalog.Roles)
         {
@@ -68,7 +68,7 @@ public sealed class FeatureCatalogTests
         Assert.Equal(3, Count(FeatureGroup.Plsql));
         Assert.Equal(1, Count(FeatureGroup.MyBatis));
         Assert.Equal(8, Count(FeatureGroup.Tuning));
-        Assert.Equal(5, Count(FeatureGroup.Operations));
+        Assert.Equal(6, Count(FeatureGroup.Operations)); // 테이블 편집 +1
 
         Assert.Equal(StartupBoundIds.Order(), Ids(f => f.StartupBound).Order());
         Assert.Equal(WritesOnlyIds.Order(), Ids(f => f.WritesOnly).Order());
@@ -230,7 +230,7 @@ public sealed class FeatureCatalogTests
         var r1 = FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.SqlDev] });
         Assert.Equal(r1.Order(), FeatureCatalog.Resolve(null).Order());
         Assert.Equal(r1.Order(), FeatureCatalog.Resolve(new FeaturesSettings()).Order());
-        Assert.Equal(12, r1.Count); // PRD 11개(반영 묶음 포함, 2026-11-17) + aiTuning
+        Assert.Equal(13, r1.Count); // PRD 12개(반영 묶음·테이블 편집 포함, 2026-11-17) + aiTuning
         Assert.DoesNotContain(FeatureIds.SqlMonitor, r1);
         Assert.DoesNotContain(FeatureIds.MyBatis, r1);
         Assert.DoesNotContain(FeatureIds.PlsqlEditor, r1);
@@ -324,7 +324,7 @@ public sealed class FeatureCatalogTests
 
         // Role 을 고른 적 없어도 덮어쓰기는 먹는다.
         var all = FeatureCatalog.Resolve(new FeaturesSettings { Disabled = [FeatureIds.MyBatis] });
-        Assert.Equal(26, all.Count);
+        Assert.Equal(27, all.Count); // 테이블 편집 +1
         Assert.DoesNotContain(FeatureIds.MyBatis, all);
     }
 
