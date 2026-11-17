@@ -31,6 +31,11 @@ public class DbmsDispatchCompositionTests
         typeof(IImportValueConverter), // 세션을 받지 않는 값 변환 — 가져오기 대화 상자가 세션 DBMS 로 Get<T>
         typeof(Oranda.Core.Transfer.Copy.ICopyDbmsParts), // 교차 복사 부품 — 복사 디스패처가 두 세션의 DBMS 로 Get<T>
         typeof(Oranda.Core.Rollback.IRollbackDialect), // 되돌리기 방언 — 시점 비교 런처가 세션 DBMS 로 For<T>(fbfix-1113 FX-01)
+
+        // 테이블 편집기(table-editor 회차): 스스로 Dbms 를 밝히는 C4 꼴 — 객체 상세가 세션 DBMS 로 DbmsServices.For<T>. 방언은 세션을 받지 않아 디스패처로 고를 수 없다.
+        typeof(Oranda.Core.Schema.TableEdit.ITableEditDialect),
+        typeof(Oranda.Core.Schema.TableEdit.ITableEditChecks),
+        typeof(Oranda.Core.Schema.TableEdit.Conversion.IColumnConversionChecks),
     ];
 
     private static ServiceContainer Compose() =>
