@@ -109,7 +109,7 @@ public static class LayoutPlanner
         if (saved?.Root is null)
         {
             var fresh = CreateDefault(all);
-            return saved is null ? fresh : saved with { Root = fresh.Root, HiddenTools = fresh.HiddenTools, PinnedTools = [], Migrations = fresh.Migrations };
+            return saved is null ? fresh : saved with { Root = fresh.Root, HiddenTools = fresh.HiddenTools, PinnedTools = [], PinnedSizes = null, Migrations = fresh.Migrations };
         }
 
         var known = all.Where(p => p.Kind == ToolPanelKind.Tool).Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
@@ -118,7 +118,7 @@ public static class LayoutPlanner
         if (root is null || CountDocuments(root) != 1)
         {
             var fresh = CreateDefault(all);
-            return saved with { Root = fresh.Root, HiddenTools = fresh.HiddenTools, PinnedTools = [], Migrations = fresh.Migrations };
+            return saved with { Root = fresh.Root, HiddenTools = fresh.HiddenTools, PinnedTools = [], PinnedSizes = null, Migrations = fresh.Migrations };
         }
 
         var hidden = (saved.HiddenTools ?? [])

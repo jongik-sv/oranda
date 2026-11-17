@@ -28,6 +28,12 @@ public sealed record LayoutDocument
     public IReadOnlyList<string> PinnedTools { get; init; } = [];
 
     /// <summary>
+    /// <see cref="PinnedTools"/> 창을 사이드바에서 펼칠 때의 크기(DIP, 창 ID 별). 다시 시작하면 핀을 화면에 붙기 전에 빼므로
+    /// 보이던 크기를 Dock 이 알 수 없어, 여기 적은 값으로 펼친다. null·빠진 창 = 기본 크기.
+    /// </summary>
+    public IReadOnlyDictionary<string, PinnedSize>? PinnedSizes { get; init; }
+
+    /// <summary>
     /// 이 배치에 이미 적용한 일회성 이주의 이름(예: <see cref="LayoutPlanner.RightToolsOpenMigration"/>). 이름이 있으면 그 이주는 다시 하지 않는다.
     /// null = 이주 표지가 없는 옛 배치.
     /// </summary>
@@ -52,6 +58,14 @@ public sealed record WindowPlacement
 
     /// <summary>화면 이름. 없거나 끊긴 화면이면 주 화면 가운데.</summary>
     public string? Screen { get; init; }
+}
+
+/// <summary>핀 창을 사이드바에서 펼친 칸의 크기(DIP). 왼쪽·오른쪽은 폭, 위·아래는 높이를 쓴다.</summary>
+public sealed record PinnedSize
+{
+    public double Width { get; init; }
+
+    public double Height { get; init; }
 }
 
 /// <summary>도킹 트리 노드. <see cref="DockNodeKind.Documents"/> 는 트리에 정확히 1개.</summary>

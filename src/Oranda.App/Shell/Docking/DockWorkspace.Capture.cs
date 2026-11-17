@@ -24,8 +24,12 @@ public sealed partial class DockWorkspace
             .Where(p => p.Kind == ToolPanelKind.Tool && !inTree.Contains(p.Id) && !IsScopedHidden(p.Id)) // 잠시 숨긴 창은 닫힌 창이 아니다
             .Select(p => p.Id)
             .ToList();
-        var pinned = PinnedTools().Select(t => t.Id).Where(inTree.Contains).ToList();
-        return new LayoutDocument { Window = window, Root = root, HiddenTools = hidden, PinnedTools = pinned, Migrations = _migrations };
+        var pinnedTools = PinnedTools().Where(t => inTree.Contains(t.Id)).ToList();
+        var pinned = pinnedTools.Select(t => t.Id).ToList();
+        return new LayoutDocument
+        {
+            Window = window, Root = root, HiddenTools = hidden, PinnedTools = pinned, PinnedSizes = PinnedSizesOf(pinnedTools), Migrations = _migrations,
+        };
     }
 
     private DockNode CaptureRoot()

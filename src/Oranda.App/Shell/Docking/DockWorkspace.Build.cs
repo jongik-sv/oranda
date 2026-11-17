@@ -105,6 +105,7 @@ public sealed partial class DockWorkspace
 
         Factory.InitLayout(dockRoot);
         _pendingPins = planned.PinnedTools ?? [];
+        _pendingPinSizes = planned.PinnedSizes;
         ApplyEmptyContent();
         LayoutRebuilt?.Invoke(this, EventArgs.Empty); // 보기가 Layout 을 갈아 끼우며 핀을 다시 뺀다(RestorePins)
         RestorePins(fromView: false); // 보기가 아직 없을 때(시작 직후·시험)
