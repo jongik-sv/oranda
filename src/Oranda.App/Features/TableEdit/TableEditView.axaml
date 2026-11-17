@@ -22,9 +22,6 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
     </Style>
-    <Style Selector="TextBox.cell.changed:disabled /template/ Border#PART_BorderElement">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
-    </Style>
     <Style Selector="TextBox.cell.changed">
       <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
     </Style>

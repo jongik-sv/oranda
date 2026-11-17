@@ -161,6 +161,57 @@ public sealed class ManualTableEditScreens
     });
 
     [Fact]
+    public Task Table_edit_new() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var meta = new ExampleMeta(OrdersTable(), Detail(partitioned: false));
+        var vm = new ObjectDetailViewModel(meta)
+        {
+            TableEditEngine = CoreTableEditEngine.Instance,
+            TableEditDialect = new OracleRules(),
+            InvalidateTableCache = (_, _, _) => Task.CompletedTask,
+            TableEditChecks = new ExampleChecks(),
+            ChangeBundles = new MemoryBundleService(new MemoryBundleStore()),
+        };
+        Assert.True(await vm.OpenNewTableAsync(new ExampleSession(ConnectionEnvironment.Development), "SAMPLE", ["SAMPLE"]));
+        vm.NewTableName = "ORDER_ITEMS";
+        vm.NewTableComment = "주문 상품";
+        var edit = vm.TableEdit!;
+        foreach (var (name, type, size, required, comment) in new[]
+        {
+            ("ORDER_ID", "NUMBER", "10", true, "주문 번호"),
+            ("LINE_NO", "NUMBER", "4", true, "줄 번호"),
+            ("PRODUCT_CODE", "VARCHAR2", "20", true, "상품 코드"),
+            ("QTY", "NUMBER", "8", false, "수량"),
+        })
+        {
+            var column = edit.AddColumn()!;
+            column.Name = name;
+            column.DataType = type;
+            column.LengthText = size;
+            column.IsNullable = !required;
+            column.Comment = comment;
+        }
+
+        edit.Columns.Single(c => c.Name == "QTY").DefaultValue = "1";
+        edit.AddConstraint(ConstraintKind.PrimaryKey)!.ColumnsText = "ORDER_ID, LINE_NO";
+        var view = new ObjectDetailView { DataContext = vm };
+        var window = Show(view, 1560, 740);
+        try
+        {
+            ManualCapture.Save(window, "table-edit-new");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
     public Task Table_edit_check() => HeadlessHost.Run(async () =>
     {
         if (!ManualCapture.Enabled)
