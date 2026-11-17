@@ -5,6 +5,8 @@ using Oranda.App.Tests.Shell;
 using Oranda.Core.ChangeBundle;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
+using Oranda.Core.Metadata;
+using Oranda.Core.Sessions;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Schema.TableEdit;
@@ -277,7 +279,7 @@ public sealed class ChangeBundleViewModelTests : IDisposable
             run!.Cancel(); // 첫 문장이 도는 사이 「중지」
             return new ExecutionResult(c.Statement, ExecutionStatus.Succeeded);
         };
-        var (vm, store, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "DROP TABLE SAMPLE.A", "DROP TABLE SAMPLE.B"), exec);
+        var (vm, store, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "COMMENT ON TABLE SAMPLE.A IS 'a'", "COMMENT ON TABLE SAMPLE.B IS 'b'"), exec);
         var test = Session("test-example", ConnectionEnvironment.Test);
         vm.SessionsProvider = () => [test];
         _dialogs.OnRun = async r =>
@@ -300,7 +302,7 @@ public sealed class ChangeBundleViewModelTests : IDisposable
     public async Task Run_uses_the_routed_session_for_the_chosen_connection()
     {
         var exec = new FakeExecutionService();
-        var (vm, _, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "DROP TABLE SAMPLE.A"), exec);
+        var (vm, _, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "COMMENT ON TABLE SAMPLE.A IS 'a'"), exec);
         var picked = Session("test-example", ConnectionEnvironment.Test);
         var workspace = new FakeSession(picked.Profile, picked.Server);
         vm.SessionsProvider = () => [picked];
@@ -316,7 +318,7 @@ public sealed class ChangeBundleViewModelTests : IDisposable
     public async Task Run_failure_that_throws_ends_the_run_with_a_reason()
     {
         var exec = new FakeExecutionService { Responder = _ => throw new InvalidOperationException("세션이 끊겼다") };
-        var (vm, _, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "DROP TABLE SAMPLE.A"), exec);
+        var (vm, _, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "COMMENT ON TABLE SAMPLE.A IS 'a'"), exec);
         vm.SessionsProvider = () => [Session("test-example", ConnectionEnvironment.Test)];
         ChangeBundleRunViewModel? run = null;
         _dialogs.OnRun = async r =>
@@ -422,8 +424,8 @@ public sealed class ChangeBundleViewModelTests : IDisposable
                 ? new ExecutionResult(c.Statement, ExecutionStatus.Failed) { Error = new DbError("ORA-00942", "table or view does not exist") }
                 : new ExecutionResult(c.Statement, ExecutionStatus.Succeeded),
         };
-        var (vm, store, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "DROP TABLE SAMPLE.A", "DROP TABLE SAMPLE.B",
-            "DROP TABLE SAMPLE.C"), exec);
+        var (vm, store, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "COMMENT ON TABLE SAMPLE.A IS 'a'", "COMMENT ON TABLE SAMPLE.B IS 'b'",
+            "COMMENT ON TABLE SAMPLE.C IS 'c'"), exec);
         vm.SessionsProvider = () => [Session("test-example", ConnectionEnvironment.Test)];
         ChangeBundleRunViewModel? run = null;
         _dialogs.OnRun = async r =>
@@ -466,6 +468,164 @@ public sealed class ChangeBundleViewModelTests : IDisposable
         Assert.Contains("가린", run!.StatusText, StringComparison.Ordinal);
         Assert.True(vm.Rows[0].HasWarning);
         Assert.Contains("***", vm.Rows[0].WarningText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Production_multi_statement_confirms_once_and_sends_each_statement_preconfirmed()
+    {
+        var exec = new FakeExecutionService();
+        var interaction = new FakeExecutionInteraction();
+        var (vm, store, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"],
+            "ALTER TABLE SAMPLE.ORDERS ADD (NOTE VARCHAR2(10))", "CREATE INDEX SAMPLE.IX_ORDERS_NOTE ON SAMPLE.ORDERS (NOTE)",
+            "COMMENT ON COLUMN SAMPLE.ORDERS.NOTE IS 'memo'"), exec);
+        vm.SessionsProvider = () => [Session("prod-example", ConnectionEnvironment.Production)];
+        var checks = new CountingChecks();
+        vm.ConfigureRun = run =>
+        {
+            run.Policy = new ConfirmEveryDdl();
+            run.Interaction = interaction;
+            run.ChecksFor = _ => checks;
+        };
+        _dialogs.OnRun = r => r.RunAsync();
+
+        await vm.RunAsync();
+
+        Assert.Single(interaction.Confirmations); // 확인 창 한 번(TE-21·TE-34)
+        Assert.Equal(3, exec.Calls.Count); // 문장별로, 한 블록이 아니다
+        Assert.All(exec.Calls, c =>
+        {
+            Assert.Equal(StatementKind.Ddl, c.Statement.Kind);
+            Assert.Contains(c.Statement.Text, c.Options.PreConfirmed!);
+        });
+        Assert.Equal(3, store.Runs.Count(r => r.Succeeded && r.Environment == ConnectionEnvironment.Production));
+    }
+
+    [Fact]
+    public async Task Production_confirmation_declined_sends_nothing()
+    {
+        var exec = new FakeExecutionService();
+        var (vm, store, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "ALTER TABLE SAMPLE.ORDERS ADD (NOTE VARCHAR2(10))"), exec);
+        vm.SessionsProvider = () => [Session("prod-example", ConnectionEnvironment.Production)];
+        vm.ConfigureRun = run =>
+        {
+            run.Policy = new ConfirmEveryDdl();
+            run.Interaction = new FakeExecutionInteraction { ConfirmAnswer = false };
+        };
+        ChangeBundleRunViewModel? seen = null;
+        _dialogs.OnRun = async r =>
+        {
+            seen = r;
+            await r.RunAsync();
+        };
+
+        await vm.RunAsync();
+
+        Assert.Empty(exec.Calls);
+        Assert.Empty(store.Runs);
+        Assert.False(seen!.Finished); // 접속을 바꿔 다시 실행할 수 있다
+    }
+
+    [Fact]
+    public async Task Blocking_check_stops_the_run_and_shows_the_line()
+    {
+        var exec = new FakeExecutionService();
+        var (vm, _, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"],
+            "ALTER TABLE SAMPLE.ORDERS MODIFY (NOTE VARCHAR2(5) NOT NULL)", "COMMENT ON TABLE SAMPLE.ORDERS IS 'x'"), exec);
+        vm.SessionsProvider = () => [Session("dev-example", ConnectionEnvironment.Development)];
+        var checks = new CountingChecks { Nulls = 3 };
+        vm.ConfigureRun = run => run.ChecksFor = _ => checks;
+        ChangeBundleRunViewModel? seen = null;
+        _dialogs.OnRun = async r =>
+        {
+            seen = r;
+            await r.RunAsync();
+        };
+
+        await vm.RunAsync();
+
+        Assert.Empty(exec.Calls);
+        Assert.Equal(["NOTE"], checks.NullColumns);
+        Assert.Equal(new DbObjectRef("SAMPLE", "ORDERS", "TABLE"), checks.LastTable);
+        Assert.Contains(seen!.FindingLines, l => l.StartsWith('✖') && l.Contains("#1 NOTE", StringComparison.Ordinal));
+        Assert.Contains("✖", seen.StatusText, StringComparison.Ordinal);
+        Assert.True(seen.CanRun); // 고친 뒤(다른 접속 등) 다시 누를 수 있다
+    }
+
+    [Fact]
+    public async Task Test_connection_warning_needs_a_second_press_and_development_does_not()
+    {
+        var exec = new FakeExecutionService();
+        var (vm, _, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "ALTER TABLE SAMPLE.ORDERS DROP COLUMN OLD_NOTE"), exec);
+        var test = Session("test-example", ConnectionEnvironment.Test);
+        var dev = Session("dev-example", ConnectionEnvironment.Development);
+        vm.SessionsProvider = () => [test, dev];
+        vm.ConfigureRun = run => run.ChecksFor = _ => new CountingChecks();
+        ChangeBundleRunViewModel? seen = null;
+        _dialogs.OnRun = async r =>
+        {
+            seen = r;
+            await r.RunAsync();
+            Assert.Empty(exec.Calls); // ⚠ 를 보인다
+            Assert.Equal("그래도 실행", r.RunText);
+            Assert.Contains(r.FindingLines, l => l.StartsWith('⚠'));
+            await r.RunAsync();
+        };
+
+        await vm.RunAsync();
+        Assert.Single(exec.Calls);
+
+        _dialogs.OnRun = async r =>
+        {
+            r.SelectedConnection = r.Connections.Single(c => c.Session == dev);
+            await r.RunAsync(); // 개발 접속은 ⚠ 만이면 창 없이(TE-20)
+        };
+        await vm.RunAsync();
+        Assert.Equal(2, exec.Calls.Count);
+        Assert.Same(dev, exec.Calls[1].Session);
+    }
+
+    [Fact]
+    public async Task Stop_during_the_pre_run_check_sends_nothing_and_frees_the_session()
+    {
+        var exec = new FakeExecutionService();
+        var (vm, _, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "ALTER TABLE SAMPLE.ORDERS MODIFY (NOTE NOT NULL)"), exec);
+        var dev = Session("dev-example", ConnectionEnvironment.Development);
+        vm.SessionsProvider = () => [dev];
+        ChangeBundleRunViewModel? seen = null;
+        var checks = new CountingChecks { OnNullCount = () => seen!.Cancel() };
+        vm.ConfigureRun = run => run.ChecksFor = _ => checks;
+        _dialogs.OnRun = async r =>
+        {
+            seen = r;
+            await r.RunAsync();
+        };
+
+        await vm.RunAsync();
+
+        Assert.Empty(exec.Calls);
+        Assert.Contains("취소", seen!.StatusText, StringComparison.Ordinal);
+        Assert.False(seen.IsRunning);
+        Assert.False(seen.Finished);
+        Assert.False(ExecutionState.For(null).IsBusy(dev.Id));
+    }
+
+    [Fact]
+    public async Task Missing_check_reader_turns_checks_into_not_checked_warnings()
+    {
+        var exec = new FakeExecutionService();
+        var (vm, _, _) = await CreateAsync(s => s.SeedAsync("릴리스 1", Dbms.Oracle, ["SAMPLE"], "ALTER TABLE SAMPLE.ORDERS MODIFY (NOTE VARCHAR2(5))"), exec);
+        vm.SessionsProvider = () => [Session("dev-example", ConnectionEnvironment.Development)];
+        ChangeBundleRunViewModel? seen = null;
+        _dialogs.OnRun = async r =>
+        {
+            seen = r;
+            await r.RunAsync();
+        };
+
+        await vm.RunAsync();
+
+        Assert.Single(exec.Calls);
+        Assert.Contains(seen!.Findings, f => f.Code == CheckCode.NotChecked);
     }
 
     [Fact]
@@ -607,6 +767,63 @@ public sealed class ChangeBundleViewModelTests : IDisposable
         Assert.Equal(2, map.Count);
         Assert.Equal("SAMPLE_T", map["SAMPLE"]);
         Assert.Equal("\"Mixed\"", map["Y"]);
+    }
+
+    /// <summary>DDL 마다 확인을 원하는 정책(운영 확인 시험용).</summary>
+    private sealed class ConfirmEveryDdl : IExecutionPolicy
+    {
+        public ValueTask<PolicyDecision> EvaluateAsync(PolicyContext ctx, SqlStatement stmt, CancellationToken ct) =>
+            ValueTask.FromResult(new PolicyDecision(PolicyDecisionKind.Confirm, PolicyRule.None, "운영 DDL"));
+    }
+
+    /// <summary>건수를 정해 두는 검사 읽기.</summary>
+    private sealed class CountingChecks : ITableEditChecks
+    {
+        public Dbms Dbms => Dbms.Oracle;
+
+        public long Nulls { get; init; }
+
+        public List<string> NullColumns { get; } = [];
+
+        public DbObjectRef? LastTable { get; private set; }
+
+        public Task<long> CountRowsAsync(ISession s, DbObjectRef table, CancellationToken ct) => Task.FromResult(0L);
+
+        public Task<long?> NumRowsAsync(ISession s, DbObjectRef table, CancellationToken ct) => Task.FromResult<long?>(10);
+
+        public Task<long> OverflowCountAsync(ISession s, DbObjectRef table, string column, ColumnDraft target, CancellationToken ct) => Task.FromResult(0L);
+
+        public Action? OnNullCount { get; init; }
+
+        public Task<long> NullCountAsync(ISession s, DbObjectRef table, string column, CancellationToken ct)
+        {
+            OnNullCount?.Invoke();
+            ct.ThrowIfCancellationRequested();
+            NullColumns.Add(column);
+            LastTable = table;
+            return Task.FromResult(Nulls);
+        }
+
+        public Task<long> NonNullCountAsync(ISession s, DbObjectRef table, string column, CancellationToken ct) => Task.FromResult(0L);
+
+        public Task<long> DuplicateKeyCountAsync(ISession s, DbObjectRef table, IReadOnlyList<string> columns, CancellationToken ct) => Task.FromResult(0L);
+
+        public Task<long> OrphanCountAsync(ISession s, DbObjectRef table, IReadOnlyList<string> columns, DbObjectRef referencedTable,
+            IReadOnlyList<string> referencedColumns, CancellationToken ct) => Task.FromResult(0L);
+
+        public Task<long> CheckViolationCountAsync(ISession s, DbObjectRef table, string condition, CancellationToken ct) => Task.FromResult(0L);
+
+        public Task<ExpressionPreview> PreviewExpressionAsync(ISession s, DbObjectRef table, string expression, IReadOnlyList<string> columns, int rows,
+            CancellationToken ct) => Task.FromResult(new ExpressionPreview([], []));
+
+        public Task<string?> ValidateExpressionAsync(ISession s, string owner, IReadOnlyList<ColumnDraft> columns, string expression, CancellationToken ct) =>
+            Task.FromResult<string?>(null);
+
+        public Task<bool> NameExistsAsync(ISession s, string owner, string name, TableEditNameKind kind, DbObjectRef? table, CancellationToken ct) =>
+            Task.FromResult(false);
+
+        public Task<IReadOnlyList<DbObjectRef>> DependentsAsync(ISession s, DbObjectRef table, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<DbObjectRef>>([]);
     }
 }
 

@@ -34,7 +34,7 @@
         </ComboBox.ItemTemplate>
       </ComboBox>
       <TextBlock Classes="danger" TextWrapping="Wrap" IsVisible="{Binding IsProduction}"
-                 Text="운영 접속이다. 정책에 따라 실행 전에 확인을 받는다." />
+                 Text="운영 접속이다. 실행 전에 확인을 한 번 받는다." />
     </StackPanel>
     <!-- 소유자 바꾸기(TE-22): 테스트·운영의 스키마 이름이 개발과 다를 때. 문자열·주석 안은 그대로. -->
     <StackPanel Spacing="4" IsVisible="{Binding HasOwnerMap}">
@@ -53,9 +53,19 @@
       </ItemsControl>
     </StackPanel>
     <TextBlock TextWrapping="Wrap" Text="{Binding OwnerWarningText}" IsVisible="{Binding HasOwnerWarning}" />
+    <!-- 실행 전 검사(설계 10장): 해석할 수 있는 문장만, ✖ → ⚠ → ✔. -->
+    <ScrollViewer MaxHeight="180" IsVisible="{Binding HasFindings}">
+      <ItemsControl ItemsSource="{Binding FindingLines}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="x:String">
+            <SelectableTextBlock TextWrapping="Wrap" Text="{Binding}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
     <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button x:Name="RunButton" Content="실행" IsEnabled="{Binding CanRun}" />
+      <Button x:Name="RunButton" Content="{Binding RunText}" IsEnabled="{Binding CanRun}" />
       <Button x:Name="CloseButton" Content="{Binding CloseText}" IsCancel="True" />
     </StackPanel>
   </StackPanel>

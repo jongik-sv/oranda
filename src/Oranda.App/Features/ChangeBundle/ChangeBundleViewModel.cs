@@ -64,6 +64,15 @@ public sealed partial class ChangeBundleViewModel : ToolPanelViewModelBase, IDis
         SessionsProvider = () => OpenSessions(services);
         CurrentSessionProvider = () => SessionRouter.ShownOf(services);
         RouteSession = s => SessionRouter.ForTool(services, s) ?? s;
+        ConfigureRun = run =>
+        {
+            run.ChecksFor = s => DbmsServices.For<Oranda.Core.Schema.TableEdit.ITableEditChecks>(services, s);
+            run.PurgesOnDropFor = s => DbmsServices.For<Oranda.Core.Schema.TableEdit.ITableEditDialect>(services, s)?.PurgesOnDrop ?? false;
+            run.Policy = services.GetService(typeof(IExecutionPolicy)) as IExecutionPolicy;
+            run.Interaction = services.GetService(typeof(IExecutionInteraction)) as IExecutionInteraction;
+            run.ConfirmPendingCommit = token => Dialogs.ConfirmAsync("묶음 실행",
+                "이 세션에 커밋하지 않은 변경이 있다. DDL 을 실행하면 그 변경도 커밋된다. 계속할까?", "계속", token);
+        };
         _ = ReloadAsync();
     }
 
@@ -161,6 +170,9 @@ public sealed partial class ChangeBundleViewModel : ToolPanelViewModelBase, IDis
 
     /// <summary>「실행…」 이 고른 접속에서 실제로 보낼 세션(<see cref="SessionRouter.ForTool"/>). 시험은 그대로.</summary>
     internal Func<ISession, ISession> RouteSession { get; set; } = s => s;
+
+    /// <summary>「실행…」 창의 검사·정책·확인 연결(셸 = 서비스에서). 시험이 바꿔 끼운다.</summary>
+    internal Action<ChangeBundleRunViewModel>? ConfigureRun { get; set; }
 
     /// <summary>오늘 날짜(새 묶음 기본 이름). 시험이 바꿔 끼운다.</summary>
     internal Func<DateTime> Today { get; set; } = () => DateTime.Now;
@@ -602,6 +614,7 @@ public sealed partial class ChangeBundleViewModel : ToolPanelViewModelBase, IDis
         {
             Route = RouteSession,
         };
+        ConfigureRun?.Invoke(vm);
         if (vm.Connections.Count == 0)
         {
             await Dialogs.NoticeAsync("묶음 실행", "열린 접속이 없다. 실행할 접속을 먼저 연다.", ct).ConfigureAwait(true);

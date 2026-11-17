@@ -2024,5 +2024,6 @@
   "PK_·UK_·FK_·CK_·IX_ 옛 이름 꼴의 제약·인덱스 이름도 새 이름으로 바꿉니다": "Also renames PK_/UK_/FK_/CK_/IX_ constraint and index names built from the old table name",
   "실행하지 않고 위 DDL 을 반영 묶음에 넣습니다(먼저 검사)": "Adds the DDL above to the change bundle without running it (checks first)",
   "지금 묶음에 넣기": "Add to the current bundle",
-  "새 묶음에 넣기…": "Add to a new bundle…"
+  "새 묶음에 넣기…": "Add to a new bundle…",
+  "운영 접속이다. 실행 전에 확인을 한 번 받는다.": "This is a production connection. You confirm once before it runs."
 }
