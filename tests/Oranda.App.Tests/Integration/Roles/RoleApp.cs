@@ -38,6 +38,7 @@ internal static class PrdMatrix
         ("changeJournal", "OOO.O."),
         ("tableSpec", "O...OO"),
         ("myBatisLog", "..O..."),
+        ("changeBundle", "OOO.O."), // 2026-11-17 반영 묶음(테이블 편집기 설계 9장)
         ("plsqlEditor", ".O.OO."),
         ("plsqlWorkspace", ".O...."),
         ("plsqlRun", ".O..O."),
@@ -61,7 +62,7 @@ internal static class PrdMatrix
     public static readonly string[] WritesOnly = ["gridEdit", "dataImport", "plsqlEditor", "plsqlWorkspace", "plsqlRun", "columnReorder"];
 
     /// <summary>시작 때 도는 기능(RL-06): 바꾸면 재시작 뒤 반영.</summary>
-    public static readonly string[] StartupBound = ["myBatis", "plsqlWorkspace", "blockerAlert", "changeJournal"];
+    public static readonly string[] StartupBound = ["myBatis", "plsqlWorkspace", "blockerAlert", "changeJournal", "changeBundle"];
 
     public static IReadOnlyList<string> AllFeatures => [.. Rows.Select(r => r.Feature)];
 
@@ -167,7 +168,7 @@ internal static class PrdMatrix
     [
         "EditorDiagnosticsStartup", "MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup",
         "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
-        "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "PlSqlWarmUpTask",
+        "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "ChangeBundleRecorder", "PlSqlWarmUpTask",
         "SessionsAutoShow", "MetadataCachePruner", "RollbackMaintenance",
         "AiContextKeys", "AgentBridgeStartup", // aiTuning(2026-10-29 기본 켬)
     ];
@@ -180,6 +181,7 @@ internal static class PrdMatrix
             "MyBatisConvertReady" or "MyBatisFolderReadyTask" or "MyBatisWorkspaceWiring" or "MapperWatchStartup" => on.Contains("myBatis"),
             "PlsqlWorkspacePersistence" => on.Contains("plsqlEditor"),
             "ChangeJournalRecorder" => on.Contains("changeJournal"),
+            "ChangeBundleRecorder" => on.Contains("changeBundle"), // 반영 묶음 자동 넣기(2026-11-17)
             "AiContextKeys" or "AgentBridgeStartup" => on.Contains("aiTuning"),
             _ => true,
         }),

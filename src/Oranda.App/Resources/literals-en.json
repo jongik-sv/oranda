@@ -1901,5 +1901,6 @@
   "지우기 · 모두 비우기": "Delete · Clear all",
   "더 많은 명령": "More commands",
   "고른 이력 지우기": "Delete chosen history",
-  "고른 이력의 오류": "Error of chosen history"
+  "고른 이력의 오류": "Error of chosen history",
+  "반영 묶음": "Change Bundle"
 }

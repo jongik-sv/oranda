@@ -17,6 +17,12 @@ public enum HistorySource
 
     /// <summary>접속 간 데이터 복사(<c>IBulkExecutionService</c>)가 요청한 실행.</summary>
     DataCopy,
+
+    /// <summary>테이블 편집기(객체 상세 편집·새 테이블)의 실행(테이블 편집기 설계 11장). 반영 묶음에 자동으로 들어간다(9.3).</summary>
+    TableEditor,
+
+    /// <summary>반영 묶음 「실행…」. 묶음에 다시 넣지 않는다(설계 9.3, TE-16). 실행 표시는 묶음 실행기가 직접 남긴다.</summary>
+    ChangeBundle,
 }
 
 /// <summary>이력 <c>status</c> 열. <see cref="ExecutionStatus"/> 와 같은 이름.</summary>

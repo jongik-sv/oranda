@@ -196,6 +196,7 @@ Role = 기능 묶음 프리셋. 여러 개를 겹쳐 고르고(합집합), 그 �
 | `changeJournal` | D6 변경 일지 | ○ | ○ | ○ | · | ○ | · |
 | `tableSpec` | D7 테이블 정의서 | ○ | · | · | · | ○ | ○ |
 | `myBatisLog` | D8 MyBatis 로그 붙여 넣기 | · | · | ○ | · | · | · |
+| `changeBundle` | D9 반영 묶음(실행한 DDL 모으기·환경별 실행 표시·의뢰용 스크립트 저장, 2026-11-17) | ○ | ○ | ○ | · | ○ | · |
 | `plsqlEditor` | P1 PL/SQL 편집기·컴파일·컴파일 오류 창 | · | ○ | · | ○ | ○ | · |
 | `plsqlWorkspace` | P2 PL/SQL 작업 공간 저장·복원 | · | ○ | · | · | · | · |
 | `plsqlRun` | P3 PL/SQL 실행 대화상자 | · | ○ | · | · | ○ | · |

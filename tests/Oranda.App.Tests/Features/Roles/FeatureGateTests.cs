@@ -159,7 +159,7 @@ public sealed class FeatureGateTests
         Assert.False(gate.IsEnabled(FeatureIds.BlockerAlert)); // 메뉴는 바로 사라진다
         Assert.False(gate.IsEnabled(FeatureIds.ChangeJournal));
         Assert.Equal(
-            new[] { FeatureIds.ChangeJournal, FeatureIds.PlsqlWorkspace, FeatureIds.MyBatis, FeatureIds.BlockerAlert }.ToHashSet(),
+            new[] { FeatureIds.ChangeJournal, FeatureIds.PlsqlWorkspace, FeatureIds.MyBatis, FeatureIds.BlockerAlert, FeatureIds.ChangeBundle }.ToHashSet(),
             gate.PendingRestart.ToHashSet()); // 감시·타이머는 다음 실행에 멈춘다
         Assert.True(gate.ReadOnlyRole);
     }

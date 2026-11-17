@@ -75,7 +75,7 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.IsDefaultRole);
         Assert.True(page.ShowDefaultRoleNotice);
         Assert.Equal("아직 주 업무를 고르지 않아 SQL 개발자 메뉴로 쓰는 중입니다. 아래에서 다른 주 업무를 고를 수 있습니다.", page.DefaultRoleNoticeText);
-        Assert.Equal(26, page.Items.Count);
+        Assert.Equal(27, page.Items.Count);
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         Assert.False(page.HasOverrides);
@@ -85,7 +85,7 @@ public sealed class FeatureSettingsViewTests
         Assert.False(page.HasRestartBanner);
         Assert.False(page.IsDirty);
         Assert.False(page.IsAdvancedExpanded); // 고급은 접혀 있다(UX-10)
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 11/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 12/27 · 직접 바꾼 것 0개", page.AdvancedHeader);
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed class FeatureSettingsViewTests
         Assert.All(page.Items, i => Assert.Equal(FeatureState.RoleDefault, i.State));
         Assert.False(page.HasOverrides);
         Assert.False(page.IsDirty);
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 26/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 27/27 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
         // 흐린 덧붙임을 눌러도 바뀌지 않는다.
         page.PlsqlAddon = false;
@@ -233,11 +233,11 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.HasOverrides);
         AssertSet(FeatureCatalog.Resolve(vm.Features.ToSettings()), Checked(page));
 
-        // 접힌 머리의 숫자 = 켜진 기능 수 / 26 · 배지 수.
+        // 접힌 머리의 숫자 = 켜진 기능 수 / 27 · 배지 수.
         var on = FeatureCatalog.Resolve(vm.Features.ToSettings()).Count;
         Assert.Equal(on, page.EnabledCount);
         Assert.Equal(2, page.OverrideCount);
-        Assert.Equal($"기능 하나씩 켜고 끄기(고급) — 켜진 기능 {on}/26 · 직접 바꾼 것 2개", page.AdvancedHeader);
+        Assert.Equal($"기능 하나씩 켜고 끄기(고급) — 켜진 기능 {on}/27 · 직접 바꾼 것 2개", page.AdvancedHeader);
     }
 
     [Fact]
@@ -260,7 +260,7 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.AddonsEnabled);
         Assert.False(page.PlsqlAddon); // 모든 기능에서 보이던 「포함」 표시는 고른 값이 아니다
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev]), Checked(page));
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 11/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 12/27 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
         page.MyBatisAddon = true;
         AssertSet(FeatureCatalog.RoleDefaults([RoleIds.SqlDev, RoleIds.MyBatisDev]), Checked(page));
@@ -420,7 +420,7 @@ public sealed class FeatureSettingsViewTests
         Assert.Equal("지금 조합: Role 없음(그대로 두기)", page.PrimaryOptions[^1].Name);
         Assert.True(page.ShowNoRoleNotice);
         Assert.Empty(Checked(page));
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 0/26 · 직접 바꾼 것 0개", page.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 0/27 · 직접 바꾼 것 0개", page.AdvancedHeader);
 
         page.Primary = PrimaryWorkKind.SqlDev;
         Assert.False(page.ShowNoRoleNotice);
@@ -537,7 +537,7 @@ public sealed class FeatureSettingsViewTests
         var (_, store, vm) = await Create(All);
 
         Item(vm.Features, FeatureIds.Trace).IsChecked = false;
-        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 25/26 · 직접 바꾼 것 1개", vm.Features.AdvancedHeader);
+        Assert.Equal("기능 하나씩 켜고 끄기(고급) — 켜진 기능 26/27 · 직접 바꾼 것 1개", vm.Features.AdvancedHeader);
         await vm.SaveAsync();
 
         Assert.Null(store.Saved.Features.Roles);
@@ -986,7 +986,7 @@ public sealed class FeatureSettingsViewTests
             Relayout(window);
             Assert.True(expander.IsExpanded);
             var featureChecks = view.FindControl<ItemsControl>("GroupList")!.GetVisualDescendants().OfType<CheckBox>().ToList();
-            Assert.Equal(26, featureChecks.Count);
+            Assert.Equal(27, featureChecks.Count);
             Assert.All(featureChecks, c => Assert.False(string.IsNullOrWhiteSpace(Avalonia.Automation.AutomationProperties.GetName(c))));
             var badges = view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("feat-badge") && b.IsVisible).ToList();
             Assert.Equal(2, badges.Count);

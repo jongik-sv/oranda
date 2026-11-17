@@ -13,7 +13,7 @@ namespace Oranda.Core.Tests.Features;
 /// </summary>
 public sealed class FeatureCatalogTests
 {
-    private static readonly string[] StartupBoundIds = ["plsqlWorkspace", "myBatis", "changeJournal", "blockerAlert"];
+    private static readonly string[] StartupBoundIds = ["plsqlWorkspace", "myBatis", "changeJournal", "blockerAlert", "changeBundle"];
     private static readonly string[] WritesOnlyIds = ["gridEdit", "dataImport", "plsqlEditor", "plsqlWorkspace", "plsqlRun", "columnReorder"];
     private static readonly string[] ViewerDefaults = [FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.TableSpec];
     private static readonly string[] PlanAdvancedCommands = ["oranda.plan.compare", "oranda.plan.pinForCompare", "oranda.plan.displayCursorOptions"];
@@ -21,10 +21,10 @@ public sealed class FeatureCatalogTests
     // ---- 카탈로그 데이터 ----
 
     [Fact]
-    public void There_are_26_features_and_6_roles_with_unique_ids_in_table_order()
+    public void There_are_27_features_and_6_roles_with_unique_ids_in_table_order()
     {
-        Assert.Equal(26, FeatureIds.All.Count);
-        Assert.Equal(26, FeatureIds.All.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(27, FeatureIds.All.Count);
+        Assert.Equal(27, FeatureIds.All.Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(FeatureIds.All, FeatureCatalog.Features.Select(f => f.Id));
 
         Assert.Equal(["sqlDev", "plsqlDev", "myBatisDev", "tuner", "dba", "viewer"], RoleIds.All);
@@ -37,7 +37,7 @@ public sealed class FeatureCatalogTests
         // 설정 파일·문맥 키에 저장되는 문자열이라 값이 바뀌면 안 된다.
         string[] expected =
         [
-            "gridEdit", "lobRowView", "dataExport", "dataImport", "dedicatedSession", "flashback", "changeJournal", "tableSpec", "myBatisLog",
+            "gridEdit", "lobRowView", "dataExport", "dataImport", "dedicatedSession", "flashback", "changeJournal", "tableSpec", "myBatisLog", "changeBundle",
             "plsqlEditor", "plsqlWorkspace", "plsqlRun", "myBatis",
             "planAdvanced", "sqlMonitor", "tuningAssistant", "childCursors", "tableStats", "trace", "tuningReport", "aiTuning",
             "sessionMonitor", "lockMonitor", "blockerAlert", "dbTools", "columnReorder",
@@ -51,7 +51,7 @@ public sealed class FeatureCatalogTests
     public void Role_default_table_is_the_same_as_prd_12_2()
     {
         var prd = ReadPrdRoleTable();
-        Assert.Equal(26, prd.Count);
+        Assert.Equal(27, prd.Count);
         Assert.Equal(FeatureIds.All, prd.Keys);
         foreach (var role in FeatureCatalog.Roles)
         {
@@ -64,7 +64,7 @@ public sealed class FeatureCatalogTests
     [Fact]
     public void Groups_flags_and_requires_follow_trd_10_4()
     {
-        Assert.Equal(9, Count(FeatureGroup.DevAssist));
+        Assert.Equal(10, Count(FeatureGroup.DevAssist));
         Assert.Equal(3, Count(FeatureGroup.Plsql));
         Assert.Equal(1, Count(FeatureGroup.MyBatis));
         Assert.Equal(8, Count(FeatureGroup.Tuning));
@@ -230,7 +230,7 @@ public sealed class FeatureCatalogTests
         var r1 = FeatureCatalog.Resolve(new FeaturesSettings { Roles = [RoleIds.SqlDev] });
         Assert.Equal(r1.Order(), FeatureCatalog.Resolve(null).Order());
         Assert.Equal(r1.Order(), FeatureCatalog.Resolve(new FeaturesSettings()).Order());
-        Assert.Equal(11, r1.Count); // PRD 10개 + aiTuning
+        Assert.Equal(12, r1.Count); // PRD 11개(반영 묶음 포함, 2026-11-17) + aiTuning
         Assert.DoesNotContain(FeatureIds.SqlMonitor, r1);
         Assert.DoesNotContain(FeatureIds.MyBatis, r1);
         Assert.DoesNotContain(FeatureIds.PlsqlEditor, r1);
@@ -324,7 +324,7 @@ public sealed class FeatureCatalogTests
 
         // Role 을 고른 적 없어도 덮어쓰기는 먹는다.
         var all = FeatureCatalog.Resolve(new FeaturesSettings { Disabled = [FeatureIds.MyBatis] });
-        Assert.Equal(25, all.Count);
+        Assert.Equal(26, all.Count);
         Assert.DoesNotContain(FeatureIds.MyBatis, all);
     }
 

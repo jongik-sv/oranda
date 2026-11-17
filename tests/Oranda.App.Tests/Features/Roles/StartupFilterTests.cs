@@ -43,6 +43,7 @@ namespace Oranda.App.Tests.Features.Roles
             "EditorDiagnosticsStartup", "MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup",
             "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
             "UpdateStartup", "HistoryRecorder", "MetadataCachePruner", "ChangeJournalRecorder", "PlSqlWarmUpTask", "SessionsAutoShow",
+            "ChangeBundleRecorder", // 반영 묶음 자동 넣기(테이블 편집기 설계 9.3)
             "RollbackMaintenance", // RB-22: 되돌리기 기록은 기능·역할과 상관없이 남아 정리도 늘 돈다
             "AiContextKeys", "AgentBridgeStartup",
         ];
@@ -235,7 +236,7 @@ namespace Oranda.App.Tests.Features.Roles
                 {
                     null => [],
                     RoleIds.SqlDev => [.. MyBatisStartupTasks, "PlsqlWorkspacePersistence"],
-                    RoleIds.Viewer => [.. MyBatisStartupTasks, "PlsqlWorkspacePersistence", "ChangeJournalRecorder", .. AiStartupTasks], // 조회 전용은 AI 튜닝 기본 켬에서 빠진다
+                    RoleIds.Viewer => [.. MyBatisStartupTasks, "PlsqlWorkspacePersistence", "ChangeJournalRecorder", "ChangeBundleRecorder", .. AiStartupTasks], // 조회 전용은 AI 튜닝 기본 켬에서 빠진다
                     _ => ["PlsqlWorkspacePersistence"], // MyBatis 개발: PL/SQL 없음, 변경 일지는 있음
                 };
                 Assert.Equal(AllStartupTasks.Concat(OptInItems.StartupTaskNames).Except(expectedOff).Order(StringComparer.Ordinal), names.Order(StringComparer.Ordinal));

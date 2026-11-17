@@ -1,7 +1,7 @@
 namespace Oranda.Core.Features;
 
 /// <summary>
-/// 기능 id 26개(PRD 12.2, D-002). 설정 <c>features.enabled</c>·<c>disabled</c> 와 문맥 키 <c>feature.&lt;id&gt;</c> 에 그대로 쓰이므로
+/// 기능 id 27개(PRD 12.2, D-002). 설정 <c>features.enabled</c>·<c>disabled</c> 와 문맥 키 <c>feature.&lt;id&gt;</c> 에 그대로 쓰이므로
 /// 한 번 내보낸 값은 바꾸지 않는다. 소유: TSK-07-01(계약).
 /// </summary>
 public static class FeatureIds
@@ -16,6 +16,9 @@ public static class FeatureIds
     public const string ChangeJournal = "changeJournal";
     public const string TableSpec = "tableSpec";
     public const string MyBatisLog = "myBatisLog";
+
+    /// <summary>반영 묶음(테이블 편집기 설계 9장): 실행한 DDL 을 모아 환경별 실행 표시·의뢰용 스크립트 저장. 자동 넣기는 시작 작업이다.</summary>
+    public const string ChangeBundle = "changeBundle";
 
     // PL/SQL
     public const string PlsqlEditor = "plsqlEditor";
@@ -50,7 +53,7 @@ public static class FeatureIds
     /// <summary>모든 기능 id(PRD 12.2 표 순서).</summary>
     public static IReadOnlyList<string> All { get; } =
     [
-        GridEdit, LobRowView, DataExport, DataImport, DedicatedSession, Flashback, ChangeJournal, TableSpec, MyBatisLog,
+        GridEdit, LobRowView, DataExport, DataImport, DedicatedSession, Flashback, ChangeJournal, TableSpec, MyBatisLog, ChangeBundle,
         PlsqlEditor, PlsqlWorkspace, PlsqlRun,
         MyBatis,
         PlanAdvanced, SqlMonitor, TuningAssistant, ChildCursors, TableStats, Trace, TuningReport, AiTuning,

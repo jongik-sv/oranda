@@ -3,7 +3,7 @@ using Oranda.Core.Settings;
 namespace Oranda.Core.Features;
 
 /// <summary>
-/// 기능 카탈로그(TRD 10.2·10.4, PRD 12.2): 기능 26개의 묶음·문구 키·StartupBound·WritesOnly·Requires, Role 별 기본 켬 목록,
+/// 기능 카탈로그(TRD 10.2·10.4, PRD 12.2): 기능 27개의 묶음·문구 키·StartupBound·WritesOnly·Requires, Role 별 기본 켬 목록,
 /// 꼬리표 규칙 표 셋(네임스페이스 접두·id 덮어쓰기·형 이름 덮어쓰기). 데이터와 순수 계산만 둔다 — 게이트(시작 때 값·PendingRestart·변경 알림)는
 /// App 의 <c>FeatureGate</c>(TSK-07-02) 몫이다. Core 는 App 형을 참조하지 않으므로 네임스페이스·형 이름은 문자열로 적는다. 소유: TSK-07-01.
 /// </summary>
@@ -14,7 +14,7 @@ public static class FeatureCatalog
 
     private static readonly string[] None = [];
 
-    /// <summary>기능 26개(<see cref="FeatureIds.All"/> 순서).</summary>
+    /// <summary>기능 27개(<see cref="FeatureIds.All"/> 순서).</summary>
     public static IReadOnlyList<FeatureDefinition> Features { get; } =
     [
         new(FeatureIds.GridEdit, FeatureGroup.DevAssist, StartupBound: false, WritesOnly: true, None),
@@ -26,6 +26,7 @@ public static class FeatureCatalog
         new(FeatureIds.ChangeJournal, FeatureGroup.DevAssist, StartupBound: true, false, None),
         new(FeatureIds.TableSpec, FeatureGroup.DevAssist, false, false, None),
         new(FeatureIds.MyBatisLog, FeatureGroup.DevAssist, false, false, None),
+        new(FeatureIds.ChangeBundle, FeatureGroup.DevAssist, StartupBound: true, false, None),
         new(FeatureIds.PlsqlEditor, FeatureGroup.Plsql, false, WritesOnly: true, None),
         new(FeatureIds.PlsqlWorkspace, FeatureGroup.Plsql, StartupBound: true, WritesOnly: true, [FeatureIds.PlsqlEditor]),
         new(FeatureIds.PlsqlRun, FeatureGroup.Plsql, false, WritesOnly: true, None),
@@ -51,18 +52,19 @@ public static class FeatureCatalog
         new(RoleIds.SqlDev,
         [
             FeatureIds.GridEdit, FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.DataImport, FeatureIds.DedicatedSession,
-            FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.TableSpec, FeatureIds.PlanAdvanced, FeatureIds.AiTuning, FeatureIds.BlockerAlert,
+            FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.TableSpec, FeatureIds.ChangeBundle, FeatureIds.PlanAdvanced, FeatureIds.AiTuning,
+            FeatureIds.BlockerAlert,
         ]),
         new(RoleIds.PlsqlDev,
         [
             FeatureIds.GridEdit, FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.DataImport, FeatureIds.DedicatedSession,
-            FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.PlsqlEditor, FeatureIds.PlsqlWorkspace, FeatureIds.PlsqlRun,
-            FeatureIds.PlanAdvanced, FeatureIds.AiTuning, FeatureIds.BlockerAlert, FeatureIds.DbTools,
+            FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.ChangeBundle, FeatureIds.PlsqlEditor, FeatureIds.PlsqlWorkspace,
+            FeatureIds.PlsqlRun, FeatureIds.PlanAdvanced, FeatureIds.AiTuning, FeatureIds.BlockerAlert, FeatureIds.DbTools,
         ]),
         new(RoleIds.MyBatisDev,
         [
             FeatureIds.GridEdit, FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.DataImport, FeatureIds.ChangeJournal,
-            FeatureIds.MyBatisLog, FeatureIds.MyBatis, FeatureIds.PlanAdvanced, FeatureIds.AiTuning, FeatureIds.BlockerAlert,
+            FeatureIds.MyBatisLog, FeatureIds.ChangeBundle, FeatureIds.MyBatis, FeatureIds.PlanAdvanced, FeatureIds.AiTuning, FeatureIds.BlockerAlert,
         ]),
         new(RoleIds.Tuner,
         [
@@ -74,7 +76,7 @@ public static class FeatureCatalog
         new(RoleIds.Dba,
         [
             FeatureIds.GridEdit, FeatureIds.LobRowView, FeatureIds.DataExport, FeatureIds.DataImport, FeatureIds.DedicatedSession,
-            FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.TableSpec, FeatureIds.PlsqlEditor, FeatureIds.PlsqlRun,
+            FeatureIds.Flashback, FeatureIds.ChangeJournal, FeatureIds.TableSpec, FeatureIds.ChangeBundle, FeatureIds.PlsqlEditor, FeatureIds.PlsqlRun,
             FeatureIds.PlanAdvanced, FeatureIds.SqlMonitor, FeatureIds.ChildCursors, FeatureIds.TableStats, FeatureIds.Trace, FeatureIds.AiTuning,
             FeatureIds.SessionMonitor, FeatureIds.LockMonitor, FeatureIds.BlockerAlert, FeatureIds.DbTools, FeatureIds.ColumnReorder,
         ]),
@@ -136,6 +138,7 @@ public static class FeatureCatalog
     public static IReadOnlyDictionary<string, string?> TypeOverrides { get; } = new Dictionary<string, string?>(StringComparer.Ordinal)
     {
         ["Oranda.Platform.Journal.ChangeJournalRecorder"] = FeatureIds.ChangeJournal,
+        ["Oranda.Platform.ChangeBundle.ChangeBundleRecorder"] = FeatureIds.ChangeBundle,
         ["Oranda.App.Features.GridEdit.SaveStatusViewModel"] = null,
     };
 

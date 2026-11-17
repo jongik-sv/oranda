@@ -1046,5 +1046,6 @@
   "TableEdit.unsupported.oracle122": "Requires Oracle 12.2 or later",
   "TableEdit.unsupported.oracle23": "Requires Oracle 23ai or later",
   "TableEdit.unsupported.oracleEnterprise": "Not available in this Oracle edition (Standard, Express)",
-  "TableEdit.unsupported.unknownServer": "Turned off because the server version is unknown"
+  "TableEdit.unsupported.unknownServer": "Turned off because the server version is unknown",
+  "Feature.changeBundle": "Change Bundle"
 }
