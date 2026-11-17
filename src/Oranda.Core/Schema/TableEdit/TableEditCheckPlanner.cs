@@ -106,8 +106,10 @@ public sealed record TableEditCheckOptions
 /// </summary>
 public static partial class TableEditCheckPlanner
 {
-    /// <summary>아직 문장을 만들지 않는 편집(2차: 신원·숨김·도메인·테이블 이름·특수 테이블 만들기)의 이유 키. T13 에서 없앤다.</summary>
-    public const string NotYetReasonKey = "tableEdit.unsupported.notYet";
+    /// <summary>
+    /// 기존 특수 테이블(GTT·IOT·외부·클러스터)에서 허용하지 않는 편집의 이유 키(설계 3장·18.10). GTT·IOT 는 주석·기본값·열 추가·지우기, 외부·클러스터는 주석·기본값만.
+    /// </summary>
+    public const string SpecialTableReasonKey = "tableEdit.unsupported.specialTable";
 
     [GeneratedRegex(@"\d+")]
     private static partial Regex Numbers();
@@ -146,22 +148,121 @@ public static partial class TableEditCheckPlanner
 
         private HashSet<string> _droppedNames = new(StringComparer.Ordinal);
 
-        private static bool PhaseTwoColumn(ColumnDraft c) => c.Identity is not null || c.IsInvisible || !string.IsNullOrWhiteSpace(c.Domain);
+        /// <summary>새 열의 신원·숨김·도메인 지원(설계 18.5·18.8).</summary>
+        private void ColumnFeatures(ColumnDraft c)
+        {
+            if (c.Identity is not null)
+            {
+                Unsupported(TableEditFeature.IdentityColumn, c.RowKey, c.Name);
+                if (dialect.NormalizeDefault(c.DefaultValue) is not null)
+                {
+                    // 신원 열에는 기본값을 못 준다(ORA-30665). 문장에서 소리 없이 빼지 않고 막는다.
+                    Invalid(c.RowKey, c.Name, "identityDefault");
+                }
+            }
 
-        private static CheckFinding NotYet(string rowKey, string subject) =>
-            new(CheckSeverity.Block, CheckCode.Unsupported, rowKey) { Subject = subject, Detail = NotYetReasonKey };
+            if (c.IsInvisible)
+            {
+                Unsupported(TableEditFeature.InvisibleColumn, c.RowKey, c.Name);
+            }
+
+            if (!string.IsNullOrWhiteSpace(c.Domain))
+            {
+                Unsupported(TableEditFeature.DomainColumn, c.RowKey, c.Name);
+            }
+        }
+
+        private void Invalid(string rowKey, string subject, string reason) =>
+            Findings.Add(new CheckFinding(CheckSeverity.Block, CheckCode.InvalidDefinition, rowKey) { Subject = subject, Detail = reason });
+
+        /// <summary>기존 특수 테이블에서 허용 밖의 편집을 ✖(설계 3장·18.10).</summary>
+        private void SpecialTable(TableDraftChanges changes)
+        {
+            if (original.Kind == TableKind.Heap)
+            {
+                return;
+            }
+
+            var addDrop = original.Kind is TableKind.Temporary or TableKind.Iot;
+            void Block(string rowKey, string subject) =>
+                Findings.Add(new CheckFinding(CheckSeverity.Block, CheckCode.Unsupported, rowKey) { Subject = subject, Detail = SpecialTableReasonKey });
+
+            foreach (var d in changes.Columns)
+            {
+                var allowed = d.State switch
+                {
+                    DraftRowState.Added or DraftRowState.Dropped => addDrop,
+                    _ => (d.Changes & ~(ColumnChange.Comment | ColumnChange.Default)) == 0,
+                };
+                if (!allowed)
+                {
+                    Block(d.RowKey, (d.Edited ?? d.Original)!.Name);
+                }
+            }
+
+            foreach (var d in changes.Constraints)
+            {
+                Block(d.RowKey, (d.Edited ?? d.Original)!.Name);
+            }
+
+            foreach (var d in changes.Indexes)
+            {
+                Block(d.RowKey, (d.Edited ?? d.Original)!.Name);
+            }
+
+            // GTT·IOT 이름 바꾸기는 된다(실측). 외부·클러스터는 막는다.
+            if (changes.Renamed && !addDrop)
+            {
+                Block(TableDraft.TableRowKey, edited.Name);
+            }
+        }
 
         public void PlanNew()
         {
             var columns = edited.Columns.Where(c => !c.IsDropped).ToList();
-            if (edited.Kind != TableKind.Heap)
+            var live = edited.Constraints.Where(c => !c.IsDropped).ToList();
+            switch (edited.Kind)
             {
-                Findings.Add(NotYet(TableDraft.TableRowKey, edited.Name));
+                case TableKind.Temporary:
+                    Unsupported(TableEditFeature.TemporaryTable, TableDraft.TableRowKey, edited.Name);
+                    foreach (var fk in live.Where(c => c.Kind == ConstraintKind.ForeignKey))
+                    {
+                        Invalid(fk.RowKey, fk.Name, "temporaryForeignKey");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(edited.Tablespace))
+                    {
+                        // GTT 는 임시 테이블스페이스를 쓰므로 문장에 넣지 않는다(설계 18.10) — 버린다고 알린다.
+                        Findings.Add(new CheckFinding(CheckSeverity.Warning, CheckCode.SettingIgnored, TableDraft.TableRowKey)
+                        {
+                            Subject = edited.Tablespace.Trim(),
+                            Detail = "temporaryTablespace",
+                        });
+                    }
+
+                    break;
+                case TableKind.Iot:
+                    Unsupported(TableEditFeature.IndexOrganizedTable, TableDraft.TableRowKey, edited.Name);
+                    if (!live.Any(c => c.Kind == ConstraintKind.PrimaryKey))
+                    {
+                        Invalid(TableDraft.TableRowKey, edited.Name, "iotWithoutPrimaryKey");
+                    }
+
+                    foreach (var bitmap in edited.Indexes.Where(i => !i.IsDropped && i.Kind == IndexKind.Bitmap))
+                    {
+                        // IOT 에 비트맵 인덱스는 매핑 테이블이 있어야 한다(ORA-28669) — 만들지 않는다.
+                        Invalid(bitmap.RowKey, bitmap.Name, "iotBitmapIndex");
+                    }
+
+                    break;
+                case TableKind.External or TableKind.Cluster:
+                    Findings.Add(new CheckFinding(CheckSeverity.Block, CheckCode.Unsupported, TableDraft.TableRowKey) { Subject = edited.Name, Detail = SpecialTableReasonKey });
+                    break;
             }
 
-            foreach (var c in columns.Where(PhaseTwoColumn))
+            foreach (var c in columns)
             {
-                Findings.Add(NotYet(c.RowKey, c.Name));
+                ColumnFeatures(c);
             }
 
             if (!string.IsNullOrWhiteSpace(edited.Name))
@@ -201,22 +302,20 @@ public static partial class TableEditCheckPlanner
         {
             var addedOrRenamed = changes.Columns.Where(d => d.State == DraftRowState.Added || d.Changes.HasFlag(ColumnChange.Name))
                 .Select(d => d.RowKey).ToHashSet(StringComparer.Ordinal);
-            var dependentsPlanned = false;
+            // 테이블 이름 바꾸기의 의존 객체 검사가 열 지우기 것도 겸한다(같은 질의).
+            var dependentsPlanned = changes.Renamed;
             var liveNames = edited.Columns.Where(c => !c.IsDropped && changes.StateOf(c.RowKey) != DraftRowState.Dropped).Select(c => c.Name)
                 .ToHashSet(StringComparer.Ordinal);
             _droppedNames = changes.Columns.Where(d => d.State == DraftRowState.Dropped).Select(d => d.Original!.Name)
                 .Where(n => !liveNames.Contains(n)).ToHashSet(StringComparer.Ordinal);
 
+            SpecialTable(changes);
             if (changes.Renamed)
             {
-                Findings.Add(NotYet(TableDraft.TableRowKey, edited.Name));
-            }
-
-            foreach (var d in changes.Columns.Where(d =>
-                         (d.State == DraftRowState.Modified && (d.Changes & (ColumnChange.Identity | ColumnChange.Invisible | ColumnChange.Domain)) != 0)
-                         || (d.State == DraftRowState.Added && PhaseTwoColumn(d.Edited!))))
-            {
-                Findings.Add(NotYet(d.RowKey, d.Edited!.Name));
+                // 설계 18.1: 새 이름 겹침 ✖, 이 테이블을 쓰는 객체가 무효가 됨 ⚠.
+                Unsupported(TableEditFeature.RenameTable, TableDraft.TableRowKey, edited.Name);
+                Checks.Add(Name(TableDraft.TableRowKey, edited.Name, TableEditNameKind.Table));
+                Checks.Add(new TableEditCheck(TableEditCheckKind.Dependents, CheckCode.DependentsInvalidated, TableDraft.TableRowKey, original.Name));
             }
 
             // 열
@@ -227,6 +326,7 @@ public static partial class TableEditCheckPlanner
                 switch (d.State)
                 {
                     case DraftRowState.Added:
+                        ColumnFeatures(d.Edited!);
                         if (d.Edited!.IsVirtual)
                         {
                             Unsupported(TableEditFeature.VirtualColumn, d.RowKey, d.Edited.Name);
@@ -324,6 +424,25 @@ public static partial class TableEditCheckPlanner
                 }
             }
 
+            // 규칙 이름 따라 바꾸기(설계 18.1, TE-38): 새 이름이 편집 안에서 겹치면 ✖, 아니면 서버에 묻는다.
+            var ruleRenames = TableEditRuleNames.Plan(original, edited, changes, dialect.MaxIdentifierBytes(options.Server));
+            foreach (var r in ruleRenames)
+            {
+                var isConstraint = r.Page == TableEditPage.Constraints;
+                var clash = (isConstraint
+                                ? liveConstraints.Any(c => c.RowKey != r.RowKey && string.Equals(c.Name, r.NewName, StringComparison.Ordinal))
+                                : liveIndexes.Any(i => i.RowKey != r.RowKey && string.Equals(i.Name, r.NewName, StringComparison.Ordinal)))
+                            || ruleRenames.Any(x => x != r && x.Page == r.Page && string.Equals(x.NewName, r.NewName, StringComparison.Ordinal));
+                if (clash)
+                {
+                    Findings.Add(new CheckFinding(CheckSeverity.Block, CheckCode.NameExists, r.RowKey) { Subject = r.NewName });
+                }
+                else if (!(isConstraint ? freedConstraints : freedIndexes).Contains(r.NewName))
+                {
+                    Checks.Add(Name(r.RowKey, r.NewName, isConstraint ? TableEditNameKind.Constraint : TableEditNameKind.Index));
+                }
+            }
+
             // 운영 큰 테이블(설계 10장): MODIFY·NOT NULL·제약 추가·인덱스 만들기
             var locks = changes.Columns.Any(d => d.State == DraftRowState.Modified
                                                  && (d.Changes & (ColumnChange.Type | ColumnChange.Nullable | ColumnChange.Default | ColumnChange.VirtualExpression)) != 0)
@@ -343,6 +462,38 @@ public static partial class TableEditCheckPlanner
             if (d.Changes.HasFlag(ColumnChange.Name))
             {
                 Unsupported(TableEditFeature.RenameColumn, d.RowKey, e.Name);
+            }
+
+            if (d.Changes.HasFlag(ColumnChange.Identity))
+            {
+                Unsupported(TableEditFeature.IdentityColumn, d.RowKey, e.Name);
+                if (!o.IsIdentityColumn && e.IsIdentityColumn)
+                {
+                    // 일반 열 → 신원 열은 빈 테이블에서도 ORA-30673(설계 12.1).
+                    Invalid(d.RowKey, o.Name, "identityFromPlain");
+                }
+                else if (o.IsIdentityUnknown && e.Identity is not null)
+                {
+                    // 원본 속성을 몰라 바뀐 옵션만 쓸 수 없다(START WITH 를 다시 쓰면 키가 겹친다). 신원 없애기만 된다.
+                    Invalid(d.RowKey, o.Name, "identityUnknown");
+                }
+            }
+
+            if (o.IsIdentityColumn && e.IsIdentityColumn && (d.Changes & (ColumnChange.Nullable | ColumnChange.Default)) != 0)
+            {
+                // 신원 열은 늘 NOT NULL 이고 기본값을 못 준다(ORA-30665·ORA-30673). 신원을 없애면서 바꾸는 것은 된다(DROP IDENTITY 가 먼저).
+                Invalid(d.RowKey, o.Name, "identityNullDefault");
+            }
+
+            if (d.Changes.HasFlag(ColumnChange.Invisible))
+            {
+                Unsupported(TableEditFeature.InvisibleColumn, d.RowKey, e.Name);
+                Findings.Add(new CheckFinding(CheckSeverity.Warning, CheckCode.ColumnOrderChanges, d.RowKey) { Subject = o.Name });
+            }
+
+            if (d.Changes.HasFlag(ColumnChange.Domain))
+            {
+                Unsupported(TableEditFeature.DomainColumn, d.RowKey, e.Name);
             }
 
             if (d.Changes.HasFlag(ColumnChange.VirtualExpression))
@@ -571,6 +722,10 @@ public static partial class TableEditCheckPlanner
             if (i.Kind == IndexKind.Bitmap)
             {
                 Unsupported(TableEditFeature.BitmapIndex, i.RowKey, i.Name);
+                if (i.IsUnique)
+                {
+                    Invalid(i.RowKey, i.Name, "uniqueBitmap");
+                }
             }
         }
 
@@ -744,7 +899,7 @@ public static class TableEditCheckRunner
                     var dependents = await checks.DependentsAsync(s, table, ct).ConfigureAwait(false);
                     return dependents.Count == 0
                         ? null
-                        : new CheckFinding(CheckSeverity.Warning, CheckCode.Irreversible, check.RowKey) { Subject = check.Subject, Dependents = dependents };
+                        : new CheckFinding(CheckSeverity.Warning, check.Code, check.RowKey) { Subject = check.Subject, Dependents = dependents };
                 }
 
             case TableEditCheckKind.LargeTable:

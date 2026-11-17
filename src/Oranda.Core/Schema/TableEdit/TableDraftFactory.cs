@@ -64,7 +64,8 @@ public static partial class TableDraftFactory
     /// <summary>
     /// 「이 구조로 새 테이블…」(설계 7.5): 열(가상 포함)·주석·제약·인덱스를 복사한 새 테이블 편집 모델. 제약·인덱스 이름은 새 이름으로 규칙대로 다시 만들고
     /// (<see cref="ConstraintNaming"/>, <see cref="ConstraintDraft.IsAutoName"/>), 줄 키는 모두 새 키다. 제약이 만든 인덱스와 다룰 수 없는 종류의 인덱스는 옮기지 않는다.
-    /// 테이블스페이스는 옮기지 않는다(TE-22). 신원 속성은 옮기지 않는다(TE-7). 원본은 <see cref="Empty"/> 와 짝이다.
+    /// 테이블스페이스는 옮기지 않는다(TE-22). 신원 속성은 옮긴다(설계 18.5 — TE-7 의 예외를 없앰). 다만 속성을 못 읽은 신원 열(<see cref="ColumnDraft.IsIdentityUnknown"/>)은
+    /// 신원 없이 옮긴다(생성 방식을 짐작하지 않는다). 원본은 <see cref="Empty"/> 와 짝이다.
     /// </summary>
     public static TableDraft CopyStructure(TableInfo source, string owner, string name, ITableEditDialect dialect, int maxIdentifierBytes)
     {
@@ -87,7 +88,7 @@ public static partial class TableDraftFactory
         {
             RowKey = Remap(c.RowKey),
             OriginalPosition = null,
-            Identity = null,
+            IsIdentityUnknown = false,
         }).ToList();
         var constraints = from.Constraints.Select(c => c with
         {
@@ -136,7 +137,9 @@ public static partial class TableDraftFactory
         DefaultValue = c.IsVirtual || c.IsIdentity ? null : c.DefaultValue,
         VirtualExpression = c.IsVirtual ? c.DefaultValue : null,
         Comment = c.Comment,
-        Identity = c.IsIdentity ? c.Identity ?? new IdentityInfo(IdentityGeneration.Always) : null,
+        // 속성을 못 읽은 신원 열은 짐작하지 않는다(ALWAYS 로 짐작하면 BY DEFAULT 열이 ALWAYS 로 바뀐다).
+        Identity = c.IsIdentity ? c.Identity : null,
+        IsIdentityUnknown = c.IsIdentity && c.Identity is null,
         IsInvisible = c.IsInvisible,
         Domain = c.Domain,
     };

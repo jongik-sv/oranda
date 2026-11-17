@@ -1,4 +1,5 @@
 using System.Text;
+using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Journal;
 using Oranda.Core.Metadata;
@@ -80,13 +81,15 @@ public sealed record TableEditScript(IReadOnlyList<TableEditStatement> Statement
 public static class TableEditScriptBuilder
 {
     /// <summary>원본과 편집의 문장. 바뀐 것이 없으면 <see cref="TableEditScript.Empty"/>. 새 테이블(<see cref="TableDraft.IsNewTable"/>)은 이름이 비면 빈 목록.</summary>
-    public static TableEditScript Build(TableDraft original, TableDraft edited, ITableEditDialect dialect)
+    /// <param name="server">접속한 서버(식별자 바이트 한도 — 규칙 이름 따라 바꾸기). 모르면 null(작은 한도, <see cref="ITableEditDialect.MaxIdentifierBytes"/>).
+    /// 검사 계획(<see cref="TableEditCheckOptions.Server"/>)과 같은 값을 준다.</param>
+    public static TableEditScript Build(TableDraft original, TableDraft edited, ITableEditDialect dialect, ServerInfo? server = null)
     {
         ArgumentNullException.ThrowIfNull(original);
         ArgumentNullException.ThrowIfNull(edited);
         ArgumentNullException.ThrowIfNull(dialect);
 
-        var b = new Builder(original, edited, dialect);
+        var b = new Builder(original, edited, dialect, dialect.MaxIdentifierBytes(server));
         if (edited.IsNewTable)
         {
             b.Create();
@@ -99,7 +102,7 @@ public static class TableEditScriptBuilder
         return b.Statements.Count == 0 ? TableEditScript.Empty : new TableEditScript(b.Statements);
     }
 
-    private sealed class Builder(TableDraft original, TableDraft edited, ITableEditDialect dialect)
+    private sealed class Builder(TableDraft original, TableDraft edited, ITableEditDialect dialect, int maxIdentifierBytes)
     {
         public List<TableEditStatement> Statements { get; } = [];
 
@@ -126,8 +129,15 @@ public static class TableEditScriptBuilder
             var constraints = edited.Constraints.Where(c => !c.IsDropped).ToList();
             var parts = columns.Select(c => ColumnDefinition(c, null)).ToList();
             parts.AddRange(constraints.Where(c => c.Kind != ConstraintKind.ForeignKey).OrderBy(c => KindOrder(c.Kind)).Select(ConstraintDefinition));
-            var create = $"CREATE TABLE {Table} ({string.Join(", ", parts)})"
-                         + (string.IsNullOrWhiteSpace(edited.Tablespace) ? string.Empty : " TABLESPACE " + Q(edited.Tablespace.Trim()));
+            var tablespace = string.IsNullOrWhiteSpace(edited.Tablespace) ? string.Empty : " TABLESPACE " + Q(edited.Tablespace.Trim());
+            var create = edited.Kind switch
+            {
+                // GTT 는 임시 테이블스페이스를 쓰므로 TABLESPACE 를 쓰지 않는다(설계 18.10).
+                TableKind.Temporary => $"CREATE GLOBAL TEMPORARY TABLE {Table} ({string.Join(", ", parts)})"
+                                       + (edited.OnCommitPreserveRows ? " ON COMMIT PRESERVE ROWS" : " ON COMMIT DELETE ROWS"),
+                TableKind.Iot => $"CREATE TABLE {Table} ({string.Join(", ", parts)}) ORGANIZATION INDEX" + tablespace,
+                _ => $"CREATE TABLE {Table} ({string.Join(", ", parts)})" + tablespace,
+            };
             Add(Ddl(create, "CREATE"), TableDraft.TableRowKey, TableEditPage.Columns, effect: new TableEditEffect(TableEditEffectKind.CreateTable));
 
             foreach (var fk in constraints.Where(c => c.Kind == ConstraintKind.ForeignKey))
@@ -210,9 +220,32 @@ public static class TableEditScriptBuilder
                     continue;
                 }
 
+                // 신원·도메인·숨김은 문법이 달라 따로(설계 18.5). 신원을 없애며 기본값·NULL 을 바꾸면 DROP IDENTITY 가 먼저다(신원 열에는 기본값·NULL 을 못 준다).
+                var dropsIdentity = d.Changes.HasFlag(ColumnChange.Identity) && !e.IsIdentityColumn;
+                if (dropsIdentity)
+                {
+                    Add(AlterTable($"MODIFY ({Q(e.Name)} DROP IDENTITY)"), d.RowKey, TableEditPage.Columns);
+                }
+
                 if (Modify(d) is { } modify)
                 {
                     Add(AlterTable($"MODIFY ({modify})"), d.RowKey, TableEditPage.Columns);
+                }
+
+                if (d.Changes.HasFlag(ColumnChange.Identity) && !dropsIdentity && e.Identity is { } identity)
+                {
+                    Add(AlterTable($"MODIFY ({Q(e.Name)} {IdentityChange(o.Identity, identity)})"), d.RowKey, TableEditPage.Columns);
+                }
+
+                if (d.Changes.HasFlag(ColumnChange.Domain))
+                {
+                    var clause = string.IsNullOrWhiteSpace(e.Domain) ? "DROP DOMAIN" : "DOMAIN " + e.Domain.Trim();
+                    Add(AlterTable($"MODIFY ({Q(e.Name)} {clause})"), d.RowKey, TableEditPage.Columns);
+                }
+
+                if (d.Changes.HasFlag(ColumnChange.Invisible))
+                {
+                    Add(AlterTable($"MODIFY ({Q(e.Name)} {(e.IsInvisible ? "INVISIBLE" : "VISIBLE")})"), d.RowKey, TableEditPage.Columns);
                 }
             }
 
@@ -315,6 +348,63 @@ public static class TableEditScriptBuilder
             {
                 AddColumnComment(d.Edited!);
             }
+
+            // 9. 테이블 이름(맨 끝 — 앞 문장이 옛 이름을 쓴다, 설계 18.1). 규칙 이름 따라 바꾸기는 켤 때만(TE-38).
+            if (changes.Renamed)
+            {
+                // 규칙 이름은 RENAME TO 앞(옛 이름의 객체를 다룬다). 끄면 없음(TE-38).
+                foreach (var r in TableEditRuleNames.Plan(original, edited, changes, maxIdentifierBytes))
+                {
+                    if (r.Page == TableEditPage.Constraints)
+                    {
+                        Add(AlterTable($"RENAME CONSTRAINT {Q(r.OldName)} TO {Q(r.NewName)}"), r.RowKey, TableEditPage.Constraints, effect: Renamed(r.NewName));
+                    }
+                    else
+                    {
+                        var statement = Ddl($"ALTER INDEX {Q(Owner)}.{Q(r.OldName)} RENAME TO {Q(r.NewName)}", "ALTER") with
+                        {
+                            ChangeTarget = new ChangeTarget(Owner, r.OldName, "INDEX", ChangeOperation.Alter),
+                        };
+                        Add(statement, r.RowKey, TableEditPage.Indexes, effect: Renamed(r.NewName));
+                    }
+                }
+
+                Add(AlterTable("RENAME TO " + Q(edited.Name)), TableDraft.TableRowKey, TableEditPage.Description);
+            }
+        }
+
+        /// <summary>새 열·새 테이블의 신원 절(옵션은 값이 있는 것 모두).</summary>
+        private static string IdentityClause(IdentityInfo identity) => IdentityText(identity.Generation, identity.StartWith, identity.IncrementBy);
+
+        /// <summary>
+        /// 기존 신원 열의 바꾸기 절: 생성 방식은 늘 쓰고(문법), 옵션은 원본과 달라진 것만 쓴다 — <c>START WITH</c> 를 다시 쓰면 시퀀스가 그 값부터 다시 시작해
+        /// 이미 있는 키와 겹친다. 원본 속성을 모르면(<paramref name="from"/> null) 옵션을 모두 쓴다(검사가 ✖ 로 막는다).
+        /// </summary>
+        private static string IdentityChange(IdentityInfo? from, IdentityInfo to) => IdentityText(
+            to.Generation,
+            from is null || to.StartWith != from.StartWith ? to.StartWith : null,
+            from is null || to.IncrementBy != from.IncrementBy ? to.IncrementBy : null);
+
+        private static string IdentityText(IdentityGeneration generation, long? startWith, long? incrementBy)
+        {
+            var text = generation switch
+            {
+                IdentityGeneration.ByDefault => "BY DEFAULT",
+                IdentityGeneration.ByDefaultOnNull => "BY DEFAULT ON NULL",
+                _ => "ALWAYS",
+            };
+            var options = new List<string>();
+            if (startWith is { } start)
+            {
+                options.Add("START WITH " + start.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            if (incrementBy is { } increment)
+            {
+                options.Add("INCREMENT BY " + increment.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            return $"GENERATED {text} AS IDENTITY" + (options.Count == 0 ? string.Empty : $" ({string.Join(" ", options)})");
         }
 
         // ---------- 문장 조각 ----------
@@ -362,9 +452,24 @@ public static class TableEditScriptBuilder
                 sb.Append(' ').Append(type);
             }
 
+            // 문법: 열 [형식] [DOMAIN d] [INVISIBLE] { AS (식) VIRTUAL | GENERATED … AS IDENTITY | DEFAULT … } [NOT NULL]
+            if (!string.IsNullOrWhiteSpace(c.Domain))
+            {
+                sb.Append(" DOMAIN ").Append(c.Domain.Trim());
+            }
+
+            if (c.IsInvisible)
+            {
+                sb.Append(" INVISIBLE");
+            }
+
             if (c.IsVirtual)
             {
                 sb.Append(" AS (").Append(c.VirtualExpression!.Trim()).Append(") VIRTUAL");
+            }
+            else if (c.Identity is { } identity)
+            {
+                sb.Append(' ').Append(IdentityClause(identity));
             }
             else if (dialect.NormalizeDefault(c.DefaultValue) is not null)
             {
@@ -448,7 +553,7 @@ public static class TableEditScriptBuilder
 
         private string TemporaryName(string name, HashSet<string> used)
         {
-            var max = dialect.MaxIdentifierBytes(null);
+            var max = maxIdentifierBytes;
             for (var n = 1; ; n++)
             {
                 var suffix = "$" + n.ToString(System.Globalization.CultureInfo.InvariantCulture);

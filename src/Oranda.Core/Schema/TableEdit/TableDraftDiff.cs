@@ -216,7 +216,8 @@ public static class TableDraftDiff
             changes |= ColumnChange.Nullable;
         }
 
-        if (!e.IsVirtual && e.Identity is null
+        // 신원 열의 기본값도 비교한다(신원 열에 기본값을 쓰면 검사가 ✖ — 소리 없이 버리지 않는다).
+        if (!e.IsVirtual
             && !string.Equals(dialect.NormalizeDefault(o.DefaultValue), dialect.NormalizeDefault(e.DefaultValue), StringComparison.Ordinal))
         {
             changes |= ColumnChange.Default;
@@ -233,7 +234,7 @@ public static class TableDraftDiff
             changes |= ColumnChange.Comment;
         }
 
-        if (o.Identity != e.Identity)
+        if (o.Identity != e.Identity || o.IsIdentityUnknown != e.IsIdentityUnknown)
         {
             changes |= ColumnChange.Identity;
         }

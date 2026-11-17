@@ -66,6 +66,9 @@ public enum CheckCode
 
     /// <summary>⚠ 숨김 ↔ 보임으로 열 순서가 바뀐다(맨 뒤로, 설계 18.5).</summary>
     ColumnOrderChanges,
+
+    /// <summary>⚠ 쓴 설정을 문장에 넣지 않는다(예: 새 GTT 의 테이블스페이스 — 임시 테이블스페이스를 쓴다). <see cref="CheckFinding.Detail"/> = 까닭(<c>temporaryTablespace</c>).</summary>
+    SettingIgnored,
 }
 
 /// <summary>

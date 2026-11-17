@@ -38,6 +38,14 @@ public sealed record TableDraft(string Owner, string Name)
     /// <summary>테이블스페이스. 새 테이블은 사용자가 칸을 열어 쓴 것만 문장에 넣는다(TE-22). 원본은 읽은 값.</summary>
     public string? Tablespace { get; init; }
 
+    /// <summary>
+    /// 테이블 이름을 바꿀 때 규칙 이름(<c>PK_&lt;옛 이름&gt;</c>·<c>IX_&lt;옛 이름&gt;_NN</c> 꼴) 제약·인덱스도 따라 바꾸나(설계 18.1 「규칙 이름도 바꾸기」, 기본 끔, TE-38).
+    /// </summary>
+    public bool RenameRuleNames { get; init; }
+
+    /// <summary>새 전역 임시 테이블의 <c>ON COMMIT PRESERVE ROWS</c>(거짓 = DELETE ROWS, 설계 18.10).</summary>
+    public bool OnCommitPreserveRows { get; init; }
+
     /// <summary>줄 키로 열 찾기. 없으면 null.</summary>
     public ColumnDraft? Column(string rowKey) => Columns.FirstOrDefault(c => c.RowKey == rowKey);
 
@@ -88,6 +96,15 @@ public sealed record ColumnDraft(string RowKey, string Name)
 
     /// <summary>신원 속성(설계 18.5). null = 신원 열 아님.</summary>
     public IdentityInfo? Identity { get; init; }
+
+    /// <summary>
+    /// 신원 열인데 공급자가 신원 속성을 읽지 못했다(<see cref="ColumnInfo.IsIdentity"/> 이고 <see cref="ColumnInfo.Identity"/> 가 null). <see cref="Identity"/> 는 null 로 둔다 —
+    /// 생성 방식을 짐작하지 않는다. 이런 열은 신원 속성 바꾸기 ✖(신원 없애기만 됨), 「이 구조로」 복사는 신원 없이 옮긴다.
+    /// </summary>
+    public bool IsIdentityUnknown { get; init; }
+
+    /// <summary>신원 열인가(속성을 알든 모르든).</summary>
+    public bool IsIdentityColumn => Identity is not null || IsIdentityUnknown;
 
     /// <summary>숨김 열(설계 18.5).</summary>
     public bool IsInvisible { get; init; }

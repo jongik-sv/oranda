@@ -28,6 +28,11 @@ public static class TableDraftRebase
         var constraints = oldOriginal.Constraints.ToDictionary(c => c.RowKey, c => c.Name, StringComparer.Ordinal);
         var indexes = oldOriginal.Indexes.ToDictionary(i => i.RowKey, i => i.Name, StringComparer.Ordinal);
         var removed = new HashSet<string>(StringComparer.Ordinal);
+
+        // 제약·인덱스 이름 바꾸기가 반영된 줄: 편집 줄 이름도 그 이름으로(규칙 이름 따라 바꾸기는 편집 줄 이름을 바꾸지 않으므로, 그대로 두면
+        // 다음 문장 만들기가 사용자가 옛 이름으로 되돌린 것으로 본다). 열은 임시 이름($1)을 거치므로 하지 않는다.
+        var constraintNames = new Dictionary<string, string>(StringComparer.Ordinal);
+        var indexNames = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var s in script.Statements.Take(applied))
         {
             if (s.Effect.Kind == TableEditEffectKind.CreateTable)
@@ -57,18 +62,36 @@ public static class TableDraftRebase
                 continue;
             }
 
+            var editedNames = s.Page switch
+            {
+                TableEditPage.Constraints => constraintNames,
+                TableEditPage.Indexes => indexNames,
+                _ => null,
+            };
             switch (s.Effect.Kind)
             {
                 case TableEditEffectKind.Drop:
                     names.Remove(s.RowKey);
                     removed.Add(s.RowKey);
+                    editedNames?.Remove(s.RowKey);
                     break;
                 case TableEditEffectKind.Rename or TableEditEffectKind.Create:
                     names[s.RowKey] = s.Effect.Name!;
                     removed.Remove(s.RowKey);
+                    if (editedNames is not null)
+                    {
+                        editedNames[s.RowKey] = s.Effect.Name!;
+                    }
+
                     break;
             }
         }
+
+        edited = edited with
+        {
+            Constraints = [.. edited.Constraints.Select(c => constraintNames.TryGetValue(c.RowKey, out var n) ? c with { Name = n } : c)],
+            Indexes = [.. edited.Indexes.Select(i => indexNames.TryGetValue(i.RowKey, out var n) ? i with { Name = n } : i)],
+        };
 
         var columnMap = Map(columns, newOriginal.Columns, c => c.Name, c => c.RowKey);
         var constraintMap = Map(constraints, newOriginal.Constraints, c => c.Name, c => c.RowKey);

@@ -108,7 +108,8 @@ public sealed class TableDraftFactoryTests
         var column = Assert.Single(TableDraftFactory.FromTable(table, Dialect).Columns);
 
         Assert.Null(column.DefaultValue);
-        Assert.Equal(new IdentityInfo(IdentityGeneration.Always), column.Identity);
+        Assert.Null(column.Identity); // 속성을 못 읽었으면 짐작하지 않는다
+        Assert.True(column.IsIdentityUnknown);
     }
 
     [Fact]
@@ -122,7 +123,7 @@ public sealed class TableDraftFactoryTests
     }
 
     [Fact]
-    public void Copy_structure_renames_constraints_and_indexes_by_rule_and_drops_identity()
+    public void Copy_structure_renames_constraints_and_indexes_by_rule_and_skips_unread_identity()
     {
         var table = Orders() with
         {
@@ -135,6 +136,7 @@ public sealed class TableDraftFactoryTests
         Assert.Equal(("SAMPLE", "ORDERS_BAK", "주문"), (copy.Owner, copy.Name, copy.Comment));
         Assert.Null(copy.Tablespace);
         Assert.Null(copy.Columns.Single(c => c.Name == "SEQ").Identity);
+        Assert.False(copy.Columns.Single(c => c.Name == "SEQ").IsIdentityUnknown);
         Assert.Null(copy.Columns.Single(c => c.Name == "SEQ").DefaultValue);
         Assert.Equal(["PK_ORDERS_BAK", "CK_ORDERS_BAK_01", "FK_ORDERS_BAK_01", "UK_ORDERS_BAK_01"], copy.Constraints.Select(c => c.Name));
         Assert.All(copy.Constraints, c => Assert.True(c.IsAutoName));

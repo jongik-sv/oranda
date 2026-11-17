@@ -6,7 +6,7 @@ using static Oranda.Core.Tests.Schema.TableEdit.Samples;
 
 namespace Oranda.Core.Tests.Schema.TableEdit;
 
-/// <summary>T1b 리뷰에서 나온 경우(다시 만드는 열의 제약·인덱스, 이름 바꾼 열의 식, 형식 판정, 지우는 열을 쓰는 식, 2차 속성 막기).</summary>
+/// <summary>T1b 리뷰에서 나온 경우(다시 만드는 열의 제약·인덱스, 이름 바꾼 열의 식, 형식 판정, 지우는 열을 쓰는 식, 2차 속성).</summary>
 public sealed class TableEditReviewFixTests
 {
     private const string T = "ALTER TABLE SAMPLE.ORDERS ";
@@ -129,22 +129,6 @@ public sealed class TableEditReviewFixTests
         edited = edited.WithColumn("TOTAL", c => c with { VirtualExpression = null, IsNullable = false });
 
         Assert.Contains(TableEditCheckPlanner.Plan(original, edited, Dialect, Dev).Checks, c => c is { Kind: TableEditCheckKind.Rows, Subject: "TOTAL" });
-    }
-
-    [Fact]
-    public void Phase_two_attributes_are_blocked_until_their_statements_exist()
-    {
-        var (original, edited) = Start();
-        edited = (edited with { Name = "SALES" })
-            .WithColumn("NOTE", c => c with { IsInvisible = true })
-            .AddColumn(new ColumnDraft("nseq", "SEQ") { DataType = "NUMBER", Identity = new IdentityInfo(IdentityGeneration.Always) });
-
-        var blocked = TableEditCheckPlanner.Plan(original, edited, Dialect, Dev).Findings.Where(f => f.Detail == TableEditCheckPlanner.NotYetReasonKey).ToList();
-
-        Assert.Equal([TableDraft.TableRowKey, original.KeyOf("NOTE"), "nseq"], blocked.Select(f => f.RowKey));
-        Assert.Single(TableEditCheckPlanner.Plan(TableDraftFactory.Empty("SAMPLE"),
-            (TableDraftFactory.Empty("SAMPLE") with { Name = "T1", Kind = TableKind.Temporary }).AddColumn(new ColumnDraft("c1", "ID") { DataType = "NUMBER" }),
-            Dialect, Dev).Findings, f => f.Detail == TableEditCheckPlanner.NotYetReasonKey);
     }
 
     [Fact]
