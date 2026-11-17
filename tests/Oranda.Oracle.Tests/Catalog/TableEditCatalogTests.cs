@@ -28,6 +28,11 @@ public partial class TableEditCatalogTests
     [InlineData("tableedit.constraint_name_exists")]
     [InlineData("tableedit.index_name_exists")]
     [InlineData("tableedit.dependents")]
+    [InlineData("tableedit.conversion_scan")]
+    [InlineData("tableedit.conversion_rows")]
+    [InlineData("tableedit.referencing_fks")]
+    [InlineData("tableedit.conversion_check_violations")]
+    [InlineData("tableedit.conversion_duplicate_keys")]
     [InlineData("meta.table_props")]
     public void Check_queries_run_from_11g_and_need_no_license_pack(string id)
     {
@@ -44,9 +49,44 @@ public partial class TableEditCatalogTests
         foreach (var id in Catalog.Entries.Select(e => e.Id).Where(i => i.StartsWith("tableedit.", StringComparison.Ordinal)).Distinct())
         {
             var body = Body(Catalog.Get(id, 26).Sql);
-            Assert.StartsWith("SELECT", body.TrimStart(), StringComparison.Ordinal);
+            // 형식 변환 행 시험(설계 18.9)만 PL/SQL 블록이다(변수에 담아 보기만 함).
+            Assert.StartsWith(id is "tableedit.conversion_scan" or "tableedit.conversion_rows" ? "DECLARE" : "SELECT", body.TrimStart(), StringComparison.Ordinal);
             Assert.DoesNotMatch(Writes(), body);
         }
+    }
+
+    [Fact]
+    public void Conversion_validate_needs_12c_and_leaves_user_text_out()
+    {
+        var query = Catalog.Get("tableedit.conversion_validate", 19);
+
+        Assert.Equal(12, query.Header.MinVersion);
+        Assert.Equal(CatalogLicense.None, query.Header.License);
+        Assert.Contains("@WHERE@", query.Sql, StringComparison.Ordinal);
+        Assert.Throws<CatalogQueryNotFoundException>(() => Catalog.Get("tableedit.conversion_validate", 11));
+    }
+
+    [Theory]
+    [InlineData("tableedit.conversion_scan")]
+    [InlineData("tableedit.conversion_rows")]
+    public void Conversion_blocks_take_the_user_expression_only_as_a_bound_query_and_rethrow_cancel(string id)
+    {
+        var sql = Catalog.Get(id, 11).Sql;
+
+        Assert.DoesNotContain("@EXPRESSION@", sql, StringComparison.Ordinal); // 사용자 식은 바인드 :query(SELECT 한 문장)로만
+        Assert.Contains(":query", sql, StringComparison.Ordinal);
+        Assert.Contains("@TYPE@", sql, StringComparison.Ordinal);
+        Assert.Matches(@"IF SQLCODE = -1013 THEN\s+RAISE;", sql);
+    }
+
+    [Theory]
+    [InlineData("tableedit.conversion_check_violations")]
+    [InlineData("tableedit.conversion_duplicate_keys")]
+    public void Converted_constraint_checks_put_the_user_text_on_its_own_lines(string id)
+    {
+        var sql = Catalog.Get(id, 11).Sql.ReplaceLineEndings("\n");
+
+        Assert.Contains("(\n@EXPRESSION@\n) AS @COL@", sql, StringComparison.Ordinal);
     }
 
     [Theory]

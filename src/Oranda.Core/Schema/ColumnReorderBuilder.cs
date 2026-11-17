@@ -137,12 +137,18 @@ public static class ColumnReorderBuilder
     /// <param name="enterprise">Enterprise Edition 이면 DBMS_REDEFINITION, 아니면 CTAS + RENAME</param>
     /// <param name="usePrimaryKey">기본키가 있으면 true(CONS_USE_PK), 없으면 ROWID 로 재정의</param>
     /// <param name="dependentDdl">제약·인덱스·트리거·권한·주석 DDL(<c>meta.ddl</c> 의 종속 객체 부분). 없으면 빈 문자열</param>
+    /// <param name="conversions">
+    /// 형식 변환(설계 18.9 「테이블 다시 만들기」): 열 이름 → 새 값 식과 맞출 형식(<see cref="RebuildConversion"/>).
+    /// 그 열은 이 식으로 복사하고(재정의는 <c>col_mapping</c>), 형식·<paramref name="columns"/> 의 그 열 정의(기본값·NOT NULL)를 새 표에 맞춘다. 없으면 null.
+    /// </param>
     public static string Rebuild(
-        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string dependentDdl)
+        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string dependentDdl,
+        IReadOnlyDictionary<string, RebuildConversion>? conversions = null)
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentNullException.ThrowIfNull(desired);
+        conversions ??= new Dictionary<string, RebuildConversion>(StringComparer.Ordinal);
 
         var byName = columns.ToDictionary(c => c.Name, StringComparer.Ordinal);
         var hidden = columns.Where(c => c.IsInvisible).ToList();
@@ -153,22 +159,34 @@ public static class ColumnReorderBuilder
         var target = Target(table);
         var staging = SqlIdentifier.QuoteAlways(table.Name + (enterprise ? "$INT" : "$NEW"));
         var stagingRef = SqlIdentifier.QuoteAlways(table.Owner) + "." + staging;
-        var selectList = string.Join(", ", copied.Select(c => SqlIdentifier.QuoteAlways(c.Name)));
+        var selectList = string.Join(", ", copied.Select(c => conversions.TryGetValue(c.Name, out var value)
+            ? value.Expression.Trim() + " AS " + SqlIdentifier.QuoteAlways(c.Name)
+            : SqlIdentifier.QuoteAlways(c.Name)));
+        var columnMapping = conversions.Count == 0
+            ? null
+            : string.Join(", ", copied.Select(c => (conversions.TryGetValue(c.Name, out var value) ? value.Expression.Trim() : SqlIdentifier.QuoteAlways(c.Name))
+                                                  + " " + SqlIdentifier.QuoteAlways(c.Name)));
 
         var sb = new StringBuilder();
         sb.AppendLine(CultureInfo.InvariantCulture, $"-- 열 순서 바꾸기: {table.Owner}.{table.Name}  (방식 ②: {(enterprise ? "DBMS_REDEFINITION" : "CTAS + RENAME")})");
         sb.AppendLine("-- 검토 뒤 실행: 이 스크립트는 자동으로 실행되지 않는다. 읽고, 공간·쓰기 중단 시간·참조 관계를 확인한 뒤 직접 실행한다.");
         sb.AppendLine("-- 새 열 순서: " + string.Join(", ", copied.Concat(ordered.Where(c => c.IsVirtual)).Select(c => c.Name)));
+        foreach (var (name, value) in conversions.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            sb.Append("-- 형식 변환: ").Append(name).Append(" = ").Append(OneLine(value.Expression))
+                .AppendLine(value.ModifyType is { } t ? " → " + t : string.Empty);
+        }
+
         AppendWarnings(sb, ordered, enterprise);
         sb.AppendLine();
 
         if (enterprise)
         {
-            AppendRedefinition(sb, table, stagingRef, selectList, copied, ordered, usePrimaryKey);
+            AppendRedefinition(sb, table, stagingRef, selectList, copied, ordered, usePrimaryKey, columnMapping, conversions);
         }
         else
         {
-            AppendCtas(sb, table, target, stagingRef, selectList, copied, ordered);
+            AppendCtas(sb, table, target, stagingRef, selectList, copied, ordered, conversions);
         }
 
         AppendStatsComment(sb, table);
@@ -211,13 +229,13 @@ public static class ColumnReorderBuilder
 
     private static void AppendCtas(
         StringBuilder sb, DbObjectRef table, string target, string stagingRef, string selectList,
-        IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered)
+        IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered, IReadOnlyDictionary<string, RebuildConversion> conversions)
     {
         var oldRef = SqlIdentifier.QuoteAlways(table.Owner) + "." + SqlIdentifier.QuoteAlways(table.Name + "$OLD");
         sb.AppendLine("-- 1) 새 순서로 복사한다(행 수만큼 시간과 공간이 든다. NOT NULL 은 따라오고 기본값·키·인덱스는 따라오지 않는다)");
         sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef} AS SELECT {selectList} FROM {target};");
         sb.AppendLine();
-        AppendColumnFixes(sb, stagingRef, copied, ordered);
+        AppendColumnFixes(sb, stagingRef, copied, ordered, conversions);
         sb.AppendLine("-- 2) 이름을 바꾼다(이 사이에 쓰기가 없어야 한다). 이 테이블을 참조하는 외래키는 원본(이름을 바꾼 테이블)에 그대로 남는다");
         sb.AppendLine(CultureInfo.InvariantCulture, $"ALTER TABLE {target} RENAME TO {SqlIdentifier.QuoteAlways(table.Name + "$OLD")};");
         sb.AppendLine(CultureInfo.InvariantCulture, $"ALTER TABLE {stagingRef} RENAME TO {SqlIdentifier.QuoteAlways(table.Name)};");
@@ -232,7 +250,8 @@ public static class ColumnReorderBuilder
 
     private static void AppendRedefinition(
         StringBuilder sb, DbObjectRef table, string stagingRef, string selectList,
-        IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered, bool usePrimaryKey)
+        IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered, bool usePrimaryKey,
+        string? columnMapping, IReadOnlyDictionary<string, RebuildConversion> conversions)
     {
         var target = Target(table);
         var owner = Lit(table.Owner);
@@ -247,9 +266,10 @@ public static class ColumnReorderBuilder
         sb.AppendLine("-- 2) 새 열 순서의 중간 테이블을 만든다(행은 복사하지 않는다)");
         sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef} AS SELECT {selectList} FROM {target} WHERE 1 = 0;");
         sb.AppendLine();
-        AppendColumnFixes(sb, stagingRef, copied, ordered);
+        AppendColumnFixes(sb, stagingRef, copied, ordered, conversions);
         sb.AppendLine("-- 3) 재정의를 시작한다(데이터를 복사한다. 원본은 계속 읽고 쓸 수 있다)");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"BEGIN DBMS_REDEFINITION.START_REDEF_TABLE(uname => {owner}, orig_table => {name}, int_table => {staging}, options_flag => {option}); END;");
+        var mapping = columnMapping is null ? string.Empty : $", col_mapping => {Lit(columnMapping)}";
+        sb.AppendLine(CultureInfo.InvariantCulture, $"BEGIN DBMS_REDEFINITION.START_REDEF_TABLE(uname => {owner}, orig_table => {name}, int_table => {staging}{mapping}, options_flag => {option}); END;");
         sb.AppendLine("/");
         sb.AppendLine();
         sb.AppendLine("-- 4) 인덱스·트리거·제약·권한을 중간 테이블에 복사한다(열 주석은 복사하지 않으니 아래 의존 DDL 의 COMMENT 문을 따로 실행한다)");
@@ -274,12 +294,25 @@ public static class ColumnReorderBuilder
     }
 
     /// <summary>CTAS 가 옮기지 못하는 기본값·가상 열·숨김 상태를 중간(새) 표에 맞춘다.</summary>
-    private static void AppendColumnFixes(StringBuilder sb, string stagingRef, IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered)
+    private static void AppendColumnFixes(
+        StringBuilder sb, string stagingRef, IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered, IReadOnlyDictionary<string, RebuildConversion> conversions)
     {
         var fixes = new List<string>();
+
+        // 문자·RAW 로 가는 변환은 CAST(자름) 대신 식 그대로 복사한 뒤 형식을 줄인다 — 넘치는 값이 있으면 오류(ORA-01441)로 멈춘다.
+        foreach (var c in copied.Where(c => conversions.TryGetValue(c.Name, out var v) && v.ModifyType is not null))
+        {
+            fixes.Add($"ALTER TABLE {stagingRef} MODIFY ({SqlIdentifier.QuoteAlways(c.Name)} {conversions[c.Name].ModifyType});");
+        }
         foreach (var c in copied.Where(c => !string.IsNullOrWhiteSpace(c.DefaultValue) && !c.IsIdentity))
         {
             fixes.Add($"ALTER TABLE {stagingRef} MODIFY ({SqlIdentifier.QuoteAlways(c.Name)} DEFAULT {c.DefaultValue!.Trim()});");
+        }
+
+        // 식으로 복사한 열은 CTAS 가 NOT NULL 을 옮기지 않는다.
+        foreach (var c in copied.Where(c => !c.IsNullable && conversions.ContainsKey(c.Name)))
+        {
+            fixes.Add($"ALTER TABLE {stagingRef} MODIFY ({SqlIdentifier.QuoteAlways(c.Name)} NOT NULL);");
         }
 
         foreach (var c in ordered.Where(c => c.IsVirtual))
@@ -297,7 +330,9 @@ public static class ColumnReorderBuilder
             return;
         }
 
-        sb.AppendLine("-- 기본값·가상 열·숨김 상태를 맞춘다(CTAS 는 옮기지 않는다)");
+        sb.AppendLine(conversions.Count == 0
+            ? "-- 기본값·가상 열·숨김 상태를 맞춘다(CTAS 는 옮기지 않는다)"
+            : "-- 기본값·가상 열·숨김 상태(형식 변환 열은 NOT NULL 도)를 맞춘다(CTAS 는 옮기지 않는다)");
         foreach (var f in fixes)
         {
             sb.AppendLine(f);
@@ -342,6 +377,9 @@ public static class ColumnReorderBuilder
 
     private static string Lit(string value) => Oranda.Core.Text.SqlLiteral.Quote(value);
 
+    private static string OneLine(string value) =>
+        string.Join(' ', value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()));
+
     private static SqlStatement Alter(string text) => new(text, default, StatementKind.Ddl) { Verb = "ALTER" };
 
     private static void EnsurePermutation(IReadOnlyList<string> original, IReadOnlyList<string> desired)
@@ -353,3 +391,9 @@ public static class ColumnReorderBuilder
         }
     }
 }
+
+/// <summary>
+/// 다시 만들기의 형식 변환 한 열(설계 18.9). <paramref name="Expression"/> = 새 값 식(옛 열 이름을 씀), <paramref name="ModifyType"/> = 복사 뒤
+/// 새 표에서 <c>MODIFY (c 형식)</c> 로 맞출 형식(문자·RAW 처럼 CAST 가 값을 자르는 형식만, 없으면 null — 식이 이미 그 형식을 낸다).
+/// </summary>
+public sealed record RebuildConversion(string Expression, string? ModifyType = null);

@@ -6,7 +6,7 @@ namespace Oranda.Core.Metadata;
 /// 메타데이터 카탈로그 행(<c>meta.objects</c>·<c>meta.columns</c>·<c>meta.constraints</c>·<c>meta.indexes</c>) → 모델. Oracle·Tibero 가 같은 열 순서로 질의해
 /// 같은 규칙으로 읽는다.
 /// </summary>
-public static class MetadataRows
+public static partial class MetadataRows
 {
     /// <summary><c>meta.objects</c> 한 줄(owner, object_name, object_type, status, last_ddl_time) → 객체. 시각은 UTC 로 읽는다.</summary>
     public static MetaObject ToMeta(string dbKey, object?[] r, DateTimeOffset fetchedAt) => new()
@@ -82,9 +82,15 @@ public static class MetadataRows
         return result;
     }
 
-    /// <summary>SQL 의 <c>search_condition LIKE '%IS NOT NULL'</c> 과 같은 판정(대소문자 구분, 끝 일치).</summary>
+    /// <summary>
+    /// NOT NULL 검사 제약인가: 조건 전체가 따옴표 열 하나 + <c>IS NOT NULL</c>(<c>"C" IS NOT NULL</c>, 서버가 만드는 꼴, 대소문자 구분). Oracle <c>meta.constraints</c>(19+) SQL 의
+    /// <c>REGEXP_LIKE</c> 와 같은 판정. <c>a &gt; 0 OR b IS NOT NULL</c> 처럼 끝만 같은 CHECK 는 사용자 제약이라 남긴다(형식 변환 5단계가 되살린다, 설계 18.9).
+    /// </summary>
     public static bool IsNotNullCheck(string? condition)
-        => condition is not null && condition.EndsWith("IS NOT NULL", StringComparison.Ordinal);
+        => condition is not null && NotNullCheckPattern().IsMatch(condition);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*""[^""]+""\s+IS NOT NULL\s*$")]
+    private static partial System.Text.RegularExpressions.Regex NotNullCheckPattern();
 
     /// <summary><c>meta.indexes</c> 행(index_name, uniqueness, index_type, column_name, column_position) → 인덱스 목록.</summary>
     public static List<IndexInfo> BuildIndexes(IReadOnlyList<object?[]> rows)

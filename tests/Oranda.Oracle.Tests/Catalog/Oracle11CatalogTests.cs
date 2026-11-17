@@ -34,8 +34,9 @@ public partial class Oracle11CatalogTests
     /// <summary>
     /// 12c 이후 뷰만 쓰는 id. tuning.trace_lines(TSK-06-02): v$diag_trace_file_contents, 11.2 에서는 서비스가 이유와 함께 끈다.
     /// copy.identity_cols(TP0b-1): ALL_TAB_IDENTITY_COLS, 11g 에는 IDENTITY 열이 없어 복사 사전 점검이 보내지 않는다.
+    /// tableedit.conversion_validate(T17): VALIDATE_CONVERSION 은 12.2 부터 — 11g 는 행 단위 시험(conversion_scan·conversion_rows)으로 센다.
     /// </summary>
-    private static readonly string[] TwelveOnly = ["tuning.trace_lines", "copy.identity_cols"];
+    private static readonly string[] TwelveOnly = ["tuning.trace_lines", "copy.identity_cols", "tableedit.conversion_validate"];
 
     [Fact]
     public void Every_catalog_id_has_a_query_for_11_2()

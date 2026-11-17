@@ -75,6 +75,15 @@ public enum CheckCode
 
     /// <summary>⚠ ONLINE 이 안 되는 MOVE — 그동안 DML 이 잠긴다(설계 18.2).</summary>
     MoveLocksDml,
+
+    /// <summary>✖ 형식 변환식으로 바꿀 수 없는 행이 있다(설계 18.9, TE-49). <see cref="CheckFinding.Detail"/> = <c>atLeast</c>(다 세지 못함) 또는 처음 본 서버 오류.</summary>
+    ConversionFails,
+
+    /// <summary>
+    /// ⚠ 형식 변환 바꿔치기: 2단계 UPDATE 부터 3단계 DROP 까지 이 테이블에 쓰기를 멈춰야 한다(3단계 앞 확인 블록이 바뀐 행을 보면 멈춤). 행 트리거는 UPDATE 로 모든 행에서 발화한다
+    /// (<see cref="CheckFinding.Dependents"/> = 트리거).
+    /// </summary>
+    ConversionNeedsQuiet,
 }
 
 /// <summary>

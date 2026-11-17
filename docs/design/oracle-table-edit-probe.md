@@ -94,3 +94,23 @@
 - 신원 열의 `DefaultValue` 는 지금처럼 `"O"."ISEQ$$_n".nextval` 이 온다(데이터 복사·상세가 그대로 씀). 편집 모델 쪽에서 `Identity` 가 있으면 기본값으로 비교하지 않아야 한다.
 - 방언 `OracleTableEditDialect`: 이름 한도 12.2 이상 128 · 그 밖 30, 가상 식 MODIFY 됨, 신원·숨김 12.1+, 도메인 23+, 비트맵·파티션은 Standard·Express 에서 끔(에디션을 모르면 켬), 일반 → 파티션은 12.2+.
 - 검사 `OracleTableEditChecks`: 카탈로그 `tableedit.*`(17개, 11g 부터 같은 문장), 이름은 늘 따옴표, 식·조건은 원문. 취소는 서버 명령 취소 뒤 `OperationCanceledException`.
+
+## 6. 형식 변경 자동 변환 실측 (T17, 2026-11-17, 26ai FREEPDB1·11g XE, 임시 계정 ORT_TE_PROBE)
+
+| # | 항목 | 26ai | 11g | 구현 |
+|---|---|---|---|---|
+| 6a | `TO_DATE('2026-01-05', 'YYYY-MM-DD HH24:MI:SS')`(짧은 값) | 됨, 0시 | 같음 | 기본 날짜 형식 하나로 날짜만·날짜 시각 모두 받음 |
+| 6b | `VALIDATE_CONVERSION(c AS NUMBER)` | 됨('12x' = 0, ' 12 ' = 1) | 없음(ORA-00907) | 12.2+ 기본 변환식만 집합 질의, 11g 는 PL/SQL 행 시험 |
+| 6c | `VALIDATE_CONVERSION(… AS NUMBER(12))` | ORA-43910(정밀도 안 받음) | — | NUMBER(p,s) 넘침은 `ABS(ROUND(TO_NUMBER(c), s)) >= POWER(10, p-s)` 로 따로 |
+| 6d | PL/SQL `v NUMBER(12) := 1234567890123` / `v VARCHAR2(3 CHAR)` 에 'abcd' | ORA-06502 | 같음 | 행 시험은 새 형식 변수에 담아 본다(UPDATE 와 같은 판정) |
+| 6e | `CAST('abcd' AS VARCHAR2(3))` | 오류 없이 'abc'(자름) | 같음 | 문자 형식으로 가는 기본 변환식은 CAST 를 쓰지 않음(TO_CHAR·그대로) |
+| 6f | `CAST(1234567890123 AS NUMBER(12))` | ORA-01438 | 같음 | 숫자 기본 변환식은 CAST |
+| 6g | 여러 열 UK 의 열 DROP COLUMN | ORA-12991 | 같음 | 3단계 `DROP COLUMN … CASCADE CONSTRAINTS`, 5단계가 되살림 |
+| 6h | 가상 열이 쓰는 열 DROP COLUMN | ORA-54031 | 같음 | 바꿔치기 ✖(`usedByVirtualColumn:V`), 다시 만들기는 됨 |
+| 6i | CASCADE CONSTRAINTS 뒤 | 여러 열 UK·CHECK·여러 열 인덱스·함수 기반 인덱스 모두 지워짐 | 같음 | 5단계에서 제약·인덱스 다시 만들기 |
+| 6j | 바꿔치기 1~4 단계 + `MODIFY (c DEFAULT 0 NOT NULL)` | 됨, 열이 맨 뒤(column_id 3), 주석 사라짐 | 같음 | 5단계에 주석 포함, ⚠ 열 순서 |
+| 6k | CTAS `CAST(TO_NUMBER(c) AS NUMBER(12))` / `CAST('ab' AS VARCHAR2(20 CHAR))` | NUMBER(12)·CHAR_USED C, NOT NULL 은 안 따라옴 | 같음 | 다시 만들기는 변환 열에 `MODIFY (c NOT NULL)` |
+| 6l | `ALTER VIEW v COMPILE` | VALID | 같음 | 6단계 |
+
+- 함정(구현 중 발견): `meta.constraints` 가 조건이 `IS NOT NULL` 로 **끝나는** CHECK 를 NOT NULL 제약으로 보고 뺐다(`id > 0 OR order_no IS NOT NULL` 도). 변환 5단계가 그 제약을 되살리지 못해 사라진다 → 조건 전체가 `"열" IS NOT NULL` 인 것만 빼도록 좁힘(19+ SQL `REGEXP_LIKE`, 11g 는 `MetadataRows.IsNotNullCheck`). Tibero `meta.constraints` 도 같은 `LIKE '%IS NOT NULL'` 이다(win30 몫).
+- IT `ColumnConversionIntegrationTests`(26ai·11g 각 6개): 바꿔치기 실행 뒤 형식·NOT NULL·기본값·주석·UK·CHECK·인덱스 2개·뷰 VALID·값, 「변환 안 되는 행」 3건(기본식 = 26ai VALIDATE / 11g 행 시험, 사용자 식 = 둘 다 행 시험)과 「그 행 보기」 SQL, 틀린 식 = 「1건 이상」 + 서버 오류, 참조 FK, 다시 만들기(CTAS) 열 순서 유지.

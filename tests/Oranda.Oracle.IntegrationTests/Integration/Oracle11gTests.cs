@@ -372,7 +372,11 @@ public sealed class Oracle11gTests : IAsyncLifetime
             "app/fk_index_check.sql [@OWNER_FILTER@ @TABLE@]", "app/locked_row_select.sql [@ROWID@ @TABLE@]",
             "dbinfo/flashback_versions.sql [@COLUMNS@ @CONDITIONS@ @RANGE@ @TABLE@]", "meta/object_users.sql [@NAME@ @OWNER@]",
             // 테이블 편집기 검사 읽기(계획 Task 3). 실제 질의는 Schema/TableEditIntegrationTests 가 11g·26ai 에서 돌린다.
-            "tableedit/check_violations.sql [@CONDITION@ @TABLE@]", "tableedit/count_rows.sql [@TABLE@]",
+            "tableedit/check_violations.sql [@CONDITION@ @TABLE@]",
+            "tableedit/conversion_check_violations.sql [@COL@ @COLUMNS@ @CONDITION@ @EXPRESSION@ @TABLE@]", // 형식 변환(T17)
+            "tableedit/conversion_duplicate_keys.sql [@ALL_NULL@ @COL@ @COLUMNS@ @EXPRESSION@ @KEYS@ @TABLE@]",
+            "tableedit/conversion_rows.sql [@TABLE@ @TYPE@]", "tableedit/conversion_scan.sql [@TYPE@]",
+            "tableedit/count_rows.sql [@TABLE@]",
             "tableedit/duplicate_keys.sql [@ALL_NULL@ @COLS@ @TABLE@]", "tableedit/length_overflow.sql [@COL@ @LENGTH@ @TABLE@]",
             "tableedit/nonnull_count.sql [@COL@ @TABLE@]", "tableedit/null_count.sql [@COL@ @TABLE@]", "tableedit/number_overflow.sql [@COL@ @TABLE@]",
             "tableedit/orphans.sql [@ANY_NULL@ @MATCH@ @REF_TABLE@ @TABLE@]", "tableedit/preview_expression.sql [@COLUMNS@ @EXPRESSION@ @TABLE@]",

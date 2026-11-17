@@ -13,10 +13,12 @@ public class Oracle11ReaderTests
 
     [Theory]
     [InlineData("\"ID\" IS NOT NULL", true)]
-    [InlineData("ID IS NOT NULL", true)]
+    [InlineData("ID IS NOT NULL", false)] // 서버가 만든 NOT NULL 은 늘 따옴표 — 따옴표 없는 것은 사용자 CHECK
     [InlineData("ID > 0", false)]
     [InlineData("ID IS NOT NULL AND ID > 0", false)]
-    [InlineData("id is not null", false)] // SQL LIKE '%IS NOT NULL' 처럼 대소문자를 가린다
+    [InlineData("ID > 0 OR CODE IS NOT NULL", false)] // 끝만 같은 사용자 CHECK 는 남긴다(형식 변환이 되살림)
+    [InlineData(" \"A B\" IS NOT NULL ", true)]
+    [InlineData("id is not null", false)] // SQL REGEXP_LIKE 처럼 대소문자를 가린다
     [InlineData("", false)]
     [InlineData(null, false)]
     public void Not_null_check_matches_the_sql_filter(string? condition, bool expected)
