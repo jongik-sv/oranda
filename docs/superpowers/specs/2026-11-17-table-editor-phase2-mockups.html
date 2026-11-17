@@ -1,0 +1,154 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>테이블 편집기 2차 시안</title><style>body{font-family:-apple-system,"Malgun Gothic",sans-serif;max-width:1000px;margin:20px auto;padding:0 16px}</style></head><body>
+<style>
+  .ow{font:12px/1.35 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:#222;background:#fff;border:1px solid #bbb;margin:6px 0}
+  .ow .tabs{display:flex;background:#eee;border-bottom:2px solid #2a7bd4}
+  .ow .tabs span{padding:4px 10px}
+  .ow .tabs .on{background:#2a7bd4;color:#fff}
+  .ow .sub{display:flex;gap:14px;padding:4px 8px;border-bottom:1px solid #ddd}
+  .ow .sub .on{border-bottom:2px solid #2a7bd4}
+  .ow .sub .dim{color:#aaa}
+  .ow .body{display:flex;min-height:200px}
+  .ow .nav{width:84px;background:#f3f3f3;border-right:1px solid #ddd}
+  .ow .nav div{padding:4px 10px}
+  .ow .nav .on{background:#9cc3ea}
+  .ow .nav .dim{color:#aaa}
+  .ow .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .ow .tb{display:flex;gap:6px;align-items:center;padding:4px 6px;background:#f7f7f7;border-bottom:1px solid #ddd}
+  .ow .ic{display:inline-block;min-width:18px;height:18px;border:1px solid #c8c8c8;border-radius:3px;background:#fff;text-align:center;font-size:11px;line-height:16px;padding:0 3px}
+  .ow .tog{border-color:#2a7bd4;background:#dbeaf9}
+  .ow table{border-collapse:collapse;width:100%}
+  .ow th,.ow td{border:1px solid #d6d6d6;padding:2px 5px;white-space:nowrap;text-align:left}
+  .ow th{background:#efefef;font-weight:600}
+  .ow .new{background:#e3f4e3}
+  .ow .ddl{border-top:1px solid #bbb;background:#fbfbfb;font:11px/1.4 Menlo,Consolas,monospace;padding:5px 8px;color:#333;white-space:pre}
+  .ow .ddl b{color:#0b5cad;font-weight:600}
+  .ow .foot{display:flex;gap:6px;justify-content:flex-end;align-items:center;padding:5px 8px;border-top:1px solid #ddd;background:#f3f3f3}
+  .ow .btn{border:1px solid #aaa;border-radius:3px;padding:2px 9px;background:#fff}
+  .ow .pri{background:#2a7bd4;color:#fff;border-color:#2a7bd4}
+  .ow .msg{flex:1;color:#666}
+  .ow .badge{background:#2e8b3a;color:#fff;border-radius:3px;padding:0 5px;font-size:11px}
+  .ow .badge.t{background:#c98a12}
+  .ow .badge.p{background:#c0392b}
+  .ow .fld{display:flex;gap:8px;align-items:center;padding:6px 8px}
+  .ow .in{border:1px solid #bbb;border-radius:2px;padding:1px 6px;min-width:90px;background:#fff}
+  .ow .ptitle{background:#e9e9e9;padding:3px 8px;font-weight:600;border-bottom:1px solid #ccc;display:flex;justify-content:space-between}
+  .ow .ok{color:#2e8b3a}
+  .q{font-size:13px;margin:4px 0 14px}
+  .q li{margin:3px 0}
+</style>
+<style>
+  .ow .chg{background:#fff3c4}
+  .ow .del{background:#fbe0e0;text-decoration:line-through;color:#888}
+  .ow .warn{color:#b26a00}
+  .ow .stop{color:#c0392b;font-weight:600}
+  .ow .form{display:grid;grid-template-columns:150px 120px 140px 1fr;gap:0;font-size:12px}
+  .ow .form div{padding:3px 8px;border-bottom:1px solid #eee}
+  .ow .form .h{background:#efefef;font-weight:600}
+  .ow .step{display:flex;gap:8px;padding:4px 8px;border-bottom:1px solid #eee;align-items:baseline}
+  .ow .step .n{width:20px;font-weight:600;color:#2a7bd4}
+  .ow .step code{font:11px Menlo,Consolas,monospace;background:#f4f4f4;padding:0 4px}
+  .ow .seg{display:inline-flex;border:1px solid #2a7bd4;border-radius:3px;overflow:hidden}
+  .ow .seg span{padding:1px 8px}
+  .ow .seg .on{background:#2a7bd4;color:#fff}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+</style>
+
+<h2>2차 시안 — 파티션 · 저장 속성/LOB · 형식 변경 자동 변환</h2>
+<p class="subtitle">셋 다 제 제안입니다. 첫판과 같은 규칙(✎ 편집 → 고치기 → 아래 DDL, ✖ 막음 / ⚠ 알림, 반영 묶음 연동)을 따릅니다.</p>
+
+<div class="section">
+<h3>⑥ 파티션 페이지</h3>
+<p class="q">지금 읽기 전용 「파티션」 페이지에 편집을 켭니다. 위에서 방식과 키 열을 고르고, 표에서 파티션 줄을 고칩니다. 「경계 채우기…」는 「2026-01 부터 매월 12개」처럼 줄을 한꺼번에 만듭니다.</p>
+<div class="ow">
+  <div class="tabs"><span>기본</span><span class="on">SAMPLE.ORDERS ✕</span></div>
+  <div class="body" style="min-height:190px">
+    <div class="nav"><div>일반</div><div>열</div><div>제약</div><div>인덱스</div><div class="on">파티션</div><div>저장</div><div>통계</div></div>
+    <div class="main">
+      <div class="fld"><span>방식</span><span class="in">범위(RANGE) ▾</span><span>키 열</span><span class="in">ORDER_DATE ▾</span><span>자동 추가</span><span class="in">매월(INTERVAL) ▾</span><span style="color:#aaa">하위 파티션: 없음</span></div>
+      <div class="tb"><span class="ic tog">✎ 편집</span><span class="ic">＋</span><span class="ic">－ 지우기</span><span class="ic">나누기</span><span class="ic">합치기</span><span class="ic">비우기</span><span style="color:#888">│</span><span class="btn">경계 채우기…</span></div>
+      <table>
+        <tr><th>이름</th><th>상한값 (LESS THAN)</th><th>테이블스페이스</th><th>행 수(통계)</th></tr>
+        <tr><td>P_2026_09</td><td>DATE '2026-10-01'</td><td>(기본)</td><td>182,400</td></tr>
+        <tr><td>P_2026_10</td><td>DATE '2026-11-01'</td><td>(기본)</td><td>190,115</td></tr>
+        <tr class="new"><td>P_2026_11</td><td>DATE '2026-12-01'</td><td>(기본)</td><td></td></tr>
+        <tr class="del"><td>P_2024_01</td><td>DATE '2024-02-01'</td><td>(기본)</td><td>95,020</td></tr>
+      </table>
+      <div class="ddl"><b>ALTER TABLE</b> SAMPLE.ORDERS <b>ADD PARTITION</b> P_2026_11 <b>VALUES LESS THAN</b> (DATE '2026-12-01');
+<b>ALTER TABLE</b> SAMPLE.ORDERS <b>DROP PARTITION</b> P_2024_01 <b>UPDATE INDEXES</b>;</div>
+      <div class="foot"><span class="msg"><span class="warn">⚠ 파티션 지우기: 95,020행이 지워지고 되돌릴 수 없음</span></span><span class="btn">묶음에 넣기 ▾</span><span class="btn">스크립트 저장…</span><span class="btn pri">실행</span></div>
+    </div>
+  </div>
+</div>
+<ul class="q">
+  <li>방식: 범위 · 목록 · 해시 · 간격(INTERVAL, 범위의 자동 추가). 새 테이블은 CREATE TABLE 안에 PARTITION BY 절로 들어갑니다.</li>
+  <li>파티션 안 된 기존 테이블 → 파티션 테이블: Oracle 12.2 이상은 <code>MODIFY PARTITION BY … ONLINE</code> 한 문장. 그 밖(구버전·Tibero 가 안 되면)은 「열 순서 바꾸기」의 테이블 다시 만들기 방식으로 바꿉니다(⚠ 오래 걸림).</li>
+  <li>나누기(SPLIT)·합치기(MERGE)는 줄을 고르고 단추로, 인덱스는 늘 <code>UPDATE INDEXES</code> 를 붙여 UNUSABLE 이 안 되게 합니다.</li>
+  <li>하위 파티션(복합 파티션)은 보여 주기만 하고 편집은 다음으로 미루는 것을 제안합니다.</li>
+</ul>
+</div>
+
+<div class="section">
+<h3>⑦ 저장 페이지 (저장 속성 + LOB 저장, 한 페이지)</h3>
+<p class="q">「저장」 페이지 하나에 테이블 저장 속성과 LOB 열을 같이 둡니다. 「지금 값 / 바꿀 값」 두 칸이라 무엇이 바뀌는지 바로 보입니다. 비운 칸은 그대로 둡니다.</p>
+<div class="cols">
+<div class="ow">
+  <div class="ptitle"><span>테이블</span><span class="ic tog" style="font-weight:400">✎ 편집</span></div>
+  <div class="form">
+    <div class="h">속성</div><div class="h">지금 값</div><div class="h">바꿀 값</div><div class="h">효과</div>
+    <div>테이블스페이스</div><div>USERS</div><div class="chg">DATA01 ▾</div><div class="warn">MOVE 필요</div>
+    <div>PCTFREE</div><div>10</div><div class="chg">20</div><div>새 블록부터</div>
+    <div>INITRANS</div><div>1</div><div></div><div></div>
+    <div>압축</div><div>없음</div><div class="chg">BASIC ▾</div><div class="warn">MOVE 필요</div>
+    <div>LOGGING</div><div>예</div><div></div><div></div>
+    <div>병렬</div><div>1</div><div></div><div></div>
+  </div>
+</div>
+<div class="ow">
+  <div class="ptitle"><span>LOB 열</span><span style="font-weight:400">LOB 이 없는 테이블은 이 칸 없음</span></div>
+  <table>
+    <tr><th>열</th><th>방식</th><th>테이블스페이스</th><th>압축</th><th>중복 제거</th><th>행 안에</th></tr>
+    <tr><td>MEMO</td><td>SECUREFILE</td><td class="chg">LOB01 ▾</td><td>없음</td><td>아니오</td><td>예</td></tr>
+    <tr><td>ATTACH</td><td>BASICFILE</td><td>(기본)</td><td>—</td><td>—</td><td>예</td></tr>
+  </table>
+</div>
+</div>
+<div class="ow">
+  <div class="ddl"><b>ALTER TABLE</b> SAMPLE.ORDERS <b>PCTFREE</b> 20;
+<b>ALTER TABLE</b> SAMPLE.ORDERS <b>MOVE ONLINE TABLESPACE</b> DATA01 <b>ROW STORE COMPRESS BASIC</b> <b>LOB</b> (MEMO) <b>STORE AS</b> (<b>TABLESPACE</b> LOB01) <b>UPDATE INDEXES</b>;</div>
+  <div class="foot"><span class="msg"><span class="warn">⚠ MOVE: 테이블 전체를 다시 씀(약 1,240,000행) · ONLINE 이 안 되는 판·Tibero 는 그동안 DML 잠금</span></span><span class="btn">묶음에 넣기 ▾</span><span class="btn">스크립트 저장…</span><span class="btn pri">실행</span></div>
+</div>
+<ul class="q">
+  <li>MOVE 가 필요한 변경(테이블스페이스·압축·LOB 저장)은 한 문장으로 모으고, 인덱스는 <code>UPDATE INDEXES</code> 로 살립니다. ONLINE 이 안 되는 곳은 MOVE 뒤 <code>ALTER INDEX … REBUILD</code> 를 덧붙입니다.</li>
+  <li>새 테이블에서는 이 페이지 값이 CREATE TABLE 의 저장 절이 됩니다. BASICFILE → SECUREFILE 바꾸기는 MOVE 로 합니다.</li>
+</ul>
+</div>
+
+<div class="section">
+<h3>⑧ 열 형식 변경 자동 변환</h3>
+<p class="q">데이터가 있는 열의 형식을 바꾸면(예: VARCHAR2 → NUMBER) 첫판은 ✖ 로 막습니다. 2차는 그 ✖ 옆에 「변환해서 바꾸기…」를 두고, 아래 창에서 방법과 변환식을 고릅니다.</p>
+<div class="ow" style="max-width:720px">
+  <div class="ptitle"><span>변환해서 바꾸기 — SAMPLE.ORDERS.ORDER_NO  VARCHAR2(20) → NUMBER(12)</span><span class="badge">개발</span></div>
+  <div class="fld"><span>방법</span><span class="seg"><span class="on">열 바꿔치기</span><span>테이블 다시 만들기</span></span><span style="color:#666">열 바꿔치기: 빠름, 열이 맨 뒤로 감 · 다시 만들기: 열 순서 유지, 오래 걸림</span></div>
+  <div class="fld"><span>변환식</span><span class="in" style="min-width:260px">TO_NUMBER(ORDER_NO)</span><span class="stop">✖ 변환 안 되는 행 3건</span><span style="color:#2a7bd4"><u>그 행 보기</u></span></div>
+  <div class="step"><span class="n">1</span><span><code>ALTER TABLE … ADD (ORDER_NO$N NUMBER(12))</code></span></div>
+  <div class="step"><span class="n">2</span><span><code>UPDATE … SET ORDER_NO$N = TO_NUMBER(ORDER_NO)</code> <span class="warn">⚠ DML · 1,240,000행 · 커밋은 이 단계 끝에 한 번</span></span></div>
+  <div class="step"><span class="n">3</span><span><code>ALTER TABLE … DROP COLUMN ORDER_NO</code> <span class="warn">⚠ 되돌릴 수 없음</span></span></div>
+  <div class="step"><span class="n">4</span><span><code>ALTER TABLE … RENAME COLUMN ORDER_NO$N TO ORDER_NO</code></span></div>
+  <div class="step"><span class="n">5</span><span>NOT NULL · 기본값 · 주석 · 이 열의 제약/인덱스 다시 만들기 (4문장)</span></div>
+  <div class="step"><span class="n">6</span><span>이 열을 쓰는 뷰·PL/SQL 다시 컴파일 (2개)</span></div>
+  <div class="foot"><span class="msg">✖ 가 없어질 때까지 실행 막음 · 중간에 실패하면 끝난 단계까지 표시하고 「남은 단계 스크립트」를 줍니다</span><span class="btn">묶음에 넣기</span><span class="btn">스크립트 저장…</span><span class="btn pri">실행</span></div>
+</div>
+<ul class="q">
+  <li>변환 검사는 실행 전에 <code>VALIDATE_CONVERSION</code>(Oracle 12.2+) 또는 행 단위 시험 질의로 「변환 안 되는 행」을 셉니다. 1건이라도 있으면 ✖.</li>
+  <li>「테이블 다시 만들기」는 이미 있는 열 순서 바꾸기의 다시 만들기 스크립트에 변환식을 끼워 넣어 재사용합니다.</li>
+  <li><b>걸리는 점:</b> 2단계 UPDATE 는 DML 입니다. 의뢰 스크립트는 지금 「DDL 만」이라, 이 변환을 묶음·의뢰에 넣으면 DML 이 섞입니다.</li>
+</ul>
+</div>
+
+<h3 style="margin-top:14px">확인하고 싶은 것</h3>
+<ul class="q">
+  <li>⑥ 하위 파티션 편집은 미루고, 파티션 지우기·비우기(데이터 사라짐)는 ⚠ 와 함께 편집기에서 허용 — 괜찮나요?</li>
+  <li>⑦ 저장 속성과 LOB 을 「저장」 한 페이지에 두는 것, 괜찮나요?</li>
+  <li>⑧ 자동 변환은 UPDATE(DML)가 들어갑니다. 이 변환만 예외로 의뢰 스크립트에 DML 을 넣을까요, 아니면 이 변환은 묶음·의뢰에서 빼고 개발·테스트 실행 전용으로 둘까요? (제 추천: 예외로 넣되 스크립트 안에 「-- DML 포함」 머리 표시)</li>
+</ul>
+</body></html>
