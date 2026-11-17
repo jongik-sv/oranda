@@ -1,0 +1,331 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>테이블 편집기 시안</title><style>body{font-family:-apple-system,"Malgun Gothic",sans-serif;max-width:1000px;margin:20px auto;padding:0 16px}.options{display:flex;flex-direction:column;gap:16px}.letter{font-weight:700}hr{margin:28px 0}</style></head><body>
+<!-- editor-layout -->
+<style>
+  .ow{font:12px/1.35 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:#222;background:#fff;border:1px solid #bbb}
+  .ow .tabs{display:flex;background:#eee;border-bottom:2px solid #2a7bd4}
+  .ow .tabs span{padding:4px 10px}
+  .ow .tabs .on{background:#2a7bd4;color:#fff}
+  .ow .sub{display:flex;gap:14px;padding:4px 8px;border-bottom:1px solid #ddd}
+  .ow .sub .on{border-bottom:2px solid #2a7bd4}
+  .ow .body{display:flex;min-height:250px}
+  .ow .nav{width:84px;background:#f3f3f3;border-right:1px solid #ddd}
+  .ow .nav div{padding:4px 10px}
+  .ow .nav .on{background:#9cc3ea}
+  .ow .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .ow .tb{display:flex;gap:6px;align-items:center;padding:4px 6px;background:#f7f7f7;border-bottom:1px solid #ddd}
+  .ow .ic{display:inline-block;min-width:18px;height:18px;border:1px solid #c8c8c8;border-radius:3px;background:#fff;text-align:center;font-size:11px;line-height:16px;padding:0 3px}
+  .ow .tog{border-color:#2a7bd4;background:#dbeaf9}
+  .ow table{border-collapse:collapse;width:100%}
+  .ow th,.ow td{border:1px solid #d6d6d6;padding:2px 5px;white-space:nowrap;text-align:left}
+  .ow th{background:#efefef;font-weight:600}
+  .ow .chg{background:#fff3c4}
+  .ow .new{background:#e3f4e3}
+  .ow .del{background:#fbe0e0;text-decoration:line-through;color:#888}
+  .ow .ddl{border-top:1px solid #bbb;background:#fbfbfb;font:11px/1.4 Menlo,Consolas,monospace;padding:5px 8px;color:#333;white-space:pre}
+  .ow .ddl b{color:#0b5cad;font-weight:600}
+  .ow .foot{display:flex;gap:6px;justify-content:flex-end;align-items:center;padding:5px 8px;border-top:1px solid #ddd;background:#f3f3f3}
+  .ow .btn{border:1px solid #aaa;border-radius:3px;padding:2px 9px;background:#fff}
+  .ow .pri{background:#2a7bd4;color:#fff;border-color:#2a7bd4}
+  .ow .msg{flex:1;color:#666}
+  .ow .badge{background:#2e8b3a;color:#fff;border-radius:3px;padding:0 5px;font-size:11px}
+  .note{font-size:13px;margin:6px 0 0}
+</style>
+
+<h2>테이블 편집기 — 어디서 고칠까?</h2>
+<p class="subtitle">둘 다 「바뀐 칸 노란색 · 새 열 초록 · 지울 열 빨강」, 아래에 ALTER 문이 바로 보이고, 실행 · 묶음에 넣기 · 스크립트 저장이 있습니다. 다른 건 <b>편집하는 장소</b>입니다.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>객체 상세에서 바로 편집 (결과 그리드 편집 모드처럼)</h3>
+      <p>지금 보던 「상세 &gt; 열」 화면에서 연필 단추로 편집을 켭니다. 보는 곳 = 고치는 곳.</p>
+      <div class="ow">
+        <div class="tabs"><span>기본</span><span class="on">SAMPLE.ORDERS ✕</span></div>
+        <div class="sub"><span class="on">상세</span><span>DDL</span></div>
+        <div class="body">
+          <div class="nav"><div>일반</div><div>설명</div><div class="on">열</div><div>데이터</div><div>제약</div><div>인덱스</div><div>참조됨</div><div>통계</div></div>
+          <div class="main">
+            <div class="tb"><span class="ic tog">✎ 편집</span><span class="ic">＋</span><span class="ic">－</span><span class="ic">↑</span><span class="ic">↓</span><span class="ic">↺</span><span style="color:#888">│ 열 순서 바꾸기…</span></div>
+            <table>
+              <tr><th>#</th><th>이름</th><th>형식</th><th>길이</th><th>NULL</th><th>기본값</th><th>가상 식</th><th>주석</th></tr>
+              <tr><td>1</td><td>ORDER_ID</td><td>NUMBER</td><td>10</td><td>N</td><td></td><td></td><td>주문 번호</td></tr>
+              <tr><td>2</td><td>CUSTOMER_ID</td><td>NUMBER</td><td>8</td><td>N</td><td></td><td></td><td></td></tr>
+              <tr><td>5</td><td>STATUS</td><td>VARCHAR2</td><td class="chg">20</td><td>N</td><td></td><td></td><td>상태</td></tr>
+              <tr class="del"><td>6</td><td>OLD_FLAG</td><td>CHAR</td><td>1</td><td>Y</td><td></td><td></td><td></td></tr>
+              <tr class="new"><td>+</td><td>TOTAL_VAT</td><td>NUMBER</td><td></td><td>Y</td><td></td><td>TOTAL_AMOUNT*0.1</td><td>부가세</td></tr>
+            </table>
+            <div style="flex:1"></div>
+            <div class="ddl"><b>ALTER TABLE</b> SAMPLE.ORDERS <b>MODIFY</b> (STATUS VARCHAR2(20));
+<b>ALTER TABLE</b> SAMPLE.ORDERS <b>DROP COLUMN</b> OLD_FLAG;
+<b>ALTER TABLE</b> SAMPLE.ORDERS <b>ADD</b> (TOTAL_VAT <b>AS</b> (TOTAL_AMOUNT*0.1) <b>VIRTUAL</b>);
+<b>COMMENT ON COLUMN</b> SAMPLE.ORDERS.TOTAL_VAT <b>IS</b> '부가세';</div>
+            <div class="foot"><span class="msg"><span class="badge">개발</span> 변경 3건</span><span class="btn">묶음에 넣기 ▾</span><span class="btn">스크립트 저장…</span><span class="btn pri">실행</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="note">＋ 익숙한 곳에서 바로 · 제약/인덱스 페이지도 같은 방식<br>－ 새 테이블은 아직 상세가 없으니 「새 테이블」용 빈 상세 탭을 따로 열어야 함 · 보기 화면이 편집 단추로 복잡해짐</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>별도 「테이블 편집」 탭 (Orange Create/Alter Table, SQL Developer Edit Table)</h3>
+      <p>스키마 브라우저 「테이블 편집…」 · 「새 테이블…」, 객체 상세의 「편집」 단추로 문서 탭을 엽니다. 새 테이블과 고치기가 같은 화면.</p>
+      <div class="ow">
+        <div class="tabs"><span>기본</span><span>SAMPLE.ORDERS</span><span class="on">✎ ORDERS 편집 ✕</span></div>
+        <div class="tb" style="border-bottom:1px solid #ddd"><span>소유자</span><span class="ic" style="min-width:70px;text-align:left">SAMPLE ▾</span><span>이름</span><span class="ic" style="min-width:90px;text-align:left">ORDERS</span><span>주석</span><span class="ic" style="min-width:110px;text-align:left">주문</span></div>
+        <div class="body">
+          <div class="nav"><div class="on">열</div><div>제약</div><div>인덱스</div><div>파티션</div><div>저장 속성</div></div>
+          <div class="main">
+            <div class="tb"><span class="ic">＋</span><span class="ic">－</span><span class="ic">↑</span><span class="ic">↓</span><span class="ic">↺</span></div>
+            <table>
+              <tr><th>이름</th><th>형식</th><th>길이</th><th>NULL</th><th>기본값</th><th>가상 식</th><th>주석</th></tr>
+              <tr><td>ORDER_ID</td><td>NUMBER</td><td>10</td><td>N</td><td></td><td></td><td>주문 번호</td></tr>
+              <tr><td>CUSTOMER_ID</td><td>NUMBER</td><td>8</td><td>N</td><td></td><td></td><td></td></tr>
+              <tr><td>STATUS</td><td>VARCHAR2</td><td class="chg">20</td><td>N</td><td></td><td></td><td>상태</td></tr>
+              <tr class="del"><td>OLD_FLAG</td><td>CHAR</td><td>1</td><td>Y</td><td></td><td></td><td></td></tr>
+              <tr class="new"><td>TOTAL_VAT</td><td>NUMBER</td><td></td><td>Y</td><td></td><td>TOTAL_AMOUNT*0.1</td><td>부가세</td></tr>
+            </table>
+            <div style="flex:1"></div>
+            <div class="ddl"><b>ALTER TABLE</b> SAMPLE.ORDERS <b>MODIFY</b> (STATUS VARCHAR2(20));
+<b>ALTER TABLE</b> SAMPLE.ORDERS <b>DROP COLUMN</b> OLD_FLAG;
+<b>ALTER TABLE</b> SAMPLE.ORDERS <b>ADD</b> (TOTAL_VAT <b>AS</b> (TOTAL_AMOUNT*0.1) <b>VIRTUAL</b>);
+<b>COMMENT ON COLUMN</b> SAMPLE.ORDERS.TOTAL_VAT <b>IS</b> '부가세';</div>
+            <div class="foot"><span class="msg"><span class="badge">개발</span> 변경 3건</span><span class="btn">묶음에 넣기 ▾</span><span class="btn">스크립트 저장…</span><span class="btn pri">실행</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="note">＋ 새 테이블·고치기가 한 화면 · 보기 화면은 그대로 깔끔 · 여러 테이블 편집 탭을 나란히<br>－ 보는 곳과 고치는 곳이 나뉨(상세에서 「편집」 한 번 더 누름)</p>
+    </div>
+  </div>
+</div>
+
+<p class="note"><b>제 추천: B.</b> 신규 시스템에서 새 테이블을 많이 만드는 만큼 「만들기 = 고치기」 한 화면이 낫고, 상세 화면은 지금처럼 읽기 전용으로 둡니다. 상세 「열」 페이지 도구줄에 「편집」 단추를 두면 A의 장점(보다가 바로 고치기)도 거의 얻습니다.</p>
+<hr>
+<!-- editor-a-newtable-bundle -->
+<style>
+  .ow{font:12px/1.35 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:#222;background:#fff;border:1px solid #bbb;margin:6px 0}
+  .ow .tabs{display:flex;background:#eee;border-bottom:2px solid #2a7bd4}
+  .ow .tabs span{padding:4px 10px}
+  .ow .tabs .on{background:#2a7bd4;color:#fff}
+  .ow .sub{display:flex;gap:14px;padding:4px 8px;border-bottom:1px solid #ddd}
+  .ow .sub .on{border-bottom:2px solid #2a7bd4}
+  .ow .sub .dim{color:#aaa}
+  .ow .body{display:flex;min-height:200px}
+  .ow .nav{width:84px;background:#f3f3f3;border-right:1px solid #ddd}
+  .ow .nav div{padding:4px 10px}
+  .ow .nav .on{background:#9cc3ea}
+  .ow .nav .dim{color:#aaa}
+  .ow .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .ow .tb{display:flex;gap:6px;align-items:center;padding:4px 6px;background:#f7f7f7;border-bottom:1px solid #ddd}
+  .ow .ic{display:inline-block;min-width:18px;height:18px;border:1px solid #c8c8c8;border-radius:3px;background:#fff;text-align:center;font-size:11px;line-height:16px;padding:0 3px}
+  .ow .tog{border-color:#2a7bd4;background:#dbeaf9}
+  .ow table{border-collapse:collapse;width:100%}
+  .ow th,.ow td{border:1px solid #d6d6d6;padding:2px 5px;white-space:nowrap;text-align:left}
+  .ow th{background:#efefef;font-weight:600}
+  .ow .new{background:#e3f4e3}
+  .ow .ddl{border-top:1px solid #bbb;background:#fbfbfb;font:11px/1.4 Menlo,Consolas,monospace;padding:5px 8px;color:#333;white-space:pre}
+  .ow .ddl b{color:#0b5cad;font-weight:600}
+  .ow .foot{display:flex;gap:6px;justify-content:flex-end;align-items:center;padding:5px 8px;border-top:1px solid #ddd;background:#f3f3f3}
+  .ow .btn{border:1px solid #aaa;border-radius:3px;padding:2px 9px;background:#fff}
+  .ow .pri{background:#2a7bd4;color:#fff;border-color:#2a7bd4}
+  .ow .msg{flex:1;color:#666}
+  .ow .badge{background:#2e8b3a;color:#fff;border-radius:3px;padding:0 5px;font-size:11px}
+  .ow .badge.t{background:#c98a12}
+  .ow .badge.p{background:#c0392b}
+  .ow .fld{display:flex;gap:8px;align-items:center;padding:6px 8px}
+  .ow .in{border:1px solid #bbb;border-radius:2px;padding:1px 6px;min-width:90px;background:#fff}
+  .ow .ptitle{background:#e9e9e9;padding:3px 8px;font-weight:600;border-bottom:1px solid #ccc;display:flex;justify-content:space-between}
+  .ow .ok{color:#2e8b3a}
+  .q{font-size:13px;margin:4px 0 14px}
+  .q li{margin:3px 0}
+</style>
+
+<h2>A안 이어서 — 새 테이블 · 반영 묶음</h2>
+<p class="subtitle">둘 다 제 제안입니다. 틀린 곳·빠진 곳을 터미널로 알려 주세요.</p>
+
+<div class="section">
+<h3>① 새 테이블: 빈 객체 상세 탭이 편집 모드로 열림</h3>
+<p class="q">스키마 브라우저에서 소유자나 「테이블」 노드 오른쪽 클릭 → 「새 테이블…」. 열·제약·인덱스 페이지만 켜지고(통계·크기 등은 흐림), 처음부터 편집 모드입니다. 실행하면 같은 탭이 진짜 테이블 상세로 바뀝니다.</p>
+<div class="ow">
+  <div class="tabs"><span>기본</span><span class="on">✎ 새 테이블 ✕</span></div>
+  <div class="sub"><span class="on">상세</span><span class="dim">DDL</span></div>
+  <div class="fld"><span>소유자</span><span class="in">SAMPLE ▾</span><span>이름</span><span class="in">ORDER_ITEMS</span><span>주석</span><span class="in" style="min-width:160px">주문 상품</span></div>
+  <div class="body">
+    <div class="nav"><div class="on">열</div><div>제약</div><div>인덱스</div><div class="dim">데이터</div><div class="dim">통계</div><div class="dim">크기</div></div>
+    <div class="main">
+      <div class="tb"><span class="ic tog">✎ 편집</span><span class="ic">＋</span><span class="ic">－</span><span class="ic">↑</span><span class="ic">↓</span></div>
+      <table>
+        <tr><th>이름</th><th>형식</th><th>길이</th><th>NULL</th><th>기본값</th><th>가상 식</th><th>주석</th></tr>
+        <tr class="new"><td>ORDER_ID</td><td>NUMBER</td><td>10</td><td>N</td><td></td><td></td><td>주문 번호</td></tr>
+        <tr class="new"><td>LINE_NO</td><td>NUMBER</td><td>4</td><td>N</td><td></td><td></td><td>줄 번호</td></tr>
+        <tr class="new"><td>QTY</td><td>NUMBER</td><td>8</td><td>N</td><td>1</td><td></td><td>수량</td></tr>
+        <tr class="new"><td>UNIT_PRICE</td><td>NUMBER</td><td>12</td><td>N</td><td></td><td></td><td>단가</td></tr>
+        <tr class="new"><td>AMOUNT</td><td>NUMBER</td><td></td><td>Y</td><td></td><td>QTY*UNIT_PRICE</td><td>금액</td></tr>
+      </table>
+      <div style="flex:1"></div>
+      <div class="ddl"><b>CREATE TABLE</b> SAMPLE.ORDER_ITEMS (
+  ORDER_ID NUMBER(10) <b>NOT NULL</b>, LINE_NO NUMBER(4) <b>NOT NULL</b>, QTY NUMBER(8) <b>DEFAULT</b> 1 <b>NOT NULL</b>,
+  UNIT_PRICE NUMBER(12) <b>NOT NULL</b>, AMOUNT <b>AS</b> (QTY*UNIT_PRICE) <b>VIRTUAL</b>,
+  <b>CONSTRAINT</b> PK_ORDER_ITEMS <b>PRIMARY KEY</b> (ORDER_ID, LINE_NO));
+<b>COMMENT ON TABLE</b> SAMPLE.ORDER_ITEMS <b>IS</b> '주문 상품';  …열 주석 5줄</div>
+      <div class="foot"><span class="msg"><span class="badge">개발</span> 새 테이블 · 열 5 · 제약 1</span><span class="btn">묶음에 넣기 ▾</span><span class="btn">스크립트 저장…</span><span class="btn pri">실행</span></div>
+    </div>
+  </div>
+</div>
+<p class="q">「다른 테이블 구조로 시작」(고른 테이블의 열을 복사해 채움)도 같은 메뉴에 두면 신규 시스템에서 비슷한 테이블 만들 때 빠릅니다.</p>
+</div>
+
+<div class="section">
+<h3>② 반영 묶음 창: 아래 도구 창(변경 일지 옆)</h3>
+<p class="q">「묶음에 넣기 ▾」는 지금 묶음에 넣거나 새 묶음을 만듭니다. SQL 편집기에서 DDL을 실행하면 「지금 묶음」이 있을 때 자동으로 쌓입니다(체크 해제로 뺌). 접속마다 어디까지 실행했는지 표시해, 개발 → 테스트 → 의뢰 흐름을 한 곳에서 봅니다.</p>
+<div class="ow">
+  <div class="ptitle"><span>반영 묶음 — <span style="font-weight:400">지금 묶음:</span> 11/20 주문 상품 의뢰 ▾</span><span style="font-weight:400">＋새 묶음 · 이름 바꾸기 · 지우기</span></div>
+  <div class="tb"><span class="ic">↑</span><span class="ic">↓</span><span class="ic">－</span><span style="color:#888">│</span><span class="btn">테스트에 실행…</span><span class="btn">의뢰용 스크립트 저장…</span><span style="flex:1"></span><span style="color:#666">대상 DBMS: Oracle</span></div>
+  <table>
+    <tr><th></th><th>#</th><th>문장</th><th>출처</th><th>개발</th><th>테스트</th><th>운영</th></tr>
+    <tr><td>☑</td><td>1</td><td>CREATE TABLE SAMPLE.ORDER_ITEMS (…)</td><td>테이블 편집</td><td class="ok">✔ 11/18</td><td class="ok">✔ 11/19</td><td></td></tr>
+    <tr><td>☑</td><td>2</td><td>COMMENT ON TABLE SAMPLE.ORDER_ITEMS …(6줄)</td><td>테이블 편집</td><td class="ok">✔ 11/18</td><td class="ok">✔ 11/19</td><td></td></tr>
+    <tr><td>☑</td><td>3</td><td>ALTER TABLE SAMPLE.ORDERS ADD (ITEM_CNT NUMBER(4))</td><td>SQL 편집기</td><td class="ok">✔ 11/19</td><td></td><td></td></tr>
+    <tr style="color:#999"><td>☐</td><td>4</td><td>ALTER TABLE SAMPLE.ORDERS DROP COLUMN ITEM_CNT2</td><td>SQL 편집기</td><td class="ok">✔ 11/19</td><td></td><td></td></tr>
+    <tr><td>☑</td><td>5</td><td>CREATE INDEX SAMPLE.IX_ORDER_ITEMS_01 …</td><td>테이블 편집</td><td class="ok">✔ 11/19</td><td></td><td></td></tr>
+  </table>
+  <div class="foot"><span class="msg">체크 4건 · 「의뢰용 스크립트 저장」은 체크한 문장만 순서대로 한 .sql 파일(DDL만)</span></div>
+</div>
+</div>
+
+<h3 style="margin-top:14px">확인하고 싶은 것</h3>
+<ul class="q">
+  <li>① 새 테이블을 빈 상세 탭으로 여는 방식, 괜찮나요?</li>
+  <li>② 묶음 창 위치(아래 도구 창)와 「개발·테스트·운영 실행 표시」 칸이 쓸모 있나요?</li>
+  <li>제약·인덱스 페이지도 열 페이지와 같은 방식(편집 켜기 → 표에서 고치기 → 아래 DDL)으로 하려 합니다.</li>
+</ul>
+<hr>
+<!-- editor-a-constraints-check -->
+<style>
+  .ow{font:12px/1.35 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:#222;background:#fff;border:1px solid #bbb;margin:6px 0}
+  .ow .tabs{display:flex;background:#eee;border-bottom:2px solid #2a7bd4}
+  .ow .tabs span{padding:4px 10px}
+  .ow .tabs .on{background:#2a7bd4;color:#fff}
+  .ow .sub{display:flex;gap:14px;padding:4px 8px;border-bottom:1px solid #ddd}
+  .ow .sub .on{border-bottom:2px solid #2a7bd4}
+  .ow .sub .dim{color:#aaa}
+  .ow .body{display:flex;min-height:200px}
+  .ow .nav{width:84px;background:#f3f3f3;border-right:1px solid #ddd}
+  .ow .nav div{padding:4px 10px}
+  .ow .nav .on{background:#9cc3ea}
+  .ow .nav .dim{color:#aaa}
+  .ow .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .ow .tb{display:flex;gap:6px;align-items:center;padding:4px 6px;background:#f7f7f7;border-bottom:1px solid #ddd}
+  .ow .ic{display:inline-block;min-width:18px;height:18px;border:1px solid #c8c8c8;border-radius:3px;background:#fff;text-align:center;font-size:11px;line-height:16px;padding:0 3px}
+  .ow .tog{border-color:#2a7bd4;background:#dbeaf9}
+  .ow table{border-collapse:collapse;width:100%}
+  .ow th,.ow td{border:1px solid #d6d6d6;padding:2px 5px;white-space:nowrap;text-align:left}
+  .ow th{background:#efefef;font-weight:600}
+  .ow .new{background:#e3f4e3}
+  .ow .ddl{border-top:1px solid #bbb;background:#fbfbfb;font:11px/1.4 Menlo,Consolas,monospace;padding:5px 8px;color:#333;white-space:pre}
+  .ow .ddl b{color:#0b5cad;font-weight:600}
+  .ow .foot{display:flex;gap:6px;justify-content:flex-end;align-items:center;padding:5px 8px;border-top:1px solid #ddd;background:#f3f3f3}
+  .ow .btn{border:1px solid #aaa;border-radius:3px;padding:2px 9px;background:#fff}
+  .ow .pri{background:#2a7bd4;color:#fff;border-color:#2a7bd4}
+  .ow .msg{flex:1;color:#666}
+  .ow .badge{background:#2e8b3a;color:#fff;border-radius:3px;padding:0 5px;font-size:11px}
+  .ow .badge.t{background:#c98a12}
+  .ow .badge.p{background:#c0392b}
+  .ow .fld{display:flex;gap:8px;align-items:center;padding:6px 8px}
+  .ow .in{border:1px solid #bbb;border-radius:2px;padding:1px 6px;min-width:90px;background:#fff}
+  .ow .ptitle{background:#e9e9e9;padding:3px 8px;font-weight:600;border-bottom:1px solid #ccc;display:flex;justify-content:space-between}
+  .ow .ok{color:#2e8b3a}
+  .q{font-size:13px;margin:4px 0 14px}
+  .q li{margin:3px 0}
+</style>
+<style>
+  .ow .chg{background:#fff3c4}
+  .ow .del{background:#fbe0e0;text-decoration:line-through;color:#888}
+  .ow .warn{color:#b26a00}
+  .ow .stop{color:#c0392b;font-weight:600}
+  .ow .dlg{max-width:620px;margin:0 auto}
+  .ow .row{display:flex;gap:8px;padding:4px 8px;border-bottom:1px solid #eee}
+  .ow .row .k{width:22px;text-align:center}
+  .ow .prev{font:11px/1.4 Menlo,Consolas,monospace;background:#f7fbff;border-top:1px solid #cfe0f2;padding:4px 8px}
+</style>
+
+<h2>A안 이어서 — 제약 · 인덱스 · 실행 전 검사</h2>
+<p class="subtitle">이것도 제 제안입니다. 열 페이지와 같은 방식(✎ 편집 → 표에서 고치기 → 아래 DDL)입니다.</p>
+
+<div class="section">
+<h3>③ 제약 페이지 편집</h3>
+<p class="q">「＋」로 종류(PK·UK·FK·CHECK)를 고르면 새 줄이 생깁니다. 열은 목록에서 고르고, FK는 참조 테이블·키를 고릅니다. 이름은 규칙대로 미리 채웁니다(PK_테이블, FK_테이블_01…). 「사용」 칸을 끄면 DISABLE 로 바뀝니다.</p>
+<div class="ow">
+  <div class="tabs"><span>기본</span><span class="on">SAMPLE.ORDER_ITEMS ✕</span></div>
+  <div class="body" style="min-height:150px">
+    <div class="nav"><div>일반</div><div>열</div><div class="on">제약</div><div>인덱스</div><div>통계</div></div>
+    <div class="main">
+      <div class="tb"><span class="ic tog">✎ 편집</span><span class="ic">＋ ▾</span><span class="ic">－</span><span class="ic">↺</span></div>
+      <table>
+        <tr><th>이름</th><th>종류</th><th>열</th><th>참조</th><th>조건</th><th>사용</th></tr>
+        <tr><td>PK_ORDER_ITEMS</td><td>PK</td><td>ORDER_ID, LINE_NO</td><td></td><td></td><td>☑</td></tr>
+        <tr class="new"><td>FK_ORDER_ITEMS_01</td><td>FK</td><td>ORDER_ID</td><td>SAMPLE.ORDERS (PK_ORDERS) ▾</td><td></td><td>☑</td></tr>
+        <tr class="new"><td>CK_ORDER_ITEMS_01</td><td>CHECK</td><td></td><td></td><td>QTY &gt; 0</td><td>☑</td></tr>
+        <tr class="chg"><td>UK_ORDER_ITEMS_OLD</td><td>UK</td><td>LINE_NO</td><td></td><td></td><td>☐</td></tr>
+      </table>
+      <div class="ddl"><b>ALTER TABLE</b> SAMPLE.ORDER_ITEMS <b>ADD CONSTRAINT</b> FK_ORDER_ITEMS_01 <b>FOREIGN KEY</b> (ORDER_ID) <b>REFERENCES</b> SAMPLE.ORDERS (ORDER_ID);
+<b>ALTER TABLE</b> SAMPLE.ORDER_ITEMS <b>ADD CONSTRAINT</b> CK_ORDER_ITEMS_01 <b>CHECK</b> (QTY &gt; 0);
+<b>ALTER TABLE</b> SAMPLE.ORDER_ITEMS <b>DISABLE CONSTRAINT</b> UK_ORDER_ITEMS_OLD;</div>
+      <div class="foot"><span class="msg"><span class="badge">개발</span> 변경 3건</span><span class="btn">묶음에 넣기 ▾</span><span class="btn">스크립트 저장…</span><span class="btn pri">실행</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="section">
+<h3>④ 인덱스 페이지 편집</h3>
+<p class="q">열 순서·ASC/DESC 를 칸 안에서 고칩니다. 열을 바꾸면 DROP + CREATE 두 문장이 됩니다(오라클은 인덱스 열 변경이 없음). 테이블스페이스는 접속별 기본값을 쓰고, 고칠 때만 칸을 엽니다.</p>
+<div class="ow">
+  <div class="body" style="min-height:120px">
+    <div class="nav"><div>열</div><div>제약</div><div class="on">인덱스</div></div>
+    <div class="main">
+      <div class="tb"><span class="ic tog">✎ 편집</span><span class="ic">＋</span><span class="ic">－</span><span class="ic">↺</span></div>
+      <table>
+        <tr><th>이름</th><th>유일</th><th>종류</th><th>열</th><th>테이블스페이스</th></tr>
+        <tr><td>PK_ORDER_ITEMS</td><td>Y</td><td>NORMAL</td><td>ORDER_ID, LINE_NO</td><td>(기본)</td></tr>
+        <tr class="new"><td>IX_ORDER_ITEMS_01</td><td>N</td><td>NORMAL</td><td>ORDER_ID, QTY DESC</td><td>(기본)</td></tr>
+        <tr class="chg"><td>IX_ORDER_ITEMS_02</td><td>N</td><td>NORMAL</td><td class="chg">UNIT_PRICE → UNIT_PRICE, AMOUNT</td><td>(기본)</td></tr>
+      </table>
+      <div class="ddl"><b>CREATE INDEX</b> SAMPLE.IX_ORDER_ITEMS_01 <b>ON</b> SAMPLE.ORDER_ITEMS (ORDER_ID, QTY <b>DESC</b>);
+<b>DROP INDEX</b> SAMPLE.IX_ORDER_ITEMS_02;
+<b>CREATE INDEX</b> SAMPLE.IX_ORDER_ITEMS_02 <b>ON</b> SAMPLE.ORDER_ITEMS (UNIT_PRICE, AMOUNT);</div>
+    </div>
+  </div>
+</div>
+<p class="q">PK·UK 가 만든 인덱스는 제약 페이지에서만 고칩니다(여기서는 흐림).</p>
+</div>
+
+<div class="section">
+<h3>⑤ 가상 식 미리보기 · 실행 전 검사</h3>
+<p class="q">가상 식 칸을 고치면 아래에 실제 데이터 5줄로 계산해 봅니다. 「실행」·「묶음에 넣기」를 누르면 먼저 데이터를 읽어 검사합니다(읽기만, 바꾸지 않음).</p>
+<div class="ow">
+  <div class="prev">가상 식 미리보기  AMOUNT = QTY*UNIT_PRICE   (SELECT … WHERE ROWNUM &lt;= 5)
+  QTY=2 UNIT_PRICE=1500 → 3000 │ QTY=1 UNIT_PRICE=9900 → 9900 │ QTY=3 UNIT_PRICE=NULL → NULL</div>
+</div>
+<div class="ow dlg">
+  <div class="ptitle"><span>실행 전 검사 — SAMPLE.ORDERS (행 약 1,240,000)</span><span class="badge p">운영</span></div>
+  <div class="row"><span class="k stop">✖</span><span><b>STATUS</b> VARCHAR2(50) → (20): 20자를 넘는 행 <b>37건</b>. 이대로는 실패합니다(ORA-01441). <u>그 행 보기</u></span></div>
+  <div class="row"><span class="k warn">⚠</span><span><b>MEMO</b> NOT NULL 추가: NULL 행 <b>12건</b>. 기본값을 넣거나 먼저 채우세요.</span></div>
+  <div class="row"><span class="k warn">⚠</span><span>행이 많은 테이블입니다. 열 형식 변경·NOT NULL 추가는 오래 잠글 수 있습니다. 운영은 「의뢰용 스크립트 저장」을 권합니다.</span></div>
+  <div class="row"><span class="k warn">⚠</span><span>DROP COLUMN OLD_FLAG: 되돌리기 지점으로 데이터를 되살릴 수 없습니다. 이 열을 쓰는 뷰·트리거 2개가 깨집니다. <u>목록</u></span></div>
+  <div class="row"><span class="k ok">✔</span><span>가상 식 TOTAL_AMOUNT*0.1: 5줄 계산 성공</span></div>
+  <div class="foot"><span class="msg">✖ 가 있으면 실행·묶음 넣기 모두 막습니다</span><span class="btn">의뢰용 스크립트 저장…</span><span class="btn">닫기</span></div>
+</div>
+</div>
+
+<h3 style="margin-top:14px">확인하고 싶은 것</h3>
+<ul class="q">
+  <li>제약 이름 규칙(PK_·FK_·CK_·UK_·IX_ + 테이블 + 번호)을 미리 채우는 것, 회사 규칙과 맞나요? 다르면 규칙을 알려 주세요.</li>
+  <li>⑤ 검사에서 ✖(실패할 게 확실)만 막고 ⚠는 알려만 주는 정도, 괜찮나요?</li>
+  <li>첫판에서 뺄 것 제안: 파티션 · 저장 속성(PCTFREE 등) · LOB 저장 · 테이블 이름 바꾸기는 나중에.</li>
+</ul>
+<hr>
+</body></html>
