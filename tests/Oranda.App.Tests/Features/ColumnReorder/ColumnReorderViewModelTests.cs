@@ -368,6 +368,10 @@ public class ColumnReorderViewModelTests
 
         public string DependentPart(string tableDdl, string fullDdl) => inner.DependentPart(tableDdl, fullDdl);
 
+        public string RebuildPartitioned(
+            DbObjectRef table, IReadOnlyList<ColumnInfo> columns, bool enterprise, bool usePrimaryKey, string? dependentDdl, string partitionClause) =>
+            inner.RebuildPartitioned(table, columns, enterprise, usePrimaryKey, dependentDdl, partitionClause);
+
         public IReadOnlyList<ColumnReorderRiskHit> FilterRiskHits(IEnumerable<SourceSearchHit> lines, DbObjectRef table) => inner.FilterRiskHits(lines, table);
     }
 

@@ -122,6 +122,56 @@ public class ColumnReorderScriptsTests
         Assert.DoesNotContain("DBMS_REDEFINITION", script, StringComparison.Ordinal);
     }
 
+    private const string MonthlyClause =
+        "PARTITION BY RANGE (\"ID\") INTERVAL (NUMTOYMINTERVAL(1, 'MONTH')) (PARTITION P_BEFORE VALUES LESS THAN (DATE '2026-11-01'))";
+
+    /// <summary>TE-41: 12.2 미만 Oracle 의 파티션 바꾸기 = 열 순서를 그대로 둔 다시 만들기 + 새 표에 PARTITION BY 절.</summary>
+    [Fact]
+    public void Partitioned_rebuild_without_enterprise_creates_the_new_table_partitioned_and_keeps_the_column_order()
+    {
+        IColumnReorderScripts scripts = new OracleColumnReorderScriptsAccess().Scripts;
+        var script = scripts.RebuildPartitioned(Table, Columns, enterprise: false, usePrimaryKey: true,
+            "CREATE INDEX \"SCOTT\".\"EMP_I\" ON \"SCOTT\".\"EMP\" (\"NAME\");", MonthlyClause);
+
+        Assert.StartsWith("-- 파티션 테이블로 바꾸기: SCOTT.EMP", script, StringComparison.Ordinal);
+        Assert.Contains("-- 파티션: " + MonthlyClause, script, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE \"SCOTT\".\"EMP$NEW\" " + MonthlyClause + " AS SELECT \"ID\", \"NAME\" FROM \"SCOTT\".\"EMP\" WHERE 1 = 0;", script, StringComparison.Ordinal);
+        Assert.Contains("INSERT INTO \"SCOTT\".\"EMP$NEW\" SELECT \"ID\", \"NAME\" FROM \"SCOTT\".\"EMP\";", script, StringComparison.Ordinal);
+        Assert.Contains("ADD (\"TOTAL\" AS (\"ID\"*2));", script, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE \"SCOTT\".\"EMP$NEW\" RENAME TO \"EMP\";", script, StringComparison.Ordinal);
+        Assert.Contains("CREATE INDEX \"SCOTT\".\"EMP_I\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("새 열 순서", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>DBMS_METADATA 의 NOT NULL 줄은 새 표에 이미 있어 다시 내면 ORA-01442(실측 26ai) — 주석으로 남긴다. 다른 종속 문장은 그대로.</summary>
+    [Fact]
+    public void Rebuild_comments_out_the_not_null_lines_of_the_dependent_ddl()
+    {
+        const string dependent = "CREATE INDEX \"SCOTT\".\"EMP_I\" ON \"SCOTT\".\"EMP\" (\"NAME\")\n  ;\n\n"
+            + "  ALTER TABLE \"SCOTT\".\"EMP\" MODIFY (\"ID\" NOT NULL ENABLE);\n"
+            + "  ALTER TABLE \"SCOTT\".\"EMP\" MODIFY (\"NAME\" CONSTRAINT \"NN_NAME\" NOT NULL ENABLE);\n"
+            + "  ALTER TABLE \"SCOTT\".\"EMP\" ADD CONSTRAINT \"EMP_PK\" PRIMARY KEY (\"ID\")\n  USING INDEX  ENABLE;";
+
+        var lines = ColumnReorderScripts.Rebuild(Table, Columns, ["NAME", "ID", "TOTAL"], false, true, dependent).ReplaceLineEndings("\n").Split('\n');
+
+        Assert.Contains(ColumnReorderBuilder.NotNullKept + "ALTER TABLE \"SCOTT\".\"EMP\" MODIFY (\"ID\" NOT NULL ENABLE);", lines);
+        Assert.Contains(ColumnReorderBuilder.NotNullKept + "ALTER TABLE \"SCOTT\".\"EMP\" MODIFY (\"NAME\" CONSTRAINT \"NN_NAME\" NOT NULL ENABLE);", lines);
+        Assert.DoesNotContain(lines, l => l.TrimStart().StartsWith("ALTER TABLE \"SCOTT\".\"EMP\" MODIFY", StringComparison.Ordinal));
+        Assert.Contains("  ALTER TABLE \"SCOTT\".\"EMP\" ADD CONSTRAINT \"EMP_PK\" PRIMARY KEY (\"ID\")", lines);
+        Assert.Contains("CREATE INDEX \"SCOTT\".\"EMP_I\" ON \"SCOTT\".\"EMP\" (\"NAME\")", lines);
+    }
+
+    [Fact]
+    public void Partitioned_rebuild_with_enterprise_makes_a_partitioned_interim_table()
+    {
+        IColumnReorderScripts scripts = new OracleColumnReorderScriptsAccess().Scripts;
+        var script = scripts.RebuildPartitioned(Table, Columns, enterprise: true, usePrimaryKey: true, string.Empty, MonthlyClause);
+
+        Assert.Contains("CREATE TABLE \"SCOTT\".\"EMP$INT\" " + MonthlyClause + " AS SELECT \"ID\", \"NAME\" FROM \"SCOTT\".\"EMP\" WHERE 1 = 0;", script, StringComparison.Ordinal);
+        Assert.Contains("START_REDEF_TABLE", script, StringComparison.Ordinal);
+        Assert.Contains("DROP TABLE \"SCOTT\".\"EMP$INT\";", script, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Rebuild_with_enterprise_uses_dbms_redefinition_and_comments_dependent_ddl()
     {
@@ -164,5 +214,12 @@ public class ColumnReorderScriptsTests
         Assert.StartsWith("-- 열 순서 바꾸기 U.T'1: ALTER TABLE 4문장", block.Text, StringComparison.Ordinal);
         Assert.Contains("EXECUTE IMMEDIATE 'ALTER TABLE \"U\".\"T''1\" MODIFY (\"B\" INVISIBLE)';", block.Text, StringComparison.Ordinal); // 작은따옴표는 두 번
         Assert.EndsWith("END;", block.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>등록된 Oracle 구현(internal)을 시험에서 꺼낸다.</summary>
+    private sealed class OracleColumnReorderScriptsAccess
+    {
+        public IColumnReorderScripts Scripts { get; } = (IColumnReorderScripts)Activator.CreateInstance(
+            typeof(ColumnReorderScripts).Assembly.GetType("Oranda.Oracle.Schema.OracleColumnReorderScripts", throwOnError: true)!, nonPublic: true)!;
     }
 }

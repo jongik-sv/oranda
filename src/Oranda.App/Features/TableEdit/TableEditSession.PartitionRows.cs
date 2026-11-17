@@ -76,6 +76,62 @@ public sealed partial class TableEditSession
     /// <summary>방식 고르기 칸을 쓸 수 있다(일반 테이블이고 방언이 바꾸기를 함).</summary>
     public bool CanChoosePartitionMethod => CanEditPartitions && ShowsPartitionMethodChoice && PartitionConversionReasonKey is null;
 
+    /// <summary>일반 테이블인데 방식을 고를 수 없다(서버·에디션이 파티션을 못 함): 그 이유를 페이지에 글로 보인다(툴팁만으로는 안 보인다).</summary>
+    public bool ShowsPartitionMethodReason => ShowsPartitionMethodChoice && CanEditPartitions && PartitionConversionReasonKey is not null;
+
+    // ---- 한 문장으로 못 바꾸는 서버(Oracle 12.2 미만·Tibero): 테이블 다시 만들기 스크립트(TE-41) ----
+
+    private Func<Task>? _openPartitionRebuild;
+    private Func<Task>? _savePartitionRebuild;
+
+    /// <summary>바꾸기 중인데 이 서버는 <c>MODIFY PARTITION BY … ONLINE</c> 이 없다 → 「실행」 대신 다시 만들기 스크립트.</summary>
+    public bool NeedsPartitionRebuild => IsPartitionConversion && PartitionConversionReasonKey is null && !Dialect.SupportsOnlinePartitionConversion(Context.Server);
+
+    /// <summary>다시 만들기 스크립트에 넣을 <c>PARTITION BY …</c> 절(키 열이 없거나 바꾸기가 아니면 null).</summary>
+    public string? PartitionRebuildClause => _partitionOriginal is { } o && _partitionDraft is { } d ? PartitionScriptBuilder.ConversionClause(o, d, Dialect) : null;
+
+    /// <summary>「다시 만들기 스크립트」 줄을 보인다.</summary>
+    public bool ShowsPartitionRebuild => NeedsPartitionRebuild && (_openPartitionRebuild is not null || _savePartitionRebuild is not null);
+
+    /// <summary>스크립트를 만들 수 있다(키 열·첫 파티션까지 정함).</summary>
+    public bool CanUsePartitionRebuild => ShowsPartitionRebuild && PartitionRebuildClause is not null
+        && (CurrentPartitionMethod == PartitionMethod.Hash || _partitionDraft!.Partitions.Any(p => !p.IsDropped && p.MergedInto is null && !string.IsNullOrWhiteSpace(p.Bound)));
+
+    /// <summary>객체 상세가 넣는 「편집기로 열기」(다시 만들기 스크립트를 새 SQL 탭에). null = 그 길이 없음.</summary>
+    public Func<Task>? OpenPartitionRebuild
+    {
+        get => _openPartitionRebuild;
+        set
+        {
+            _openPartitionRebuild = value;
+            RaisePartitionRebuild();
+        }
+    }
+
+    /// <summary>객체 상세가 넣는 「스크립트 저장…」(다시 만들기 스크립트를 파일로). null = 그 길이 없음.</summary>
+    public Func<Task>? SavePartitionRebuild
+    {
+        get => _savePartitionRebuild;
+        set
+        {
+            _savePartitionRebuild = value;
+            RaisePartitionRebuild();
+        }
+    }
+
+    public Task OpenPartitionRebuildScriptAsync() => CanUsePartitionRebuild && _openPartitionRebuild is { } open ? open() : Task.CompletedTask;
+
+    public Task SavePartitionRebuildScriptAsync() => CanUsePartitionRebuild && _savePartitionRebuild is { } save ? save() : Task.CompletedTask;
+
+    private void RaisePartitionRebuild()
+    {
+        OnPropertyChanged(nameof(NeedsPartitionRebuild));
+        OnPropertyChanged(nameof(ShowsPartitionRebuild));
+        OnPropertyChanged(nameof(CanUsePartitionRebuild));
+        OnPropertyChanged(nameof(PartitionRebuildClause));
+        OnPropertyChanged(nameof(ShowsPartitionMethodReason));
+    }
+
     /// <summary>방식 고르기 칸 도움말(못 쓰면 그 이유).</summary>
     public string PartitionMethodTip => PartitionConversionReasonKey is { } key ? UiText.Get(key, key)
         : !CanEditPartitions ? PartitionLockedReason
@@ -554,6 +610,7 @@ public sealed partial class TableEditSession
         OnPropertyChanged(nameof(SubpartitionText));
         OnPropertyChanged(nameof(BoundHeaderText));
         RaiseEasyPartition();
+        RaisePartitionRebuild();
         RaisePartitionActions();
     }
 

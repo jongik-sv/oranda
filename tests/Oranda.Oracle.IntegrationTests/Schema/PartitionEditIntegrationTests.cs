@@ -283,6 +283,61 @@ public sealed class PartitionEditIntegrationTests : IAsyncLifetime
         Assert.Equal("50", await ScalarAsync("SELECT COUNT(*) FROM pon"));
     }
 
+    /// <summary>
+    /// 일반 → 파티션의 「다시 만들기 스크립트」(12.2 미만 Oracle 이 쓰는 길, TE-41)를 파티션 기능이 있는 서버에서 끝까지 돌린다(CTAS + RENAME, 버전과 상관없는 문법).
+    /// 쉬운 설정 꼴(날짜 범위 + 매월 자동 추가 + 첫 파티션). 행·기본키·인덱스·주석·기본값이 남고, 새 달 행이 파티션을 만든다.
+    /// </summary>
+    [Fact]
+    public async Task Plain_table_converts_through_the_rebuild_script()
+    {
+        if (Skip(needsPartitioning: true))
+        {
+            return;
+        }
+
+        await OwnerExecAsync(
+            "CREATE TABLE prb (id NUMBER CONSTRAINT prb_pk PRIMARY KEY, d DATE NOT NULL, name VARCHAR2(30) DEFAULT 'x')",
+            "CREATE INDEX prb_ix ON prb (name)",
+            "COMMENT ON TABLE prb IS 'part rb'",
+            "INSERT INTO prb (id, d, name) VALUES (1, DATE '2026-09-15', 'a')",
+            "INSERT INTO prb (id, d, name) VALUES (2, DATE '2026-10-31', 'b')",
+            "INSERT INTO prb (id, d, name) VALUES (3, DATE '2026-11-02', 'c')",
+            "COMMIT");
+        var s = await OpenAsync();
+        var provider = NewProvider();
+        var info = await provider.GetTableAsync(s, Ref("PRB"), default);
+        var tableDdl = await provider.GetDdlAsync(s, Ref("PRB"), new DdlOptions { SqlTerminator = true }, default);
+        var fullDdl = await provider.GetDdlAsync(s, Ref("PRB"), new DdlOptions { SqlTerminator = true, IncludeDependentObjects = true }, default);
+        var edited = new PartitionTableDraft(new PartitionScheme(PartitionMethod.Range, ["D"]) { Interval = "NUMTOYMINTERVAL(1, 'MONTH')" },
+            [new PartitionDraft("n1", "P_BEFORE_2026_11") { Bound = "DATE '2026-11-01'" }]);
+        var clause = PartitionScriptBuilder.ConversionClause(PartitionTableDraft.FromTable(info)!, edited, _dialect);
+        Assert.NotNull(clause);
+
+        var script = Oranda.Core.Schema.ColumnReorderBuilder.Rebuild(Ref("PRB"), ColumnOrdering.ByColumnId(info.Columns),
+            Oranda.Core.Schema.ColumnReorderBuilder.VisibleOrder(ColumnOrdering.ByColumnId(info.Columns)), enterprise: false, usePrimaryKey: true,
+            Oranda.Core.Schema.ColumnReorderBuilder.DependentPart(tableDdl, fullDdl), partitionClause: clause);
+        _output.WriteLine(script);
+        var statements = Oranda.Language.Lexing.StatementSplitter.Split(script, Oranda.Core.Language.SplitOptions.Default)
+            .Where(x => x.Kind != Oranda.Core.Execution.StatementKind.SqlPlus
+                        && !x.Text.ReplaceLineEndings("\n").Split('\n').All(l => string.IsNullOrWhiteSpace(l) || l.TrimStart().StartsWith("--", StringComparison.Ordinal)))
+            .Select(x => x.Text)
+            .ToArray();
+        await OwnerExecAsync(statements);
+
+        Assert.Equal("RANGE", await ScalarAsync("SELECT partitioning_type FROM user_part_tables WHERE table_name = 'PRB'"));
+        Assert.Equal("3", await ScalarAsync("SELECT COUNT(*) FROM prb"));
+        Assert.Equal("2", await ScalarAsync("SELECT COUNT(*) FROM prb PARTITION (p_before_2026_11)"));
+        Assert.Equal("1", await ScalarAsync("SELECT COUNT(*) FROM user_constraints WHERE table_name = 'PRB' AND constraint_name = 'PRB_PK' AND status = 'ENABLED'"));
+        Assert.Equal("1", await ScalarAsync("SELECT COUNT(*) FROM user_indexes WHERE table_name = 'PRB' AND index_name = 'PRB_IX'"));
+        Assert.Equal("part rb", await ScalarAsync("SELECT comments FROM user_tab_comments WHERE table_name = 'PRB'"));
+        Assert.Equal("0", await ScalarAsync("SELECT COUNT(*) FROM user_tables WHERE table_name IN ('PRB$OLD', 'PRB$NEW')"));
+
+        var before = await ScalarAsync("SELECT COUNT(*) FROM user_tab_partitions WHERE table_name = 'PRB'");
+        await OwnerExecAsync("INSERT INTO prb (id, d) VALUES (4, DATE '2027-02-10')", "COMMIT");
+        Assert.NotEqual(before, await ScalarAsync("SELECT COUNT(*) FROM user_tab_partitions WHERE table_name = 'PRB'"));
+        Assert.Equal("x", await ScalarAsync("SELECT name FROM prb WHERE id = 4"));
+    }
+
     /// <summary>파티션 기능이 없는 서버(11g XE·SE): 방언이 막고, 서버도 ORA-00439. 비파티션 테이블은 파티션 정보 없이 읽힌다(part 질의를 묻지 않음).</summary>
     [Fact]
     public async Task Without_the_partitioning_option_the_dialect_blocks_and_plain_tables_read()

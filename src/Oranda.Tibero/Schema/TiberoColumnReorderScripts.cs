@@ -78,6 +78,15 @@ internal sealed class TiberoColumnReorderScripts : IColumnReorderScripts
         return ForTibero(script, table, keepOriginal: dependentDdl is null);
     }
 
+    /// <summary>파티션 테이블로 바꾸기: 열 순서 바꾸기와 같은 CTAS + RENAME(온라인 재정의 없음)에 <c>PARTITION BY</c> 절을 붙인다. 원본 남기기 규칙도 같다.</summary>
+    public string RebuildPartitioned(
+        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, bool enterprise, bool usePrimaryKey, string? dependentDdl, string partitionClause)
+    {
+        var script = ColumnReorderBuilder.Rebuild(table, columns, ColumnReorderBuilder.VisibleOrder(columns), enterprise: false, usePrimaryKey,
+            dependentDdl ?? string.Empty, partitionClause: partitionClause);
+        return ForTibero(script, table, keepOriginal: dependentDdl is null);
+    }
+
     internal const string OriginalKept =
         "-- 원본을 남긴다: 종속 객체(제약·인덱스·트리거·권한·주석) DDL 을 읽지 못해 원본을 지우면 되살릴 수 없다. 새 테이블을 확인하고 옮긴 뒤 직접 지운다";
 

@@ -50,8 +50,8 @@ public sealed partial class TableEditSession
         }
     }
 
-    /// <summary>「저장」 페이지의 「파티션 테이블로 바꾸기…」 단추를 보인다: 일반 테이블이고 파티션을 고칠 수 있다.</summary>
-    public bool CanOpenPartitioning => _openPartitionsPage is not null && ShowsPartitionMethodChoice && CanEditPartitions;
+    /// <summary>「저장」 페이지의 「파티션 테이블로 바꾸기…」 단추를 보인다: 일반 테이블이고 이 서버에서 파티션 테이블로 바꿀 수 있다(못 바꾸면 막다른 페이지라 숨긴다).</summary>
+    public bool CanOpenPartitioning => _openPartitionsPage is not null && CanChoosePartitionMethod;
 
     /// <summary>「파티션 테이블로 바꾸기…」: 「파티션」 페이지로 간다(방식·키 열은 그 페이지에서 고른다).</summary>
     public void OpenPartitioning()

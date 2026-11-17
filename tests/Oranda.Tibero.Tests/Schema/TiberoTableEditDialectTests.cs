@@ -27,7 +27,10 @@ public class TiberoTableEditDialectTests
         Assert.Contains("TIMESTAMP WITH TIME ZONE", Dialect.TypeNames);
     }
 
-    /// <summary>파티션(실측 11·19): 해시 수 바꾸기·일반 → 파티션은 막고, 범위·목록 정비는 됨. 나누기·합치기 뒤 전역 인덱스 다시 만들기.</summary>
+    /// <summary>
+    /// 파티션(실측 11·19): 해시 수 바꾸기는 막고, 범위·목록 정비는 됨. 나누기·합치기 뒤 전역 인덱스 다시 만들기.
+    /// 일반 → 파티션은 한 문장이 없어(온라인 바꾸기 거짓) 막지 않고 다시 만들기 스크립트로 간다(TE-41).
+    /// </summary>
     [Fact]
     public void Partition_operations_follow_the_probe()
     {
@@ -36,7 +39,8 @@ public class TiberoTableEditDialectTests
         Assert.False(d.SupportsOnlinePartitionConversion(Server(7)));
         Assert.Equal(TiberoTableEditDialect.HashPartitionChangeKey, d.UnsupportedPartitionReasonKey(PartitionOperation.Add, PartitionMethod.Hash, null));
         Assert.Equal(TiberoTableEditDialect.HashPartitionChangeKey, d.UnsupportedPartitionReasonKey(PartitionOperation.Coalesce, PartitionMethod.Hash, null));
-        Assert.Equal(TiberoTableEditDialect.ReasonPrefix + "partitionConversion", d.UnsupportedPartitionReasonKey(PartitionOperation.Convert, PartitionMethod.Range, null));
+        Assert.Null(d.UnsupportedPartitionReasonKey(PartitionOperation.Convert, PartitionMethod.Range, Server(6)));
+        Assert.Null(d.UnsupportedReasonKey(TableEditFeature.PartitionConversion, Server(6)));
         foreach (var op in new[] { PartitionOperation.Add, PartitionOperation.Drop, PartitionOperation.Rename, PartitionOperation.Split, PartitionOperation.Merge, PartitionOperation.Truncate, PartitionOperation.SetInterval })
         {
             Assert.Null(d.UnsupportedPartitionReasonKey(op, PartitionMethod.Range, null));
@@ -58,7 +62,6 @@ public class TiberoTableEditDialectTests
     [InlineData(TableEditFeature.IdentityColumn, "identityColumn")]
     [InlineData(TableEditFeature.InvisibleColumn, "invisibleColumn")]
     [InlineData(TableEditFeature.DomainColumn, "domainColumn")]
-    [InlineData(TableEditFeature.PartitionConversion, "partitionConversion")]
     public void Unsupported_features_carry_a_reason_key(TableEditFeature feature, string suffix)
     {
         Assert.Equal(TiberoTableEditDialect.ReasonPrefix + suffix, Dialect.UnsupportedReasonKey(feature, Server(6)));

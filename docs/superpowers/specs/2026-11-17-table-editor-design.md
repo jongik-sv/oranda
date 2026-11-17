@@ -488,6 +488,10 @@ Oracle 실측에서 더한 규칙: 기준(BYTE/CHAR)을 쓰지 않은 MODIFY 는
 - 지우기·비우기(데이터 사라짐)는 편집기에서 허용하고 ⚠ 「N행이 지워지고 되돌릴 수 없음」 **[사용자]**.
 - 새 테이블: CREATE TABLE 안에 `PARTITION BY RANGE (c) [INTERVAL (…)] (PARTITION …)`.
 - 파티션 안 된 기존 테이블 → 파티션 테이블: Oracle 12.2 이상 = `ALTER TABLE o.t MODIFY PARTITION BY … ONLINE` 한 문장. 그 밖(구버전·Tibero)은 「열 순서 바꾸기」의 테이블 다시 만들기 방식으로(⚠ 오래 걸림) **[사용자, TE-41 고침]**.
+  - 구현(2026-11-18): 파티션 페이지 위 「다시 만들기 스크립트 열기 / 스크립트 저장…」. 「실행」은 하지 않는다(DDL 미리보기에도 없음). 글 = `IColumnReorderScripts.RebuildPartitioned`(열 순서 그대로 + 새 표에 `PARTITION BY` 절, 종속 DDL 은 서버에서 새로 읽음). Oracle EE 는 DBMS_REDEFINITION, 그 밖은 CTAS + RENAME.
+  - 새 표는 `CREATE TABLE … PARTITION BY … AS SELECT … WHERE 1 = 0` 뒤 `INSERT … SELECT` + `COMMIT`. Tibero 6.2.15 는 CTAS 도중 INTERVAL 파티션을 만들지 못해 TBR-8015 로 멈추고 표 없는 파티션 객체를 남긴다(그 객체를 DROP 하면 접속이 끊김, TBR-90405). 실측 IT: Tibero `TiberoColumnReorderRebuildIt`, Oracle 26ai `PartitionEditIntegrationTests.Plain_table_converts_through_the_rebuild_script`.
+  - DBMS_METADATA 의 종속 DDL 에 든 `MODIFY ("C" NOT NULL ENABLE)` 은 새 표에 이미 있어 ORA-01442 → 스크립트에서 주석으로 남긴다(열 순서 바꾸기 다시 만들기도 같이 고침).
+  - 파티션 기능이 없는 서버(Oracle SE·XE)는 「파티션 테이블로 바꾸기…」 단추를 숨기고 파티션 페이지 위에 이유를 글로 보인다.
 - 하위(복합) 파티션은 보여 주기만 하고 편집은 미룬다 **[사용자, TE-42]**.
 - 검사: 새 RANGE 경계가 기존 행을 가르면 ⚠, DROP/TRUNCATE 행 수, 파티션 키 열 지우기·형식 바꾸기 ✖.
 - Tibero(실측 11): RANGE/LIST/HASH/INTERVAL CREATE·ADD/SPLIT/MERGE/RENAME/TRUNCATE/DROP 됨. 해시 ADD PARTITION·COALESCE·LIST ADD VALUES·EXCHANGE·`SUBPARTITIONS n` 줄임꼴은 안 됨 → 흐리게 + 이유. 카탈로그 HIGH_VALUE → BOUND, PARTITION_POSITION → PARTITION_NO. 서버 이름 파티션 `<계정>_P<n>`. ONLINE·`UPDATE INDEXES` 수용 여부는 T14 에서 실측.

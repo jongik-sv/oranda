@@ -38,7 +38,6 @@ internal sealed partial class TiberoTableEditDialect : ITableEditDialect
         [TableEditFeature.IdentityColumn] = ReasonPrefix + "identityColumn", // 15장 7001
         [TableEditFeature.InvisibleColumn] = ReasonPrefix + "invisibleColumn", // 15장 7001
         [TableEditFeature.DomainColumn] = ReasonPrefix + "domainColumn", // 15장 7001
-        [TableEditFeature.PartitionConversion] = ReasonPrefix + "partitionConversion", // 실측 밖(MODIFY PARTITION BY 없음 추정) — 보수적으로 막음
     };
 
     /// <summary>해시 파티션 수 바꾸기(ADD·COALESCE) 미지원 이유 키.</summary>
@@ -61,12 +60,12 @@ internal sealed partial class TiberoTableEditDialect : ITableEditDialect
     public string? UnsupportedReasonKey(TableEditFeature feature, ServerInfo? server) => Unsupported.GetValueOrDefault(feature);
 
     /// <summary>
-    /// 파티션(실측 11·19): 해시 <c>ADD PARTITION</c>(7002)·<c>COALESCE</c>(7001) 와 일반 → 파티션(<c>MODIFY PARTITION BY</c> 7001)은 안 된다.
+    /// 파티션(실측 11·19): 해시 <c>ADD PARTITION</c>(7002)·<c>COALESCE</c>(7001) 는 안 된다.
     /// RANGE/LIST 의 ADD·DROP·SPLIT·MERGE·RENAME·TRUNCATE·SET INTERVAL 은 된다.
+    /// 일반 → 파티션은 한 문장(<c>MODIFY PARTITION BY</c> 7001)이 없어 테이블 다시 만들기 스크립트로 한다(<see cref="SupportsOnlinePartitionConversion"/> = false, TE-41).
     /// </summary>
     public string? UnsupportedPartitionReasonKey(PartitionOperation operation, PartitionMethod method, ServerInfo? server) => operation switch
     {
-        PartitionOperation.Convert => Unsupported[TableEditFeature.PartitionConversion],
         PartitionOperation.Add or PartitionOperation.Coalesce when method == PartitionMethod.Hash => HashPartitionChangeKey,
         _ => null,
     };

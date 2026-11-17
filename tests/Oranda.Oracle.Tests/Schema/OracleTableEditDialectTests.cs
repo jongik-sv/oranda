@@ -59,7 +59,7 @@ public class OracleTableEditDialectTests
     [InlineData(TableEditFeature.IdentityColumn, "19.0.0.0.0", null)]
     [InlineData(TableEditFeature.DomainColumn, "19.0.0.0.0", OracleTableEditDialect.Needs23Key)]
     [InlineData(TableEditFeature.DomainColumn, "23.26.3.0.0", null)]
-    [InlineData(TableEditFeature.PartitionConversion, "12.1.0.2.0", OracleTableEditDialect.Needs122Key)]
+    [InlineData(TableEditFeature.PartitionConversion, "11.2.0.4.0", null)] // 12.2 미만은 다시 만들기 스크립트(TE-41)
     [InlineData(TableEditFeature.PartitionConversion, "19.0.0.0.0", null)]
     [InlineData(TableEditFeature.VirtualColumnModify, "11.2.0.2.0", null)]
     [InlineData(TableEditFeature.RenameTable, "11.2.0.2.0", null)]

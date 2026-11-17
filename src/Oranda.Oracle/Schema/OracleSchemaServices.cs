@@ -54,6 +54,11 @@ internal sealed class OracleColumnReorderScripts : IColumnReorderScripts
 
     public string DependentPart(string tableDdl, string fullDdl) => ColumnReorderScripts.DependentPart(tableDdl, fullDdl);
 
+    public string RebuildPartitioned(
+        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, bool enterprise, bool usePrimaryKey, string? dependentDdl, string partitionClause) =>
+        ColumnReorderBuilder.Rebuild(table, columns, ColumnReorderBuilder.VisibleOrder(columns), enterprise, usePrimaryKey, dependentDdl ?? string.Empty,
+            partitionClause: partitionClause);
+
     public IReadOnlyList<ColumnReorderRiskHit> FilterRiskHits(IEnumerable<SourceSearchHit> lines, DbObjectRef table) =>
         ColumnReorderSourceScan.Filter(lines, table);
 }

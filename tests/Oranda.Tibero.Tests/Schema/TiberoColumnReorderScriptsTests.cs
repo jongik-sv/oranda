@@ -84,6 +84,26 @@ public class TiberoColumnReorderScriptsTests
         Assert.Equal(script.ReplaceLineEndings(), script);
     }
 
+    /// <summary>TE-41: Tibero 의 파티션 바꾸기 = CTAS + RENAME(재정의 없음) + 새 표에 PARTITION BY 절. 종속 DDL 을 못 읽으면 원본을 남기는 규칙도 같다.</summary>
+    [Fact]
+    public void Partitioned_rebuild_is_ctas_with_the_partition_clause_and_keeps_the_original_without_dependent_ddl()
+    {
+        const string clause = "PARTITION BY RANGE (ID) (PARTITION P_BEFORE VALUES LESS THAN (100))";
+        var script = Scripts.RebuildPartitioned(Emp, Columns, enterprise: true, usePrimaryKey: true, dependentDdl: null, clause);
+        var lines = SplitLines(script);
+
+        Assert.Contains("CREATE TABLE \"HR\".\"EMP$NEW\" " + clause + " AS SELECT \"ID\", \"NAME\", \"MEMO\" FROM \"HR\".\"EMP\" WHERE 1 = 0;", lines);
+        Assert.Contains("INSERT INTO \"HR\".\"EMP$NEW\" SELECT \"ID\", \"NAME\", \"MEMO\" FROM \"HR\".\"EMP\";", lines);
+        Assert.DoesNotContain("DBMS_REDEFINITION", script, StringComparison.Ordinal);
+        Assert.Contains("-- DROP TABLE \"HR\".\"EMP$OLD\";", lines);
+        Assert.Contains(TiberoColumnReorderScripts.OriginalKept, lines);
+
+        var dropping = Scripts.RebuildPartitioned(Emp, Columns, enterprise: false, usePrimaryKey: true, dependentDdl: string.Empty, clause);
+        Assert.Contains("DROP TABLE \"HR\".\"EMP$OLD\";", SplitLines(dropping));
+    }
+
+    private static string[] SplitLines(string script) => script.ReplaceLineEndings("\n").Split('\n');
+
     /// <summary>D4c: 종속 DDL 을 읽지 못했으면(null) 원본을 지우지 않는다 — 지우면 제약·인덱스·트리거를 되살릴 길이 없다.</summary>
     [Fact]
     public void Rebuild_keeps_the_original_table_when_the_dependent_ddl_could_not_be_read()

@@ -3,6 +3,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.Language;
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema;
+using Oranda.Core.Schema.TableEdit.Partitions;
 using Oranda.Language.Lexing;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
@@ -34,6 +35,9 @@ public class TiberoColumnReorderRebuildIt(ITestOutputHelper output)
     private static readonly string Index = TiberoItSessions.ObjectName("RB_IX");
     private static readonly string Trigger = TiberoItSessions.ObjectName("RB_TRG");
     private static readonly string VirtualTable = TiberoItSessions.ObjectName("REORDER_RBV");
+    private static readonly string PartTable = TiberoItSessions.ObjectName("PART_RB2");
+    private static readonly string PartPk = TiberoItSessions.ObjectName("PRB2_PK");
+    private static readonly string PartIndex = TiberoItSessions.ObjectName("PRB2_IX");
 
     private static readonly ColumnReorderTraits PlainTable = new(false, false, null);
 
@@ -64,6 +68,67 @@ public class TiberoColumnReorderRebuildIt(ITestOutputHelper output)
             await PurgeOwnBinItemsAsync(s, own);
             await TryExecAsync(s, "ALTER SESSION SET USE_RECYCLEBIN = N");
         }
+    });
+
+    /// <summary>
+    /// TE-41: 일반 → 파티션 테이블(한 문장 <c>MODIFY PARTITION BY</c> 가 없는 Tibero)을 앱과 같은 길로 만든 다시 만들기 스크립트로 바꾼다.
+    /// 쉬운 설정과 같은 꼴(날짜 열 범위 + 매월 자동 추가 + 첫 파티션 하나). 행·기본키·인덱스·주석이 남고, 새 달 행을 넣으면 파티션이 생기는지 본다.
+    /// </summary>
+    [TiberoWriteFact]
+    public Task Rebuild_into_a_monthly_interval_partitioned_table_keeps_rows_and_dependents() => WriteAsync(PartTable, async (session, owner) =>
+    {
+        var t = PartTable;
+        string[] setup =
+        [
+            $"CREATE TABLE {t} (ID NUMBER NOT NULL, ORDER_DATE DATE NOT NULL, NAME VARCHAR2(30) DEFAULT 'x', CONSTRAINT {PartPk} PRIMARY KEY (ID))",
+            $"CREATE INDEX {PartIndex} ON {t} (NAME)",
+            $"COMMENT ON TABLE {t} IS 'part rb'",
+            $"INSERT INTO {t} (ID, ORDER_DATE, NAME) VALUES (1, DATE '2026-09-15', 'a')",
+            $"INSERT INTO {t} (ID, ORDER_DATE, NAME) VALUES (2, DATE '2026-10-31', 'b')",
+            $"INSERT INTO {t} (ID, ORDER_DATE, NAME) VALUES (3, DATE '2026-11-02', 'c')",
+            "COMMIT",
+        ];
+        for (var i = 0; i < setup.Length; i++)
+        {
+            await ExecQuietAsync(session, "setup statement " + i, setup[i]);
+        }
+
+        var provider = new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync);
+        var scripts = new TiberoColumnReorderScripts();
+        var tableRef = new DbObjectRef(owner, t, "TABLE");
+        var info = await QuietAsync("GetTableAsync(before)", () => provider.GetTableAsync(session, tableRef, CancellationToken.None));
+        var tableDdl = await QuietAsync("GetDdlAsync(table)", () => provider.GetDdlAsync(session, tableRef, new DdlOptions { SqlTerminator = true }, CancellationToken.None));
+        var fullDdl = await QuietAsync("GetDdlAsync(table, dependents)",
+            () => provider.GetDdlAsync(session, tableRef, new DdlOptions { SqlTerminator = true, IncludeDependentObjects = true }, CancellationToken.None));
+
+        var edited = new PartitionTableDraft(
+            new PartitionScheme(PartitionMethod.Range, ["ORDER_DATE"]) { Interval = "NUMTOYMINTERVAL(1, 'MONTH')" },
+            [new PartitionDraft("n1", "P_BEFORE_2026_11") { Bound = "DATE '2026-11-01'" }]);
+        var clause = PartitionScriptBuilder.ConversionClause(PartitionTableDraft.None, edited, new TiberoTableEditDialect());
+        Assert.True(clause is not null, "no partition clause for the conversion");
+        var script = scripts.RebuildPartitioned(tableRef, ColumnOrdering.ByColumnId(info.Columns), enterprise: false,
+            info.Constraints.Any(c => c.Kind == ConstraintKind.PrimaryKey), scripts.DependentPart(tableDdl, fullDdl), clause!);
+        output.WriteLine(script); // 예시 이름(ORT_)만 든 글: 접속 값은 없다
+
+        await RunScriptAsync(session, script);
+
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_part_tables WHERE table_name = '{t}' AND partitioning_type = 'RANGE'") == 1,
+            "the table is not RANGE partitioned after the rebuild");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM {t}") == 3, "row count changed by the rebuild");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM {t} PARTITION (P_BEFORE_2026_11)") == 2, "rows before 2026-11 are not in the first partition");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_constraints WHERE table_name = '{t}' AND constraint_name = '{PartPk}' AND constraint_type = 'P' AND status = 'ENABLED'") == 1,
+            "primary key is missing or not ENABLED after the rebuild");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_indexes WHERE table_name = '{t}' AND index_name = '{PartIndex}'") == 1, "index is missing after the rebuild");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_tab_comments WHERE table_name = '{t}' AND comments = 'part rb'") == 1, "table comment is missing");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM user_objects WHERE object_name IN ('{t}$OLD', '{t}$NEW')") == 0, "a $OLD or $NEW table is left over");
+
+        // 자동 추가: 새 달 행이 들어가면 파티션이 늘어난다(쓰기 뒤 되돌린다).
+        var before = await CountAsync(session, $"SELECT COUNT(*) FROM user_tab_partitions WHERE table_name = '{t}'");
+        await ExecQuietAsync(session, "insert into a new month", $"INSERT INTO {t} (ID, ORDER_DATE) VALUES (4, DATE '2027-02-10')");
+        var after = await CountAsync(session, $"SELECT COUNT(*) FROM user_tab_partitions WHERE table_name = '{t}'");
+        Assert.True(after > before, "inserting a row for a new month did not create a partition (interval did not carry over)");
+        Assert.True(await CountAsync(session, $"SELECT COUNT(*) FROM {t} WHERE ID = 4 AND NAME = 'x'") == 1, "the NAME default did not carry over");
+        await ExecQuietAsync(session, "rollback test row", "ROLLBACK");
     });
 
     [TiberoWriteFact]

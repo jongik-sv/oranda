@@ -166,6 +166,22 @@ public static class PartitionScriptBuilder
         return Clause(scheme, partitions, name => SqlIdentifier.Quote(name, dialect.IsReservedWord));
     }
 
+    /// <summary>
+    /// 일반 → 파티션 바꾸기의 <c>PARTITION BY …</c> 절(테이블 다시 만들기 스크립트가 새 표에 붙인다, TE-41). 바꾸기가 아니면 null.
+    /// </summary>
+    public static string? ConversionClause(PartitionTableDraft original, PartitionTableDraft edited, ITableEditDialect dialect)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(edited);
+        ArgumentNullException.ThrowIfNull(dialect);
+        if (original.Scheme is not null || edited.Scheme is not { KeyColumns.Count: > 0 } scheme)
+        {
+            return null;
+        }
+
+        return Clause(scheme, edited.Partitions, name => SqlIdentifier.Quote(name, dialect.IsReservedWord));
+    }
+
     private static string Clause(PartitionScheme scheme, IReadOnlyList<PartitionDraft> partitions, Func<string, string> q)
     {
         var method = scheme.Method switch

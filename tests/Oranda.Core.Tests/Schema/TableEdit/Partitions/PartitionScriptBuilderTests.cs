@@ -439,6 +439,19 @@ public class PartitionScriptBuilderTests
         Assert.Equal([TiberoLike.ConvertKey], PartitionDiff.Compute(PartitionTableDraft.None, edited, Tibero, Server(Dbms.Tibero, "6")).Problems.Select(p => p.ReasonKey));
     }
 
+    /// <summary>다시 만들기 스크립트에 붙일 절: 바꾸기일 때만, 새 표 머리의 PARTITION BY 와 같은 꼴.</summary>
+    [Fact]
+    public void Conversion_clause_is_the_partition_by_part_only_for_a_conversion()
+    {
+        var edited = new PartitionTableDraft(new PartitionScheme(PartitionMethod.Range, ["ORDER_DATE"]) { Interval = "NUMTOYMINTERVAL(1, 'MONTH')" },
+            [Row("n1", "P_BEFORE_2026_11", "DATE '2026-11-01'")]);
+
+        Assert.Equal("PARTITION BY RANGE (ORDER_DATE) INTERVAL (NUMTOYMINTERVAL(1, 'MONTH')) (PARTITION P_BEFORE_2026_11 VALUES LESS THAN (DATE '2026-11-01'))",
+            PartitionScriptBuilder.ConversionClause(PartitionTableDraft.None, edited, Oracle));
+        Assert.Null(PartitionScriptBuilder.ConversionClause(edited, edited, Oracle)); // 이미 파티션 테이블
+        Assert.Null(PartitionScriptBuilder.ConversionClause(PartitionTableDraft.None, new PartitionTableDraft(new PartitionScheme(PartitionMethod.Range, []), []), Oracle));
+    }
+
     [Theory]
     [InlineData("12.2.0.1.0", true)]
     [InlineData("12.1.0.2.0", false)]

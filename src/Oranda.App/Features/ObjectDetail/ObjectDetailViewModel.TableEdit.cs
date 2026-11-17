@@ -239,6 +239,7 @@ public sealed partial class ObjectDetailViewModel
             TableEdit = edit;
             EnsureStorageSection();
             edit.OpenPartitionsPage = ShowPartitionsSection;
+            WirePartitionRebuild(edit);
             StatusText = TableEdit.IsRestricted
                 ? TableEdit.RestrictionText
                 : TableEditText.T("편집 중 — 고친 내용은 아래 DDL 로 보입니다", "Editing — your changes appear as DDL below");

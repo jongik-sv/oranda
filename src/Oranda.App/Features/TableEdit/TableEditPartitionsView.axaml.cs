@@ -14,6 +14,8 @@ public partial class TableEditPartitionsView : UserControl
         AddPartitionButton.Click += (_, _) => Session?.AddPartition();
         ApplyEasyPartitionButton.Click += (_, _) => Session?.ApplyEasyPartitioning();
         EnableAutoAddButton.Click += (_, _) => Session?.EnableAutoAdd();
+        OpenPartitionRebuildButton.Click += async (_, _) => await (Session?.OpenPartitionRebuildScriptAsync() ?? Task.CompletedTask);
+        SavePartitionRebuildButton.Click += async (_, _) => await (Session?.SavePartitionRebuildScriptAsync() ?? Task.CompletedTask);
         DropPartitionButton.Click += (_, _) => Session?.DropSelectedPartition();
         SplitPartitionButton.Click += (_, _) => Session?.SplitSelectedPartition();
         MergePartitionButton.Click += (_, _) => Session?.MergeSelectedPartition();

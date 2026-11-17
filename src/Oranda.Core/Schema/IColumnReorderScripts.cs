@@ -84,6 +84,14 @@ public interface IColumnReorderScripts
     /// </summary>
     string DependentPart(string tableDdl, string fullDdl);
 
+    /// <summary>
+    /// 일반 → 파티션 테이블 바꾸기(테이블 편집기 설계 TE-41): 한 문장 <c>MODIFY PARTITION BY … ONLINE</c> 이 없는 서버(Oracle 12.2 미만·Tibero)에서
+    /// 방식 ② 다시 만들기 스크립트의 새 표에 <paramref name="partitionClause"/>(<c>PARTITION BY …</c>)를 붙인다. 열 순서는 그대로. 자동으로 실행하지 않는다.
+    /// </summary>
+    /// <param name="columns">표의 모든 열(INVISIBLE 포함, 현재 순서)</param>
+    string RebuildPartitioned(
+        DbObjectRef table, IReadOnlyList<ColumnInfo> columns, bool enterprise, bool usePrimaryKey, string? dependentDdl, string partitionClause);
+
     /// <summary>표를 참조하는 소스 줄 가운데 열 순서에 민감한 위험 후보만 남긴다(한 줄 단위 판정이라 줄을 넘는 문장은 못 찾는다).</summary>
     IReadOnlyList<ColumnReorderRiskHit> FilterRiskHits(IEnumerable<SourceSearchHit> lines, DbObjectRef table);
 }

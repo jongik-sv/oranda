@@ -50,7 +50,8 @@ internal sealed class OracleTableEditDialect : ITableEditDialect
         TableEditFeature.IdentityColumn or TableEditFeature.InvisibleColumn => Requires(server, 12, 1, Needs12cKey, enterprise: false),
         TableEditFeature.DomainColumn => Requires(server, 23, 0, Needs23Key, enterprise: false),
         TableEditFeature.BitmapIndex or TableEditFeature.Partitioning => Requires(server, 0, 0, null, enterprise: true),
-        TableEditFeature.PartitionConversion => Requires(server, 12, 2, Needs122Key, enterprise: true),
+        // 12.2 미만은 한 문장 MODIFY PARTITION BY 가 없어 테이블 다시 만들기 스크립트로 바꾼다(TE-41) — 파티션 옵션(Enterprise)만 본다.
+        TableEditFeature.PartitionConversion => Requires(server, 0, 0, null, enterprise: true),
         _ => null,
     };
 

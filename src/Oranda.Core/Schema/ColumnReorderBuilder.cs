@@ -13,7 +13,7 @@ namespace Oranda.Core.Schema;
 /// Oracle 만 아는 부분은 인자로 가른다: 온라인 재정의(<c>DBMS_REDEFINITION</c>)는 <c>enterprise</c> 가 true 일 때만 만들고,
 /// INVISIBLE 열 방식은 호출한 쪽(서비스)이 <c>BlockReasons</c> 로 막는다.
 /// </summary>
-public static class ColumnReorderBuilder
+public static partial class ColumnReorderBuilder
 {
     /// <summary>방식에 따라 막는 이유. 비어 있으면 쓸 수 있다.</summary>
     /// <param name="columns">표의 모든 열(INVISIBLE 포함)</param>
@@ -141,9 +141,12 @@ public static class ColumnReorderBuilder
     /// 형식 변환(설계 18.9 「테이블 다시 만들기」): 열 이름 → 새 값 식과 맞출 형식(<see cref="RebuildConversion"/>).
     /// 그 열은 이 식으로 복사하고(재정의는 <c>col_mapping</c>), 형식·<paramref name="columns"/> 의 그 열 정의(기본값·NOT NULL)를 새 표에 맞춘다. 없으면 null.
     /// </param>
+    /// <param name="partitionClause">
+    /// 일반 → 파티션 테이블 바꾸기(설계 TE-41, 한 문장 <c>MODIFY PARTITION BY</c> 가 없는 서버): 새 표를 만들 때 붙일 <c>PARTITION BY …</c> 절. 없으면 null.
+    /// </param>
     public static string Rebuild(
         DbObjectRef table, IReadOnlyList<ColumnInfo> columns, IReadOnlyList<string> desired, bool enterprise, bool usePrimaryKey, string dependentDdl,
-        IReadOnlyDictionary<string, RebuildConversion>? conversions = null)
+        IReadOnlyDictionary<string, RebuildConversion>? conversions = null, string? partitionClause = null)
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(columns);
@@ -168,9 +171,21 @@ public static class ColumnReorderBuilder
                                                   + " " + SqlIdentifier.QuoteAlways(c.Name)));
 
         var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture, $"-- 열 순서 바꾸기: {table.Owner}.{table.Name}  (방식 ②: {(enterprise ? "DBMS_REDEFINITION" : "CTAS + RENAME")})");
+        var partition = string.IsNullOrWhiteSpace(partitionClause) ? string.Empty : " " + partitionClause.Trim();
+        var way = enterprise ? "DBMS_REDEFINITION" : "CTAS + RENAME";
+        sb.AppendLine(partition.Length > 0
+            ? $"-- 파티션 테이블로 바꾸기: {table.Owner}.{table.Name}  (테이블 다시 만들기: {way})"
+            : $"-- 열 순서 바꾸기: {table.Owner}.{table.Name}  (방식 ②: {way})");
         sb.AppendLine("-- 검토 뒤 실행: 이 스크립트는 자동으로 실행되지 않는다. 읽고, 공간·쓰기 중단 시간·참조 관계를 확인한 뒤 직접 실행한다.");
-        sb.AppendLine("-- 새 열 순서: " + string.Join(", ", copied.Concat(ordered.Where(c => c.IsVirtual)).Select(c => c.Name)));
+        if (partition.Length > 0)
+        {
+            sb.AppendLine("-- 파티션:" + partition);
+        }
+        else
+        {
+            sb.AppendLine("-- 새 열 순서: " + string.Join(", ", copied.Concat(ordered.Where(c => c.IsVirtual)).Select(c => c.Name)));
+        }
+
         foreach (var (name, value) in conversions.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
             sb.Append("-- 형식 변환: ").Append(name).Append(" = ").Append(OneLine(value.Expression))
@@ -182,16 +197,23 @@ public static class ColumnReorderBuilder
 
         if (enterprise)
         {
-            AppendRedefinition(sb, table, stagingRef, selectList, copied, ordered, usePrimaryKey, columnMapping, conversions);
+            AppendRedefinition(sb, table, stagingRef, selectList, copied, ordered, usePrimaryKey, columnMapping, conversions, partition);
         }
         else
         {
-            AppendCtas(sb, table, target, stagingRef, selectList, copied, ordered, conversions);
+            AppendCtas(sb, table, target, stagingRef, selectList, copied, ordered, conversions, partition);
         }
 
         AppendStatsComment(sb, table);
         AppendDependents(sb, dependentDdl, enterprise);
         return sb.ToString().TrimEnd() + Environment.NewLine;
+    }
+
+    /// <summary>보이는 열의 지금 순서(<see cref="Rebuild"/> 의 <c>desired</c> 에 넣으면 순서를 바꾸지 않는다).</summary>
+    public static IReadOnlyList<string> VisibleOrder(IReadOnlyList<ColumnInfo> columns)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        return [.. columns.Where(c => !c.IsInvisible).Select(c => c.Name)];
     }
 
     /// <summary>
@@ -229,11 +251,24 @@ public static class ColumnReorderBuilder
 
     private static void AppendCtas(
         StringBuilder sb, DbObjectRef table, string target, string stagingRef, string selectList,
-        IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered, IReadOnlyDictionary<string, RebuildConversion> conversions)
+        IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered, IReadOnlyDictionary<string, RebuildConversion> conversions, string partition)
     {
         var oldRef = SqlIdentifier.QuoteAlways(table.Owner) + "." + SqlIdentifier.QuoteAlways(table.Name + "$OLD");
-        sb.AppendLine("-- 1) 새 순서로 복사한다(행 수만큼 시간과 공간이 든다. NOT NULL 은 따라오고 기본값·키·인덱스는 따라오지 않는다)");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef} AS SELECT {selectList} FROM {target};");
+        if (partition.Length > 0)
+        {
+            // 빈 파티션 표를 먼저 만들고 INSERT 로 옮긴다: Tibero 는 CTAS 도중 INTERVAL 파티션을 새로 만들지 못해 TBR-8015 로 멈추고
+            // 표 없는 파티션 객체를 남긴다(실측 6.2.15, 2026-11-18). INSERT 는 새 기간 파티션을 만든다. Oracle 도 같은 순서로 된다.
+            sb.AppendLine("-- 1) 빈 파티션 테이블을 만들고 행을 옮긴다(행 수만큼 시간과 공간이 든다. NOT NULL 은 따라오고 기본값·키·인덱스는 따라오지 않는다)");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef}{partition} AS SELECT {selectList} FROM {target} WHERE 1 = 0;");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"INSERT INTO {stagingRef} SELECT {selectList} FROM {target};");
+            sb.AppendLine("COMMIT;");
+        }
+        else
+        {
+            sb.AppendLine("-- 1) 새 순서로 복사한다(행 수만큼 시간과 공간이 든다. NOT NULL 은 따라오고 기본값·키·인덱스는 따라오지 않는다)");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef} AS SELECT {selectList} FROM {target};");
+        }
+
         sb.AppendLine();
         AppendColumnFixes(sb, stagingRef, copied, ordered, conversions);
         sb.AppendLine("-- 2) 이름을 바꾼다(이 사이에 쓰기가 없어야 한다). 이 테이블을 참조하는 외래키는 원본(이름을 바꾼 테이블)에 그대로 남는다");
@@ -251,7 +286,7 @@ public static class ColumnReorderBuilder
     private static void AppendRedefinition(
         StringBuilder sb, DbObjectRef table, string stagingRef, string selectList,
         IReadOnlyList<ColumnInfo> copied, IReadOnlyList<ColumnInfo> ordered, bool usePrimaryKey,
-        string? columnMapping, IReadOnlyDictionary<string, RebuildConversion> conversions)
+        string? columnMapping, IReadOnlyDictionary<string, RebuildConversion> conversions, string partition)
     {
         var target = Target(table);
         var owner = Lit(table.Owner);
@@ -263,8 +298,10 @@ public static class ColumnReorderBuilder
         sb.AppendLine(CultureInfo.InvariantCulture, $"BEGIN DBMS_REDEFINITION.CAN_REDEF_TABLE({owner}, {name}, {option}); END;");
         sb.AppendLine("/");
         sb.AppendLine();
-        sb.AppendLine("-- 2) 새 열 순서의 중간 테이블을 만든다(행은 복사하지 않는다)");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef} AS SELECT {selectList} FROM {target} WHERE 1 = 0;");
+        sb.AppendLine(partition.Length > 0
+            ? "-- 2) 파티션 중간 테이블을 만든다(행은 복사하지 않는다)"
+            : "-- 2) 새 열 순서의 중간 테이블을 만든다(행은 복사하지 않는다)");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"CREATE TABLE {stagingRef}{partition} AS SELECT {selectList} FROM {target} WHERE 1 = 0;");
         sb.AppendLine();
         AppendColumnFixes(sb, stagingRef, copied, ordered, conversions);
         sb.AppendLine("-- 3) 재정의를 시작한다(데이터를 복사한다. 원본은 계속 읽고 쓸 수 있다)");
@@ -288,7 +325,7 @@ public static class ColumnReorderBuilder
         sb.AppendLine(CultureInfo.InvariantCulture, $"BEGIN DBMS_REDEFINITION.FINISH_REDEF_TABLE(uname => {owner}, orig_table => {name}, int_table => {staging}); END;");
         sb.AppendLine("/");
         sb.AppendLine();
-        sb.AppendLine("-- 6) 중간 테이블(이제 예전 순서)를 지운다");
+        sb.AppendLine(partition.Length > 0 ? "-- 6) 중간 테이블(이제 파티션 없는 예전 테이블)을 지운다" : "-- 6) 중간 테이블(이제 예전 순서)를 지운다");
         sb.AppendLine(CultureInfo.InvariantCulture, $"DROP TABLE {stagingRef};");
         sb.AppendLine();
     }
@@ -368,9 +405,19 @@ public static class ColumnReorderBuilder
         else
         {
             sb.AppendLine("-- 5) 원본의 제약·인덱스·트리거·권한·주석(DBMS_METADATA). 4) 로 원본을 지운 뒤에 실행한다(이름이 겹치지 않도록).");
-            sb.AppendLine(dependentDdl.Trim());
+            foreach (var line in dependentDdl.Trim().ReplaceLineEndings("\n").Split('\n'))
+            {
+                // DBMS_METADATA 는 NOT NULL 도 ALTER … MODIFY ("C" NOT NULL ENABLE) 로 낸다. 새 표는 이미 NOT NULL 이라(CTAS 가 옮기거나 위에서 맞춤) 다시 내면 ORA-01442 로 멈춘다(실측 26ai).
+                sb.AppendLine(NotNullModify().IsMatch(line) ? NotNullKept + line.Trim() : line);
+            }
         }
     }
+
+    /// <summary>종속 DDL 의 NOT NULL 줄을 주석으로 바꿀 때 앞에 붙이는 글.</summary>
+    public const string NotNullKept = "-- (새 테이블에 이미 NOT NULL) ";
+
+    [System.Text.RegularExpressions.GeneratedRegex("""^\s*ALTER\s+TABLE\s+\S+\s+MODIFY\s*\(\s*"[^"]+"\s+(CONSTRAINT\s+"[^"]+"\s+)?NOT\s+NULL(\s+ENABLE)?\s*\)\s*;\s*$""", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex NotNullModify();
 
     private static string Target(DbObjectRef table)
         => SqlIdentifier.QuoteAlways(table.Owner) + "." + SqlIdentifier.QuoteAlways(table.Name);
