@@ -98,10 +98,206 @@ public sealed record TableDraftChanges
         ?? DraftRowState.Unchanged;
 }
 
-/// <summary>차이 계산(설계 8.1: 줄 키로 맞춤, 8.4: 정규화 뒤 비교).</summary>
+/// <summary>
+/// 차이 계산(설계 8.1: 줄 키로 맞춤, 8.4: 정규화 뒤 비교). 지울 열을 쓰는 제약·인덱스(열 줄 키로 가리키는 것)는 사용자가 표시하지 않았어도 지움으로 본다
+/// (설계 8.3: 먼저 지워야 열 지우기가 된다). PK·UK 가 만든 인덱스(<see cref="IndexDraft.ConstraintName"/>)는 인덱스 페이지에서 고치지 않으므로 비교하지 않는다.
+/// </summary>
 public static class TableDraftDiff
 {
     /// <summary>원본 <paramref name="original"/> 과 편집 <paramref name="edited"/> 의 차이.</summary>
-    public static TableDraftChanges Compute(TableDraft original, TableDraft edited, ITableEditDialect dialect) =>
-        throw new NotImplementedException("T1b");
+    public static TableDraftChanges Compute(TableDraft original, TableDraft edited, ITableEditDialect dialect)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(edited);
+        ArgumentNullException.ThrowIfNull(dialect);
+
+        var columns = Rows(original.Columns, edited.Columns, c => c.RowKey, c => c.IsDropped, (o, e) => ColumnChanges(o, e, dialect),
+            (key, state, changes, o, e) => new ColumnDiff(key, state, changes, o, e));
+        var droppedColumns = columns.Where(d => d.State == DraftRowState.Dropped).Select(d => d.RowKey).ToHashSet(StringComparer.Ordinal);
+
+        // 지우고 다시 만드는 열(가상↔일반, 가상 식을 MODIFY 로 못 바꾸는 방언)을 쓰는 제약·인덱스는 열과 함께 사라지므로 지우고 다시 만든다.
+        var recreatedColumns = columns.Where(d => IsRecreated(d, dialect)).Select(d => d.RowKey).ToHashSet(StringComparer.Ordinal);
+
+        var constraints = Rows(original.Constraints, edited.Constraints, c => c.RowKey, c => c.IsDropped,
+            (o, e) => ConstraintChanges(o, e, dialect) | (o.ColumnKeys.Any(recreatedColumns.Contains) ? ConstraintChange.Definition : ConstraintChange.None),
+            (key, state, changes, o, e) => new ConstraintDiff(key, state, changes, o, e),
+            o => o.ColumnKeys.Any(droppedColumns.Contains));
+
+        var indexes = Rows(
+            [.. original.Indexes.Where(i => i.ConstraintName is null)], [.. edited.Indexes.Where(i => i.ConstraintName is null)],
+            i => i.RowKey, i => i.IsDropped,
+            (o, e) => IndexChanges(o, e, dialect)
+                      | (o.Columns.Any(c => c.ColumnKey is { } k && recreatedColumns.Contains(k)) ? IndexChange.Definition : IndexChange.None),
+            (key, state, changes, o, e) => new IndexDiff(key, state, changes, o, e),
+            o => o.Columns.Any(c => c.ColumnKey is { } k && droppedColumns.Contains(k)));
+
+        return new TableDraftChanges
+        {
+            Columns = columns,
+            Constraints = constraints,
+            Indexes = indexes,
+            CommentChanged = !string.Equals(original.Comment ?? string.Empty, edited.Comment ?? string.Empty, StringComparison.Ordinal),
+            Renamed = !edited.IsNewTable && !original.IsNewTable && !string.Equals(original.Name, edited.Name, StringComparison.Ordinal),
+        };
+    }
+
+    /// <summary>열을 MODIFY 가 아니라 DROP + ADD 로 바꾸는가(가상↔일반, 또는 방언이 가상 식 MODIFY 를 못 함).</summary>
+    public static bool IsRecreated(ColumnDiff d, ITableEditDialect dialect)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        ArgumentNullException.ThrowIfNull(dialect);
+        return d.State == DraftRowState.Modified && d.Changes.HasFlag(ColumnChange.VirtualExpression)
+               && (d.Original!.IsVirtual != d.Edited!.IsVirtual || !dialect.SupportsVirtualColumnModify);
+    }
+
+    /// <summary>
+    /// 줄 맞추기. 편집 순서(빠진 원본 줄은 끝에 원본 순서로)로 돌려준다. <paramref name="dropsWith"/> 가 참인 원본 줄은 편집에 살아 있어도 지움으로 본다.
+    /// </summary>
+    private static List<TDiff> Rows<TRow, TChange, TDiff>(
+        IReadOnlyList<TRow> original, IReadOnlyList<TRow> edited, Func<TRow, string> key, Func<TRow, bool> dropped, Func<TRow, TRow, TChange> compare,
+        Func<string, DraftRowState, TChange, TRow?, TRow?, TDiff> make, Func<TRow, bool>? dropsWith = null)
+        where TRow : class
+        where TChange : struct, Enum
+    {
+        var originals = original.ToDictionary(key, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<TDiff>();
+        foreach (var e in edited)
+        {
+            var k = key(e);
+            seen.Add(k);
+            if (!originals.TryGetValue(k, out var o))
+            {
+                if (!dropped(e))
+                {
+                    result.Add(make(k, DraftRowState.Added, default, null, e));
+                }
+
+                continue;
+            }
+
+            if (dropped(e) || dropsWith?.Invoke(o) == true)
+            {
+                result.Add(make(k, DraftRowState.Dropped, default, o, e));
+                continue;
+            }
+
+            var changes = compare(o, e);
+            if (!EqualityComparer<TChange>.Default.Equals(changes, default))
+            {
+                result.Add(make(k, DraftRowState.Modified, changes, o, e));
+            }
+        }
+
+        foreach (var o in original.Where(o => !seen.Contains(key(o))))
+        {
+            result.Add(make(key(o), DraftRowState.Dropped, default, o, null));
+        }
+
+        return result;
+    }
+
+    private static ColumnChange ColumnChanges(ColumnDraft o, ColumnDraft e, ITableEditDialect dialect)
+    {
+        var changes = ColumnChange.None;
+        if (!string.Equals(o.Name, e.Name, StringComparison.Ordinal))
+        {
+            changes |= ColumnChange.Name;
+        }
+
+        if (!(e.IsVirtual && string.IsNullOrWhiteSpace(e.DataType))
+            && !string.Equals(dialect.NormalizeType(o), dialect.NormalizeType(e with { CharSemantics = e.CharSemantics ?? o.CharSemantics }), StringComparison.Ordinal))
+        {
+            changes |= ColumnChange.Type;
+        }
+
+        if (o.IsNullable != e.IsNullable)
+        {
+            changes |= ColumnChange.Nullable;
+        }
+
+        if (!e.IsVirtual && e.Identity is null
+            && !string.Equals(dialect.NormalizeDefault(o.DefaultValue), dialect.NormalizeDefault(e.DefaultValue), StringComparison.Ordinal))
+        {
+            changes |= ColumnChange.Default;
+        }
+
+        if (o.IsVirtual != e.IsVirtual
+            || (e.IsVirtual && !string.Equals(dialect.NormalizeExpression(o.VirtualExpression), dialect.NormalizeExpression(e.VirtualExpression), StringComparison.Ordinal)))
+        {
+            changes |= ColumnChange.VirtualExpression;
+        }
+
+        if (!string.Equals(o.Comment ?? string.Empty, e.Comment ?? string.Empty, StringComparison.Ordinal))
+        {
+            changes |= ColumnChange.Comment;
+        }
+
+        if (o.Identity != e.Identity)
+        {
+            changes |= ColumnChange.Identity;
+        }
+
+        if (o.IsInvisible != e.IsInvisible)
+        {
+            changes |= ColumnChange.Invisible;
+        }
+
+        if (!string.Equals(Blank(o.Domain), Blank(e.Domain), StringComparison.OrdinalIgnoreCase))
+        {
+            changes |= ColumnChange.Domain;
+        }
+
+        return changes;
+    }
+
+    private static ConstraintChange ConstraintChanges(ConstraintDraft o, ConstraintDraft e, ITableEditDialect dialect)
+    {
+        var changes = ConstraintChange.None;
+        if (!string.IsNullOrWhiteSpace(e.Name) && !string.Equals(o.Name, e.Name, StringComparison.Ordinal))
+        {
+            changes |= ConstraintChange.Name;
+        }
+
+        if (o.Kind != e.Kind
+            || !o.ColumnKeys.SequenceEqual(e.ColumnKeys, StringComparer.Ordinal)
+            || !string.Equals(o.ReferencedTable?.Owner, e.ReferencedTable?.Owner, StringComparison.Ordinal)
+            || !string.Equals(o.ReferencedTable?.Name, e.ReferencedTable?.Name, StringComparison.Ordinal)
+            || !o.ReferencedColumns.SequenceEqual(e.ReferencedColumns, StringComparer.Ordinal)
+            || o.DeleteRule != e.DeleteRule
+            || !string.Equals(dialect.NormalizeCondition(o.Condition), dialect.NormalizeCondition(e.Condition), StringComparison.Ordinal))
+        {
+            changes |= ConstraintChange.Definition;
+        }
+
+        if (o.IsEnabled != e.IsEnabled)
+        {
+            changes |= ConstraintChange.Enabled;
+        }
+
+        return changes;
+    }
+
+    private static IndexChange IndexChanges(IndexDraft o, IndexDraft e, ITableEditDialect dialect)
+    {
+        var changes = IndexChange.None;
+        if (!string.IsNullOrWhiteSpace(e.Name) && !string.Equals(o.Name, e.Name, StringComparison.Ordinal))
+        {
+            changes |= IndexChange.Name;
+        }
+
+        var sameColumns = o.Columns.Count == e.Columns.Count && o.Columns.Zip(e.Columns).All(p =>
+            string.Equals(p.First.ColumnKey, p.Second.ColumnKey, StringComparison.Ordinal)
+            && p.First.Descending == p.Second.Descending
+            && string.Equals(dialect.NormalizeExpression(p.First.Expression), dialect.NormalizeExpression(p.Second.Expression), StringComparison.Ordinal));
+        var tablespaceChanged = !string.IsNullOrWhiteSpace(e.Tablespace) && !string.Equals(o.Tablespace, e.Tablespace, StringComparison.OrdinalIgnoreCase);
+        if (o.IsUnique != e.IsUnique || o.Kind != e.Kind || !sameColumns || tablespaceChanged)
+        {
+            changes |= IndexChange.Definition;
+        }
+
+        return changes;
+    }
+
+    private static string Blank(string? text) => string.IsNullOrWhiteSpace(text) ? string.Empty : text.Trim();
 }

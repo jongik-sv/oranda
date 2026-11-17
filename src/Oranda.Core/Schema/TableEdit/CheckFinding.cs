@@ -57,10 +57,19 @@ public enum CheckCode
 
     /// <summary>✖ 방언·서버가 지원하지 않는 편집(설계 18.8). <see cref="CheckFinding.Detail"/> = 이유 문자열 키.</summary>
     Unsupported,
+
+    /// <summary>✖ 서버가 받지 않는 정의(지우는 열을 쓰는 식, 유일 비트맵, PK 없는 IOT 등). <see cref="CheckFinding.Detail"/> = 까닭(예 <c>droppedColumn:B</c>).</summary>
+    InvalidDefinition,
+
+    /// <summary>⚠ 테이블 이름 바꾸기로 이 테이블을 쓰는 뷰·PL/SQL·시노님이 무효가 된다(설계 18.1).</summary>
+    DependentsInvalidated,
+
+    /// <summary>⚠ 숨김 ↔ 보임으로 열 순서가 바뀐다(맨 뒤로, 설계 18.5).</summary>
+    ColumnOrderChanges,
 }
 
 /// <summary>
-/// 검사 결과 한 줄. <see cref="RowKey"/> 는 편집 줄(<see cref="TableDraft.TableRowKey"/> = 테이블 전체).
+/// 검사 결과 한 줄. <see cref="CheckSeverity.Ok"/> 줄은 그 항목(<see cref="Code"/>)을 검사해 걸리지 않았다는 뜻이다(설계 10장 ✔). <see cref="RowKey"/> 는 편집 줄(<see cref="TableDraft.TableRowKey"/> = 테이블 전체).
 /// 문구는 화면이 <see cref="Code"/>·<see cref="Subject"/>·<see cref="Count"/>·<see cref="Detail"/> 로 만든다.
 /// </summary>
 public sealed record CheckFinding(CheckSeverity Severity, CheckCode Code, string RowKey)

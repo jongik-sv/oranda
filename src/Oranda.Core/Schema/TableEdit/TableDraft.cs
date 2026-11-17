@@ -57,7 +57,11 @@ public sealed record ColumnDraft(string RowKey, string Name)
     /// <summary>원본의 위치(상세 「#」 칸, 1부터). 새 열은 null.</summary>
     public int? OriginalPosition { get; init; }
 
-    /// <summary>형식 이름(<c>VARCHAR2</c>, <c>TIMESTAMP(6)</c> …). 가상 열은 비워도 된다(서버가 정함).</summary>
+    /// <summary>
+    /// 형식 이름(<c>VARCHAR2</c>, <c>NUMBER</c>, <c>TIMESTAMP(6)</c> …). 길이·정밀도·소수는 <see cref="Length"/>·<see cref="Precision"/>·<see cref="Scale"/> 에 따로 둔다 —
+    /// 화면은 <c>VARCHAR2(100)</c> 처럼 괄호를 붙여 넣지 않는다(괄호가 있으면 그대로 써서 길이 기준이 빠진다). 괄호는 서버 사전이 형식 이름에 붙여 주는 것
+    /// (<c>TIMESTAMP(6)</c>·<c>INTERVAL DAY(2) TO SECOND(6)</c>)만 남는다. 가상 열은 비워도 된다(서버가 정함).
+    /// </summary>
     public string? DataType { get; init; }
 
     /// <summary>문자·RAW 형식 길이(글자 또는 바이트, <see cref="CharSemantics"/>).</summary>
