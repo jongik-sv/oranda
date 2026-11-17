@@ -40,11 +40,11 @@ public class TiberoTableEditIt(ITestOutputHelper output)
         await p.DropTableAsync(t);
         try
         {
-            await p.MustAsync($"CREATE TABLE {t} (ID NUMBER, S VARCHAR2(20), N NUMBER(10,2), NL VARCHAR2(5), E NUMBER, NS NVARCHAR2(10))");
-            await p.MustAsync($"INSERT INTO {t} VALUES (1, 'abcdefg', 12345.67, NULL, NULL, N'가나다')");
-            await p.MustAsync($"INSERT INTO {t} VALUES (2, '가나다', 1.5, 'x', NULL, N'가')");
-            await p.MustAsync($"INSERT INTO {t} VALUES (3, 'ab', -999.99, NULL, NULL, NULL)");
-            await p.MustAsync($"INSERT INTO {t} VALUES (4, NULL, NULL, 'y', NULL, NULL)");
+            await p.MustAsync($"CREATE TABLE {t} (ID NUMBER, S VARCHAR2(20), N NUMBER(10,2), NL VARCHAR2(5), E NUMBER, NS NVARCHAR2(10), R RAW(8))");
+            await p.MustAsync($"INSERT INTO {t} VALUES (1, 'abcdefg', 12345.67, NULL, NULL, N'가나다', HEXTORAW('0102030405'))");
+            await p.MustAsync($"INSERT INTO {t} VALUES (2, '가나다', 1.5, 'x', NULL, N'가', HEXTORAW('01'))");
+            await p.MustAsync($"INSERT INTO {t} VALUES (3, 'ab', -999.99, NULL, NULL, NULL, NULL)");
+            await p.MustAsync($"INSERT INTO {t} VALUES (4, NULL, NULL, 'y', NULL, NULL, NULL)");
             await p.MustAsync("COMMIT");
             var ct = CancellationToken.None;
 
@@ -62,8 +62,9 @@ public class TiberoTableEditIt(ITestOutputHelper output)
             // '가나다' = 3글자 9바이트(실측 6장). 5 BYTE 면 'abcdefg'·'가나다' 둘, 5 CHAR 면 'abcdefg' 하나.
             Assert.Equal(2, await Checks.OverflowCountAsync(session, table, "S", Draft("S", "VARCHAR2", 5, CharSemantics.Bytes), ct));
             Assert.Equal(1, await Checks.OverflowCountAsync(session, table, "S", Draft("S", "VARCHAR2", 5, CharSemantics.Characters), ct));
-            Assert.Equal(2, await Checks.OverflowCountAsync(session, table, "S", Draft("S", "VARCHAR2", 5), ct)); // 기준 모름 = 바이트(보수적)
+            Assert.Equal(1, await Checks.OverflowCountAsync(session, table, "S", Draft("S", "VARCHAR2", 5), ct)); // 기준 모름 = 글자(Core 조건, 검사 계획은 원래 기준을 채워 보낸다)
             Assert.Equal(1, await Checks.OverflowCountAsync(session, table, "NS", Draft("NS", "NVARCHAR2", 2), ct)); // N 형식은 글자
+            Assert.Equal(1, await Checks.OverflowCountAsync(session, table, "R", Draft("R", "RAW", 4), ct)); // RAW 는 바이트(Core 조건 UTL_RAW.LENGTH)
             Assert.Equal(1, await Checks.OverflowCountAsync(session, table, "N", Draft("N", "NUMBER", precision: 5, scale: 2), ct)); // 정수 3자리: 12345.67
             Assert.Equal(0, await Checks.OverflowCountAsync(session, table, "N", Draft("N", "NUMBER", precision: 10, scale: 0), ct)); // 소수 줄이기는 반올림
             Assert.Equal(2, await Checks.OverflowCountAsync(session, table, "N", Draft("N", "NUMBER", precision: 2, scale: 0), ct)); // 12345.67, -999.99

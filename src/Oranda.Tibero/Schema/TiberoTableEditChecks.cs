@@ -29,7 +29,7 @@ internal sealed class TiberoTableEditChecks : ITableEditChecks
     public Dbms Dbms => Dbms.Tibero;
 
     public Task<long> CountRowsAsync(ISession s, DbObjectRef table, CancellationToken ct) =>
-        CountAsync(s, $"SELECT COUNT(*) FROM {Name(table)}", ct);
+        CountAsync(s, TableEditCheckSql.CountSql(Checked(table), "1 = 1"), ct);
 
     public async Task<long?> NumRowsAsync(ISession s, DbObjectRef table, CancellationToken ct)
     {
@@ -41,22 +41,36 @@ internal sealed class TiberoTableEditChecks : ITableEditChecks
         return TiberoSessionQuery.Long(value);
     }
 
+    /// <summary>
+    /// 문자·RAW = Core <see cref="TableEditCheckSql.OverflowWhere"/>(「그 행 보기」와 같은 조건), NUMBER = 정수 자리 넘침(<see cref="OverflowCondition"/>,
+    /// 검사 계획은 정밀도·소수 줄이기를 NULL 아닌 행으로 보므로 보통 부르지 않는다). 그 밖의 형식 = 0.
+    /// </summary>
     public Task<long> OverflowCountAsync(ISession s, DbObjectRef table, string column, ColumnDraft target, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
-        var condition = OverflowCondition(Column(column), target);
-        return condition is null ? Task.FromResult(0L) : CountAsync(s, $"SELECT COUNT(*) FROM {Name(table)} WHERE {condition}", ct);
+        ArgumentException.ThrowIfNullOrWhiteSpace(column);
+        var where = Family(target.DataType) switch
+        {
+            "VARCHAR2" or "CHAR" or "NVARCHAR2" or "NCHAR" or "RAW" when target.Length is not null => TableEditCheckSql.OverflowWhere(column, target),
+            "NUMBER" => OverflowCondition("t." + Column(column), target),
+            _ => null,
+        };
+        return where is null ? Task.FromResult(0L) : CountAsync(s, TableEditCheckSql.CountSql(Checked(table), where), ct);
     }
 
     public Task<long> NullCountAsync(ISession s, DbObjectRef table, string column, CancellationToken ct) =>
-        CountAsync(s, $"SELECT COUNT(*) FROM {Name(table)} WHERE {Column(column)} IS NULL", ct);
+        CountAsync(s, TableEditCheckSql.CountSql(Checked(table), TableEditCheckSql.NullWhere(Checked(column))), ct);
 
     public Task<long> NonNullCountAsync(ISession s, DbObjectRef table, string column, CancellationToken ct) =>
-        CountAsync(s, $"SELECT COUNT(*) FROM {Name(table)} WHERE {Column(column)} IS NOT NULL", ct);
+        CountAsync(s, TableEditCheckSql.CountSql(Checked(table), TableEditCheckSql.NonNullWhere(Checked(column))), ct);
 
+    /// <summary>
+    /// 겹치는 행 수(모든 키가 NULL 인 행은 빼고, 일부 NULL 은 NULL 끼리 같게 — UK 규칙). 건수는 GROUP BY 한 번(Core 「그 행 보기」 조건의
+    /// 행마다 EXISTS 는 큰 테이블에서 시간 제한에 걸린다). GROUP BY 도 NULL 끼리 묶으므로 건수는 Core 조건과 같다.
+    /// </summary>
     public Task<long> DuplicateKeyCountAsync(ISession s, DbObjectRef table, IReadOnlyList<string> columns, CancellationToken ct)
     {
-        var keys = Columns(columns);
+        var keys = Columns(columns).Select(Column).ToList();
         var allNull = string.Join(" AND ", keys.Select(k => k + " IS NULL"));
         return CountAsync(s,
             $"SELECT NVL(SUM(cnt), 0) FROM (SELECT COUNT(*) AS cnt FROM {Name(table)} WHERE NOT ({allNull}) GROUP BY {string.Join(", ", keys)} HAVING COUNT(*) > 1)",
@@ -66,24 +80,22 @@ internal sealed class TiberoTableEditChecks : ITableEditChecks
     public Task<long> OrphanCountAsync(
         ISession s, DbObjectRef table, IReadOnlyList<string> columns, DbObjectRef referencedTable, IReadOnlyList<string> referencedColumns, CancellationToken ct)
     {
-        var keys = Columns(columns);
-        var parents = Columns(referencedColumns);
-        if (keys.Count != parents.Count)
+        Columns(columns);
+        Columns(referencedColumns);
+        ArgumentNullException.ThrowIfNull(referencedTable);
+        if (columns.Count != referencedColumns.Count)
         {
             throw new ArgumentException("FK 열과 참조 열의 수가 다르다.", nameof(referencedColumns));
         }
 
-        var notNull = string.Join(" AND ", keys.Select(k => "c." + k + " IS NOT NULL"));
-        var match = string.Join(" AND ", keys.Select((k, i) => "p." + parents[i] + " = c." + k));
-        return CountAsync(s,
-            $"SELECT COUNT(*) FROM {Name(table)} c WHERE {notNull} AND NOT EXISTS (SELECT 1 FROM {Name(referencedTable)} p WHERE {match})",
-            ct);
+        return CountAsync(s, TableEditCheckSql.CountSql(Checked(table), TableEditCheckSql.OrphanWhere(columns, referencedTable, referencedColumns)), ct);
     }
 
+    /// <summary>어기는 행 수. 조건 끝에 줄을 바꿔 닫아 <c>--</c> 주석이 괄호를 먹지 않게 한다.</summary>
     public Task<long> CheckViolationCountAsync(ISession s, DbObjectRef table, string condition, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(condition);
-        return CountAsync(s, $"SELECT COUNT(*) FROM {Name(table)} WHERE NOT ({condition}{Close}", ct);
+        return CountAsync(s, TableEditCheckSql.CountSql(Checked(table), TableEditCheckSql.CheckViolationWhere(condition + "\n")), ct);
     }
 
     public async Task<ExpressionPreview> PreviewExpressionAsync(
@@ -188,6 +200,21 @@ internal sealed class TiberoTableEditChecks : ITableEditChecks
         }
     }
 
+    /// <summary>형식 계열(괄호 앞 이름, Tibero 사전 표기 VARCHAR·NVARCHAR 는 VARCHAR2·NVARCHAR2 로).</summary>
+    private static string Family(string? dataType)
+    {
+        var type = (dataType ?? string.Empty).Trim().ToUpperInvariant();
+        var paren = type.IndexOf('(', StringComparison.Ordinal);
+        var name = (paren < 0 ? type : type[..paren]).Trim();
+        return name switch
+        {
+            "VARCHAR" => "VARCHAR2",
+            "NVARCHAR" => "NVARCHAR2",
+            "NUMERIC" or "DECIMAL" or "INTEGER" or "INT" or "SMALLINT" => "NUMBER",
+            _ => name,
+        };
+    }
+
     /// <summary>빈 행 만들기용 형식 표기(<c>CAST(NULL AS …)</c>). 길이 기준은 쓴 것만.</summary>
     internal static string TypeText(ColumnDraft c)
     {
@@ -227,15 +254,28 @@ internal sealed class TiberoTableEditChecks : ITableEditChecks
     /// <summary>대문자 규칙을 벗어나거나 예약어면 따옴표(설계 8.2).</summary>
     private static string Quote(string name) => SqlIdentifier.Quote(name, TableEditDefaults.IsReservedWord);
 
-    private static List<string> Columns(IReadOnlyList<string> columns)
+    /// <summary>열 목록을 확인해 그대로 돌려준다(이름은 Core 가 감싼다).</summary>
+    private static IReadOnlyList<string> Columns(IReadOnlyList<string> columns)
     {
         ArgumentNullException.ThrowIfNull(columns);
-        if (columns.Count == 0)
+        if (columns.Count == 0 || columns.Any(string.IsNullOrWhiteSpace))
         {
             throw new ArgumentException("열이 하나 이상 있어야 한다.", nameof(columns));
         }
 
-        return [.. columns.Select(Column)];
+        return columns;
+    }
+
+    private static DbObjectRef Checked(DbObjectRef table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        return table;
+    }
+
+    private static string Checked(string column)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(column);
+        return column;
     }
 
     private static async Task<long> CountAsync(ISession s, string sql, CancellationToken ct) =>
