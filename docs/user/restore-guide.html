@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- 팀원용 데이터 되돌리기 안내. 그림은 site/src/assets/screens 의 매뉴얼 스크린샷을 상대 경로로 씁니다. -->
+<title>Oranda 데이터 되돌리기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column, a situation picker up top, then one compact section per method; every section heading carries its manual link. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1a2230;
+  --muted: #5b6577;
+  --line: #dde2ea;
+  --accent: #1f5fa8;
+  --accent-soft: #e6eef8;
+  --scn: #0f7a6c;
+  --scn-soft: #e2f3f0;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --danger: #b4262c;
+  --danger-soft: #fbe5e5;
+  --code-bg: #f0f2f6;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "D2Coding", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a2029; --fg: #e4e8ef; --muted: #9aa4b5; --line: #2c3442;
+    --accent: #7fb0ec; --accent-soft: #1d2b3e; --scn: #5cc8b6; --scn-soft: #15302c;
+    --warn: #e8b562; --warn-soft: #34291a; --danger: #f08a8e; --danger-soft: #3a1e21; --code-bg: #222a35;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a2029; --fg: #e4e8ef; --muted: #9aa4b5; --line: #2c3442;
+  --accent: #7fb0ec; --accent-soft: #1d2b3e; --scn: #5cc8b6; --scn-soft: #15302c;
+  --warn: #e8b562; --warn-soft: #34291a; --danger: #f08a8e; --danger-soft: #3a1e21; --code-bg: #222a35;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  font-size: 15.5px; line-height: 1.7; word-break: keep-all; overflow-wrap: anywhere;
+}
+.wrap {
+  max-width: 880px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+  display: flex; flex-direction: column; gap: 52px;
+}
+h1, h2, h3 { line-height: 1.3; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(28px, 5vw, 38px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 23px; font-weight: 700; }
+h3 { font-size: 17.5px; font-weight: 600; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 16px; }
+.eyebrow { font-size: 12.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); }
+.lead { font-size: 17px; color: var(--muted); max-width: 62ch; }
+code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.ui { font-weight: 600; color: var(--fg); }
+.ui::before { content: "「"; color: var(--muted); font-weight: 400; }
+.ui::after { content: "」"; color: var(--muted); font-weight: 400; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.help { font-size: 13.5px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.help:hover { text-decoration: underline; }
+
+header { display: flex; flex-direction: column; gap: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip { font-size: 12.5px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); }
+
+.rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.rule { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+.rule b { font-size: 15.5px; }
+.rule span { color: var(--muted); font-size: 14px; }
+
+.picker { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 16px; align-items: start; }
+.sits { display: flex; flex-direction: column; gap: 6px; }
+.sit {
+  text-align: left; font: inherit; font-size: 14.5px; line-height: 1.45; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; cursor: pointer;
+}
+.sit:hover { border-color: var(--accent); }
+.sit[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.answer { background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+.answer .tag { font-size: 12.5px; font-weight: 600; color: var(--accent); letter-spacing: 0.04em; }
+.answer h3 { font-size: 19px; }
+.answer ol { margin: 0; padding-left: 20px; }
+.answer .links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.answer .go { font-weight: 600; font-size: 14px; }
+
+.figure { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; overflow-x: auto; }
+.figure svg { display: block; min-width: 640px; width: 100%; height: auto; }
+.figure svg text { font-family: var(--font-body); }
+.figure .t-main { fill: var(--fg); font-size: 13px; font-weight: 600; }
+.figure .t-sub { fill: var(--muted); font-size: 11.5px; }
+.figure .t-mono { fill: var(--scn); font-size: 11.5px; font-family: var(--font-mono); }
+
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid var(--line); }
+th { font-size: 12.5px; font-weight: 600; color: var(--muted); letter-spacing: 0.03em; background: var(--bg); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; font-weight: 600; }
+
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.sec-head .help { margin-left: auto; }
+.badge { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 6px; }
+.b-prod { background: var(--danger-soft); color: var(--danger); }
+.b-all { background: var(--scn-soft); color: var(--scn); }
+.b-pre { background: var(--warn-soft); color: var(--warn); }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 8px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; }
+.steps > li::before {
+  content: counter(s); width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--surface);
+  font-size: 13px; font-weight: 600; display: grid; place-items: center; margin-top: 1px;
+}
+.muted { color: var(--muted); font-size: 14px; }
+.shot { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.shot img { border: 1px solid var(--line); border-radius: 8px; background: #fff; max-width: 100%; height: auto; }
+.shot figcaption { font-size: 13.5px; color: var(--muted); }
+.shots-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 14.5px; }
+.note b { color: var(--warn); }
+.tip { border-left: 3px solid var(--scn); background: var(--scn-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 14.5px; }
+.tip b { color: var(--scn); }
+ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+pre {
+  margin: 0; background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto;
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
+}
+.sub { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.sub-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.status-pill { display: inline-block; font-size: 12.5px; font-weight: 600; padding: 1px 8px; border-radius: 6px; white-space: nowrap; }
+.s-ok { background: var(--scn-soft); color: var(--scn); }
+.s-part { background: var(--warn-soft); color: var(--warn); }
+.s-void { background: var(--code-bg); color: var(--muted); }
+.s-check { background: var(--danger-soft); color: var(--danger); }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 720px) {
+  .rules { grid-template-columns: minmax(0, 1fr); }
+  .picker { grid-template-columns: minmax(0, 1fr); }
+  .answer { position: static; }
+  .shots-2 { grid-template-columns: minmax(0, 1fr); }
+  td:first-child { white-space: normal; }
+  .sec-head .help { margin-left: 0; }
+}
+</style>
+<style>body{margin:0}img{max-width:100%}</style>
+</head>
+<body>
+
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">ORANDA 팀 안내</span>
+  <h1>Oranda 데이터 되돌리기</h1>
+  <p class="lead">잘못 실행하고 커밋까지 한 데이터를 Oranda 안에서 되돌리는 방법입니다.</p>
+  <div class="meta">
+    <span class="chip">Oranda v0.1.25 기준</span>
+    <span class="chip">Oracle · Tibero</span>
+    <a class="help" href="https://jongik-sv.github.io/oranda/run/undo-guide/" target="_blank" rel="noopener">도움말: 데이터를 바꾼 뒤 되돌리기 ↗</a>
+  </div>
+</header>
+
+<section aria-labelledby="rules-h">
+  <h2 id="rules-h">먼저 알아 둘 세 가지</h2>
+  <div class="rules">
+    <div class="rule"><b>자동 실행 없음</b><span>되돌릴 문장을 먼저 보여 줍니다. 실행은 직접 누릅니다.</span></div>
+    <div class="rule"><b>커밋은 직접</b><span>되돌리기는 커밋 없이 반영됩니다. 확인 후 커밋·롤백하세요.</span></div>
+    <div class="rule"><b>남이 바꾼 행은 그대로</b><span>커밋 뒤 남이 다시 바꾼 행은 0행이나 「충돌」로 남습니다.</span></div>
+  </div>
+  <div class="note"><b>운영 DB 접속은 환경을 「운영」으로.</b> 처음 값 「개발」이면 원복 스크립트가 생기지 않습니다. <a href="https://jongik-sv.github.io/oranda/run/undo-guide/#미리-켜-둘-것" target="_blank" rel="noopener">미리 켜 둘 것 ↗</a></div>
+</section>
+
+<section id="pick" aria-labelledby="pick-h">
+  <h2 id="pick-h">상황별 방법 고르기</h2>
+  <div class="picker">
+    <div class="sits" role="group" aria-label="상황">
+      <button type="button" class="sit" id="sit-gridedit" data-k="gridedit" aria-pressed="false">그리드에서 고쳤고 아직 반영 전</button>
+      <button type="button" class="sit" id="sit-uncommitted" data-k="uncommitted" aria-pressed="false">실행했고 아직 커밋 전 (「미커밋」)</button>
+      <button type="button" class="sit" id="sit-prod" data-k="prod" aria-pressed="true">운영 접속에서 커밋함</button>
+      <button type="button" class="sit" id="sit-devtest" data-k="devtest" aria-pressed="false">개발·테스트 접속에서 커밋함</button>
+      <button type="button" class="sit" id="sit-noscript" data-k="noscript" aria-pressed="false">원복 스크립트가 없거나 「불완전」</button>
+      <button type="button" class="sit" id="sit-grid" data-k="grid" aria-pressed="false">몇 행만 몇 분 전 값으로</button>
+      <button type="button" class="sit" id="sit-version" data-k="version" aria-pressed="false">한 행을 특정 과거 버전으로</button>
+      <button type="button" class="sit" id="sit-redo" data-k="redo" aria-pressed="false">되돌린 게 틀려서 다시 원래대로</button>
+      <button type="button" class="sit" id="sit-def" data-k="def" aria-pressed="false">테이블·PL/SQL 정의를 잘못 바꿈</button>
+      <button type="button" class="sit" id="sit-drop" data-k="drop" aria-pressed="false">테이블을 DROP 함</button>
+      <button type="button" class="sit" id="sit-ddl" data-k="ddl" aria-pressed="false">곧 TRUNCATE·DROP COLUMN 실행 예정</button>
+      <button type="button" class="sit" id="sit-old" data-k="old" aria-pressed="false">시간이 꽤 지남 (ORA-01555)</button>
+    </div>
+    <div class="answer" id="answer" aria-live="polite">
+      <span class="tag" id="ans-tag">방법 A</span>
+      <h3 id="ans-title">원복 스크립트 실행</h3>
+      <div id="ans-body"></div>
+      <div class="links">
+        <a class="go" id="ans-link" href="#method-a">이 안내에서 보기 ↓</a>
+        <a class="go help" id="ans-help" href="https://jongik-sv.github.io/oranda/run/rollback/#원복-스크립트-열기와-실행" target="_blank" rel="noopener">도움말 ↗</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="record" aria-labelledby="record-h">
+  <div class="sec-head"><h2 id="record-h">실행하면 남는 것</h2><a class="help" href="https://jongik-sv.github.io/oranda/run/rollback/" target="_blank" rel="noopener">도움말: 되돌리기 지점 ↗</a></div>
+  <div class="figure" role="img" aria-label="실행 직전 SCN 기록, 문장 실행, 커밋, 다른 사람의 변경, 지금 순서의 시간선과 각 방법이 비교하는 지점">
+    <svg viewBox="0 0 760 210" xmlns="http://www.w3.org/2000/svg">
+      <line x1="40" y1="92" x2="730" y2="92" stroke="var(--line)" stroke-width="3"/>
+      <polygon points="730,86 742,92 730,98" fill="var(--line)"/>
+      <circle cx="80" cy="92" r="9" fill="var(--scn)"/>
+      <text x="80" y="62" text-anchor="middle" class="t-main">실행 직전 시점</text>
+      <text x="80" y="78" text-anchor="middle" class="t-mono">SCN 48213907</text>
+      <rect x="160" y="80" width="150" height="24" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+      <text x="235" y="96" text-anchor="middle" class="t-main">UPDATE·DELETE·INSERT</text>
+      <text x="235" y="62" text-anchor="middle" class="t-sub">운영 접속이면 원복 스크립트 생성</text>
+      <circle cx="390" cy="92" r="9" fill="var(--accent)"/>
+      <text x="390" y="62" text-anchor="middle" class="t-main">커밋</text>
+      <text x="390" y="78" text-anchor="middle" class="t-mono">SCN 48214022</text>
+      <circle cx="530" cy="92" r="7" fill="var(--surface)" stroke="var(--warn)" stroke-width="2.5"/>
+      <text x="530" y="62" text-anchor="middle" class="t-main">다른 사람이 수정</text>
+      <text x="530" y="78" text-anchor="middle" class="t-sub">→ 충돌 · 0행 처리</text>
+      <circle cx="680" cy="92" r="9" fill="var(--fg)"/>
+      <text x="680" y="62" text-anchor="middle" class="t-main">지금</text>
+      <path d="M680 112 V150 H80 V112" fill="none" stroke="var(--scn)" stroke-width="2" stroke-dasharray="5 4"/>
+      <text x="380" y="168" text-anchor="middle" class="t-main" style="fill: var(--scn)">이 실행 전과 비교: 실행 직전 값을 undo 에서 읽어 지금과 견줌</text>
+      <text x="380" y="186" text-anchor="middle" class="t-sub">undo 보존 기간(예: 900초) 안에서만 가능</text>
+      <path d="M235 112 V128 H680" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <text x="458" y="124" text-anchor="middle" class="t-sub" style="fill: var(--accent)">원복 스크립트: 실행 직후 값 = 지금 값인 행만 되돌림 (이 PC, 30일)</text>
+    </svg>
+  </div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>접속 환경</th><th>원복 스크립트</th><th>실행 직전 시점</th><th>되돌리는 방법</th></tr></thead>
+      <tbody>
+        <tr><td>운영</td><td>만듦 (확인 창에서 끌 수 있음)</td><td>기록</td><td>A 원복 스크립트, 없으면 B</td></tr>
+        <tr><td>테스트 · 개발</td><td>안 만듦</td><td>기록</td><td>B 이 실행 전과 비교</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul class="plain">
+    <li><b>원복 스크립트</b>: 실행 문장의 역 SQL. UPDATE → 이전 값 UPDATE, DELETE → INSERT, 한 행 INSERT → DELETE.</li>
+    <li><b>실행 직전 시점</b>: Oracle SCN, Tibero TSN. 실행 속도에 거의 영향 없음.</li>
+    <li>되돌리는 단위는 <b>커밋 한 번(커밋 묶음)</b>.</li>
+  </ul>
+  <div class="note"><b>원복 스크립트는 실행한 PC 에만 있습니다.</b> 암호화 보관, 30일 뒤 삭제. 다른 PC 에서는 못 엽니다.</div>
+</section>
+
+<section id="basic" aria-labelledby="ba-h">
+  <div class="sec-head"><h2 id="ba-h">커밋 전이면</h2><a class="help" href="https://jongik-sv.github.io/oranda/run/undo-guide/#커밋-전-롤백" target="_blank" rel="noopener">도움말 ↗</a></div>
+  <div class="tbl">
+    <table>
+      <tbody>
+        <tr><td>그리드 반영 전</td><td>편집 도구 줄 <span class="ui">행 되돌리기</span> · <span class="ui">모두 되돌리기</span>. DB 에는 안 보냄.</td></tr>
+        <tr><td>실행 후 커밋 전</td><td><b>SQL &gt; 롤백</b> 또는 도구 모음 <span class="ui">롤백</span>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">자동 커밋·DDL 실행은 이미 커밋된 것입니다. 아래 방법을 쓰세요.</p>
+</section>
+
+<section id="method-a" aria-labelledby="ma-h">
+  <div class="sec-head"><span class="eyebrow">방법 A</span><h2 id="ma-h">원복 스크립트 실행</h2><span class="badge b-prod">운영 접속</span><a class="help" href="https://jongik-sv.github.io/oranda/run/rollback/#원복-스크립트-열기와-실행" target="_blank" rel="noopener">도움말 ↗</a></div>
+  <p>운영 접속에서 커밋한 실수에 먼저 씁니다. undo 와 무관하게 30일 동안 됩니다.</p>
+
+  <div class="sub">
+    <div class="sub-head"><h3>실행할 때: 확인 창에서 켜 두기</h3><a class="help" href="https://jongik-sv.github.io/oranda/run/rollback/#실행-확인-창의-원복-줄" target="_blank" rel="noopener">도움말 ↗</a></div>
+    <div class="shots-2">
+      <figure class="shot">
+        <img src="../../site/src/assets/screens/rollback-confirm.png" alt="운영 접속의 실행 확인 창. 원복 스크립트 만들기 확인란과 트리거 경고" width="617" height="487">
+        <figcaption>운영 접속의 실행 확인 창</figcaption>
+      </figure>
+      <ul class="plain">
+        <li><span class="ui">원복 스크립트 만들기</span> 켜짐 = 원복 문장 생성. 실행은 조금 느려짐.</li>
+        <li>트리거·CASCADE 경고: 함께 바뀐 다른 테이블은 빠짐.</li>
+        <li>예상 행 수가 100,000행 넘으면 생성 안 함 → 방법 B.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="sub">
+    <h3>되돌릴 때</h3>
+    <ol class="steps">
+      <li><div><b>도구 &gt; 변경 일지</b> → <span class="ui">원인</span>에서 <span class="ui">DML</span>.</div></li>
+      <li><div>커밋 묶음 고르기. 아래 칸에 실행 문장과 원복 스크립트 미리보기.</div></li>
+      <li><div><span class="ui">원복 스크립트 열기</span>.</div></li>
+      <li><div><span class="ui">원복 실행 (커밋 안 함)</span>. 그 묶음의 접속이 열려 있어야 함.</div></li>
+      <li><div>요약(되돌림 · 0행 · 충돌 · 오류) 확인 → <b>커밋</b> 또는 <b>롤백</b>.</div></li>
+    </ol>
+    <figure class="shot">
+      <img src="../../site/src/assets/screens/rollback-journal.png" alt="변경 일지 화면. 커밋 묶음 목록과 원복 스크립트 열기, 이 실행 전과 비교 단추" width="1280" height="560" loading="lazy">
+      <figcaption>변경 일지: ① 원인 ② 원복 스크립트 열기 ③ 이 실행 전과 비교 ④ 커밋 묶음 <a class="help" href="https://jongik-sv.github.io/oranda/run/rollback/#변경-일지에서-커밋-묶음-보기" target="_blank" rel="noopener">도움말 ↗</a></figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="../../site/src/assets/screens/rollback-script.png" alt="원복 스크립트 탭. 원복 실행, 일반 SQL 탭으로 복사, 파일로 내보내기 단추와 역순 원복 문장" width="1100" height="560" loading="lazy">
+      <figcaption>원복 스크립트 탭: 실행 역순으로 나옵니다.</figcaption>
+    </figure>
+    <ul class="plain">
+      <li>문장 하나만: <span class="ui">일반 SQL 탭으로 복사</span> 후 그 부분만 실행.</li>
+      <li>0행 = 그 뒤 남이 바꾼 행. 충돌 = 같은 키 행이 이미 있음.</li>
+      <li><span class="ui">파일로 내보내기…</span> 파일은 평문 데이터. 공유 금지.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="method-b" aria-labelledby="mb-h">
+  <div class="sec-head"><span class="eyebrow">방법 B</span><h2 id="mb-h">이 실행 전과 비교</h2><span class="badge b-all">모든 접속</span><a class="help" href="https://jongik-sv.github.io/oranda/run/rollback/#이-실행-전과-비교" target="_blank" rel="noopener">도움말 ↗</a></div>
+  <p>원복 스크립트가 없을 때(개발·테스트, 상한 초과, MERGE 등, 불완전) 씁니다. 실행 직전 값을 undo 에서 읽어 되돌리는 DML 을 만듭니다.</p>
+  <div class="note"><b>빨리 하세요.</b> undo 보존 기간(예: 15분)이 지나면 ORA-01555 로 실패합니다.</div>
+  <ol class="steps">
+    <li><div><b>도구 &gt; 변경 일지</b>에서 커밋 묶음(또는 펼친 문장) 고르기.</div></li>
+    <li><div><span class="ui">이 실행 전과 비교…</span> → 테이블이 여럿이면 고르기 → <span class="ui">비교</span>.</div></li>
+    <li><div>바뀐 행 · 만들어진 DML 확인 → <span class="ui">반영(커밋 안 함)</span>.</div></li>
+    <li><div>확인 후 <b>커밋</b> 또는 <b>롤백</b>.</div></li>
+  </ol>
+  <figure class="shot">
+    <img src="../../site/src/assets/screens/rollback-compare.png" alt="이 실행 전과 비교 창. 기준 시점, undo 안내, 구분별 요약, 바뀐 행 표, 만들어진 DML" width="1100" height="770" loading="lazy">
+    <figcaption>① 기준 시점 ② undo 안내 ③ 요약 ④ 바뀐 행 ⑤ 만들어진 DML ⑥ 반영(커밋 안 함)</figcaption>
+  </figure>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>구분</th><th>뜻</th><th>만드는 문장</th></tr></thead>
+      <tbody>
+        <tr><td>되돌림</td><td>바뀐 뒤 그대로인 행</td><td>UPDATE</td></tr>
+        <tr><td>되살림</td><td>지운 행</td><td>INSERT</td></tr>
+        <tr><td>지움</td><td>넣은 행</td><td>DELETE</td></tr>
+        <tr><td>충돌</td><td>커밋 뒤 남이 다시 바꾼 행</td><td>기본 제외 (<span class="ui">충돌 행도 되돌리기</span>로 포함)</td></tr>
+        <tr><td>같음</td><td>앞뒤 값이 같음</td><td>없음</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul class="plain">
+    <li><span class="ui">시각 직접 지정…</span>: SCN 이나 <code>yyyy-MM-dd HH:mm:ss</code>. 그 사이 남의 변경까지 잡힘.</li>
+    <li>뷰는 불가. 다른 스키마 테이블은 FLASHBACK 권한 필요.</li>
+  </ul>
+</section>
+
+<section id="method-c" aria-labelledby="mc-h">
+  <div class="sec-head"><span class="eyebrow">방법 C</span><h2 id="mc-h">그리드 플래시백</h2><span class="badge b-all">모든 접속</span><a class="help" href="https://jongik-sv.github.io/oranda/run/grid-edit/#플래시백" target="_blank" rel="noopener">도움말 ↗</a></div>
+  <p>결과 그리드 오른쪽 클릭 &gt; <b>플래시백</b>. 결과에 기본 키 열이 있어야 합니다.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>메뉴</th><th>하는 일</th></tr></thead>
+      <tbody>
+        <tr><td>N분 전 값 보기…</td><td>N분 전 값을 새 탭에, 다른 칸 노랗게. 보기만 함.</td></tr>
+        <tr><td>이 행 변경 이력</td><td>그 행의 버전 목록. 최신이 위, 바뀐 칸 보라색.</td></tr>
+        <tr><td>이전 값으로 되돌리기…</td><td>고른 행(최대 200)을 고른 시점 값으로.</td></tr>
+        <tr><td>이 행 상태로 되돌리기…</td><td>이력의 한 버전으로. 지운 행이면 INSERT.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="sub" id="c-prev">
+    <div class="sub-head"><h3>몇 분 전 값으로</h3><a class="help" href="https://jongik-sv.github.io/oranda/run/grid-edit/#이전-값으로-되돌리기" target="_blank" rel="noopener">도움말 ↗</a></div>
+    <ol class="steps">
+      <li><div>편집 모드로 조회 (<code>F9</code>, macOS <code>Ctrl+Enter</code>).</div></li>
+      <li><div><b>N분 전 값 보기…</b>로 달라진 값 확인.</div></li>
+      <li><div>행 고르고 <b>이전 값으로 되돌리기…</b> → 기준 시점 → <span class="ui">비교</span>.</div></li>
+      <li><div><span class="ui">반영(커밋 안 함)</span> → 커밋 또는 롤백.</div></li>
+    </ol>
+    <p class="muted">지운 행까지: 기준 시점에서 커밋 묶음 → <span class="ui">이 커밋 묶음 전체 보기</span>.</p>
+  </div>
+
+  <div class="sub" id="c-version">
+    <div class="sub-head"><h3>특정 과거 버전으로</h3><a class="help" href="https://jongik-sv.github.io/oranda/run/grid-edit/#이-행-상태로-되돌리기" target="_blank" rel="noopener">도움말 ↗</a></div>
+    <ol class="steps">
+      <li><div><b>이 행 변경 이력</b> 실행, 또는 직접 플래시백 조회.</div></li>
+      <li><div>돌아갈 버전의 셀 하나 → <b>이 행 상태로 되돌리기…</b>.</div></li>
+      <li><div><span class="ui">반영(커밋 안 함)</span> → 커밋 또는 롤백.</div></li>
+    </ol>
+<pre>SELECT versions_operation, e.* FROM emp VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE e WHERE e.empno = 7369;
+SELECT * FROM emp AS OF TIMESTAMP SYSTIMESTAMP - INTERVAL '1' HOUR;</pre>
+    <p class="muted">Tibero 는 VERSIONS BETWEEN 미지원(TBR-8022). <code>AS OF</code> 결과에서 쓰세요. LOB 등 큰 열은 되돌리지 않습니다.</p>
+  </div>
+</section>
+
+<section id="redo" aria-labelledby="rd-h">
+  <div class="sec-head"><span class="eyebrow">되돌린 뒤</span><h2 id="rd-h">되돌린 것을 다시 되돌리기</h2><a class="help" href="https://jongik-sv.github.io/oranda/run/undo-guide/#되돌린-것을-다시-되돌리기" target="_blank" rel="noopener">도움말 ↗</a></div>
+  <p>되돌리기도 변경 일지에 새 묶음으로 남습니다. 그 묶음을 A 나 B 로 다시 되돌리면 됩니다.</p>
+  <div class="tbl">
+    <table>
+      <tbody>
+        <tr><td>원복 실행</td><td>문장마다 기록, 원인 「원복 실행(#N)」, 실행 직전 SCN 포함</td></tr>
+        <tr><td>비교 반영 · 플래시백</td><td>「비교 반영」 묶음 (요약에서 값 가림)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="objects" aria-labelledby="ob-h">
+  <h2 id="ob-h">정의를 바꿨거나 테이블을 지웠을 때</h2>
+  <div class="sub">
+    <div class="sub-head"><h3>정의(DDL) 되돌리기</h3><a class="help" href="https://jongik-sv.github.io/oranda/tools/db-tools/#이전-ddl로-되돌리기" target="_blank" rel="noopener">도움말 ↗</a></div>
+    <ol class="steps">
+      <li><div><b>도구 &gt; 변경 일지</b> (또는 스키마 브라우저 객체 오른쪽 클릭 &gt; <b>변경 일지 보기</b>).</div></li>
+      <li><div>보관본 고르기 → 아래 칸에서 차이 확인.</div></li>
+      <li><div><span class="ui">이 DDL 을 새 편집기에 열기</span> → 확인 후 직접 실행.</div></li>
+    </ol>
+    <p class="muted">정의만 돌아옵니다. DROP COLUMN 으로 잃은 값은 안 돌아옵니다.</p>
+  </div>
+  <div class="sub">
+    <div class="sub-head"><h3>DROP 한 테이블 되살리기</h3><a class="help" href="https://jongik-sv.github.io/oranda/schema/browser/#휴지통-탭" target="_blank" rel="noopener">도움말 ↗</a></div>
+    <ol class="steps">
+      <li><div><b>데이터베이스 &gt; 객체 검색</b> → <span class="ui">휴지통</span> 탭 → <span class="ui">새로 고침</span>.</div></li>
+      <li><div>항목 고르기 → (이름 겹치면 새 이름) → <span class="ui">되살리기</span>.</div></li>
+    </ol>
+    <p class="muted"><code>DROP … PURGE</code> 로 지운 테이블은 휴지통에 없습니다.</p>
+  </div>
+</section>
+
+<section id="prevent" aria-labelledby="pv-h">
+  <div class="sec-head"><span class="eyebrow">미리 막기</span><h2 id="pv-h">TRUNCATE 전 백업 테이블</h2><span class="badge b-pre">테스트 · 운영 접속</span><a class="help" href="https://jongik-sv.github.io/oranda/run/rollback/#실행-확인-창의-원복-줄" target="_blank" rel="noopener">도움말 ↗</a></div>
+  <p><code>TRUNCATE</code>, <code>DROP COLUMN</code>, <code>DROP … PURGE</code> 는 실행 뒤 되돌릴 수 없습니다.</p>
+  <ol class="steps">
+    <li><div>실행 확인 창의 <span class="ui">먼저 백업 테이블 만들기</span> 켜기 (기본 꺼짐).</div></li>
+    <li><div>이름 확인: <code>ORB_테이블_월일시분</code>, 내 스키마에 생성.</div></li>
+    <li><div><span class="ui">실행</span> → 복사 후 원래 문장 실행.</div></li>
+  </ol>
+  <div class="note"><b>DDL 이라 열린 트랜잭션을 먼저 커밋합니다.</b> 백업 실패 시 원래 문장은 실행 안 됨.</div>
+</section>
+
+<section id="status" aria-labelledby="st-h">
+  <div class="sec-head"><h2 id="st-h">변경 일지의 원복 스크립트 상태</h2><a class="help" href="https://jongik-sv.github.io/oranda/run/rollback/#변경-일지에서-커밋-묶음-보기" target="_blank" rel="noopener">도움말 ↗</a></div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>표시</th><th>뜻</th><th>할 일</th></tr></thead>
+      <tbody>
+        <tr><td><span class="status-pill s-ok">확정</span></td><td>모든 원복 문장 생성</td><td>A</td></tr>
+        <tr><td><span class="status-pill s-part">불완전</span></td><td>일부 못 만듦</td><td>A 후 B 로 남은 차이 확인</td></tr>
+        <tr><td><span class="status-pill s-void">만들지 않음</span></td><td>개발·테스트, 끔, 상한, 대상 아님 등</td><td>B</td></tr>
+        <tr><td><span class="status-pill s-check">확인 필요</span></td><td>트랜잭션 결과 모름</td><td>데이터 확인 후 A</td></tr>
+        <tr><td><span class="status-pill s-void">무효</span></td><td>롤백한 묶음</td><td>없음</td></tr>
+        <tr><td><span class="status-pill s-void">열림</span></td><td>커밋 전</td><td>롤백</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="trouble" aria-labelledby="tr-h">
+  <div class="sec-head"><h2 id="tr-h">안 될 때</h2><a class="help" href="https://jongik-sv.github.io/oranda/run/undo-guide/#안-되는-경우와-대안" target="_blank" rel="noopener">도움말: 안 되는 경우와 대안 ↗</a></div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>증상</th><th>해결</th></tr></thead>
+      <tbody>
+        <tr><td>원복 실행이 모두 0행</td><td>남이 바꿈. B 로 지금 값과 비교.</td></tr>
+        <tr><td>충돌: 같은 키 있음</td><td>그 행 확인 후 직접 처리.</td></tr>
+        <tr><td>원복 스크립트를 열 수 없음</td><td>다른 PC 이거나 키 손상. B 사용.</td></tr>
+        <tr><td>만들지 않음 · 권한 없음</td><td>SELECT·FOR UPDATE 권한 없음. B 사용.</td></tr>
+        <tr><td>ORA-01555 · undo 에서 잃음</td><td>시간 초과. 원복 스크립트 있으면 A, 없으면 DBA.</td></tr>
+        <tr><td>ORA-01466 · 정의가 바뀜</td><td>그 사이 DDL. 원복 스크립트 있으면 A.</td></tr>
+        <tr><td>ORA-01031 · ORA-41900</td><td>FLASHBACK 권한 요청: <code>GRANT FLASHBACK ON 소유자.테이블 TO 사용자</code></td></tr>
+        <tr><td>MERGE · INSERT … SELECT · PL/SQL 안 DML</td><td>원복 스크립트 대상 아님. B 사용.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">트리거·CASCADE 로 바뀐 다른 테이블, LOB 값은 원복 스크립트에 빠집니다. <a href="https://jongik-sv.github.io/oranda/run/grid-edit/#플래시백-오류" target="_blank" rel="noopener">플래시백 오류 목록 ↗</a></p>
+</section>
+
+<section id="settings" aria-labelledby="se-h">
+  <div class="sec-head"><h2 id="se-h">미리 켜 둘 것</h2><a class="help" href="https://jongik-sv.github.io/oranda/run/undo-guide/#미리-켜-둘-것" target="_blank" rel="noopener">도움말 ↗</a></div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>항목</th><th>곳</th><th>처음 값</th></tr></thead>
+      <tbody>
+        <tr><td>운영 DB 환경 「운영」</td><td>접속 편집</td><td>개발</td></tr>
+        <tr><td>직전 시점(SCN) 기록</td><td>설정 &gt; 되돌리기</td><td>켜짐</td></tr>
+        <tr><td>운영 원복 스크립트</td><td>설정 &gt; 되돌리기</td><td>켜짐</td></tr>
+        <tr><td>문장당 상한</td><td>설정 &gt; 되돌리기</td><td>100,000행</td></tr>
+        <tr><td>보관 기간</td><td>설정 &gt; 되돌리기</td><td>30일</td></tr>
+        <tr><td>백업 테이블 권하기</td><td>설정 &gt; 되돌리기</td><td>켜짐</td></tr>
+        <tr><td>변경 추적(이력)</td><td>설정 &gt; 결과 그리드</td><td>켜짐, 1.5일</td></tr>
+        <tr><td>자동 커밋</td><td>SQL 메뉴</td><td>꺼짐</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">다른 스키마 테이블은 FLASHBACK 권한을 미리 받아 두세요. <a href="https://jongik-sv.github.io/oranda/settings/options/#되돌리기" target="_blank" rel="noopener">설정 &gt; 되돌리기 ↗</a></p>
+</section>
+
+<section id="changes" aria-labelledby="ch-h">
+  <h2 id="ch-h">0.1.24 에서 바뀐 것</h2>
+  <ul class="plain">
+    <li>원복 실행이 문장마다 기록되고 실행 직전 시점도 남음 → 다시 되돌리기 가능. (전에는 「원복 스크립트 #N 실행」 한 줄)</li>
+    <li>비교 반영 묶음 요약에서 행 값 가림.</li>
+    <li>변경 일지를 좁게(폭 560 미만) 붙이면 카드 목록. <a href="https://jongik-sv.github.io/oranda/tools/db-tools/#변경-일지" target="_blank" rel="noopener">도움말 ↗</a></li>
+    <li>매뉴얼에 <a href="https://jongik-sv.github.io/oranda/run/undo-guide/" target="_blank" rel="noopener">데이터를 바꾼 뒤 되돌리기 ↗</a> 쪽 추가.</li>
+    <li>나머지 되돌리기 동작은 0.1.23 과 같음. 0.1.25 는 되돌리기 변경 없음.</li>
+  </ul>
+</section>
+
+<footer>출처: Oranda v0.1.25 매뉴얼 <a href="https://jongik-sv.github.io/oranda/run/undo-guide/" target="_blank" rel="noopener">데이터를 바꾼 뒤 되돌리기</a> · <a href="https://jongik-sv.github.io/oranda/run/rollback/" target="_blank" rel="noopener">되돌리기 지점</a> · <a href="https://jongik-sv.github.io/oranda/run/grid-edit/" target="_blank" rel="noopener">그리드 편집과 플래시백</a>. 화면 그림의 접속 이름과 데이터는 예시입니다.</footer>
+</div>
+
+<script>
+(function () {
+  var H = "https://jongik-sv.github.io/oranda/";
+  var A = {
+    gridedit: { tag: "기본 기능", title: "행 되돌리기 · 모두 되돌리기", link: "#basic", help: "run/undo-guide/#반영-전-그리드-편집-버리기",
+      body: "<p>편집 도구 줄에서 누르면 화면 편집만 버립니다. 이미 반영했으면 롤백.</p>" },
+    uncommitted: { tag: "기본 기능", title: "SQL > 롤백", link: "#basic", help: "run/undo-guide/#커밋-전-롤백",
+      body: "<p>커밋 전 변경을 모두 취소합니다. 가장 확실합니다.</p><p class='muted'>자동 커밋·DDL 은 이미 커밋된 것입니다.</p>" },
+    prod: { tag: "방법 A", title: "원복 스크립트 실행", link: "#method-a", help: "run/rollback/#원복-스크립트-열기와-실행",
+      body: "<ol><li>도구 &gt; 변경 일지 → 커밋 묶음</li><li>「원복 스크립트 열기」</li><li>「원복 실행 (커밋 안 함)」</li><li>확인 후 커밋</li></ol><p class='muted'>실행한 PC 에서만. 「만들지 않음」이면 방법 B.</p>" },
+    devtest: { tag: "방법 B", title: "이 실행 전과 비교", link: "#method-b", help: "run/rollback/#이-실행-전과-비교",
+      body: "<ol><li>도구 &gt; 변경 일지 → 커밋 묶음</li><li>「이 실행 전과 비교…」 → 「비교」</li><li>「반영(커밋 안 함)」</li><li>확인 후 커밋</li></ol><p class='muted'>undo 시간 제한. 바로 하세요.</p>" },
+    noscript: { tag: "방법 B", title: "이 실행 전과 비교", link: "#method-b", help: "run/undo-guide/#커밋한-뒤-이-실행-전과-비교",
+      body: "<p>실행 직전 시점은 항상 남으니 방법 B 로 됩니다. 「불완전」이면 A 먼저, 남은 차이는 B.</p>" },
+    grid: { tag: "방법 C", title: "플래시백 > 이전 값으로 되돌리기", link: "#c-prev", help: "run/grid-edit/#이전-값으로-되돌리기",
+      body: "<ol><li>F9 로 조회</li><li>N분 전 값 보기…로 확인</li><li>행 고르고 이전 값으로 되돌리기…</li><li>비교 → 반영 → 커밋</li></ol>" },
+    version: { tag: "방법 C", title: "플래시백 > 이 행 상태로 되돌리기", link: "#c-version", help: "run/grid-edit/#이-행-상태로-되돌리기",
+      body: "<ol><li>이 행 변경 이력</li><li>돌아갈 버전 셀 고르기</li><li>이 행 상태로 되돌리기… → 반영 → 커밋</li></ol><p class='muted'>Tibero 는 AS OF 결과에서만.</p>" },
+    redo: { tag: "다시 되돌리기", title: "새로 생긴 묶음을 되돌리기", link: "#redo", help: "run/undo-guide/#되돌린-것을-다시-되돌리기",
+      body: "<p>변경 일지의 「원복 실행(#N)」이나 「비교 반영」 묶음을 A 나 B 로 되돌립니다.</p>" },
+    def: { tag: "정의 되돌리기", title: "변경 일지의 DDL 보관본", link: "#objects", help: "tools/db-tools/#이전-ddl로-되돌리기",
+      body: "<ol><li>도구 &gt; 변경 일지 → 보관본</li><li>「이 DDL 을 새 편집기에 열기」</li><li>확인 후 실행</li></ol>" },
+    drop: { tag: "테이블 되살리기", title: "객체 검색 > 휴지통", link: "#objects", help: "schema/browser/#휴지통-탭",
+      body: "<ol><li>데이터베이스 &gt; 객체 검색 → 휴지통</li><li>항목 고르기 → 「되살리기」</li></ol><p class='muted'>PURGE 로 지웠으면 불가.</p>" },
+    ddl: { tag: "미리 막기", title: "백업 테이블 먼저 만들기", link: "#prevent", help: "run/rollback/#실행-확인-창의-원복-줄",
+      body: "<p>실행 확인 창에서 「먼저 백업 테이블 만들기」를 켜고 실행. 실행 뒤에는 되돌릴 수 없습니다.</p>" },
+    old: { tag: "방법 A 만 가능", title: "원복 스크립트 확인", link: "#trouble", help: "run/undo-guide/#안-되는-경우와-대안",
+      body: "<p>undo 가 지나면 B·C 불가. 원복 스크립트(30일)가 「확정」이면 A. 없으면 백업 테이블이나 DBA.</p>" }
+  };
+  var tag = document.getElementById("ans-tag"), title = document.getElementById("ans-title"),
+      body = document.getElementById("ans-body"), link = document.getElementById("ans-link"),
+      help = document.getElementById("ans-help");
+  var btns = Array.prototype.slice.call(document.querySelectorAll(".sit"));
+  function show(k) {
+    var a = A[k]; if (!a) return;
+    tag.textContent = a.tag; title.textContent = a.title; body.innerHTML = a.body;
+    link.setAttribute("href", a.link);
+    help.setAttribute("href", H + a.help);
+    btns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-k") === k ? "true" : "false"); });
+  }
+  btns.forEach(function (b) { b.addEventListener("click", function () { show(b.getAttribute("data-k")); }); });
+  show("prod");
+})();
+</script>
+
+</body>
+</html>
