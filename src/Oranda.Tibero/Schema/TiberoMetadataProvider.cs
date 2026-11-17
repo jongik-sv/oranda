@@ -39,6 +39,7 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         "meta.detail_stats", "meta.detail_size", "meta.detail_size_user", "meta.detail_privileges", "meta.detail_privileges_user",
         "meta.detail_dependencies", "meta.source", "meta.compile_errors", "meta.name_step",
         "meta.ddl_view", "meta.ddl_sequence", "meta.ddl_index", "meta.ddl_table_indexes", "meta.ddl_constraints", "meta.ddl_trigger",
+        "meta.table_kind",
     ];
 
     private readonly CatalogRunner _run;
@@ -91,13 +92,16 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         var consRows = await RunAsync(s, "meta.constraints", binds, ct).ConfigureAwait(false);
         var idxRows = await RunAsync(s, "meta.indexes", binds, ct).ConfigureAwait(false);
         var commentRows = await RunAsync(s, "meta.table_comment", binds, ct).ConfigureAwait(false);
+        var kindRows = await RunAsync(s, "meta.table_kind", binds, ct).ConfigureAwait(false);
 
-        var info = new TableInfo(table, [.. colRows.Select(MetadataRows.ToColumn)])
-        {
-            Constraints = MetadataRows.BuildConstraints(consRows),
-            Indexes = MetadataRows.BuildIndexes(idxRows),
-            Comment = commentRows.Count > 0 ? Str(commentRows[0][0]) : null,
-        };
+        var info = WithTableEditMetadata(
+            new TableInfo(table, [.. colRows.Select(MetadataRows.ToColumn)])
+            {
+                Constraints = MetadataRows.BuildConstraints(consRows),
+                Indexes = MetadataRows.BuildIndexes(idxRows),
+                Comment = commentRows.Count > 0 ? Str(commentRows[0][0]) : null,
+            },
+            colRows, consRows, idxRows, kindRows);
 
         await StorePayloadAsync(s, cachedRow, "table", info, ct).ConfigureAwait(false);
         return info;

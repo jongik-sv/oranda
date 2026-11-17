@@ -3,6 +3,8 @@
 -- identity_column 열이 없어 identity_flag 는 NULL, domain_name 도 NULL. 문자 형식 이름이 VARCHAR/NVARCHAR 이므로 길이 판정에 함께 넣었다.
 -- column_id 는 0부터라 Oracle 처럼 1부터 되게 1을 더했다. 숫자가 아닌 열은 data_precision/data_scale 이 0 으로 오므로 NUMBER·FLOAT 만 값을 내고 나머지는 NULL.
 -- 끝 열 byte_length = 문자 열(VARCHAR2·CHAR)의 data_length(바이트). data_length 열(글자 수)과 같으면 바이트 단위 열이다 — 다시 만들기가 큰 바이트 열을 BYTE 로 남기는 데 쓴다(TR1).
+-- 끝 열 char_used = 문자 열의 길이 기준 B/C(테이블 편집기 TE-29). Tibero 는 n CHAR 열도 data_length = n 이라 byte_length 로는 BYTE/CHAR 를 가르지 못한다(실측 tibero-table-edit-probe.md 7장).
+-- 정렬 = column_id(0부터). internal_column_id 는 *_tab_cols 에서 늘 NULL 이라 순서를 정하지 못한다(실측 같은 문서 1장).
 -- id: meta.columns
 -- dbms: tibero
 -- min-version: 6
@@ -22,11 +24,12 @@ SELECT c.column_name,
        CASE WHEN c.hidden_column = 'Y' THEN 'YES' ELSE 'NO' END AS hidden_column,
        CAST(NULL AS VARCHAR2(128)) AS domain_name,
        cm.comments,
-       CASE WHEN c.data_type IN ('VARCHAR', 'VARCHAR2', 'CHAR') THEN c.data_length END AS byte_length
+       CASE WHEN c.data_type IN ('VARCHAR', 'VARCHAR2', 'CHAR') THEN c.data_length END AS byte_length,
+       CASE WHEN c.data_type IN ('VARCHAR', 'VARCHAR2', 'NVARCHAR', 'NVARCHAR2', 'CHAR', 'NCHAR') THEN c.char_used END AS char_used
   FROM @PFX@_tab_cols c
   LEFT JOIN @PFX@_col_comments cm
     ON cm.owner = c.owner AND cm.table_name = c.table_name AND cm.column_name = c.column_name
  WHERE c.owner = :owner
    AND c.table_name = :name
    AND c.hidden_column = 'N'
- ORDER BY c.internal_column_id
+ ORDER BY c.column_id, c.column_name

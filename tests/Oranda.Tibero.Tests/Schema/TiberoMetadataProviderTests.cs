@@ -32,7 +32,7 @@ public class TiberoMetadataProviderTests
         var unresolved = TiberoMetadataProvider.CatalogIds.Where(id => string.IsNullOrWhiteSpace(TiberoCatalogQuery.Sql(session, id))).ToList();
 
         Assert.Empty(unresolved);
-        Assert.Equal(28, TiberoMetadataProvider.CatalogIds.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(29, TiberoMetadataProvider.CatalogIds.Distinct(StringComparer.Ordinal).Count()); // +meta.table_kind(테이블 편집기 TE-29)
     }
 
     /// <summary>
@@ -231,7 +231,7 @@ public class TiberoMetadataProviderTests
 
         var table = await provider.GetTableAsync(session, Emp, CancellationToken.None);
 
-        Assert.Equal(["meta.columns", "meta.constraints", "meta.indexes", "meta.table_comment"], calls.Select(c => c.Id));
+        Assert.Equal(["meta.columns", "meta.constraints", "meta.indexes", "meta.table_comment", "meta.table_kind"], calls.Select(c => c.Id));
         Assert.All(calls, c => Assert.Equal(new Dictionary<string, object?> { ["owner"] = "SCOTT", ["name"] = "EMP" }, c.Binds));
         Assert.Equal(new ColumnInfo("EMPNO", 1, "NUMBER") { Precision = 4, Scale = 0, IsNullable = false, Comment = "사번" }, table.Columns[0]);
         Assert.Equal(new ColumnInfo("ENAME", 2, "VARCHAR") { Length = 10, DefaultValue = "'X'" }, table.Columns[1]);
