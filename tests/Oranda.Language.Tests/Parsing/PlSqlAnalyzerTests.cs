@@ -60,6 +60,35 @@ public class PlSqlAnalyzerTests(ITestOutputHelper output)
         Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
     }
 
+    /// <summary>
+    /// 테이블 편집 검사 질의(<c>Catalog/tableedit</c>, 설계 10장·18.9)의 자리 표시자 예시 값. NULL 로 바꾸면 함수 이름(<c>@LENGTH@(</c>)·별칭(<c>AS @COL@</c>)·
+    /// 형식(<c>TABLE OF @TYPE@</c>) 자리에서 문장이 깨진다. 값은 각 질의 머리 주석의 꼴을 따른다.
+    /// </summary>
+    private static readonly (string Placeholder, string Example)[] PlaceholderExamples =
+    [
+        ("@LENGTH@", "LENGTH"),
+        ("@COL@", "\"C\""),
+        ("@EXPRESSION@", "TO_NUMBER(\"C\")"),
+        ("@CONDITION@", "\"C\" > 0"),
+        ("@TYPE@", "NUMBER(10,2)"),
+        ("@COLS@", "\"C\""),
+        ("@WHERE@", "t.\"C\" IS NOT NULL AND VALIDATE_CONVERSION(t.\"C\" AS NUMBER) = 0"),
+        ("@SOURCE@", "CAST(NULL AS NUMBER) AS \"C\""),
+        ("@REF_TABLE@", "p_t"),
+        ("@ANY_NULL@", "c.\"C\" IS NULL"),
+        ("@ALL_NULL@", "\"C\" IS NULL"),
+        ("@MATCH@", "p.\"ID\" = c.\"C\""),
+        ("@KEYS@", "\"C\""),
+    ];
+
+    /// <summary><c>@COLUMNS@</c> 는 질의마다 꼴이 달라(쉼표 앞·뒤·목록) 파일마다 예시 값을 둔다. 없는 파일은 NULL(열 목록 자리).</summary>
+    private static readonly Dictionary<string, string> ColumnsExamples = new(StringComparer.Ordinal)
+    {
+        ["conversion_check_violations.sql"] = "t.\"A\", ",
+        ["conversion_duplicate_keys.sql"] = "t.\"A\", ",
+        ["preview_expression.sql"] = ", \"A\"",
+    };
+
     [Fact]
     public async Task Catalog_queries_are_regression_examples_with_no_errors()
     {
@@ -71,16 +100,25 @@ public class PlSqlAnalyzerTests(ITestOutputHelper output)
         foreach (var file in files)
         {
             // 카탈로그 자리 표시자: @PFX@ 는 뷰 접두사, @SEGMENTS@ 는 세그먼트 뷰(표 자리), @USER@ 는 계정 이름, @TABLE@ 는 표 이름,
-            // @OWNER_FILTER@ 는 조건 줄 통째(없으면 빈 글), @RANGE@ 는 VERSIONS BETWEEN 구간. 그 밖의 @이름@ 은 실행 때 식으로 바뀐다.
-            var sql = System.Text.RegularExpressions.Regex.Replace(
-                (await File.ReadAllTextAsync(file)).Replace("@PFX@", "dba", StringComparison.Ordinal)
-                    .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal)
-                    .Replace("@USER@", "scott", StringComparison.Ordinal)
-                    .Replace("@TABLE@", "t", StringComparison.Ordinal)
-                    .Replace("@RANGE@", "SCN MINVALUE", StringComparison.Ordinal)
-                    .Replace("@OWNER_FILTER@", string.Empty, StringComparison.Ordinal),
-                "@[A-Z_]+@",
-                "NULL");
+            // @OWNER_FILTER@ 는 조건 줄 통째(없으면 빈 글), @RANGE@ 는 VERSIONS BETWEEN 구간. 테이블 편집 검사(tableedit)의 자리는 PlaceholderExamples.
+            // 그 밖의 @이름@ 은 실행 때 식으로 바뀐다(NULL 로 읽는다).
+            var text = (await File.ReadAllTextAsync(file)).Replace("@PFX@", "dba", StringComparison.Ordinal)
+                .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal)
+                .Replace("@USER@", "scott", StringComparison.Ordinal)
+                .Replace("@TABLE@", "t", StringComparison.Ordinal)
+                .Replace("@RANGE@", "SCN MINVALUE", StringComparison.Ordinal)
+                .Replace("@OWNER_FILTER@", string.Empty, StringComparison.Ordinal);
+            if (ColumnsExamples.TryGetValue(Path.GetFileName(file), out var columns))
+            {
+                text = text.Replace("@COLUMNS@", columns, StringComparison.Ordinal);
+            }
+
+            foreach (var (placeholder, example) in PlaceholderExamples)
+            {
+                text = text.Replace(placeholder, example, StringComparison.Ordinal);
+            }
+
+            var sql = System.Text.RegularExpressions.Regex.Replace(text, "@[A-Z_]+@", "NULL");
             var diagnostics = await service.AnalyzeAsync(sql, CancellationToken.None);
             failures.AddRange(diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
                 .Select(d => $"{Path.GetFileName(file)}@{d.Range.Start}: {d.Message}"));
