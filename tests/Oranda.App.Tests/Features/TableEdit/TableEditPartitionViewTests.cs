@@ -26,7 +26,7 @@ public class TableEditPartitionViewTests
             var rows = view.FindControl<ListBox>("PartitionRows")!;
             Assert.Equal(3, rows.ItemCount);
             Assert.Contains(rows.GetVisualDescendants().OfType<TextBox>(), t => t.Text == "P_2026_09");
-            Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "상한값 (LESS THAN)");
+            Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "이 값 미만 (상한값)");
             Assert.False(view.FindControl<TextBlock>("PartitionLockedText")!.IsEffectivelyVisible);
 
             Button B(string name) => view.FindControl<Button>(name)!;

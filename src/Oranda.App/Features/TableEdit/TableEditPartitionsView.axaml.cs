@@ -12,6 +12,8 @@ public partial class TableEditPartitionsView : UserControl
     {
         InitializeComponent();
         AddPartitionButton.Click += (_, _) => Session?.AddPartition();
+        ApplyEasyPartitionButton.Click += (_, _) => Session?.ApplyEasyPartitioning();
+        EnableAutoAddButton.Click += (_, _) => Session?.EnableAutoAdd();
         DropPartitionButton.Click += (_, _) => Session?.DropSelectedPartition();
         SplitPartitionButton.Click += (_, _) => Session?.SplitSelectedPartition();
         MergePartitionButton.Click += (_, _) => Session?.MergeSelectedPartition();

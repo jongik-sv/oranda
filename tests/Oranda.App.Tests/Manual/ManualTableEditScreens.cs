@@ -295,6 +295,31 @@ public sealed class ManualTableEditScreens
         }
     });
 
+    /// <summary>일반 테이블의 「파티션 테이블로 바꾸기…」 → 쉬운 설정(날짜 열 · 단위 · 자동 추가).</summary>
+    [Fact]
+    public Task Table_edit_partition_easy() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var (vm, _) = await OpenAsync();
+        vm.SelectedSection = vm.Sections.Single(s => s.Title == ObjectDetailViewModel.StorageTitle);
+        vm.TableEdit!.Today = () => new DateTime(2026, 11, 18, 0, 0, 0, DateTimeKind.Unspecified);
+        vm.TableEdit.OpenPartitioning();
+        var view = new ObjectDetailView { DataContext = vm };
+        var window = Show(view, 1560, 740);
+        try
+        {
+            ManualCapture.Save(window, "table-edit-partition-easy");
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
     [Fact]
     public Task Table_edit_convert() => HeadlessHost.Run(async () =>
     {

@@ -2065,5 +2065,16 @@
   "「파티션」 페이지를 열어 방식·키 열·파티션을 정합니다": "Opens the Partitions page to choose the method, key columns and partitions",
   "파티션 테이블로 바꾸기": "Convert to a partitioned table",
   "파티션 테이블로 바꾸기…": "Convert to a partitioned table…",
-  "파티션 테이블이 아닙니다": "Not a partitioned table"
+  "파티션 테이블이 아닙니다": "Not a partitioned table",
+  "쉬운 설정": "Easy setup",
+  "날짜 열": "Date column",
+  "파티션 기준 날짜 열": "Date column to partition by",
+  "파티션 단위": "Partition unit",
+  "파티션 테이블로 만들기": "Make it a partitioned table",
+  "새 기간 파티션을 직접 더해야 합니다. 자동 추가를 켜면 데이터가 들어올 때 DB 가 알아서 만듭니다.": "New period partitions must be added by hand. Turn on automatic add and the database creates them when rows arrive.",
+  "자동 추가 켜기": "Turn on automatic add",
+  "자동 추가": "Automatic add",
+  "새 기간의 데이터가 들어오면 DB 가 파티션을 알아서 만듭니다(INTERVAL)": "When rows for a new period arrive, the database creates the partition by itself (INTERVAL)",
+  "자동 추가 간격 식(예: NUMTOYMINTERVAL(3, 'MONTH'), 수 키는 1000). 비우면 끕니다": "Automatic add interval expression (e.g. NUMTOYMINTERVAL(3, 'MONTH'), 1000 for number keys). Leave empty to turn it off",
+  "↺ 되돌리기": "↺ Revert"
 }

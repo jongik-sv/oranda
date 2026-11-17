@@ -169,10 +169,13 @@ public sealed class PartitionRowViewModel : ObservableObject
         }
     }
 
-    /// <summary>상한값(LESS THAN 괄호 안) · 값 목록(VALUES 괄호 안). 해시는 빈 글.</summary>
+    /// <summary>
+    /// 상한값 · 값 목록을 보통 값으로(<c>2026-12-01</c>, <c>A, B</c>). 쓰면 SQL 로 바꿔 넣고 자동 이름을 다시 짓는다(<see cref="TableEditSession.SetNewPartitionBound"/>).
+    /// 해시는 빈 글.
+    /// </summary>
     public string BoundText
     {
-        get => _row.Bound ?? string.Empty;
+        get => PartitionBounds.ToPlain(_row.Bound);
         set
         {
             if (!CanEditBound || SameAsShown(value, BoundText))
@@ -180,13 +183,12 @@ public sealed class PartitionRowViewModel : ObservableObject
                 return;
             }
 
-            var bound = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-            if (!string.Equals(bound, _row.Bound, StringComparison.Ordinal))
-            {
-                Session.UpdatePartition(Key, p => p with { Bound = bound });
-            }
+            Session.SetNewPartitionBound(Key, value);
         }
     }
+
+    /// <summary>경계 칸 빈 글 안내.</summary>
+    public string BoundPlaceholder => IsNew ? Session.BoundPlaceholder : string.Empty;
 
     /// <summary>테이블스페이스(빈 글 = 테이블 기본).</summary>
     public string Tablespace

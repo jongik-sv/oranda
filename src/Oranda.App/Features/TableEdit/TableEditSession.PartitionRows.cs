@@ -201,7 +201,7 @@ public sealed partial class TableEditSession
     {
         PartitionMethod.List => TableEditText.T("값 목록", "Values"),
         PartitionMethod.Hash => "—",
-        _ => TableEditText.T("상한값 (LESS THAN)", "Upper bound (LESS THAN)"),
+        _ => TableEditText.T("이 값 미만 (상한값)", "Below this value (upper bound)"),
     };
 
     // ---- 도구줄 ----------------------------------------------------------
@@ -227,7 +227,9 @@ public sealed partial class TableEditSession
         .Where(x => x is not null)
         .Distinct());
 
-    public bool CanAddPartition => CanEditPartitions && CurrentPartitionMethod is not null && PartitionOperationReason(PartitionOperation.Add) is null;
+    /// <summary>「＋」: 자동 추가가 켜진 범위 테이블은 DB 가 만든다(ADD 는 ORA-14760) — 바꾸기 중(CREATE 안)은 된다.</summary>
+    public bool CanAddPartition => CanEditPartitions && CurrentPartitionMethod is not null && PartitionOperationReason(PartitionOperation.Add) is null
+        && !(CurrentPartitionMethod == PartitionMethod.Range && IntervalOn && !IsPartitionConversion);
 
     public bool CanDropPartition => CanEditPartitions && SelectedPartition is not null
         && PartitionOperationReason(CurrentPartitionMethod == PartitionMethod.Hash ? PartitionOperation.Coalesce : PartitionOperation.Drop) is null;
@@ -251,7 +253,7 @@ public sealed partial class TableEditSession
     /// <summary>경계 채우기: 범위만(경계 = 다음 구간의 시작).</summary>
     public bool CanFillBounds => CanEditPartitions && CurrentPartitionMethod == PartitionMethod.Range;
 
-    /// <summary>「＋」 새 줄을 끝에 붙이고 고른다(범위 = 마지막 경계 뒤 ADD, 경계는 비어 있다).</summary>
+    /// <summary>「＋」 새 줄을 끝에 붙이고 고른다(범위 = 앞 간격을 이은 이름·경계, 짐작할 수 없으면 빈 경계).</summary>
     public PartitionRowViewModel? AddPartition()
     {
         if (!CanAddPartition)
@@ -259,7 +261,7 @@ public sealed partial class TableEditSession
             return null;
         }
 
-        var row = new PartitionDraft(DraftKeys.New(), UniquePartitionName(i => "P_NEW" + i.ToString(CultureInfo.InvariantCulture)));
+        var row = NextRangeRow() ?? new PartitionDraft(DraftKeys.New(), UniquePartitionName(i => "P_NEW" + i.ToString(CultureInfo.InvariantCulture)));
         UpdatePartitions(d => d with { Partitions = [.. d.Partitions, row] });
         return SelectedPartition = PartitionRowOf(row.RowKey);
     }
@@ -551,6 +553,7 @@ public sealed partial class TableEditSession
         OnPropertyChanged(nameof(PartitionIntervalText));
         OnPropertyChanged(nameof(SubpartitionText));
         OnPropertyChanged(nameof(BoundHeaderText));
+        RaiseEasyPartition();
         RaisePartitionActions();
     }
 

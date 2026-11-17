@@ -94,8 +94,10 @@ public class TableEditPartitionSessionTests
         Assert.Same(row, s.SelectedPartition);
         Assert.True(row.IsAdded);
         Assert.True(row.CanEditBound);
-        Assert.True(row.HasError); // 상한값을 아직 안 씀
-        Assert.NotEmpty(s.PartitionProblemLines);
+        // 앞 간격(한 달)을 이어 이름·경계를 채운다(쉬운 편집). 경계는 보통 값으로 보인다.
+        Assert.Equal("P_2026_11", row.Row.Name);
+        Assert.Equal("2026-12-01", row.BoundText);
+        Assert.False(row.HasError);
 
         row.Name = "p_2026_11";
         row.BoundText = "DATE '2026-12-01'";
@@ -445,5 +447,11 @@ public class TableEditPartitionSessionTests
         public int MaxIdentifierBytes(ServerInfo? server) => 128;
 
         public string? UnsupportedReasonKey(TableEditFeature feature, ServerInfo? server) => Unsupported(feature);
+
+        /// <summary>파티션 문장 하나를 막는다(기본 = 모두 됨).</summary>
+        public Func<Oranda.Core.Schema.TableEdit.Partitions.PartitionOperation, string?> UnsupportedPartition { get; init; } = _ => null;
+
+        public string? UnsupportedPartitionReasonKey(Oranda.Core.Schema.TableEdit.Partitions.PartitionOperation operation, Oranda.Core.Schema.TableEdit.Partitions.PartitionMethod method, ServerInfo? server) =>
+            UnsupportedPartition(operation);
     }
 }
