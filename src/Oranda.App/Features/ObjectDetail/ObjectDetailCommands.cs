@@ -89,6 +89,7 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
     internal static void CloseDataWithDocument(DockWorkspace docking, ObjectDetailViewModel vm)
     {
         ArgumentNullException.ThrowIfNull(docking);
+        InstallCloseConfirm(docking);
         void OnClosed(object? sender, PanelDocument doc)
         {
             if (ReferenceEquals(doc.Panel, vm))
@@ -99,6 +100,46 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
         }
 
         docking.DocumentClosed += OnClosed;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DockWorkspace, object> CloseConfirmInstalled = new();
+
+    /// <summary>
+    /// 테이블 편집 중 고친 내용이 있는 객체 상세 탭을 닫을 때 버릴지 묻는다(테이블 편집기 설계 7.1·4장). 도킹마다 한 번, 앞선 확인(PL/SQL 저장 등)에 이어 붙인다.
+    /// </summary>
+    internal static void InstallCloseConfirm(DockWorkspace docking)
+    {
+        ArgumentNullException.ThrowIfNull(docking);
+        if (!CloseConfirmInstalled.TryAdd(docking, new object()))
+        {
+            return;
+        }
+
+        var previous = docking.CloseConfirm;
+        docking.CloseConfirm = document => document.Panel is ObjectDetailViewModel detail && detail.CloseConfirmation() is { } confirm
+            ? confirm
+            : previous?.Invoke(document);
+    }
+
+    /// <summary>
+    /// 앱을 끝낼 때: 테이블 편집 중 고친 내용이 있는 객체 상세 탭마다 버릴지 묻는다(설계 4장). 하나라도 거절하면 false.
+    /// </summary>
+    internal static async Task<bool> ConfirmDiscardTableEditsAsync(IServiceProvider? services, CancellationToken ct)
+    {
+        if (services?.GetService(typeof(IShellUi)) is not IShellUi { Docking: { } docking })
+        {
+            return true;
+        }
+
+        foreach (var doc in docking.Documents.ToList())
+        {
+            if (doc.Panel is ObjectDetailViewModel detail && detail.CloseConfirmation() is { } confirm && !await confirm(ct).ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>도킹 트리에서 스키마 브라우저 도구 창의 ViewModel 을 찾는다(없으면 null).</summary>

@@ -4,8 +4,18 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:se="using:Oranda.App.Features.SqlEditor"
+             xmlns:te="using:Oranda.App.Features.TableEdit"
              x:Class="Oranda.App.Features.ObjectDetail.ObjectDetailView"
              x:DataType="vm:ObjectDetailViewModel">
+  <UserControl.Styles>
+    <!-- 편집 아래 줄의 환경 배지: 운영은 빨강(SAFE-03 과 같은 뜻). -->
+    <Style Selector="Border.env-badge.prod">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <Style Selector="Border.env-badge.prod > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
@@ -28,15 +38,100 @@
           <ListBox x:Name="SectionList" DockPanel.Dock="Left" Classes="log" MinWidth="120" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection, Mode=TwoWay}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ObjectDetailSection">
-                <TextBlock Text="{Binding Title}" Margin="4,3" />
+                <TextBlock Text="{Binding DisplayTitle}" Margin="4,3" />
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
           <Border BorderThickness="1,0,0,0" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
             <DockPanel>
-              <!-- 「열」 탭: 열 순서 바꾸기 대화상자(TSK-13-01). 표에서만 보인다. -->
-              <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding CanReorderColumns}">
-                <Button x:Name="ReorderColumnsButton" Classes="tool" Content="열 순서 바꾸기…" AutomationProperties.Name="열 순서 바꾸기" />
+              <!-- 테이블의 「열」「제약」「인덱스」「설명」: ✎ 편집 토글과 편집 도구줄(테이블 편집기 설계 7.1, 시안 화면 0 A).
+                   「열」 탭: 열 순서 바꾸기 대화상자(TSK-13-01). 표에서만 보인다. -->
+              <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding ShowsTableToolbar}">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                  <Button x:Name="RefreshDetailButton" Classes="toolbar" Content="새로 고침" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True"
+                          IsVisible="{Binding CanToggleTableEdit}" IsEnabled="{Binding !IsBusy}" ToolTip.Tip="상세를 새로 읽습니다(고친 내용이 있으면 먼저 묻습니다)" />
+                  <ToggleButton x:Name="TableEditToggle" Classes="tool" Content="✎ 편집" IsVisible="{Binding CanToggleTableEdit}" IsEnabled="{Binding CanEditTable}"
+                                ToolTip.Tip="표에서 고치면 바뀐 만큼의 DDL 이 아래에 보입니다" AutomationProperties.Name="테이블 편집" />
+                  <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsEditPageShown}" IsEnabled="{Binding CanEditTable}">
+                    <Button x:Name="AddRowButton" Classes="tool" Content="＋" IsVisible="{Binding !IsEditingConstraints}" IsEnabled="{Binding CanAddRow}"
+                            ToolTip.Tip="새 줄" AutomationProperties.Name="새 줄" />
+                    <Button x:Name="AddConstraintButton" Classes="tool" Content="＋ ▾" IsVisible="{Binding IsEditingConstraints}" IsEnabled="{Binding CanAddRow}"
+                            ToolTip.Tip="새 제약" AutomationProperties.Name="새 제약">
+                      <Button.Flyout>
+                        <MenuFlyout>
+                          <MenuItem x:Name="AddPrimaryKeyItem" Header="기본 키(PK)" IsEnabled="{Binding TableEdit.CanAddPrimaryKey}" />
+                          <MenuItem x:Name="AddUniqueItem" Header="유일 키(UK)" />
+                          <MenuItem x:Name="AddForeignKeyItem" Header="외래 키(FK)" />
+                          <MenuItem x:Name="AddCheckItem" Header="CHECK" />
+                        </MenuFlyout>
+                      </Button.Flyout>
+                    </Button>
+                    <Button x:Name="DropRowButton" Classes="tool" Content="－" IsEnabled="{Binding CanAddRow}"
+                            ToolTip.Tip="고른 줄 지우기(다시 누르면 되살림)" AutomationProperties.Name="줄 지우기" />
+                    <Button x:Name="MoveUpButton" Classes="tool" Content="↑" IsVisible="{Binding IsEditingColumns}" IsEnabled="{Binding TableEdit.CanMoveUp}"
+                            ToolTip.Tip="새 열을 위로(기존 열 순서는 「열 순서 바꾸기…」)" AutomationProperties.Name="위로" />
+                    <Button x:Name="MoveDownButton" Classes="tool" Content="↓" IsVisible="{Binding IsEditingColumns}" IsEnabled="{Binding TableEdit.CanMoveDown}"
+                            ToolTip.Tip="새 열을 아래로" AutomationProperties.Name="아래로" />
+                    <Button x:Name="RevertRowButton" Classes="tool" Content="↺" IsVisible="{Binding !IsEditingDescription}"
+                            ToolTip.Tip="고른 줄을 원래대로" AutomationProperties.Name="줄 되돌리기" />
+                  </StackPanel>
+                  <Separator Classes="toolbar" IsVisible="{Binding CanReorderColumns}" />
+                  <Button x:Name="ReorderColumnsButton" Classes="tool" Content="열 순서 바꾸기…" IsVisible="{Binding CanReorderColumns}" AutomationProperties.Name="열 순서 바꾸기" />
+                </StackPanel>
+              </Border>
+              <!-- 편집 중: 아래 DDL 미리보기(탭 전체의 차이, 실행 순서)와 단추(설계 7.7). 사용자가 DDL 을 보지 않고 실행하는 길은 없다. -->
+              <Border DockPanel.Dock="Bottom" IsVisible="{Binding IsTableEditing}" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+                <DockPanel>
+                  <Border DockPanel.Dock="Bottom" Classes="panel-toolbar">
+                    <DockPanel>
+                      <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Border Classes="env-badge" Classes.prod="{Binding IsProductionConnection}"
+                                BorderThickness="1" CornerRadius="3" Padding="5,0" VerticalAlignment="Center" BorderBrush="{DynamicResource OrandaIconNeutralBrush}">
+                          <TextBlock x:Name="EnvironmentText" Text="{Binding EnvironmentText}" />
+                        </Border>
+                        <TextBlock x:Name="TableEditSummaryText" Text="{Binding TableEdit.SummaryText}" VerticalAlignment="Center" />
+                      </StackPanel>
+                      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                        <!-- 「묶음에 넣기 ▾」(설계 7.7): 반영 묶음(te-bundle)이 들어오면 보인다. 자리만 둔다. -->
+                        <Button x:Name="AddToBundleButton" Classes="tool" Content="묶음에 넣기 ▾" IsVisible="{Binding CanAddToBundle}" AutomationProperties.Name="묶음에 넣기" />
+                        <Button x:Name="SaveScriptButton" Classes="tool" Classes.accent="{Binding IsProductionConnection}" Content="스크립트 저장…"
+                                IsEnabled="{Binding CanSaveTableEditScript}" ToolTip.Tip="이 편집의 DDL 을 .sql 파일로 저장합니다(의뢰용 형식)" AutomationProperties.Name="스크립트 저장" />
+                        <!-- 개발·테스트는 「실행」이 기본(강조), 운영은 「스크립트 저장…」을 강조하고 「실행」은 보통 단추(설계 7.7). -->
+                        <Button x:Name="RunTableEditButton" Classes="tool" Classes.accent="{Binding RunIsDefault}" Content="실행" MinWidth="64"
+                                IsEnabled="{Binding CanRunTableEdit}" ToolTip.Tip="실행 전 검사를 한 뒤 위 DDL 을 차례로 실행합니다" AutomationProperties.Name="편집 실행" />
+                      </StackPanel>
+                      <Panel />
+                    </DockPanel>
+                  </Border>
+                  <Border DockPanel.Dock="Top" Classes="panel-toolbar">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <TextBlock Text="DDL 미리보기" VerticalAlignment="Center" Margin="4,0" />
+                      <Button x:Name="CopyEditDdlButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding CanSaveTableEditScript}" />
+                      <Button x:Name="OpenEditDdlButton" Classes="tool" Content="편집기로 열기" icons:ButtonIcon.Key="newSql" IsEnabled="{Binding CanSaveTableEditScript}"
+                              ToolTip.Tip="새 SQL 탭에 넣습니다(실행하지 않음)" />
+                    </StackPanel>
+                  </Border>
+                  <!-- 가상 식 미리보기(설계 7.6, 시안 ⑤) · 실행 전 검사 줄(✖ 막음 · ⚠ 알림 · ✔, 설계 10장). -->
+                  <Border DockPanel.Dock="Bottom" Padding="6,3" IsVisible="{Binding HasTableEditFindings}">
+                    <ScrollViewer MaxHeight="120">
+                      <ItemsControl x:Name="TableEditFindingsList" ItemsSource="{Binding TableEditFindingRows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="te:FindingRow">
+                            <DockPanel>
+                              <Button DockPanel.Dock="Right" Classes="tool" Content="그 행 보기" IsVisible="{Binding HasViewRows}" Tag="{Binding ViewRowsSql}"
+                                      Click="OnViewRowsClick" ToolTip.Tip="그 행을 고르는 SELECT 를 새 SQL 탭에 엽니다" />
+                              <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            </DockPanel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </Border>
+                  <Border DockPanel.Dock="Bottom" Padding="6,3" IsVisible="{Binding HasVirtualPreview}">
+                    <SelectableTextBlock x:Name="VirtualPreviewText" Text="{Binding VirtualPreviewText}" TextWrapping="Wrap" />
+                  </Border>
+                  <se:SqlCodeView x:Name="TableEditDdlView" Height="130" Text="{Binding TableEdit.PreviewText}" />
+                </DockPanel>
               </Border>
               <!-- JAVA CLASS: 같은 스키마의 JAVA SOURCE 에서 왔으면 그 소스로 간다(TSK-14-22). -->
               <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding HasSource}">
@@ -44,7 +139,7 @@
               </Border>
             <Panel>
               <!-- 구역 표(C안 격자, 행 선택·복사). 인덱스·제약 구역이면 아래에 고른 줄의 열 표(TSK-13-34). -->
-              <Grid x:Name="SectionGrid" RowDefinitions="*,Auto,0" IsVisible="{Binding !IsDataSelected}">
+              <Grid x:Name="SectionGrid" RowDefinitions="*,Auto,0" IsVisible="{Binding ShowsSectionTable}">
                 <ctl:DetailTable x:Name="SectionTable" Columns="{Binding SelectedSection.Columns}" Rows="{Binding SelectedSection.Rows}"
                                  RowNumbers="{Binding !SelectedSection.HasNumberColumn}" KeepSelectionOnSameShape="True" />
                 <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="{Binding HasKeyColumns}" Background="{DynamicResource OrandaSeparatorBrush}" />
@@ -55,6 +150,10 @@
                   <ctl:DetailTable x:Name="KeyTable" Columns="{Binding KeyColumns.Columns}" Rows="{Binding KeyColumns.Rows}" RowNumbers="False" />
                 </DockPanel>
               </Grid>
+              <!-- 편집 모드의 편집 표(열·제약·인덱스·설명). -->
+              <Panel IsVisible="{Binding IsEditPageShown}">
+                <te:TableEditView x:Name="TableEditView" DataContext="{Binding TableEdit}" IsEnabled="{Binding $parent[UserControl].((vm:ObjectDetailViewModel)DataContext).CanEditTable}" />
+              </Panel>
               <!-- 「데이터」 탭(표·뷰): 처음 고를 때 읽는다. 결과 영역은 편집기 결과와 같다(거르기·행 수·편집). -->
               <Panel IsVisible="{Binding IsDataSelected}">
                 <vm:ObjectDataView x:Name="DataView" DataContext="{Binding Data}" />

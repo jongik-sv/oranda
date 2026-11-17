@@ -121,6 +121,7 @@ public sealed class SchemaObjectOpener
 
         ObjectDetailCommandHandler.CloseDataWithDocument(docking, vm);
         PinWhenEdited(docking, doc, vm.Data, nameof(vm.Data.IsEditing), () => vm.Data.IsEditing);
+        PinWhenEdited(docking, doc, vm, nameof(vm.TableEdit), () => vm.IsTableEditing); // 테이블 편집을 켜면 고정(다음 미리보기가 바꿔 쓰지 않게)
         Show(docking, doc, focus);
         await LoadAsync(docking, doc, token => vm.OpenAsync(session, target, showDdl: false, token), ct).ConfigureAwait(true);
         return doc;
@@ -235,7 +236,7 @@ public sealed class SchemaObjectOpener
     /// <summary>바꿔 끼우면 잃는 것이 있는 문서: 반영하지 않은 데이터 편집(PL/SQL 미리보기 탭의 고친 글은 작업 공간이 본다).</summary>
     private static bool IsEdited(object panel) => panel switch
     {
-        ObjectDetailViewModel d => d.Data.IsEditing || d.Data.Pane.IsEditDirty,
+        ObjectDetailViewModel d => d.Data.IsEditing || d.Data.Pane.IsEditDirty || d.IsTableEditing,
         _ => false,
     };
 

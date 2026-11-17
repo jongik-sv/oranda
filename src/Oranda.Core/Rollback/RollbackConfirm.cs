@@ -34,6 +34,18 @@ public sealed record BackupOffer(DbObjectRef Table, string BackupName, string Cr
 public sealed record ConfirmExtras(RollbackOffer? Rollback, BackupOffer? Backup)
 {
     public static ConfirmExtras None { get; } = new(null, null);
+
+    /// <summary>
+    /// 확인 한 번으로 실행할 문장 묶음(<see cref="Oranda.Core.Execution.IExecutionInteraction.ConfirmBatchAsync"/>, TE-34). 비어 있으면 한 문장 확인.
+    /// 확인 창은 첫 문장 대신 이 문장들을 보이고 「앞 문장이 성공한 뒤 뒤 문장이 실패하면 앞 문장은 남는다(DDL 자동 커밋)」를 알린다(TE-21).
+    /// </summary>
+    public IReadOnlyList<Oranda.Core.Execution.SqlStatement> Batch { get; init; } = [];
+
+    /// <summary>실행 전 검사 결과(테이블 편집기 설계 10장). 운영 확인 창 안에 같이 보인다(검사 창을 따로 띄우지 않는다).</summary>
+    public IReadOnlyList<Oranda.Core.Schema.TableEdit.CheckFinding> Findings { get; init; } = [];
+
+    /// <summary>문장 묶음을 보낼 접속(확인 창 머리 띠). null 이면 확인 창이 지금 보이는 접속을 쓴다.</summary>
+    public Oranda.Core.Connection.ConnectionProfile? Profile { get; init; }
 }
 
 /// <summary>

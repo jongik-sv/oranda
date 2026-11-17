@@ -86,12 +86,19 @@ public static class DedicatedSessionCommands
         var result = ExitConfirmResult.Cancelled;
         try
         {
+            // 테이블 편집 중 고친 내용이 있는 객체 상세 탭(테이블 편집기 설계 4장: 말없이 잃지 않음). 부작용이 없는 질문이라 커밋·롤백을 묻기 전에 먼저.
+            if (!await Oranda.App.Features.ObjectDetail.ObjectDetailCommandHandler.ConfirmDiscardTableEditsAsync(container, ct).ConfigureAwait(true))
+            {
+                return result;
+            }
+
             // 전용 세션 확인을 마치면 그 세션들은 「닫는 중」으로 남는다(공유 세션 확인·커밋을 기다리는 동안 실행이 끼어들지 않게).
             if (!await host.CanShutdownAsync(ct).ConfigureAwait(true))
             {
                 result = registry?.LastGuardFailed == true ? ExitConfirmResult.Failed : ExitConfirmResult.Cancelled;
                 return result;
             }
+
 
             // 공유 작업 세션은 열린 접속마다 묻는다(CONN-06).
             var state = ExecutionState.For(container.GetService<IEventBus>());

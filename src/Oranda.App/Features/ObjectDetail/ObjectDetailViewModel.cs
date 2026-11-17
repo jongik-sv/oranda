@@ -28,6 +28,7 @@ public enum DetailKeyKind
 public sealed class ObjectDetailSection : ObservableObject
 {
     private IReadOnlyList<IReadOnlyList<object?>> _rows;
+    private int _editCount;
 
     public ObjectDetailSection(DetailSection source)
     {
@@ -44,6 +45,22 @@ public sealed class ObjectDetailSection : ObservableObject
     }
 
     public string Title { get; }
+
+    /// <summary>테이블 편집 중 이 페이지의 바뀐 건수(설계 7.1). 0 이면 이름만 보인다.</summary>
+    public int EditCount
+    {
+        get => _editCount;
+        set
+        {
+            if (SetProperty(ref _editCount, value))
+            {
+                OnPropertyChanged(nameof(DisplayTitle));
+            }
+        }
+    }
+
+    /// <summary>구역 목록에 보일 이름(편집 중 바뀐 건수가 있으면 「열 (2)」).</summary>
+    public string DisplayTitle => EditCount > 0 ? $"{Title} ({EditCount})" : Title;
 
     /// <summary>인덱스·제약 구역이면 그 종류(줄의 첫 칸 = 키 이름).</summary>
     public DetailKeyKind KeyKind { get; }
@@ -311,6 +328,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
     {
         CanReorderColumns = value is { Title: "열" } && Target is { ObjectType: "TABLE" };
         IsDataSelected = value is { IsData: true };
+        RaiseTableEditProperties();
         ResetKeyColumns(value);
         if (IsDataSelected)
         {
@@ -332,6 +350,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(target);
 
+        EndTableEdit(); // 다시 열면 편집은 꺼진다(묻는 일은 부르는 쪽: 새로 고침·실행 성공 뒤, 설계 7.1)
         _session = session;
         Target = target;
         Title = $"{target.Owner}.{target.Name}";

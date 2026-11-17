@@ -42,17 +42,34 @@ public sealed class AppExecutionInteraction : IExecutionInteraction
         var shown = grid is { Statements: > 1 } many && decision.Message is { Length: > 0 } m
             ? decision with { Message = m + Environment.NewLine + $"그리드 편집 {many.Statements}문장({many.Verbs})을 이 확인 한 번으로 모두 실행합니다. 원복 경고는 첫 문장 기준입니다." }
             : decision;
-        var request = new ConfirmRequest(stmt, shown, grid?.Profile ?? ProfileProvider?.Invoke())
+        extras ??= ConfirmExtras.None;
+        var batch = grid is null && extras.Batch.Count > 0 ? extras.Batch : null;
+        var request = new ConfirmRequest(stmt, shown, grid?.Profile ?? (batch is null ? null : extras.Profile) ?? ProfileProvider?.Invoke())
         {
-            Extras = extras ?? ConfirmExtras.None,
+            Extras = extras,
             Rollback = RollbackSettingsProvider?.Invoke() ?? new RollbackSettings(),
-            Preview = grid?.Preview,
-            Notice = grid?.Notice,
-            StatementCount = grid?.Statements ?? 1,
+            Preview = grid?.Preview ?? (batch is null ? null : BatchPreview(batch)),
+            Notice = grid?.Notice ?? (batch is null ? null : BatchNotice(batch.Count, extras.Findings)),
+            StatementCount = grid?.Statements ?? batch?.Count ?? 1,
         };
         return grid is null
             ? Dialogs.ConfirmChangeAsync(request, ct)
             : grid.ConfirmAsync(decision, request.Extras, () => Dialogs.ConfirmChangeAsync(request, ct));
+    }
+
+    /// <summary>확인 한 번으로 실행할 문장 묶음의 본문(문장마다 <c>;</c>, 실행 순서, TE-34).</summary>
+    internal static string BatchPreview(IReadOnlyList<SqlStatement> batch) =>
+        string.Join(Environment.NewLine, batch.Select(s => s.Text.TrimEnd().TrimEnd(';') + ";"));
+
+    /// <summary>문장 묶음 확인의 안내: 문장 수·DDL 자동 커밋(TE-21)과 실행 전 검사 줄(테이블 편집기 설계 10장, 운영은 이 창 하나로 묻는다).</summary>
+    internal static string BatchNotice(int count, IReadOnlyList<Oranda.Core.Schema.TableEdit.CheckFinding> findings)
+    {
+        var text = Oranda.App.Features.TableEdit.TableEditText.T(
+            $"{count}문장을 이 확인 한 번으로 차례로 실행합니다. 앞 문장이 성공한 뒤 뒤 문장이 실패하면 앞 문장은 남습니다(DDL 은 문장마다 자동 커밋). 이 확인에는 백업 테이블 제안이 없습니다 — 필요하면 먼저 백업하세요.",
+            $"Runs {count} statement(s) in order with this one confirmation. If a later statement fails, the earlier ones stay applied (each DDL commits automatically). This confirmation offers no backup table — back up first if you need one.");
+        return findings is { Count: > 0 }
+            ? text + Environment.NewLine + Environment.NewLine + Oranda.App.Features.TableEdit.CheckFindingText.FormatAll(findings)
+            : text;
     }
 
     public Task<bool> ConfirmAsync(SqlStatement stmt, PolicyDecision decision, CancellationToken ct)

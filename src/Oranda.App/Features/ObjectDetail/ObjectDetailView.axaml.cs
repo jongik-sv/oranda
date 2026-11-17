@@ -21,6 +21,53 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
             }
         };
         ReorderColumnsButton.Click += async (_, _) => await OpenReorderDialogAsync();
+        // 테이블 편집(설계 7.1): ✎ 토글은 뷰모델이 정한 상태로 되돌려 맞춘다(끄기를 거절하면 켠 채).
+        TableEditToggle.Click += async (_, _) =>
+        {
+            if (_vm is not null)
+            {
+                await _vm.SetTableEditingAsync(TableEditToggle.IsChecked == true);
+                SyncTableEditToggle();
+            }
+        };
+        AddRowButton.Click += (_, _) => WithEditPage((edit, page) => edit.AddRow(page));
+        AddPrimaryKeyItem.Click += (_, _) => WithEditPage((edit, page) => edit.AddRow(page, Oranda.Core.Metadata.ConstraintKind.PrimaryKey));
+        AddUniqueItem.Click += (_, _) => WithEditPage((edit, page) => edit.AddRow(page, Oranda.Core.Metadata.ConstraintKind.Unique));
+        AddForeignKeyItem.Click += (_, _) => WithEditPage((edit, page) => edit.AddRow(page, Oranda.Core.Metadata.ConstraintKind.ForeignKey));
+        AddCheckItem.Click += (_, _) => WithEditPage((edit, page) => edit.AddRow(page, Oranda.Core.Metadata.ConstraintKind.Check));
+        DropRowButton.Click += (_, _) => WithEditPage((edit, page) => edit.DropSelected(page));
+        RevertRowButton.Click += (_, _) => WithEditPage((edit, page) => edit.RevertSelected(page));
+        MoveUpButton.Click += (_, _) => _vm?.TableEdit?.MoveSelected(-1);
+        MoveDownButton.Click += (_, _) => _vm?.TableEdit?.MoveSelected(1);
+        SaveScriptButton.Click += async (_, _) =>
+        {
+            if (_vm is not null)
+            {
+                await _vm.SaveTableEditScriptAsync();
+            }
+        };
+        CopyEditDdlButton.Click += async (_, _) =>
+        {
+            if (_vm?.TableEdit is { } edit && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            {
+                await clipboard.SetTextAsync(edit.PreviewText);
+            }
+        };
+        OpenEditDdlButton.Click += (_, _) => _vm?.OpenTableEditDdlInEditor();
+        RefreshDetailButton.Click += async (_, _) =>
+        {
+            if (_vm is not null)
+            {
+                await _vm.RefreshAsync();
+            }
+        };
+        RunTableEditButton.Click += async (_, _) =>
+        {
+            if (_vm is not null)
+            {
+                await _vm.RunTableEditAsync();
+            }
+        };
         OpenSourceButton.Click += async (_, _) =>
         {
             if (_vm is not null)
@@ -74,10 +121,35 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
         return SectionList.SelectedItem is { } selected && SectionList.ContainerFromItem(selected) is { } row && row.Focus();
     }
 
-    /// <summary>「열 순서 바꾸기…」: 대화상자를 열고, 방식 ① 이 끝나면 상세를 새로 읽는다.</summary>
+    /// <summary>검사 줄의 「그 행 보기」: 그 SELECT 를 새 SQL 탭에(실행하지 않음, 설계 10장).</summary>
+    private void OnViewRowsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string sql })
+        {
+            _vm?.OpenViewRows(sql);
+        }
+    }
+
+    /// <summary>편집 도구줄 단추: 지금 편집 페이지의 세션에 맡긴다.</summary>
+    private void WithEditPage(System.Action<Oranda.App.Features.TableEdit.TableEditSession, Oranda.Core.Schema.TableEdit.TableEditPage> action)
+    {
+        if (_vm is { TableEdit: { } edit, EditPage: { } page })
+        {
+            action(edit, page);
+        }
+    }
+
+    private void SyncTableEditToggle() => TableEditToggle.IsChecked = _vm?.IsTableEditing == true;
+
+    /// <summary>「열 순서 바꾸기…」: 고친 내용이 있으면 먼저 버릴지 묻고(설계 13장), 대화상자를 열고, 방식 ① 이 끝나면 상세를 새로 읽는다.</summary>
     private async Task OpenReorderDialogAsync()
     {
         if (_vm is not { Services: { } services, Session: { } session, Target: { } target } vm)
+        {
+            return;
+        }
+
+        if (!await vm.ConfirmBeforeReorderAsync())
         {
             return;
         }
@@ -89,6 +161,11 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
     private void OnVmChanged(object? sender, PropertyChangedEventArgs e)
     {
         Sync();
+        if (e.PropertyName == nameof(ObjectDetailViewModel.TableEdit))
+        {
+            SyncTableEditToggle();
+        }
+
         if (e.PropertyName == nameof(ObjectDetailViewModel.HasKeyColumns))
         {
             SyncKeyPane();

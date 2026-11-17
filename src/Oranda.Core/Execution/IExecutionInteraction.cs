@@ -18,6 +18,30 @@ public interface IExecutionInteraction
     async Task<ConfirmAnswer> ConfirmChangeAsync(SqlStatement stmt, PolicyDecision decision, ConfirmExtras extras, CancellationToken ct) =>
         await ConfirmAsync(stmt, decision, ct).ConfigureAwait(false) ? ConfirmAnswer.Default(extras) : ConfirmAnswer.Declined;
 
+    /// <summary>
+    /// 여러 문장을 확인 한 번으로 받는다(테이블 편집기·반영 묶음 실행, TE-21·TE-34). 받으면 부르는 쪽이 그 문장 전부를
+    /// <see cref="ExecutionOptions.PreConfirmed"/> 에 넣어 문장별로 보낸다(<c>AsSingleBlock</c> 으로 묶지 않음).
+    /// 기본 구현은 첫 문장으로 <see cref="ConfirmChangeAsync"/> 를 부르고, 문장 묶음·검사 결과는 <see cref="ConfirmExtras.Batch"/>·<see cref="ConfirmExtras.Findings"/> 에 싣는다.
+    /// 문장이 없으면 묻지 않고 true.
+    /// </summary>
+    /// <param name="decision">보일 판단(문장들 가운데 확인이 필요한 것, 다시 입력이 있으면 그것)</param>
+    /// <param name="profile">문장을 보낼 접속(확인 창 머리 띠). null 이면 창이 지금 보이는 접속을 쓴다.</param>
+    async Task<bool> ConfirmBatchAsync(IReadOnlyList<SqlStatement> statements, PolicyDecision decision,
+                                       IReadOnlyList<Oranda.Core.Schema.TableEdit.CheckFinding> findings,
+                                       Oranda.Core.Connection.ConnectionProfile? profile, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(statements);
+        ArgumentNullException.ThrowIfNull(decision);
+        if (statements.Count == 0)
+        {
+            return true;
+        }
+
+        var extras = ConfirmExtras.None with { Batch = statements, Findings = findings ?? [], Profile = profile };
+        var answer = await ConfirmChangeAsync(statements[0], decision, extras, ct).ConfigureAwait(false);
+        return answer.Proceed;
+    }
+
     /// <summary>치환 변수 값 입력. null = 취소.</summary>
     Task<IReadOnlyDictionary<string, string>?> AskSubstitutionsAsync(IReadOnlyList<string> names, CancellationToken ct);
 
