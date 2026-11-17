@@ -2,6 +2,7 @@
 import { Image } from 'astro:assets';
 import '../styles/brand.css';
 import logo from '../assets/brand/oranda-o.png';
+import aiAccess from '../assets/landing/ai-access-level.png';
 import aiChat from '../assets/landing/ai-chat.png';
 import connectionList from '../assets/landing/connection-list.png';
 import lockMonitor from '../assets/landing/lock-monitor.png';
@@ -9,6 +10,8 @@ import mainWindow from '../assets/landing/main-window.png';
 import mascot from '../assets/landing/mascot.png';
 import mybatis from '../assets/landing/mybatis.png';
 import planCompare from '../assets/landing/plan-compare.png';
+import rollbackCompare from '../assets/landing/rollback-compare.png';
+import rollbackJournal from '../assets/landing/rollback-journal.png';
 import { page, siteUrl } from '../lib/links';
 
 const releases = 'https://github.com/jongik-sv/oranda/releases/latest';
@@ -27,7 +30,7 @@ const wideSizes = '(max-width: 1320px) 100vw, 1240px';
     <title>Oranda: Oracle Client 없이 쓰는 무료 Oracle 클라이언트</title>
     <meta
       name="description"
-      content="Oranda는 Windows와 macOS에서 쓰는 무료 오픈 소스 Oracle 클라이언트입니다. Oracle Client를 설치하지 않고 SQL 편집, 실행 계획, 세션과 Lock 모니터를 씁니다."
+      content="Oranda는 Windows와 macOS에서 쓰는 무료 오픈 소스 Oracle 클라이언트입니다. Oracle Client를 설치하지 않고 SQL 편집, 실행 계획, 세션과 Lock 모니터를 쓰고, AI에게 튜닝을 묻고, 커밋한 데이터를 실행 직전으로 되돌립니다."
     />
     <link rel="icon" type="image/png" href={siteUrl('favicon.png')} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -72,9 +75,13 @@ const wideSizes = '(max-width: 1320px) 100vw, 1240px';
             </h1>
             <p class="lead">
               Oranda는 Windows와 macOS에서 쓰는 무료 오픈 소스 Oracle 클라이언트입니다. SQL과 PL/SQL 편집, 결과 그리드,
-              실행 계획, 세션과 Lock 모니터, 튜닝 도구를 한 프로그램에서 씁니다. 오래된 Orange for ORACLE 5.0을 대신하려고
-              만들었습니다.
+              실행 계획, 세션과 Lock 모니터, 튜닝 도구를 한 프로그램에서 씁니다. AI에게 느린 쿼리를 묻고, 커밋한 데이터를
+              실행 직전으로 되돌릴 수도 있습니다. 오래된 Orange for ORACLE 5.0을 대신하려고 만들었습니다.
             </p>
+            <ul class="highlights" aria-label="눈여겨볼 기능">
+              <li><a href="#ai">AI 튜닝과 SQL 해설</a></li>
+              <li><a href="#rollback">커밋 뒤 데이터 원복</a></li>
+            </ul>
             <div class="actions">
               <a class="btn" href={windowsSetup}>Windows용 내려받기</a>
               <a class="btn" href={macSetup}>macOS용 내려받기</a>
@@ -128,6 +135,129 @@ const wideSizes = '(max-width: 1320px) 100vw, 1240px';
         <div>
           <h2>무료 오픈 소스입니다</h2>
           <p>MIT 라이선스이며 소스 코드를 GitHub에서 공개합니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="spotlight dark" id="ai" aria-labelledby="ai-title">
+      <div class="wrap spotlight-inner">
+        <div class="spotlight-head">
+          <p class="eyebrow">AI 튜닝 · 실험 기능</p>
+          <h2 id="ai-title" class="oranda-display">왜 느린지, AI가 DB를 직접 보고 답합니다</h2>
+          <p class="spotlight-lead">
+            이 PC에 로그인된 Claude Code, Codex CLI, Antigravity CLI를 그대로 씁니다. API 키로 만든 프로필이나 Ollama,
+            LM Studio 같은 로컬 모델도 고를 수 있습니다. AI는 실행 계획, 통계, 인덱스를 도구로 직접 읽고 원인과 고칠 방법을
+            제안합니다.
+          </p>
+        </div>
+        <ul class="points">
+          <li>
+            <h3>AI 튜닝</h3>
+            <p>인덱스 후보와 재작성 제안을 받습니다. 제안은 비교 창에서 원문과 나란히 확인한 뒤 새 탭에 넣습니다.</p>
+          </li>
+          <li>
+            <h3>실행 계획 해설</h3>
+            <p>커서 아래 문장의 실행 계획을 단계별로 풀어서 설명합니다.</p>
+          </li>
+          <li>
+            <h3>SQL 설명</h3>
+            <p>처음 보는 문장이 무엇을 하는지 설명합니다. 남이 쓴 쿼리를 읽을 때 씁니다.</p>
+          </li>
+          <li>
+            <h3>오류 고치기</h3>
+            <p>마지막 실행에서 오류가 난 문장을 고친 문장으로 제안합니다.</p>
+          </li>
+        </ul>
+        <div class="shots">
+          <figure>
+            <Image
+              class="shot"
+              src={aiChat}
+              alt="AI 대화 창. 느린 이유를 묻는 질문에 원인 설명과 재작성 제안이 답으로 나와 있습니다."
+            />
+            <figcaption>AI 대화: 원인과 재작성 제안을 받고, 비교한 뒤 적용합니다.</figcaption>
+          </figure>
+          <figure>
+            <Image
+              class="shot"
+              src={aiAccess}
+              alt="접속 편집의 AI 허용 수준. 끔, 메타데이터, 계획, 조회 실행, 조회 + 행 값 다섯 칸 가운데 조회 실행이 골라져 있습니다."
+            />
+            <figcaption>접속마다 AI가 할 수 있는 일의 한도를 다섯 단계로 정합니다.</figcaption>
+          </figure>
+        </div>
+        <div class="guard">
+          <h3>보내는 것은 접속마다 정합니다</h3>
+          <ul>
+            <li>비밀번호와 호스트는 AI에 보내지 않습니다.</li>
+            <li>접속마다 AI 허용 수준을 끔, 메타데이터, 계획, 조회 실행, 조회 + 행 값 가운데에서 고릅니다.</li>
+            <li>SQL의 리터럴 값은 <code>:v1</code> 같은 자리표시로 가려 보내고, 제안을 편집기에 넣을 때 원래 값으로 되돌립니다.</li>
+            <li>운영 접속은 값 가림이 항상 켜지고 행 값을 보내지 않습니다. 직접 지정한 로컬 AI만 예외입니다.</li>
+          </ul>
+        </div>
+        <div class="spotlight-links">
+          <a href={page('ai/overview/')}>AI 기능 개요 읽기</a>
+          <a href={page('ai/commands/')}>AI 명령 읽기</a>
+          <a href={page('ai/overview/#접속의-ai-허용-수준')}>AI 허용 수준 읽기</a>
+        </div>
+        <p class="spotlight-note">AI 기능은 아직 실험 기능입니다. AI가 낸 SQL은 틀릴 수 있으니 적용하기 전에 직접 확인하세요. 화면의 내용은 설명을 위한 예시입니다.</p>
+      </div>
+    </section>
+
+    <section class="spotlight tint" id="rollback" aria-labelledby="rollback-title">
+      <div class="wrap spotlight-inner">
+        <div class="spotlight-head">
+          <p class="eyebrow">데이터 원복</p>
+          <h2 id="rollback-title" class="oranda-display">커밋한 뒤에도 실행 직전 데이터로 되돌립니다</h2>
+          <p class="spotlight-lead">
+            운영 DB에서 조건을 잘못 쓴 UPDATE를 커밋했어도 늦지 않습니다. Oranda는 쓰기 문장을 실행할 때 되돌릴 기록을 미리
+            남기고, 커밋한 뒤에 그 기록으로 바뀐 행만 골라 되돌립니다.
+          </p>
+        </div>
+        <ul class="points">
+          <li>
+            <h3>원복 스크립트</h3>
+            <p>운영 접속에서 UPDATE, DELETE, INSERT를 실행하면 거꾸로 되돌리는 SQL을 함께 만듭니다. 이 PC에 암호화해 30일 동안 보관합니다.</p>
+          </li>
+          <li>
+            <h3>이 실행 전과 비교</h3>
+            <p>모든 접속에서 실행 직전 시점(Oracle SCN, Tibero TSN)을 기록합니다. 그 시점과 지금 데이터를 비교해 되돌릴 DML을 만듭니다.</p>
+          </li>
+          <li>
+            <h3>남이 바꾼 행은 지킵니다</h3>
+            <p>그 사이 다른 사람이 다시 바꾼 행은 충돌로 알리고 덮어쓰지 않습니다. 되돌리기도 커밋하지 않고 반영하므로 확인한 뒤 커밋합니다.</p>
+          </li>
+          <li>
+            <h3>플래시백과 백업 테이블</h3>
+            <p>N분 전 값이나 한 행의 변경 이력에서 골라 되돌립니다. TRUNCATE, DROP COLUMN 앞에서는 백업 테이블을 먼저 만들도록 권합니다.</p>
+          </li>
+        </ul>
+        <figure>
+          <div class="capture framed" tabindex="0" role="group" aria-label="변경 일지 화면. 좁은 화면에서는 옆으로 밀어서 봅니다.">
+            <Image
+              src={rollbackJournal}
+              widths={[800, rollbackJournal.width]}
+              sizes={wideSizes}
+              alt="변경 일지. 커밋 묶음마다 시간, 객체, 문장 수, 실행 직전과 커밋 시점의 SCN, 원복 스크립트 상태가 한 줄씩 보입니다."
+            />
+          </div>
+          <figcaption>변경 일지: 커밋 묶음마다 실행 직전과 커밋 시점, 원복 스크립트 상태가 남습니다.</figcaption>
+        </figure>
+        <figure>
+          <div class="capture framed" tabindex="0" role="group" aria-label="이 실행 전과 비교 화면. 좁은 화면에서는 옆으로 밀어서 봅니다.">
+            <Image
+              src={rollbackCompare}
+              widths={[800, rollbackCompare.width]}
+              sizes={wideSizes}
+              alt="이 실행 전과 비교 창. 되돌릴 값, 되살릴 행, 지울 행, 충돌 행이 표로 나오고 아래에 되돌릴 DML이 만들어져 있습니다."
+            />
+          </div>
+          <figcaption>이 실행 전과 비교: 되돌릴 값, 되살릴 행, 지울 행, 충돌을 보이고 되돌릴 DML을 만듭니다. 화면의 데이터는 설명을 위한 예시입니다.</figcaption>
+        </figure>
+        <div class="spotlight-links">
+          <a href={page('run/undo-guide/')}>데이터를 바꾼 뒤 되돌리기 읽기</a>
+          <a href={page('run/rollback/#원복-스크립트-열기와-실행')}>원복 스크립트 읽기</a>
+          <a href={page('run/rollback/#이-실행-전과-비교')}>이 실행 전과 비교 읽기</a>
         </div>
       </div>
     </section>
@@ -217,19 +347,6 @@ const wideSizes = '(max-width: 1320px) 100vw, 1240px';
             <li>PL/SQL Developer</li>
             <li>SQL Developer</li>
           </ul>
-        </div>
-        <div class="trio-item">
-          <h2 class="oranda-display">왜 느린지 AI에게 물어보고 싶습니다</h2>
-          <p>이 PC에 로그인된 Claude Code나 Codex CLI를 그대로 씁니다. 비밀번호와 호스트는 AI에 보내지 않고, 접속마다 AI 허용 수준을 정합니다. AI 기능은 아직 실험 기능입니다.</p>
-          <a href={page('ai/overview/')}>AI 기능 개요 읽기</a>
-          <figure>
-            <Image
-              class="trio-image"
-              src={aiChat}
-              alt="AI 대화 창. 느린 이유를 묻는 질문에 원인 설명과 재작성 제안이 답으로 나와 있습니다."
-            />
-            <figcaption>화면의 내용은 설명을 위한 예시입니다.</figcaption>
-          </figure>
         </div>
       </div>
     </section>
@@ -533,6 +650,181 @@ const wideSizes = '(max-width: 1320px) 100vw, 1240px';
   .facts p {
     margin: 0;
     font-size: 1rem;
+    color: var(--muted);
+  }
+
+  .highlights {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .coral .highlights a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding-inline: 1rem;
+    border: 2px solid var(--oranda-ink);
+    border-radius: 999px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .coral .highlights a::after {
+    content: '↓';
+    margin-inline-start: 0.5rem;
+  }
+
+  .coral .highlights a:hover {
+    background: var(--oranda-ink);
+    color: #fff;
+  }
+
+  .spotlight {
+    padding-block: clamp(3.5rem, 7vw, 6.5rem);
+    scroll-margin-top: 1rem;
+  }
+
+  .spotlight.tint {
+    background: var(--tint);
+  }
+
+  .spotlight.dark {
+    --muted: #c4d6d5;
+    --line: #2e474b;
+    background: var(--oranda-teal);
+    color: #e4f0ef;
+  }
+
+  .spotlight.dark a {
+    color: #ffc2a8;
+  }
+
+  .spotlight.dark a:hover {
+    color: #fff;
+  }
+
+  .spotlight.dark h2,
+  .spotlight.dark h3 {
+    color: #fff;
+  }
+
+  .spotlight-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 2.25rem;
+  }
+
+  .spotlight-head {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 52rem;
+  }
+
+  .eyebrow {
+    align-self: flex-start;
+    margin: 0;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    background: var(--oranda-coral);
+    color: var(--oranda-ink);
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  .spotlight-head h2 {
+    margin: 0;
+    font-size: clamp(2.125rem, 4.6vw, 3.75rem);
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  .spotlight-lead {
+    margin: 0;
+    font-size: clamp(1.0625rem, 1.5vw, 1.25rem);
+    text-wrap: pretty;
+  }
+
+  .points {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+    gap: 1.75rem 2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .points li {
+    padding-top: 1rem;
+    border-top: 3px solid var(--oranda-coral);
+  }
+
+  .points h3,
+  .guard h3 {
+    margin: 0 0 0.375rem;
+    font-size: 1.1875rem;
+    line-height: 1.4;
+  }
+
+  .points p {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--muted);
+    text-wrap: pretty;
+  }
+
+  .shots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+    align-items: start;
+    gap: 2rem 2.5rem;
+  }
+
+  .shot {
+    width: 100%;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  }
+
+  .guard {
+    padding: 1.5rem clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .guard ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(26rem, 100%), 1fr));
+    gap: 0.5rem 2.5rem;
+    margin: 0.75rem 0 0;
+    padding-inline-start: 1.25rem;
+  }
+
+  .guard code {
+    font-size: 0.9375em;
+  }
+
+  .spotlight-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.5rem;
+  }
+
+  .spotlight-links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    font-weight: 500;
+  }
+
+  .spotlight-note {
+    margin: -1rem 0 0;
+    font-size: 0.875rem;
     color: var(--muted);
   }
 

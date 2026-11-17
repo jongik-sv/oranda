@@ -14,6 +14,7 @@ namespace Oranda.App.Tests.Manual;
 /// 평소 시험·CI 에서는 파일을 쓰지 않는다. 켜는 방법(둘 다 필요):
 /// <c>ORANDA_MANUAL_CAPTURE=1</c> 과 <c>ORANDA_RENDER_DIR=&lt;저장소 밖 폴더&gt;</c>(후자는 헤드리스가 실제 픽셀을 그리게 하는 기존 스위치).
 /// 출력 폴더 기본값은 <c>site/src/assets/screens</c>, <c>ORANDA_MANUAL_OUT</c> 으로 바꾼다.
+/// 소개 페이지(<c>site/src/assets/landing</c>)용으로 번호 표시 없이 그리려면 <c>ORANDA_MANUAL_PLAIN=1</c> 을 더하고 다른 폴더로 내보낸 뒤 잘라 쓴다.
 /// </summary>
 internal static class ManualCapture
 {
@@ -24,6 +25,9 @@ internal static class ManualCapture
     internal static bool Enabled =>
         Environment.GetEnvironmentVariable("ORANDA_MANUAL_CAPTURE") == "1"
         && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ORANDA_RENDER_DIR"));
+
+    /// <summary>번호 표시를 얹지 않는다(소개 페이지용 캡처).</summary>
+    private static bool Plain => Environment.GetEnvironmentVariable("ORANDA_MANUAL_PLAIN") == "1";
 
     /// <summary>한 장의 크기 상한(바이트). 매뉴얼 이미지는 이 값 이하여야 한다.</summary>
     internal const int MaxBytes = 500 * 1024;
@@ -40,7 +44,7 @@ internal static class ManualCapture
         Settle(window);
 
         Control? original = null;
-        if (callouts is { Count: > 0 })
+        if (callouts is { Count: > 0 } && !Plain)
         {
             original = window.Content as Control ?? throw new InvalidOperationException("창 내용이 컨트롤이 아니다.");
             var overlay = WrapWithOverlay(window, original);
@@ -85,7 +89,7 @@ internal static class ManualCapture
     internal static string SaveOverlaid(Window window, Canvas overlay, string name, IReadOnlyList<Callout> callouts)
     {
         Settle(window);
-        foreach (var callout in callouts)
+        foreach (var callout in Plain ? [] : callouts)
         {
             AddBadge(overlay, callout);
         }
