@@ -304,7 +304,8 @@
     {"id": "oranda.window.saveLayoutAs", "page": "settings/layout"},
     {"id": "oranda.window.splitDown", "page": "settings/layout"},
     {"id": "oranda.window.splitRight", "page": "settings/layout"},
-    {"id": "oranda.window.toggleResultPane", "page": "settings/layout"}
+    {"id": "oranda.window.toggleResultPane", "page": "settings/layout"},
+    {"id": "oranda.view.changeBundle", "page": "tools/db-tools"}
   ],
   "panels": [
     {"id": "oranda.panel.aiChat", "page": "ai/chat"},
@@ -342,7 +343,8 @@
     {"id": "oranda.panel.templates", "page": "editor/assist"},
     {"id": "oranda.panel.traceViewer", "page": "plan/tuning"},
     {"id": "oranda.panel.tuningAssistant", "page": "plan/tuning"},
-    {"id": "oranda.panel.tuningStats", "page": "plan/tuning"}
+    {"id": "oranda.panel.tuningStats", "page": "plan/tuning"},
+    {"id": "oranda.panel.changeBundle", "page": "tools/db-tools"}
   ],
   "statusBar": [
     {"id": "oranda.status.blocker", "page": "tools/monitor"},
@@ -387,7 +389,9 @@
     {"id": "TableLayoutWindow", "page": "run/result-grid"},
     {"id": "TuningReportDialog", "page": "plan/tuning"},
     {"id": "TuningStartDialog", "page": "plan/tuning"},
-    {"id": "UpdateWindow", "page": "install/update"}
+    {"id": "UpdateWindow", "page": "install/update"},
+    {"id": "ChangeBundleRunWindow", "page": "tools/db-tools"},
+    {"id": "ChangeBundleSaveWindow", "page": "tools/db-tools"}
   ],
   "dialogSources": [
     {"id": "Features/Ai/Settings/AiConfirmDialog.cs", "page": "ai/commands"},
@@ -398,7 +402,8 @@
     {"id": "Features/Navigation/ObjectInfoPopup.cs", "page": "schema/browser"},
     {"id": "Features/SqlEditor/AvaloniaEditorDialogs.cs", "page": "editor/sql-editor"},
     {"id": "Features/Tuning/Report/TuningReportCommands.cs", "page": "plan/tuning"},
-    {"id": "Shell/ShellController.cs", "page": "settings/options"}
+    {"id": "Shell/ShellController.cs", "page": "settings/options"},
+    {"id": "Features/ChangeBundle/ChangeBundleDialogs.cs", "page": "tools/db-tools"}
   ],
   "settings": [
     {"id": "tab.ai", "page": "ai/models"},

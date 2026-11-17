@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Oranda.App.Features.ChangeBundle"
+        x:Class="Oranda.App.Features.ChangeBundle.ChangeBundleSaveWindow"
+        x:DataType="vm:ChangeBundleSaveViewModel"
+        Title="의뢰용 스크립트 저장"
+        Width="560" SizeToContent="Height" MinWidth="440"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <Window.Styles>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Opacity" Value="0.65" />
+    </Style>
+  </Window.Styles>
+  <StackPanel Margin="16" Spacing="10">
+    <TextBlock FontWeight="SemiBold" Text="{Binding HeaderText}" />
+    <TextBlock Classes="hint" TextWrapping="Wrap"
+               Text="체크한 문장만 화면 순서대로 .sql 한 파일에 쓴다(UTF-8, 머리 주석: 묶음 이름·만든 날짜·대상 DBMS·문장 수). 접속 이름·호스트는 넣지 않는다." />
+    <!-- 소유자 바꾸기(TE-22). -->
+    <StackPanel Spacing="4" IsVisible="{Binding HasOwnerMap}">
+      <TextBlock Text="소유자 바꾸기" />
+      <TextBlock Classes="hint" TextWrapping="Wrap" Text="문장 안의 소유자 한정 이름만 바꿔 쓴다(문자열·주석 안은 그대로)." />
+      <ItemsControl ItemsSource="{Binding OwnerMap}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:OwnerMapRow">
+            <Grid ColumnDefinitions="160,Auto,*" ColumnSpacing="8" Margin="0,2">
+              <TextBlock VerticalAlignment="Center" Classes="mono" Text="{Binding From}" />
+              <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="→" />
+              <TextBox Grid.Column="2" Classes="compact" Text="{Binding To, Mode=TwoWay}" AutomationProperties.Name="바꿀 소유자" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+    <TextBlock TextWrapping="Wrap" Text="{Binding OwnerWarningText}" IsVisible="{Binding HasOwnerWarning}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="SaveButton" Content="저장…" IsEnabled="{Binding CanSave}" IsDefault="True" />
+      <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

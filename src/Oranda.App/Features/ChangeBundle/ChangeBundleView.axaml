@@ -1,0 +1,112 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:Oranda.App.Shell.Icons"
+             xmlns:ctl="using:Oranda.App.Shell.Controls"
+             xmlns:cb="using:Oranda.Core.ChangeBundle"
+             xmlns:vm="using:Oranda.App.Features.ChangeBundle"
+             x:Class="Oranda.App.Features.ChangeBundle.ChangeBundleView"
+             x:DataType="vm:ChangeBundleViewModel">
+  <UserControl.Styles>
+    <!-- 체크 해제 줄은 흐리게(설계 9.2). -->
+    <Style Selector="Grid.bundle-row.dimmed">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+    <Style Selector="Border.notice">
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconBlueBrush}" />
+    </Style>
+    <Style Selector="Border.notice > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconBlueBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <!-- 제목줄: 지금 묶음 고르기 · ＋ · 이름 바꾸기 · 지우기 · 대상 소유자 · 넣은 건수(잠깐). -->
+    <Border x:Name="TitleBar" DockPanel.Dock="Top" Classes="panel-toolbar">
+      <WrapPanel>
+        <TextBlock Text="지금 묶음" VerticalAlignment="Center" Margin="0,0,6,0" />
+        <ComboBox x:Name="BundleBox" Classes="compact" MinWidth="200" Margin="0,0,4,0" VerticalAlignment="Center"
+                  ItemsSource="{Binding Bundles}" SelectedItem="{Binding CurrentBundle, Mode=TwoWay}" AutomationProperties.Name="지금 묶음"
+                  PlaceholderText="묶음 없음">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="cb:ChangeBundleInfo">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Classes="toolbar" x:Name="NewBundleButton" Content="새 묶음" icons:ButtonIcon.Key="add" icons:ButtonIcon.IconOnly="True"
+                ToolTip.Tip="새 묶음(지금 묶음이 된다)" />
+        <Button Classes="toolbar" x:Name="RenameBundleButton" Content="이름 바꾸기" icons:ButtonIcon.Key="rename" icons:ButtonIcon.IconOnly="True"
+                IsEnabled="{Binding HasBundle}" ToolTip.Tip="이름 바꾸기" />
+        <Button Classes="toolbar" x:Name="DeleteBundleButton" Content="묶음 지우기" icons:ButtonIcon.Key="delete" icons:ButtonIcon.IconOnly="True"
+                IsEnabled="{Binding HasBundle}" ToolTip.Tip="묶음 지우기" />
+        <Separator Classes="toolbar" />
+        <Button Classes="toolbar" x:Name="OwnersButton" Content="{Binding TargetOwnersText}" IsVisible="{Binding HasBundle}"
+                ToolTip.Tip="대상 소유자 고치기 — 이 소유자의 객체를 바꾸는 DDL 만 자동으로 넣는다" />
+        <Border Classes="notice" Margin="6,0,0,0" IsVisible="{Binding HasNotice}">
+          <TextBlock Text="{Binding NoticeText}" />
+        </Border>
+      </WrapPanel>
+    </Border>
+    <!-- 도구줄: ↑ ↓ · － · 실행… · 의뢰용 스크립트 저장… · 오른쪽에 대상 DBMS. -->
+    <Border x:Name="Toolbar" DockPanel.Dock="Top" Classes="panel-toolbar">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Classes="dim" VerticalAlignment="Center" Margin="6,0" Text="{Binding DbmsText}" />
+        <WrapPanel>
+          <Button Classes="toolbar" x:Name="UpButton" Content="위로" icons:ButtonIcon.Key="up" icons:ButtonIcon.IconOnly="True"
+                  IsEnabled="{Binding HasSelection}" ToolTip.Tip="위로" />
+          <Button Classes="toolbar" x:Name="DownButton" Content="아래로" icons:ButtonIcon.Key="down" icons:ButtonIcon.IconOnly="True"
+                  IsEnabled="{Binding HasSelection}" ToolTip.Tip="아래로" />
+          <Button Classes="toolbar" x:Name="RemoveButton" Content="문장 지우기" icons:ButtonIcon.Key="remove" icons:ButtonIcon.IconOnly="True"
+                  IsEnabled="{Binding HasSelection}" ToolTip.Tip="문장 지우기" />
+          <Separator Classes="toolbar" />
+          <Button Classes="toolbar" x:Name="RunButton" Content="실행…" icons:ButtonIcon.Key="run" IsEnabled="{Binding CanRunOrSave}"
+                  ToolTip.Tip="체크한 문장을 고른 접속에 순서대로 실행" />
+          <Button Classes="toolbar" x:Name="SaveButton" Content="의뢰용 스크립트 저장…" icons:ButtonIcon.Key="save" IsEnabled="{Binding CanRunOrSave}"
+                  ToolTip.Tip="체크한 문장을 .sql 한 파일로 저장" />
+        </WrapPanel>
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Classes="panel-status">
+      <TextBlock Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
+    </Border>
+    <!-- 표: 체크 | # | 문장(한 줄 요약, 두 번 누르면 전문) | 출처 | 개발 | 테스트 | 운영. 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns). -->
+    <DockPanel ctl:TableColumns.Scope="change-bundle">
+      <Border DockPanel.Dock="Top" Classes="grid-header">
+        <Grid ctl:TableColumns.Header="True" ColumnDefinitions="34,40,*,96,72,72,72">
+          <TextBlock Grid.Column="1" Padding="6,0" Text="#" />
+          <TextBlock Grid.Column="2" Padding="6,0" Text="문장" />
+          <TextBlock Grid.Column="3" Padding="6,0" Text="출처" />
+          <TextBlock Grid.Column="4" Padding="6,0" Text="개발" />
+          <TextBlock Grid.Column="5" Padding="6,0" Text="테스트" />
+          <TextBlock Grid.Column="6" Padding="6,0" Text="운영" />
+        </Grid>
+      </Border>
+      <ListBox x:Name="List" Classes="table" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="반영 묶음 문장">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ChangeBundleRow">
+            <Grid Classes="bundle-row" Classes.dimmed="{Binding IsDimmed}" ctl:TableColumns.Row="True" ColumnDefinitions="34,40,*,96,72,72,72"
+                  ToolTip.Tip="{Binding ToolTipText}">
+              <CheckBox Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center" IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                        AutomationProperties.Name="체크" />
+              <TextBlock Grid.Column="1" Padding="6,0" VerticalAlignment="Center" Classes="mono dim" Text="{Binding NumberText}" />
+              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="6,0,10,0" VerticalAlignment="Center">
+                <ContentControl VerticalAlignment="Center" IsVisible="{Binding HasWarning}"
+                                Content="{Binding Source='warn', Converter={x:Static icons:IconKeyConverter.Instance}, ConverterParameter=13}" />
+                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="mono" Text="{Binding SummaryText}" />
+              </StackPanel>
+              <TextBlock Grid.Column="3" Padding="6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding SourceText}" />
+              <TextBlock Grid.Column="4" Padding="6,0" VerticalAlignment="Center" Classes="mono" Text="{Binding DevelopmentText}" />
+              <TextBlock Grid.Column="5" Padding="6,0" VerticalAlignment="Center" Classes="mono" Text="{Binding TestText}" />
+              <TextBlock Grid.Column="6" Padding="6,0" VerticalAlignment="Center" Classes="mono" Text="{Binding ProductionText}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+  </DockPanel>
+</UserControl>

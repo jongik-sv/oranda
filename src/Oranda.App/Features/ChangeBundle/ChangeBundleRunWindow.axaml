@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Oranda.App.Features.ChangeBundle"
+        x:Class="Oranda.App.Features.ChangeBundle.ChangeBundleRunWindow"
+        x:DataType="vm:ChangeBundleRunViewModel"
+        Title="묶음 실행"
+        Width="560" SizeToContent="Height" MinWidth="440"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontSize="{DynamicResource OrandaFontSizeBase}">
+  <Window.Styles>
+    <Style Selector="TextBlock.danger">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <!-- DBMS 가 다른 접속은 고를 수 없다(TE-23). -->
+    <Style Selector="ComboBox#ConnectionBox ComboBoxItem" x:DataType="vm:ChangeBundleConnection">
+      <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Opacity" Value="0.65" />
+    </Style>
+  </Window.Styles>
+  <StackPanel Margin="16" Spacing="10">
+    <TextBlock FontWeight="SemiBold" Text="{Binding HeaderText}" />
+    <!-- 접속: 지금 열린 접속, 기본은 묶음 DBMS 와 같은 테스트 접속(TE-15). DBMS 가 다르면 고를 수 없다(TE-23). -->
+    <StackPanel Spacing="4">
+      <TextBlock Text="실행할 접속" />
+      <ComboBox x:Name="ConnectionBox" HorizontalAlignment="Stretch" ItemsSource="{Binding Connections}"
+                SelectedItem="{Binding SelectedConnection, Mode=TwoWay}" AutomationProperties.Name="실행할 접속">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ChangeBundleConnection">
+            <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <TextBlock Classes="danger" TextWrapping="Wrap" IsVisible="{Binding IsProduction}"
+                 Text="운영 접속이다. 정책에 따라 실행 전에 확인을 받는다." />
+    </StackPanel>
+    <!-- 소유자 바꾸기(TE-22): 테스트·운영의 스키마 이름이 개발과 다를 때. 문자열·주석 안은 그대로. -->
+    <StackPanel Spacing="4" IsVisible="{Binding HasOwnerMap}">
+      <TextBlock Text="소유자 바꾸기" />
+      <TextBlock Classes="hint" TextWrapping="Wrap" Text="문장 안의 소유자 한정 이름만 바꿔 실행한다(문자열·주석 안은 그대로)." />
+      <ItemsControl ItemsSource="{Binding OwnerMap}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:OwnerMapRow">
+            <Grid ColumnDefinitions="160,Auto,*" ColumnSpacing="8" Margin="0,2">
+              <TextBlock VerticalAlignment="Center" Classes="mono" Text="{Binding From}" />
+              <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="→" />
+              <TextBox Grid.Column="2" Classes="compact" Text="{Binding To, Mode=TwoWay}" AutomationProperties.Name="바꿀 소유자" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+    <TextBlock TextWrapping="Wrap" Text="{Binding OwnerWarningText}" IsVisible="{Binding HasOwnerWarning}" />
+    <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="RunButton" Content="실행" IsEnabled="{Binding CanRun}" />
+      <Button x:Name="CloseButton" Content="{Binding CloseText}" IsCancel="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

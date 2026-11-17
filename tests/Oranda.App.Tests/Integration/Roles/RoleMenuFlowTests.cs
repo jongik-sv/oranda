@@ -131,7 +131,7 @@ public sealed class RoleMenuFlowTests
                 Assert.Empty(first.RegistryCommands.Intersect(mybatisCommands));
                 Assert.Empty(first.PendingRestart);
                 Assert.Equal(PrdMatrix.ExpectedTasks(PrdMatrix.Enabled(["sqlDev"])).Order(), first.StartupTasks.Order());
-                Assert.Equal(15, first.StartupTasks.Count); // + 반영 묶음 자동 넣기 ChangeBundleRecorder(2026-11-17)
+                Assert.Equal(16, first.StartupTasks.Count); // + 반영 묶음 자동 넣기 ChangeBundleRecorder·알림 ChangeBundleNotices(2026-11-17)
                 Assert.DoesNotContain(first.StartupTasks, t => PrdMatrix.MyBatisTasks.Contains(t));
                 Assert.DoesNotContain("MapperSaveStatusViewModel", first.StatusTypes);
                 Assert.Contains("BlockerStatusViewModel", first.StatusTypes);
@@ -145,9 +145,9 @@ public sealed class RoleMenuFlowTests
                 {
                     await Oranda.App.App.RunStartupTasksAsync(app.Services, run, Oranda.Core.Composition.StartupPhase.AfterFirstFrame);
                     await Oranda.App.App.RunStartupTasksAsync(app.Services, run, null);
-                    Assert.Equal(15, run.Ran.Count); // + ChangeBundleRecorder(2026-11-17)
+                    Assert.Equal(16, run.Ran.Count); // + ChangeBundleRecorder·ChangeBundleNotices(2026-11-17)
                     Assert.Equal(5 + OptInItems.StartupTaskNames.Count, run.Skipped.Count);
-                    Assert.Contains(trace.Lines, l => l.Contains($"시작 작업: 돈 15개, 건너뜀 {5 + OptInItems.StartupTaskNames.Count}개", StringComparison.Ordinal));
+                    Assert.Contains(trace.Lines, l => l.Contains($"시작 작업: 돈 16개, 건너뜀 {5 + OptInItems.StartupTaskNames.Count}개", StringComparison.Ordinal));
                 }
 
                 Assert.Same(MyBatisHooks.Empty, Oranda.App.Features.SqlEditor.SqlEditorHost.Current.MyBatisHooks); // MyBatis 배선이 돌지 않았다
@@ -190,7 +190,7 @@ public sealed class RoleMenuFlowTests
                 Assert.Empty(s.PendingRestart);
                 Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());
                 Assert.Equal(11, s.TopMenus.Count);
-                Assert.Equal(20, s.StartupTasks.Count); // + 반영 묶음 자동 넣기 ChangeBundleRecorder(2026-11-17)
+                Assert.Equal(21, s.StartupTasks.Count); // + 반영 묶음 자동 넣기 ChangeBundleRecorder·알림 ChangeBundleNotices(2026-11-17)
                 Assert.Equal(10, s.StatusTypes.Count);
                 Assert.Subset(s.RegistryCommands, mybatisCommands.ToHashSet(StringComparer.Ordinal));
                 Assert.Contains("MapperSaveStatusViewModel", s.StatusTypes);

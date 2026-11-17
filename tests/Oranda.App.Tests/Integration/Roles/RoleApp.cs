@@ -168,7 +168,7 @@ internal static class PrdMatrix
     [
         "EditorDiagnosticsStartup", "MyBatisConvertReady", "MyBatisFolderReadyTask", "MyBatisWorkspaceWiring", "MapperWatchStartup",
         "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
-        "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "ChangeBundleRecorder", "PlSqlWarmUpTask",
+        "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "ChangeBundleRecorder", "ChangeBundleNotices", "PlSqlWarmUpTask",
         "SessionsAutoShow", "MetadataCachePruner", "RollbackMaintenance",
         "AiContextKeys", "AgentBridgeStartup", // aiTuning(2026-10-29 기본 켬)
     ];
@@ -181,7 +181,7 @@ internal static class PrdMatrix
             "MyBatisConvertReady" or "MyBatisFolderReadyTask" or "MyBatisWorkspaceWiring" or "MapperWatchStartup" => on.Contains("myBatis"),
             "PlsqlWorkspacePersistence" => on.Contains("plsqlEditor"),
             "ChangeJournalRecorder" => on.Contains("changeJournal"),
-            "ChangeBundleRecorder" => on.Contains("changeBundle"), // 반영 묶음 자동 넣기(2026-11-17)
+            "ChangeBundleRecorder" or "ChangeBundleNotices" => on.Contains("changeBundle"), // 반영 묶음 자동 넣기·알림(2026-11-17)
             "AiContextKeys" or "AgentBridgeStartup" => on.Contains("aiTuning"),
             _ => true,
         }),

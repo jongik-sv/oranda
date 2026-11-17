@@ -39,15 +39,15 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     internal static readonly Dictionary<string, Config> Configs = new(StringComparer.Ordinal)
     {
-        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 285, 11, ["view/도구 창=17", "sql=27", "result=18", "database=24", "monitor=21", "tuning=24"], 18, 21, 21, 5, 17, 234, 303, 275, 11),
-        ["none(default-R1)"] = new(null, 215, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 201, 225, 210, 10),
-        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 215, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 14, 201, 225, 210, 10),
-        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 229, 10, ["sql=24", "result=18", "database=21"], 18, 19, 19, 5, 15, 209, 239, 220, 10),
-        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 221, 10, ["view/도구 창=16", "sql=26", "result=17"], 17, 17, 17, 5, 16, 198, 237, 217, 10),
+        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 287, 11, ["view/도구 창=18", "sql=27", "result=18", "database=24", "monitor=21", "tuning=24"], 18, 21, 21, 5, 18, 235, 304, 275, 11),
+        ["none(default-R1)"] = new(null, 217, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 202, 226, 210, 10),
+        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 217, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 202, 226, 210, 10),
+        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 231, 10, ["view/도구 창=16", "sql=24", "result=18", "database=21"], 18, 19, 19, 5, 16, 210, 240, 220, 10),
+        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 223, 10, ["view/도구 창=17", "sql=26", "result=17"], 17, 17, 17, 5, 17, 199, 238, 217, 10),
         ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 248, 11, ["sql=23", "result=16", "database=19", "monitor=21", "tuning=24"], 16, 21, 21, 5, 14, 208, 258, 240, 11),
-        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 267, 11, ["sql=24", "result=18", "database=23", "monitor=21", "tuning=21"], 18, 21, 21, 5, 15, 225, 277, 257, 11),
+        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 269, 11, ["view/도구 창=16", "sql=24", "result=18", "database=23", "monitor=21", "tuning=21"], 18, 21, 21, 5, 16, 226, 278, 257, 11),
         ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 186, 9, ["sql=22", "result=16"], 16, 14, 16, 5, 12, 172, 196, 184, 9),
-        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 267, 11, ["sql=24", "result=18", "database=21", "monitor=21", "tuning=24"], 18, 21, 21, 5, 15, 226, 279, 258, 11),
+        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 269, 11, ["view/도구 창=16", "sql=24", "result=18", "database=21", "monitor=21", "tuning=24"], 18, 21, 21, 5, 16, 227, 280, 258, 11),
         // AI 튜닝 기본 켬(2026-10-29): 조회 전용(R6)·Role 0개를 뺀 구성은 툴바 AI 단추 1·튜닝 메뉴 「AI 튜닝」 1·보기 > 도구 창 ▸ AI 대화 토글 1(항목 +2, 툴바 +1, 도구 창 등록 +1, 팔레트 +5).
         // TSK-14-17: SQL 모니터 기능이 있는 구성(all-features·R4·R5·R1+R4)은 튜닝 메뉴 「튜닝 추천」 한 줄이 늘었다(항목·tuning·SQL 탭·팔레트 +1).
         // 실행하고 실제 계획(oranda.plan.runActual): 툴바 +1·튜닝 메뉴 +1(튜닝 메뉴가 없는 R6·roles-empty 는 항목 그대로)·팔레트 +1.
@@ -62,6 +62,7 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
         // 원복 스크립트 열기·원복 실행(oranda.rollback.openScript·runScript, 메뉴 없음, 되돌리기 지점 RB-43): 모든 구성의 팔레트 +2.
         // 이 실행 전과 비교(oranda.rollback.compare, 메뉴 없음, 되돌리기 지점 RB-32): 모든 구성의 팔레트 +1.
         // 이 행 상태로 되돌리기(oranda.grid.flashback.restoreRow, fb-w1): 결과 ▸ 플래시백 ▸ 한 줄 — 플래시백이 있는 구성(all-features·none·R1·R2·R5·R1+R4)의 항목·SQL 탭·팔레트 +1.
+        // 반영 묶음(oranda.view.changeBundle·oranda.panel.changeBundle, 2026-11-17 te-bundle T9): 도구 ▸ 「반영 묶음」 1 + 보기 > 도구 창 ▸ 토글 1 — changeBundle 이 켜진 구성(all-features·none·R1·R2·R3·R5·R1+R4)의 항목 +2·도구 창 등록·SQL 탭·팔레트 +1, 보기 > 도구 창 ▸ +1(R2·R5·R1+R4 는 16줄이 되어 15넘음 +1).
         ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 179, 9, ["sql=22"], 12, 16, 16, 5, 11, 168, 189, 176, 9),
     };
 
@@ -170,6 +171,7 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
             var templates = registry.Find("oranda.view.templates") is not null ? 1 : 0;
             var reset = registry.Find("oranda.view.resetLayout") is not null ? 1 : 0;
             var recommend = registry.Find("oranda.tuning.recommend") is not null ? 1 : 0; // TSK-14-17 튜닝 메뉴 「튜닝 추천」(SQL 모니터 기능이 있는 구성만)
+            recommend += registry.Find("oranda.view.changeBundle") is not null ? 2 : 0; // 반영 묶음: 도구 ▸ 「반영 묶음」·보기 > 도구 창 ▸ 토글(changeBundle 이 있는 구성만, 조사 뒤 추가 2026-11-17)
             recommend += registry.Find("oranda.grid.flashback.restoreRow") is not null ? 1 : 0; // fb-w1 결과 ▸ 플래시백 ▸ 「이 행 상태로 되돌리기…」(플래시백이 있는 구성만, 조사 뒤 추가)
             var sql = TopOf(app, bar, "sql");
             var sub = sql.Children.SingleOrDefault(c => c.Kind == MenuNodeKind.Submenu && c.Key == "Menu.sql.plsql");
@@ -203,8 +205,8 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
         Assert.Equal(["oranda.panel.extensionTest"], devPanels);
         Assert.Equal(release.Count, dev.Count);
-        Assert.Contains(release, w => w == "view/도구 창=17");
-        Assert.Contains(dev, w => w == "view/도구 창=18");
+        Assert.Contains(release, w => w == "view/도구 창=18"); // + 반영 묶음 토글(2026-11-17)
+        Assert.Contains(dev, w => w == "view/도구 창=19");
     });
 
     /// <summary>설정 「기능」 탭 첫 화면 입력 칸(라디오·확인란·단추·고급 머리 토글): 조사 33 → 10 이하(PRD 13.5).</summary>

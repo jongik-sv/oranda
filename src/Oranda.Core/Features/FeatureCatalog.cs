@@ -96,6 +96,7 @@ public static class FeatureCatalog
         new("DedicatedSession", FeatureIds.DedicatedSession),
         new("Flashback", FeatureIds.Flashback),
         new("ChangeJournal", FeatureIds.ChangeJournal),
+        new("ChangeBundle", FeatureIds.ChangeBundle),
         new("TableSpec", FeatureIds.TableSpec),
         new("MyBatisLog", FeatureIds.MyBatisLog),
         new("PlsqlEditor", FeatureIds.PlsqlEditor),
