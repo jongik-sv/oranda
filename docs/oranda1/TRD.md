@@ -127,6 +127,8 @@
 | `BlockerAlert` | `blockerAlert` |
 | `DbTools` | `dbTools` |
 | `ColumnReorder` | `columnReorder` |
+| `TableEdit` | `tableEditor` (2026-11-17, 테이블 편집기·새 테이블 탭) |
+| `ChangeBundle` | `changeBundle` (2026-11-17, 반영 묶음 창·알림) |
 
 | 덮어쓰기 대상 | 기능 id | 이유 |
 |---|---|---|

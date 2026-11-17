@@ -382,6 +382,71 @@ Oracle 실측에서 더한 규칙: 기준(BYTE/CHAR)을 쓰지 않은 MODIFY 는
 | TE-36 | 2차 범위를 같은 회차에 넣음(18장). TE-1(자동 변환·특수 테이블)·TE-7·TE-9·TE-10 을 18장 규칙으로 뒤집음 |
 | TE-37 | 2차 기능은 첫판과 같은 화면 규칙. Tibero 가 지원하지 않는 것은 실측으로 확인하고 흐리게 + 이유(18.8) |
 
+### 16.1 구현 중 결정 (2026-11-17 회차 `table-editor`, 레인이 정하고 조정자가 기록)
+
+사용자에게 묻지 않고 정했다(2026-11-17 지시). 뒤집을 수 있다. 회차 `WBS.md` 「이슈·결정」과 같은 목록이다.
+
+| 레인 | 무엇 | 결정 |
+|---|---|---|
+| te-core | PC 배치 | win30 이 더 빠름(사용자) → 화면 레인 te-w30-ui 를 win30 에, 전체 시험도 win30 대행 |
+| te-core | TE-5 남은 문장 | Core TableDraftRebase.Rebase(oldOriginal, edited, newOriginal), 이름으로 맞춤 |
+| te-core | 새 줄 키 | DraftKeys.New() 만 씀 |
+| te-core | 정밀도·소수 줄이기 검사 | NULL 아닌 행 있으면 ✖(ORA-01440·TBR-7238) |
+| te-core | 형식 계열 | VARCHAR2↔CHAR·NVARCHAR2↔NCHAR 같은 계열, 그 밖은 데이터 있으면 ✖ |
+| te-core | NOT NULL 새 열 | 기본값 없고 행 있으면 ✖(ORA-01758) |
+| te-core | 검사 SQL | Core TableEditCheckSql(WHERE 조각 + CountSql·RowsSql) 를 T3·T4 가 씀 |
+| te-core | 열 이름 맞바꾸기 | 임시 이름 A$1 을 거침 |
+| te-w30-probe | Tibero 정규화 | 방언 자체 구현, 서버 괄호·CONCAT 은 지우지 않음 |
+| te-w30-probe | Tibero NumRows | LAST_ANALYZED NULL 이면 null |
+| te-w30-probe | Tibero 가상 식 칸 | 흐리게 하지 않고 DROP+ADD ⚠ 경로, 이유 키는 ⚠ 문구로 |
+| te-core | 파티션 Core 담당 | te-core → win30 te-w30-probe(T14), win30 이 빠르고 te-core 부담 큼 |
+| te-core | TE-5 서명 | Rebase(oldOriginal, edited, script, applied, newOriginal), applied=앞에서 성공한 문장 수 |
+| te-w30-ui | TE-UI-1 편집 표 | 새 컨트롤 TableEditView, DetailTable 은 표시 전용 그대로, 칸 벗어날 때 반영 |
+| te-w30-ui | TE-UI-2 엔진 | Core 를 ITableEditEngine(App) 뒤로 |
+| te-w30-ui | TE-UI-5 TE-34 꼴 | ConfirmBatchAsync(stmts, decision, findings, ct)→bool, ConfirmExtras.Batch·Findings |
+| te-w30-ui | TE-UI-6 테스트 접속 ⚠ | 확인 창 한 번, 개발은 줄만, 운영은 SAFE-03 창 안 |
+| te-w30-ui | TE-UI-7 미커밋 변경 | 실행 전에 물음(DDL 이 커밋함), 실행 세션 = SessionRouter.ForTool |
+| te-bundle | TB-1 묶음 형 이름 | ChangeBundleInfo(네임스페이스 겹침) |
+| te-bundle | TB-3 history CHECK | 0006 에서 TableEditor·ChangeBundle·DataCopy 더함(DataCopy 이력이 버려지던 기존 결함 고침) |
+| te-bundle | TB-5 묶음 문장 가리기 | ISecretRedactor 로 가림, 가렸으면 ⚠ SecretRedacted |
+| te-bundle | TB-6 자동 넣기 제외 | SkipHistory·ALTER SESSION/SYSTEM 도 제외 |
+| te-bundle | TB-7 현재 스키마 | 접속 사용자 + 성공한 ALTER SESSION SET CURRENT_SCHEMA 를 따라감 |
+| te-bundle | TB-9 해시 정규화 | 앞뒤 공백·끝 ; 제거·공백 덩어리 하나, 리터럴·따옴표 이름·주석 안 그대로 |
+| te-bundle | TB-10 기능 id | changeBundle 먼저, tableEditor 는 화면 명령 생길 때(te-w30-ui) |
+| te-bundle | Oracle DESC 인덱스 | 공급자가 원래 열 이름 + Expressions, IndexType 은 사전 값 그대로 |
+| te-l1 | Linux 활용 | tmux 레인 te-l1 에 T16 작업 저장(저장소·직렬화·자동 저장 서비스), DB 없는 단위 시험만 |
+| te-l1 | TE-43 저장분 소유 | table_draft 에 open_by(<pid>@<시작초>) 더함, 한 저장분은 한 앱 인스턴스만 쥠, 끝난 인스턴스 것 = 작업 공간 복원, 놓인 것 = 소유자 메뉴 |
+| te-l1 | table_draft id | AUTOINCREMENT(지운 id 재사용 막음) |
+| te-l1 | 작업 저장 JSON | TableDraft 그대로 소스 생성, 읽기 엄격(이상하면 되살리지 않음), 모르는 칸 무시 |
+| te-l1 | 자동 저장 | TableDraftAutosave 30초, 같은 JSON 이면 안 씀, 앱 끌 때는 쥔 채 남김 |
+| te-core | 저장 값 의미 | 편집 모델 저장 값 = 바꿀 값, null·같은 값 = 문장 없음 |
+| te-bundle | TB-12 묶음 알림 | 시작 작업 ChangeBundleNotices: DBMS 다름 = 메시지 창 한 줄, 넣음 = 탭 제목 (+N) 4초 |
+| te-bundle | TB-13 메뉴 | 도구 @51(변경 일지 아래) |
+| te-bundle | TB-14 가린 비밀 문장 | 실행 막고 안내, 의뢰 스크립트 저장은 허용 + ⚠ |
+| te-bundle | TB-15·16 문장 고치기 | 분리기로 한 문장만, 실행·저장 = 분리기 글 |
+| te-bundle | TB-17 실행… 접속 | 열린 접속, 기본 = 같은 DBMS 테스트 접속, 다른 DBMS 비활성, SessionRouter.ForTool |
+| te-bundle | TB-18 대상 소유자 입력 | 쉼표 목록, 따옴표 이름 보호 |
+| te-bundle | tableEditor 기능 id | 첫 등록 항목(새 테이블 명령, te-w30-probe T8)과 같이 넣음 |
+| te-oracle | 자동 변환 3단계 보호 | UPDATE 뒤 바뀐 행 있으면 ORA-20990 으로 멈추는 확인 블록 → DROP COLUMN CASCADE CONSTRAINTS |
+| te-oracle | 변환 검사 | Oracle 12.2+ VALIDATE_CONVERSION, 그 밖 PL/SQL 500행씩 + 실패 행 ROWID 100개 |
+| te-oracle | 결함 고침 | Oracle meta.constraints 가 IS NOT NULL 로 끝나는 CHECK 를 모두 빼던 것 → 서버 꼴만 뺌 |
+| te-w30-ui | TE-UI-13 tableEditor 기본 켬 | sqlDev·plsqlDev·myBatisDev·dba(tuner·viewer 끔) |
+| te-w30-ui | 파티션 문장 위치 | 테이블 문장 뒤, RENAME TO·규칙 이름 바꾸기 앞 |
+| te-w30-ui | 특수 테이블 편집 범위 | GTT·IOT = 열 추가·지우기·이름, 외부·클러스터 = 열 주석·기본값, 테이블 주석은 모두 |
+| te-bundle | TB-20 묶음 검사 범위 | ChangeBundleCheckPlanner 작은 토크나이저: MODIFY 길이·NOT NULL, ADD PK/UK/FK/CHECK, DROP 계열 ⚠, 그 밖은 검사 없이 |
+| te-bundle | TB-21 앞 문장이 바꾼 테이블 | 뒤 문장 데이터 검사 안 하고 ⚠ 확인 못 함 |
+| te-bundle | TB-22 기준 없는 MODIFY | 글자 수로 셈 |
+| te-bundle | TB-23 묶음 실행 흐름 | TableEditRunner 와 같음, 테스트·운영 ⚠ = 창 안 검사 줄 + 그래도 실행 두 번째 누름 |
+| te-oracle | Tibero 변환 검사 | VALIDATE_CONVERSION 없음 → 늘 PL/SQL 행 시험 |
+| te-oracle | 결함 고침 Tibero FBI | DROP COLUMN CASCADE 뒤 남는 함수 기반 인덱스를 지우는 블록을 3단계에 더함 |
+| te-oracle | 결함 고침 NOT NULL 판정 | 서버 꼴 "열" IS NOT NULL 정확히만 뺌(Core·Oracle·Tibero) |
+| te-l1 | T11 준비 중 상자 | 화면 없는 기능 절은 :::caution[준비 중], 화면 머지 뒤 지움 |
+| te-l1 | T11 그림 자리 | HTML 주석 자리, win30 이 찍은 뒤 링크로 |
+| te-l1 | idea.md 1장 | 테이블 구조 편집기를 「이미 한 것」 표로 옮김 |
+| te-l1 | 작업 저장 JSON 파티션 | 새 테이블은 파티션 안 함 → 저장분에 파티션 없음 |
+| te-w30-ui | TE-UI-16 변환 실행 출처 | SchemaBrowser(자동 넣기 밖) + 성공 뒤 계획 전체를 묶음에 직접 넣음 |
+| te-w30-ui | 화면 → Core 서버 전달 | Build(..., server) 로 ONLINE·UPDATE INDEXES·SECUREFILE 판정 |
+
 ## 17. 빌더 점검 결과 (2026-11-17)
 
 빌더 점검 질문 다섯 개를 이렇게 정리했다. 사용자는 1·2·4번을 「알아서 진행해」로 설계자에게 맡겼다.
@@ -436,7 +501,8 @@ Oracle 실측에서 더한 규칙: 기준(BYTE/CHAR)을 쓰지 않은 MODIFY 는
 - 식은 가상 식처럼 서버 표기로 정규화해 거짓 차이를 막는다.
 
 ### 18.7 새 테이블 작업 저장 (TE-10 뒤집음)
-- 「✎ 새 테이블」 탭의 편집 모델을 `oranda.db` 표 `table_draft`(마이그레이션 `0007_table_draft.sql`: id, 접속 이름, DBMS, 소유자, 이름, 모델 JSON, 고친 때)에 30초마다·탭을 닫을 때 저장한다. 앱을 다시 켜면 작업 공간 복원 때 그 탭을 되살린다. 실행이 성공하거나 사용자가 「버리기」를 고르면 지운다.
+- 「✎ 새 테이블」 탭의 편집 모델을 `oranda.db` 표 `table_draft`(마이그레이션 `0007_table_draft.sql`: id(AUTOINCREMENT), 접속 이름, DBMS, 소유자, 이름, 모델 JSON, 고친 때, 연 인스턴스 `open_by`)에 30초마다·탭을 닫을 때 저장한다. 앱을 다시 켜면 작업 공간 복원 때 그 탭을 되살린다. 실행이 성공하거나 사용자가 「버리기」를 고르면 지운다.
+- 한 저장분은 한 앱 인스턴스만 쥔다(`open_by` = `<pid>@<시작 시각>`). 열린 채 끝난 인스턴스의 저장분은 작업 공간 복원으로, 놓인 것(「남겨 두기」)은 소유자 노드 메뉴로 연다. 같은 oranda.db 를 두 앱이 써도 서로 덮어쓰지 않는다 **[구현 결정, te-l1]**.
 - 닫기 확인은 「버리기 / 남겨 두기 / 취소」. 남겨 둔 것은 스키마 브라우저 소유자 노드 오른쪽 클릭 「만들던 새 테이블…」로 다시 연다 **[TE-43]**.
 
 ### 18.8 Tibero·구버전에서 안 되는 것
