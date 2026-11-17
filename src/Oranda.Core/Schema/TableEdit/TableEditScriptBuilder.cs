@@ -476,19 +476,28 @@ public static class TableEditScriptBuilder
             }
 
             var compression = changes.Storage.HasFlag(StorageChange.Compression) && e.Compression is not TableCompression.Other;
-            var moves = move.Count > 0 || compression || lobs.Count > 0;
+
+            // Tibero 는 MOVE 가 PCTFREE·INITRANS·압축을 반영하지 않는다 → 이 셋은 MOVE 앞 ALTER 로(TableEditDefaults.MoveCarriesAttributes).
+            var carries = TableEditDefaults.MoveCarriesAttributes(dialect.Dbms);
+            var moves = move.Count > 0 || (compression && carries) || lobs.Count > 0;
+            var inMove = moves && carries;
 
             var attributes = new List<string>();
-            var pctFree = changes.Storage.HasFlag(StorageChange.PctFree) ? e.PctFree : moves ? o.PctFree : null;
+            var pctFree = changes.Storage.HasFlag(StorageChange.PctFree) ? e.PctFree : inMove ? o.PctFree : null;
             if (pctFree is { } p)
             {
-                (moves ? move : attributes).Add("PCTFREE " + Num(p));
+                (inMove ? move : attributes).Add("PCTFREE " + Num(p));
             }
 
-            var initTrans = changes.Storage.HasFlag(StorageChange.InitTrans) ? e.InitTrans : moves && o.InitTrans is not (null or 1) ? o.InitTrans : null;
+            var initTrans = changes.Storage.HasFlag(StorageChange.InitTrans) ? e.InitTrans : inMove && o.InitTrans is not (null or 1) ? o.InitTrans : null;
             if (initTrans is { } t)
             {
-                (moves ? move : attributes).Add("INITRANS " + Num(t));
+                (inMove ? move : attributes).Add("INITRANS " + Num(t));
+            }
+
+            if (compression && !carries)
+            {
+                attributes.Add(dialect.CompressionClause(e.Compression!.Value, server));
             }
 
             if (changes.Storage.HasFlag(StorageChange.Logging))
@@ -506,7 +515,7 @@ public static class TableEditScriptBuilder
                 Add(AlterTable(string.Join(" ", attributes)), TableDraft.TableRowKey, TableEditPage.Storage);
             }
 
-            if (compression)
+            if (compression && carries)
             {
                 move.Add(dialect.CompressionClause(e.Compression!.Value, server));
             }

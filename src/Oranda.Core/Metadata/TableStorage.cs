@@ -5,7 +5,7 @@ namespace Oranda.Core.Metadata;
 /// 편집 모델(<c>TableDraft.Storage</c>)도 같은 형을 쓴다 — 그때 null 은 「바꾸지 않음」(비운 「바꿀 값」 칸).
 /// 테이블스페이스는 <see cref="TableInfo.Tablespace"/> 에 따로 있다.
 /// 공급자 읽기 규칙: <c>DEGREE</c> 는 앞뒤 공백을 떼고 <c>DEFAULT</c> = 0, <c>COMPRESSION = DISABLED</c> = <see cref="TableCompression.None"/>,
-/// <c>COMPRESS_FOR</c> BASIC = Basic, ADVANCED·OLTP = Advanced, 그 밖 = Other. Tibero <c>COMPRESSION YES</c> = Basic. 사전에 열이 없으면 null.
+/// <c>COMPRESS_FOR</c> BASIC = Basic, ADVANCED·OLTP = Advanced, 그 밖 = Other. Tibero <c>COMPRESSION YES</c> = Basic, <c>DEGREE</c> 0 = 1·-1 = 0(<see cref="TableStorageRows.TiberoParallel"/>). 사전에 열이 없으면 null.
 /// </summary>
 public sealed record TableStorage
 {
@@ -24,10 +24,10 @@ public sealed record TableStorage
     /// <summary>병렬 정도(<c>DEGREE</c>). 1 = <c>NOPARALLEL</c>, 0 = <c>PARALLEL</c>(서버 기본, 사전 <c>DEFAULT</c>), 2 이상 = <c>PARALLEL n</c>.</summary>
     public int? Parallel { get; init; }
 
-    /// <summary><c>STORAGE (INITIAL …)</c> 글(<c>64K</c>, <c>1M</c>, 바이트 수). 새 테이블에서만 문장에 쓴다(TE-39). 공급자는 사전 바이트 수를 숫자 글로(<c>65536</c>).</summary>
+    /// <summary><c>STORAGE (INITIAL …)</c> 글(<c>64K</c>, <c>1M</c>, 바이트 수). 새 테이블에서만 문장에 쓴다(TE-39). 공급자는 채우지 않는다(사전 값은 지연 세그먼트·최소 익스텐트라 입력과 달라 거짓 차이만 만든다).</summary>
     public string? InitialExtent { get; init; }
 
-    /// <summary><c>STORAGE (NEXT …)</c> 글. 새 테이블에서만(TE-39).</summary>
+    /// <summary><c>STORAGE (NEXT …)</c> 글. 새 테이블에서만(TE-39), 공급자는 채우지 않는다.</summary>
     public string? NextExtent { get; init; }
 }
 
@@ -66,7 +66,7 @@ public enum LobCompression
 /// <summary>
 /// LOB 열 하나의 저장 절(설계 18.2 LOB 표). 모르는 값은 null. 편집 모델에서 null 은 「바꾸지 않음」.
 /// 공급자 읽기 규칙: <c>SECUREFILE</c> YES/NO = SecureFile/BasicFile(Tibero 는 열이 없어 null), BASICFILE 의 <c>COMPRESSION</c>·<c>DEDUPLICATION</c> = <c>NONE</c> 은 null,
-/// <c>COMPRESSION</c> NO = None, <c>DEDUPLICATION</c> NO = false·LOB = true, <c>IN_ROW</c> YES/NO.
+/// <c>COMPRESSION</c> NO(Tibero NOCOMPRESS) = None, <c>DEDUPLICATION</c> NO = false·LOB = true, <c>IN_ROW</c> YES/NO. 규칙 구현 = <see cref="TableStorageRows"/>.
 /// </summary>
 public sealed record LobStorage
 {

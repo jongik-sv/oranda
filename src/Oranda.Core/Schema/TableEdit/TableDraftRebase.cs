@@ -131,6 +131,9 @@ public static class TableDraftRebase
             Constraints = rebasedConstraints,
             Indexes = rebasedIndexes,
             IsNewTable = newOriginal.IsNewTable,
+
+            // CREATE 가 반영되면 익스텐트(새 테이블에서만 쓰는 값, TE-39)는 할 일이 끝났다 — 남기면 기존 테이블의 ⚠ existingStorage·변경 수 1 만 남는다.
+            Storage = oldOriginal.IsNewTable && !newOriginal.IsNewTable ? edited.Storage with { InitialExtent = null, NextExtent = null } : edited.Storage,
         };
     }
 

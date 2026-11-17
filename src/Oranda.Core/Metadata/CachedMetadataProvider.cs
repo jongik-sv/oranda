@@ -81,9 +81,10 @@ public abstract class CachedMetadataProvider
     /// 2: 외래키 제약에 참조 키 이름(<see cref="ConstraintInfo.ReferencedConstraint"/>)을 더했다.
     /// 3: 테이블 편집기 메타데이터(TE-29) — 열 길이 기준·신원 속성, FK 삭제 규칙·참조 열, 인덱스 DESC·테이블스페이스·만든 제약·식, 테이블 종류·테이블스페이스·파티션 여부.
     /// 4: 테이블 저장 속성(<see cref="TableInfo.Storage"/>)·LOB 저장 절(<see cref="TableInfo.Lobs"/>)(설계 18.2), 파티션 정보(<see cref="TableInfo.Partitioning"/>, 18.4).
+    /// 5: Oracle·Tibero 공급자가 저장 속성·LOB 저장 절을 실제로 채운다(T13c) — 4 로 저장된 캐시는 비어 있어 버린다.
     /// 한 DBMS 의 읽기만 바뀌어 그 DBMS 캐시만 버려야 하면 상속한 형식이 올린다.
     /// </summary>
-    protected virtual int PayloadVersion => 4;
+    protected virtual int PayloadVersion => 5;
 
     /// <summary>
     /// 뒤 갱신이 이미 시작한 읽기를 이어 갈 때(Oracle: 커서를 연 뒤 행마다 잠금을 다시 잡을 때) 세션 잠금을 기다리는 한도. 이보다 오래 다른 명령(긴 실행 등)이

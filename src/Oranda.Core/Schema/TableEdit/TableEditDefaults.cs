@@ -74,6 +74,14 @@ public static class TableEditDefaults
         };
     }
 
+    /// <summary>
+    /// <c>MOVE</c> 가 테이블 속성(<c>PCTFREE</c>·<c>INITRANS</c>·압축)을 받아 반영하는가 — 문장 배치 규칙(지원 여부가 아니다).
+    /// Tibero(6.2.15 실측, T13c): LOB 절이 붙은 MOVE 는 PCTFREE·NOCOMPRESS 를 소리 없이 무시하고, <c>MOVE … NOCOMPRESS</c> 는 성공해도 반영되지 않고,
+    /// <c>MOVE … COMPRESS</c> 는 TBR-7002, <c>MOVE PCTFREE n</c>(TABLESPACE 없이)은 TBR-7001 이다. 일반 <c>ALTER TABLE … PCTFREE/INITRANS/[NO]COMPRESS</c> 는 반영된다
+    /// → 거짓이면 이 셋은 MOVE 앞 ALTER 로 보내고 MOVE 는 테이블스페이스·LOB 절만 싣는다. Oracle 은 MOVE 한 문장에 모은다(압축은 MOVE 라야 기존 행까지 다시 쓴다).
+    /// </summary>
+    public static bool MoveCarriesAttributes(Dbms dbms) => dbms != Dbms.Tibero;
+
     private static bool AtLeast(ServerInfo server, int major, int minor)
     {
         var parts = server.Version.Split('.');

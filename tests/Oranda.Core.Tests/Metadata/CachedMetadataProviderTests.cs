@@ -149,6 +149,8 @@ public sealed class CachedMetadataProviderTests : IAsyncDisposable
             Tablespace = "USERS",
             Kind = TableKind.Iot,
             IsPartitioned = true,
+            Storage = new TableStorage { PctFree = 20, InitTrans = 4, Compression = TableCompression.Advanced, Logging = false, Parallel = 0, InitialExtent = "65536" },
+            Lobs = [new LobInfo("MEMO", new LobStorage { Kind = LobStorageKind.SecureFile, Tablespace = "LOB01", Compression = LobCompression.Medium, Deduplicate = true, InRow = false })],
         };
         await provider.StoreAsync(_session, info.Table, "table", info);
 
@@ -164,6 +166,8 @@ public sealed class CachedMetadataProviderTests : IAsyncDisposable
         Assert.Equal(("USERS", "PK_EMP"), (ix.Tablespace, ix.ConstraintName));
         Assert.Equal([null, "UPPER(\"NAME\")"], ix.Expressions);
         Assert.Equal(("USERS", TableKind.Iot, true), (hit.Tablespace, hit.Kind, hit.IsPartitioned));
+        Assert.Equal(info.Storage, hit.Storage); // 저장 속성·LOB 저장 절(T13c)
+        Assert.Equal(info.Lobs, hit.Lobs);
     }
 
     [Fact]
@@ -175,6 +179,7 @@ public sealed class CachedMetadataProviderTests : IAsyncDisposable
         Assert.False(provider.Read("""{"v":2,"procs":[]}""", "table", out TableInfo? _));
         // 3(TE-29): 테이블 편집기 메타데이터 이전 캐시는 버린다.
         Assert.False(provider.Read("""{"v":2,"table":{"Table":{"Owner":"HR","Name":"EMP","ObjectType":"TABLE"},"Columns":[]}}""", "table", out TableInfo? _));
+        Assert.False(provider.Read("""{"v":4,"table":{"Table":{"Owner":"HR","Name":"EMP","ObjectType":"TABLE"},"Columns":[]}}""", "table", out TableInfo? _)); // 5(T13c): 저장 속성을 안 채운 캐시
         Assert.False(provider.Read("not json", "table", out TableInfo? _));
     }
 

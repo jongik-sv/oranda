@@ -331,7 +331,9 @@ public static partial class TableEditCheckPlanner
                 LobValues(d.Edited!, d.Original!.Lob);
             }
 
-            var moves = (table & (StorageChange.Tablespace | StorageChange.Compression)) != 0 || lobs.Count > 0;
+            // 문장 빌더와 같은 규칙: Tibero 는 압축을 MOVE 없이 ALTER 로 바꾼다(TableEditDefaults.MoveCarriesAttributes).
+            var moving = TableEditDefaults.MoveCarriesAttributes(dialect.Dbms) ? StorageChange.Tablespace | StorageChange.Compression : StorageChange.Tablespace;
+            var moves = (table & moving) != 0 || lobs.Count > 0;
             if (!moves)
             {
                 return false;

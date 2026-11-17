@@ -32,6 +32,71 @@ public class TiberoMetadataTableEditTests
 
     private static readonly string[] KindHeader = ["TABLESPACE_NAME", "TEMPORARY", "DURATION", "IOT_TYPE", "PARTITIONED", "EXTERNAL_COUNT"];
 
+    private static readonly string[] StorageKindHeader =
+        [.. KindHeader, "PCT_FREE", "INI_TRANS", "COMPRESSION", "LOGGING", "DEGREE"];
+
+    private static readonly string[] LobHeader = ["COLUMN_NAME", "TABLESPACE_NAME", "COMPRESSION", "DEDUPLICATION", "IN_ROW"];
+
+    /// <summary>
+    /// 저장 속성(T13c): <c>meta.table_kind</c> [6]~[10] → <see cref="TableInfo.Storage"/>(Tibero DEGREE 0 = NOPARALLEL → 1, -1 = PARALLEL → 0, COMPRESSION YES = Basic),
+    /// LOB 열이 있으면 <c>meta.table_lobs</c> → <see cref="TableInfo.Lobs"/>(저장 방식 null, NOCOMPRESS = None, DEDUPLICATION LOB = true).
+    /// </summary>
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-1, 0)]
+    [InlineData(4, 4)]
+    public async Task Storage_attributes_and_lob_storage_are_read_from_the_table_kind_and_the_lob_rows(int degree, int parallel)
+    {
+        var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
+        var provider = new TiberoMetadataProvider(Recording(calls, ById(
+            ("meta.columns", Table(ColumnHeader,
+                ["ID", 1m, "NUMBER", null, null, null, "N", null, "NO", null, "NO", null, null, null, null],
+                ["MEMO", 2m, "CLOB", 4000m, null, null, "Y", null, "NO", null, "NO", null, null, null, null],
+                ["PIC", 3m, "BLOB", 4000m, null, null, "Y", null, "NO", null, "NO", null, null, null, null])),
+            ("meta.table_kind", Table(StorageKindHeader, ["TS_DATA", "NO", null, null, "NO", 0m, 20m, 4m, "YES", "NO", (decimal)degree])),
+            ("meta.table_lobs", Table(LobHeader,
+                ["MEMO", "TS_LOB", "MEDIUM", "LOB", "NO"],
+                ["PIC", "TS_DATA", "NOCOMPRESS", "NO", "YES"])))));
+        await using var session = Session();
+
+        var table = await provider.GetTableAsync(session, Orders, CancellationToken.None);
+
+        Assert.Equal(
+            new TableStorage { PctFree = 20, InitTrans = 4, Compression = TableCompression.Basic, Logging = false, Parallel = parallel },
+            table.Storage);
+        Assert.Contains(calls, c => c.Id == "meta.table_lobs" && Equals(c.Binds!["owner"], "SAMPLE") && Equals(c.Binds!["name"], "ORDERS"));
+        Assert.Equal(
+            [
+                new LobInfo("MEMO", new LobStorage { Tablespace = "TS_LOB", Compression = LobCompression.Medium, Deduplicate = true, InRow = false }),
+                new LobInfo("PIC", new LobStorage { Tablespace = "TS_DATA", Compression = LobCompression.None, Deduplicate = false, InRow = true }),
+            ],
+            table.Lobs);
+    }
+
+    /// <summary>LOB 열이 없으면 <c>meta.table_lobs</c> 를 묻지 않는다. 예전 행 모양(저장 열 없음)이면 저장 속성은 null(안 읽음).</summary>
+    [Fact]
+    public async Task Lob_rows_are_asked_only_for_lob_columns_and_old_kind_rows_leave_storage_unread()
+    {
+        var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
+        var provider = new TiberoMetadataProvider(Recording(calls, ById(
+            ("meta.columns", Table(ColumnHeader, ["ID", 1m, "NUMBER", null, null, null, "N", null, "NO", null, "NO", null, null, null, null])),
+            ("meta.table_kind", Table(StorageKindHeader, ["TS_DATA", "NO", null, null, "NO", 0m, 10m, 1m, "NO", "YES", 0m])))));
+        await using var session = Session();
+
+        var table = await provider.GetTableAsync(session, Orders, CancellationToken.None);
+
+        Assert.Equal(new TableStorage { PctFree = 10, InitTrans = 1, Compression = TableCompression.None, Logging = true, Parallel = 1 }, table.Storage);
+        Assert.Empty(table.Lobs);
+        Assert.DoesNotContain(calls, c => c.Id == "meta.table_lobs");
+
+        var old = new TiberoMetadataProvider(Recording([], ById(
+            ("meta.columns", Table(ColumnHeader, ["MEMO", 1m, "CLOB", 4000m, null, null, "Y", null, "NO", null, "NO", null, null, null, null])),
+            ("meta.table_kind", Table(KindHeader, ["TS_DATA", "NO", null, null, "NO", 0m])))));
+        var unread = await old.GetTableAsync(session, Orders, CancellationToken.None);
+        Assert.Null(unread.Storage);
+        Assert.Empty(unread.Lobs);
+    }
+
     [Fact]
     public async Task Table_edit_metadata_is_read_from_the_trailing_catalog_columns_and_the_table_kind()
     {
@@ -155,6 +220,7 @@ public class TiberoMetadataTableEditTests
         var index = Assert.Single(table.Indexes);
         Assert.Equal((0, 0, (string?)null, (string?)null), (index.Descending.Count, index.Expressions.Count, index.Tablespace, index.ConstraintName));
         Assert.Equal((TableKind.Heap, false, (string?)null), (table.Kind, table.IsPartitioned, table.Tablespace));
+        Assert.Null(table.Storage);
         Assert.Equal(["NOTE"], index.Columns);
     }
 }

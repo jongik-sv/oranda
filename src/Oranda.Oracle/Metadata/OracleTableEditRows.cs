@@ -177,7 +177,7 @@ internal static partial class OracleTableEditRows
     }
 
     /// <summary>
-    /// <c>meta.table_props</c> 한 줄(tablespace_name, temporary, duration, iot_type, partitioned, cluster_name, external)을 테이블에 붙인다. 행이 없으면(뷰) 그대로.
+    /// <c>meta.table_props</c> 한 줄(tablespace_name, temporary, duration, iot_type, partitioned, cluster_name, external, 저장 속성 6열)을 테이블에 붙인다. 행이 없으면(뷰) 그대로.
     /// 종류 판정 순서: 임시 → 외부 → IOT → 클러스터 → 일반.
     /// </summary>
     internal static TableInfo WithTableProps(TableInfo table, IReadOnlyList<object?[]> rows)
@@ -200,7 +200,20 @@ internal static partial class OracleTableEditRows
             Tablespace = Str(r[0]),
             Kind = kind,
             IsPartitioned = Str(r[4]) == "YES",
+
+            // 저장 속성(T13c): [7] pct_free [8] ini_trans [9] compression [10] compress_for [11] logging [12] degree. 예전 행 모양이면 null(안 읽음).
+            Storage = r.Length > 12 ? TableStorageRows.ForKind(TableStorageRows.Table(r[7], r[8], r[9], r[10], r[11], r[12]), kind) : null,
         };
+    }
+
+    /// <summary><c>meta.table_lobs</c> 줄(column_name, securefile, tablespace_name, compression, deduplication, in_row)을 <see cref="TableInfo.Lobs"/> 로.</summary>
+    internal static TableInfo WithLobs(TableInfo table, IReadOnlyList<object?[]> rows)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(rows);
+        return rows.Count == 0
+            ? table
+            : table with { Lobs = [.. rows.Where(r => Str(r[0]) is not null).Select(r => TableStorageRows.Lob(Str(r[0])!, r[1], r[2], r[3], r[4], r[5]))] };
     }
 
     /// <summary>PK·UK 제약 행의 index_name → 제약 이름.</summary>

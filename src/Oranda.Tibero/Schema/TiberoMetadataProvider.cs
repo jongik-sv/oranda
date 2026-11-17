@@ -39,7 +39,7 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         "meta.detail_stats", "meta.detail_size", "meta.detail_size_user", "meta.detail_privileges", "meta.detail_privileges_user",
         "meta.detail_dependencies", "meta.source", "meta.compile_errors", "meta.name_step",
         "meta.ddl_view", "meta.ddl_sequence", "meta.ddl_index", "meta.ddl_table_indexes", "meta.ddl_constraints", "meta.ddl_trigger",
-        "meta.table_kind", "meta.part_scheme", "meta.part_indexes",
+        "meta.table_kind", "meta.part_scheme", "meta.part_indexes", "meta.table_lobs",
     ];
 
     private readonly CatalogRunner _run;
@@ -106,6 +106,8 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         {
             info = info with { Partitioning = await ReadPartitioningAsync(s, binds, ct).ConfigureAwait(false) };
         }
+
+        info = await WithLobsAsync(s, info, binds, ct).ConfigureAwait(false); // LOB 저장 절(T13c)
 
         await StorePayloadAsync(s, cachedRow, "table", info, ct).ConfigureAwait(false);
         return info;

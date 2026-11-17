@@ -194,6 +194,31 @@ public sealed class TableEditStorageTests
     // ---------- 리뷰 반영 ----------
 
     [Fact]
+    public void Tibero_moves_only_tablespace_and_lobs_and_alters_the_attributes_first()
+    {
+        // Tibero 실측(T13c): LOB 절이 붙은 MOVE 는 PCTFREE·NOCOMPRESS 를 무시하고 MOVE … COMPRESS 는 TBR-7002 → PCTFREE·INITRANS·압축은 MOVE 앞 ALTER.
+        var tibero = Oracle23 with { Version = "6.0", Dbms = Dbms.Tibero };
+        var dialect = new FakeTableEditDialect { Dbms = Dbms.Tibero };
+        var (original, edited) = Start(Stored(), dialect);
+        edited = WithStorage(edited with { Tablespace = "DATA01" }, s => s with { PctFree = 20, InitTrans = 4, Compression = TableCompression.Basic })
+            .WithColumn("MEMO", c => c with { Lob = c.Lob! with { Tablespace = "LOB01" } });
+
+        var texts = TableEditScriptBuilder.Build(original, edited, dialect, tibero).Texts();
+
+        Assert.Equal(T + "PCTFREE 20 INITRANS 4 COMPRESS", texts[0]);
+        Assert.Equal(T + "MOVE TABLESPACE DATA01 LOB (MEMO) STORE AS (TABLESPACE LOB01)", texts[1]);
+        Assert.All(texts.Skip(2), t => Assert.EndsWith(" REBUILD", t, StringComparison.Ordinal));
+
+        // 압축만 바꾸면 MOVE 없이 ALTER 하나 — 다시 쓰기·잠금 ⚠ 도 없다.
+        var (o2, e2) = Start(Stored() with { Storage = Stored().Storage! with { Compression = TableCompression.Basic } }, dialect);
+        e2 = WithStorage(e2, s => s with { Compression = TableCompression.None });
+        Assert.Equal([T + "NOCOMPRESS"], TableEditScriptBuilder.Build(o2, e2, dialect, tibero).Texts());
+        var plan = TableEditCheckPlanner.Plan(o2, e2, dialect, Dev with { Server = tibero });
+        Assert.DoesNotContain(plan.Checks, c => c.Kind == TableEditCheckKind.TableRewrite);
+        Assert.DoesNotContain(plan.Findings, f => f.Code == CheckCode.MoveLocksDml);
+    }
+
+    [Fact]
     public void Core_gate_turns_off_online_update_indexes_and_kind_words_when_unsure()
     {
         // 방언이 새 기능 값을 몰라 「된다」로 답해도 서버를 모르거나 11g·Tibero 면 ONLINE·UPDATE INDEXES·방식 낱말을 쓰지 않는다.
@@ -238,6 +263,30 @@ public sealed class TableEditStorageTests
 
         Assert.Equal([T + "MOVE ONLINE PCTFREE 10 LOB (MEMO) STORE AS BASICFILE (TABLESPACE USERS) UPDATE INDEXES"], Build23(original, edited));
         Assert.DoesNotContain(TableEditCheckPlanner.Plan(original, edited, Dialect, Dev with { Server = Oracle23 }).Findings, f => f.Severity == CheckSeverity.Block);
+    }
+
+    [Fact]
+    public void New_table_extents_are_done_once_the_create_is_applied()
+    {
+        // CREATE 성공 + 주석 실패 → 다시 읽은 테이블은 익스텐트를 모른다(공급자는 읽지 않음). 남은 익스텐트는 기존 테이블 ⚠ 만 만들므로 Rebase 가 지운다.
+        var table = (TableDraftFactory.Empty("SAMPLE") with
+            {
+                Name = "T1",
+                Comment = "주문",
+                Storage = new TableStorage { PctFree = 20, InitialExtent = "256K", NextExtent = "1M" },
+            })
+            .AddColumn(new ColumnDraft("c1", "ID") { DataType = "NUMBER" });
+        var script = TableEditScriptBuilder.Build(TableDraftFactory.Empty("SAMPLE"), table, Dialect);
+        Assert.Equal(2, script.SqlStatements.Count);
+
+        var reread = TableDraftFactory.FromTable(
+            new TableInfo(new DbObjectRef("SAMPLE", "T1", "TABLE"), [new ColumnInfo("ID", 1, "NUMBER")]) { Storage = new TableStorage { PctFree = 20 } }, Dialect);
+        var rebased = TableDraftRebase.Rebase(TableDraftFactory.Empty("SAMPLE"), table, script, 1, reread);
+
+        Assert.Equal((false, 20, (string?)null, (string?)null), (rebased.IsNewTable, rebased.Storage.PctFree, rebased.Storage.InitialExtent, rebased.Storage.NextExtent));
+        Assert.Equal(0, TableDraftDiff.Compute(reread, rebased, Dialect).CountFor(TableEditPage.Storage));
+        Assert.DoesNotContain(TableEditCheckPlanner.Plan(reread, rebased, Dialect, Dev).Findings, f => f.Detail == "existingStorage");
+        Assert.Equal(["COMMENT ON TABLE SAMPLE.T1 IS '주문'"], Build(reread, rebased));
     }
 
     [Fact]

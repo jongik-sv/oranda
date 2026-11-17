@@ -159,6 +159,61 @@ public class OracleTableEditRowsTests
         Assert.Equal(isPartitioned, result.IsPartitioned);
     }
 
+    /// <summary>저장 속성(T13c): table_props [7]~[12](익스텐트는 읽지 않음). DEGREE 는 공백 붙은 글(DEFAULT = 0), COMPRESS_FOR 로 압축 종류를 가른다. 예전 행 모양(7열)이면 null(안 읽음).</summary>
+    [Theory]
+    [InlineData("ENABLED", "BASIC", "         4", TableCompression.Basic, 4)]
+    [InlineData("ENABLED", "ADVANCED", "   DEFAULT", TableCompression.Advanced, 0)]
+    [InlineData("ENABLED", "OLTP", "         1", TableCompression.Advanced, 1)]
+    [InlineData("ENABLED", "QUERY HIGH", "1", TableCompression.Other, 1)]
+    [InlineData("DISABLED", null, "1", TableCompression.None, 1)]
+    [InlineData(null, null, null, null, null)]
+    public void Table_props_carry_the_storage_attributes(string? compression, string? compressFor, string? degree, TableCompression? expected, int? parallel)
+    {
+        var table = new TableInfo(new DbObjectRef("SAMPLE", "ORDERS", "TABLE"), []);
+        object?[][] rows = [["USERS", "N", null, null, "NO", null, "NO", 20m, 4m, compression, compressFor, "NO", degree]];
+
+        var storage = OracleTableEditRows.WithTableProps(table, rows).Storage;
+
+        Assert.Equal(
+            new TableStorage { PctFree = 20, InitTrans = 4, Compression = expected, Logging = false, Parallel = parallel },
+            storage);
+        Assert.Null(OracleTableEditRows.WithTableProps(table, [["USERS", "N", null, null, "NO", null, "NO"]]).Storage);
+    }
+
+    /// <summary>IOT 는 테이블 줄의 PCT_FREE 등이 실제 값이 아니라 병렬만 남는다.</summary>
+    [Fact]
+    public void Iot_table_props_keep_only_the_parallel_degree()
+    {
+        var table = new TableInfo(new DbObjectRef("SAMPLE", "LOOKUP", "TABLE"), []);
+        object?[][] rows = [[null, "N", null, "IOT", "NO", null, "NO", 0m, 0m, "DISABLED", null, "YES", "         1"]];
+
+        Assert.Equal(new TableStorage { Parallel = 1 }, OracleTableEditRows.WithTableProps(table, rows).Storage);
+    }
+
+    /// <summary>table_lobs 줄 → Lobs: SECUREFILE YES/NO, BASICFILE 의 NONE = null, DEDUPLICATION NO/LOB.</summary>
+    [Fact]
+    public void Lob_rows_give_the_lob_storage()
+    {
+        var table = new TableInfo(new DbObjectRef("SAMPLE", "ORDERS", "TABLE"), []);
+        object?[][] rows =
+        [
+            ["MEMO", "YES", "LOB01", "MEDIUM", "LOB", "NO"],
+            ["OLD_DOC", "NO", "USERS", "NONE", "NONE", "YES"],
+            ["PIC", "YES", "USERS", "NO", "NO", "YES"],
+        ];
+
+        var lobs = OracleTableEditRows.WithLobs(table, rows).Lobs;
+
+        Assert.Equal(
+            [
+                new LobInfo("MEMO", new LobStorage { Kind = LobStorageKind.SecureFile, Tablespace = "LOB01", Compression = LobCompression.Medium, Deduplicate = true, InRow = false }),
+                new LobInfo("OLD_DOC", new LobStorage { Kind = LobStorageKind.BasicFile, Tablespace = "USERS", InRow = true }),
+                new LobInfo("PIC", new LobStorage { Kind = LobStorageKind.SecureFile, Tablespace = "USERS", Compression = LobCompression.None, Deduplicate = false, InRow = true }),
+            ],
+            lobs);
+        Assert.Same(table, OracleTableEditRows.WithLobs(table, []));
+    }
+
     [Fact]
     public void View_without_table_props_stays_a_heap_table()
     {

@@ -34,6 +34,7 @@ public partial class TableEditCatalogTests
     [InlineData("tableedit.conversion_check_violations")]
     [InlineData("tableedit.conversion_duplicate_keys")]
     [InlineData("meta.table_props")]
+    [InlineData("meta.table_lobs")]
     public void Check_queries_run_from_11g_and_need_no_license_pack(string id)
     {
         var query = Catalog.Get(id, 11);
