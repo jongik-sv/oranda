@@ -1,4 +1,5 @@
 using Oranda.Core.Connection;
+using Oranda.Core.Metadata;
 
 namespace Oranda.Core.Schema.TableEdit;
 
@@ -60,6 +61,12 @@ public interface ITableEditDialect
 
     /// <summary>일반 → 파티션을 <c>MODIFY PARTITION BY … ONLINE</c> 한 문장으로 하나(TE-41). 아니면 테이블 다시 만들기. 기본 = Oracle 12.2 이상.</summary>
     bool SupportsOnlinePartitionConversion(ServerInfo? server) => Partitions.PartitionDefaults.SupportsOnlinePartitionConversion(server);
+
+    /// <summary>
+    /// 테이블 압축 절(설계 18.2: 새 테이블 저장 절·MOVE). 기본 = Oracle(12c 이상 <c>ROW STORE COMPRESS BASIC|ADVANCED</c>, 11g·모름 <c>COMPRESS BASIC</c>·<c>COMPRESS FOR OLTP</c>),
+    /// <see cref="TableCompression.None"/> = <c>NOCOMPRESS</c>. Tibero 는 <c>COMPRESS</c>.
+    /// </summary>
+    string CompressionClause(TableCompression compression, ServerInfo? server) => TableEditDefaults.CompressionClause(compression, server);
 }
 
 /// <summary>
@@ -127,4 +134,19 @@ public enum TableEditFeature
 
     /// <summary>형식 변경 자동 데이터 변환(18.9).</summary>
     ConvertingTypeChange,
+
+    /// <summary><c>ALTER TABLE … MOVE ONLINE</c>(18.2, Oracle 12.2+ Enterprise). 안 되면 ONLINE 을 빼고 ⚠ 「그동안 DML 잠금」 — 막지 않는다.</summary>
+    OnlineMove,
+
+    /// <summary>일반 테이블 <c>MOVE … UPDATE INDEXES</c>(18.2, Oracle 12.2+). 안 되면 빼고 MOVE 뒤 인덱스마다 <c>ALTER INDEX … REBUILD</c> — 막지 않는다.</summary>
+    MoveUpdateIndexes,
+
+    /// <summary>LOB 저장 방식 낱말 <c>SECUREFILE</c>·<c>BASICFILE</c>(18.2, Oracle 11g+). Tibero 는 세그먼트 이름으로 읽혀 쓰지 않는다 — 방식 칸 흐림.</summary>
+    SecureFileLob,
+
+    /// <summary>고급 행 압축(<see cref="TableCompression.Advanced"/>, 18.2).</summary>
+    AdvancedRowCompression,
+
+    /// <summary>기본 테이블 압축(<see cref="TableCompression.Basic"/>, 18.2). Oracle 은 Enterprise 만(11g XE 실측 ORA-00439), Tibero 는 됨.</summary>
+    BasicTableCompression,
 }

@@ -69,6 +69,12 @@ public enum CheckCode
 
     /// <summary>⚠ 쓴 설정을 문장에 넣지 않는다(예: 새 GTT 의 테이블스페이스 — 임시 테이블스페이스를 쓴다). <see cref="CheckFinding.Detail"/> = 까닭(<c>temporaryTablespace</c>).</summary>
     SettingIgnored,
+
+    /// <summary>⚠ MOVE 가 테이블 전체를 다시 쓴다(설계 18.2). <see cref="CheckFinding.Count"/> = 통계 행 수(모르면 null, Detail <c>unknown</c>).</summary>
+    TableRewrite,
+
+    /// <summary>⚠ ONLINE 이 안 되는 MOVE — 그동안 DML 이 잠긴다(설계 18.2).</summary>
+    MoveLocksDml,
 }
 
 /// <summary>

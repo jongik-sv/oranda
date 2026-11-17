@@ -40,6 +40,12 @@ public enum TableEditEffectKind
 
     /// <summary>새 테이블 CREATE TABLE: 지우지 않은 열과 FK 가 아닌 제약을 모두 만든다.</summary>
     CreateTable,
+
+    /// <summary>테이블 MOVE(설계 18.2): 인덱스가 UNUSABLE 이 될 수 있다(뒤 <see cref="Rebuild"/> 가 살림).</summary>
+    Move,
+
+    /// <summary>인덱스 <see cref="TableEditEffect.Name"/> 을 REBUILD(MOVE 뒤).</summary>
+    Rebuild,
 }
 
 /// <summary>문장 효과.</summary>
@@ -89,7 +95,7 @@ public static class TableEditScriptBuilder
         ArgumentNullException.ThrowIfNull(edited);
         ArgumentNullException.ThrowIfNull(dialect);
 
-        var b = new Builder(original, edited, dialect, dialect.MaxIdentifierBytes(server));
+        var b = new Builder(original, edited, dialect, server, dialect.MaxIdentifierBytes(server));
         if (edited.IsNewTable)
         {
             b.Create();
@@ -102,7 +108,7 @@ public static class TableEditScriptBuilder
         return b.Statements.Count == 0 ? TableEditScript.Empty : new TableEditScript(b.Statements);
     }
 
-    private sealed class Builder(TableDraft original, TableDraft edited, ITableEditDialect dialect, int maxIdentifierBytes)
+    private sealed class Builder(TableDraft original, TableDraft edited, ITableEditDialect dialect, ServerInfo? server, int maxIdentifierBytes)
     {
         public List<TableEditStatement> Statements { get; } = [];
 
@@ -129,14 +135,15 @@ public static class TableEditScriptBuilder
             var constraints = edited.Constraints.Where(c => !c.IsDropped).ToList();
             var parts = columns.Select(c => ColumnDefinition(c, null)).ToList();
             parts.AddRange(constraints.Where(c => c.Kind != ConstraintKind.ForeignKey).OrderBy(c => KindOrder(c.Kind)).Select(ConstraintDefinition));
-            var tablespace = string.IsNullOrWhiteSpace(edited.Tablespace) ? string.Empty : " TABLESPACE " + Q(edited.Tablespace.Trim());
+            var tablespace = string.IsNullOrWhiteSpace(edited.Tablespace) ? string.Empty : " TABLESPACE " + Space(edited.Tablespace);
+            var storage = tablespace + NewTableStorage(columns);
             var create = edited.Kind switch
             {
-                // GTT 는 임시 테이블스페이스를 쓰므로 TABLESPACE 를 쓰지 않는다(설계 18.10).
+                // GTT 는 임시 테이블스페이스를 쓰므로 TABLESPACE·저장 절을 쓰지 않는다(설계 18.10, 검사가 ⚠).
                 TableKind.Temporary => $"CREATE GLOBAL TEMPORARY TABLE {Table} ({string.Join(", ", parts)})"
                                        + (edited.OnCommitPreserveRows ? " ON COMMIT PRESERVE ROWS" : " ON COMMIT DELETE ROWS"),
-                TableKind.Iot => $"CREATE TABLE {Table} ({string.Join(", ", parts)}) ORGANIZATION INDEX" + tablespace,
-                _ => $"CREATE TABLE {Table} ({string.Join(", ", parts)})" + tablespace,
+                TableKind.Iot => $"CREATE TABLE {Table} ({string.Join(", ", parts)}) ORGANIZATION INDEX" + storage,
+                _ => $"CREATE TABLE {Table} ({string.Join(", ", parts)})" + storage,
             };
             Add(Ddl(create, "CREATE"), TableDraft.TableRowKey, TableEditPage.Columns, effect: new TableEditEffect(TableEditEffectKind.CreateTable));
 
@@ -253,7 +260,12 @@ public static class TableEditScriptBuilder
             var added = changes.Columns.Where(d => d.State == DraftRowState.Added).ToList();
             foreach (var d in added.Where(d => !d.Edited!.IsVirtual))
             {
-                Add(AlterTable($"ADD ({ColumnDefinition(d.Edited!, null)})"), d.RowKey, TableEditPage.Columns, effect: Created(d.Edited!.Name));
+                // GTT 는 LOB 저장 절을 쓰지 않는다(검사가 ⚠). LOB 형식이 아닌 열의 칸은 쓰지 않는다(검사가 ✖).
+                var lob = original.Kind != TableKind.Temporary && TableEditDefaults.IsLobType(d.Edited!.DataType) && d.Edited.Lob is { } l
+                          && LobClause(d.Edited.Name, l, null) is { } clause
+                    ? " " + clause
+                    : string.Empty;
+                Add(AlterTable($"ADD ({ColumnDefinition(d.Edited!, null)})" + lob), d.RowKey, TableEditPage.Columns, effect: Created(d.Edited!.Name));
             }
 
             foreach (var d in added.Where(d => d.Edited!.IsVirtual).Concat(recreated).OrderBy(d => edited.Columns.ToList().FindIndex(c => c.RowKey == d.RowKey)))
@@ -275,6 +287,9 @@ public static class TableEditScriptBuilder
             {
                 AddDropColumn(d.Original!, d.RowKey, TableEditMarks.Irreversible);
             }
+
+            // 5b. 저장(설계 18.2): MOVE 없는 속성 한 문장 → MOVE 한 문장(제약·인덱스를 만들기 전 — 새로 만드는 인덱스는 다시 만들 일이 없다)
+            AddStorage(changes);
 
             // 6. 제약: 이름 바꾸기 → 추가(PK·UK → CHECK → FK) → ENABLE/DISABLE
             foreach (var d in changes.Constraints.Where(d => d.State == DraftRowState.Modified && d.Changes == (d.Changes & (ConstraintChange.Name | ConstraintChange.Enabled))
@@ -372,6 +387,249 @@ public static class TableEditScriptBuilder
                 Add(AlterTable("RENAME TO " + Q(edited.Name)), TableDraft.TableRowKey, TableEditPage.Description);
             }
         }
+
+        // ---------- 저장(설계 18.2) ----------
+
+        /// <summary>방언 판정과 Core 보수 판정(<see cref="TableEditDefaults.StorageReasonKey"/>)이 모두 될 때.</summary>
+        private bool Supports(TableEditFeature feature) =>
+            dialect.UnsupportedReasonKey(feature, server) is null && TableEditDefaults.StorageReasonKey(feature, server) is null;
+
+        /// <summary>테이블스페이스 칸 글 → 문장 이름(따옴표 없으면 대문자, <see cref="TableEditNames.FromInput"/>).</summary>
+        private string Space(string typed) => Q(TableEditNames.FromInput(typed));
+
+        /// <summary>새 테이블 저장 절(TABLESPACE 뒤): 값이 있는 칸만. STORAGE(INITIAL/NEXT)는 새 테이블만(TE-39). GTT 는 없음.</summary>
+        private string NewTableStorage(IReadOnlyList<ColumnDraft> columns)
+        {
+            if (edited.Kind == TableKind.Temporary)
+            {
+                return string.Empty;
+            }
+
+            var s = edited.Storage;
+            var parts = new List<string>();
+            if (s.PctFree is { } pctFree)
+            {
+                parts.Add("PCTFREE " + Num(pctFree));
+            }
+
+            if (s.InitTrans is { } initTrans)
+            {
+                parts.Add("INITRANS " + Num(initTrans));
+            }
+
+            var extents = new List<string>();
+            if (!string.IsNullOrWhiteSpace(s.InitialExtent))
+            {
+                extents.Add("INITIAL " + s.InitialExtent.Trim().ToUpperInvariant());
+            }
+
+            if (!string.IsNullOrWhiteSpace(s.NextExtent))
+            {
+                extents.Add("NEXT " + s.NextExtent.Trim().ToUpperInvariant());
+            }
+
+            if (extents.Count > 0)
+            {
+                parts.Add($"STORAGE ({string.Join(" ", extents)})");
+            }
+
+            if (s.Logging is { } logging)
+            {
+                parts.Add(logging ? "LOGGING" : "NOLOGGING");
+            }
+
+            if (s.Compression is { } compression and not TableCompression.Other)
+            {
+                parts.Add(dialect.CompressionClause(compression, server));
+            }
+
+            parts.AddRange(columns.Where(c => c.Lob is not null && TableEditDefaults.IsLobType(c.DataType)).Select(c => LobClause(c.Name, c.Lob!, null)).OfType<string>());
+            if (s.Parallel is { } parallel)
+            {
+                parts.Add(ParallelClause(parallel));
+            }
+
+            return parts.Count == 0 ? string.Empty : " " + string.Join(" ", parts);
+        }
+
+        /// <summary>
+        /// 기존 테이블: LOGGING·병렬(MOVE 가 없으면 PCTFREE·INITRANS 도)은 <c>ALTER TABLE t …</c> 한 문장(새 블록부터), 테이블스페이스·압축·LOB 저장은 <c>MOVE</c> 한 문장으로 모은다.
+        /// MOVE 가 있으면 PCTFREE·INITRANS 는 MOVE 안에 쓰고 바꾸지 않은 지금 값도 이어 쓴다(MOVE·압축이 PCTFREE 를 기본값으로 되돌린다 — Tibero 실측 12, Oracle BASIC 압축 기본 0).
+        /// ONLINE 은 될 때만, <c>UPDATE INDEXES</c> 가 안 되면 MOVE 뒤 남는 인덱스마다 <c>ALTER INDEX … REBUILD</c>. 앞 실행에서 남은 REBUILD(<see cref="TableDraft.RebuildIndexes"/>)도 여기서.
+        /// </summary>
+        private void AddStorage(TableDraftChanges changes)
+        {
+            var (o, e) = (original.Storage, edited.Storage);
+            var move = new List<string>();
+            if (changes.Storage.HasFlag(StorageChange.Tablespace))
+            {
+                move.Add("TABLESPACE " + Space(edited.Tablespace!));
+            }
+
+            var lobs = new List<string>();
+            foreach (var d in changes.Columns.Where(d => d.State == DraftRowState.Modified && d.Changes.HasFlag(ColumnChange.Lob) && !TableDraftDiff.IsRecreated(d, dialect)))
+            {
+                if (LobClause(d.Edited!.Name, d.Edited.Lob!, d.Original!.Lob ?? new LobStorage()) is { } clause)
+                {
+                    lobs.Add(clause);
+                }
+            }
+
+            var compression = changes.Storage.HasFlag(StorageChange.Compression) && e.Compression is not TableCompression.Other;
+            var moves = move.Count > 0 || compression || lobs.Count > 0;
+
+            var attributes = new List<string>();
+            var pctFree = changes.Storage.HasFlag(StorageChange.PctFree) ? e.PctFree : moves ? o.PctFree : null;
+            if (pctFree is { } p)
+            {
+                (moves ? move : attributes).Add("PCTFREE " + Num(p));
+            }
+
+            var initTrans = changes.Storage.HasFlag(StorageChange.InitTrans) ? e.InitTrans : moves && o.InitTrans is not (null or 1) ? o.InitTrans : null;
+            if (initTrans is { } t)
+            {
+                (moves ? move : attributes).Add("INITRANS " + Num(t));
+            }
+
+            if (changes.Storage.HasFlag(StorageChange.Logging))
+            {
+                attributes.Add(e.Logging!.Value ? "LOGGING" : "NOLOGGING");
+            }
+
+            if (changes.Storage.HasFlag(StorageChange.Parallel))
+            {
+                attributes.Add(ParallelClause(e.Parallel!.Value));
+            }
+
+            if (attributes.Count > 0)
+            {
+                Add(AlterTable(string.Join(" ", attributes)), TableDraft.TableRowKey, TableEditPage.Storage);
+            }
+
+            if (compression)
+            {
+                move.Add(dialect.CompressionClause(e.Compression!.Value, server));
+            }
+
+            move.AddRange(lobs);
+            var rebuild = new List<IndexDraft>();
+            if (moves)
+            {
+                var updateIndexes = Supports(TableEditFeature.MoveUpdateIndexes);
+                var online = Supports(TableEditFeature.OnlineMove) ? " ONLINE" : string.Empty;
+                Add(AlterTable($"MOVE{online} {string.Join(" ", move)}" + (updateIndexes ? " UPDATE INDEXES" : string.Empty)), TableDraft.TableRowKey, TableEditPage.Storage,
+                    effect: new TableEditEffect(TableEditEffectKind.Move));
+                if (!updateIndexes)
+                {
+                    rebuild.AddRange(KeptIndexes(changes).Where(i => i.Kind != IndexKind.Other));
+                }
+            }
+
+            var pending = edited.RebuildIndexes.ToHashSet(StringComparer.Ordinal);
+            rebuild.AddRange(KeptIndexes(changes).Where(i => pending.Contains(i.Name) && !rebuild.Contains(i)));
+            foreach (var i in rebuild)
+            {
+                // MOVE 로 쓸 수 없게 된 인덱스(LOB·도메인 인덱스 Other 는 빼고).
+                var statement = Ddl($"ALTER INDEX {Q(Owner)}.{Q(i.Name)} REBUILD", "ALTER") with
+                {
+                    ChangeTarget = new ChangeTarget(Owner, i.Name, "INDEX", ChangeOperation.Alter),
+                };
+                Add(statement, i.RowKey, TableEditPage.Storage, effect: new TableEditEffect(TableEditEffectKind.Rebuild, i.Name));
+            }
+        }
+
+        /// <summary>이 단계(1단계 지우기 뒤)에도 서버에 있는 원본 인덱스: 지우거나 다시 만들지 않는 것, 제약 인덱스는 그 제약을 지우거나 다시 만들지 않을 때.</summary>
+        private IEnumerable<IndexDraft> KeptIndexes(TableDraftChanges changes)
+        {
+            var keptConstraints = original.Constraints
+                .Where(c => changes.Constraints.FirstOrDefault(d => d.RowKey == c.RowKey) is not { } d
+                            || (d.State != DraftRowState.Dropped && !d.Changes.HasFlag(ConstraintChange.Definition)))
+                .Select(c => c.Name)
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var i in original.Indexes.Where(i => !TableDraftDiff.GoesWithDroppedColumn(i, changes)))
+            {
+                var kept = i.ConstraintName is { } owner
+                    ? keptConstraints.Contains(owner)
+                    : changes.Indexes.FirstOrDefault(d => d.RowKey == i.RowKey) is not { } d
+                      || (d.State != DraftRowState.Dropped && !d.Changes.HasFlag(IndexChange.Definition));
+                if (kept)
+                {
+                    yield return i;
+                }
+            }
+        }
+
+        /// <summary>
+        /// <c>LOB (c) STORE AS [SECUREFILE|BASICFILE] (…)</c>. <paramref name="current"/> 이 null 이면(새 열·새 테이블) 값이 있는 칸 모두.
+        /// 아니면 MOVE 용: 바뀐 칸 + 알고 있는 지금 방식·테이블스페이스 + 기본값이 아닌 지금 값(MOVE 가 쓰지 않은 LOB 속성은 기본값으로 돌아갈 수 있다 — Tibero 실측 13).
+        /// 목표 방식이 BASICFILE 이면 SECUREFILE 전용 옵션(압축·중복 제거)은 이어 쓰지 않는다. 방식 낱말은 될 때만(Tibero 는 세그먼트 이름으로 읽는다). 쓸 것이 없으면 null.
+        /// </summary>
+        private string? LobClause(string column, LobStorage target, LobStorage? current)
+        {
+            T? Pick<T>(T? now, T? want, Func<T, bool> carry)
+                where T : struct
+            {
+                if (current is null || (want is { } w && !EqualityComparer<T?>.Default.Equals(now, w)))
+                {
+                    return want;
+                }
+
+                return now is { } n && carry(n) ? n : null;
+            }
+
+            var kind = Supports(TableEditFeature.SecureFileLob) ? Pick(current?.Kind, target.Kind, _ => true) : null;
+            var basicFile = (target.Kind ?? current?.Kind) == LobStorageKind.BasicFile;
+            var tablespace = current is null || NameChanged(current.Tablespace, target.Tablespace) ? target.Tablespace : current.Tablespace;
+            var compression = Pick(current?.Compression, target.Compression, c => c != LobCompression.None && !basicFile);
+            var deduplicate = Pick(current?.Deduplicate, target.Deduplicate, d => d && !basicFile);
+            var inRow = Pick(current?.InRow, target.InRow, r => !r);
+
+            var items = new List<string>();
+            if (!string.IsNullOrWhiteSpace(tablespace))
+            {
+                items.Add("TABLESPACE " + Space(tablespace));
+            }
+
+            if (compression is { } c)
+            {
+                items.Add(c == LobCompression.None ? "NOCOMPRESS" : "COMPRESS " + c.ToString().ToUpperInvariant());
+            }
+
+            if (deduplicate is { } dedup)
+            {
+                items.Add(dedup ? "DEDUPLICATE" : "KEEP_DUPLICATES");
+            }
+
+            if (inRow is { } row)
+            {
+                items.Add(row ? "ENABLE STORAGE IN ROW" : "DISABLE STORAGE IN ROW");
+            }
+
+            if (kind is null && items.Count == 0)
+            {
+                return null;
+            }
+
+            var kindText = kind switch
+            {
+                LobStorageKind.SecureFile => " SECUREFILE",
+                LobStorageKind.BasicFile => " BASICFILE",
+                _ => string.Empty,
+            };
+            return $"LOB ({Q(column)}) STORE AS{kindText}" + (items.Count == 0 ? string.Empty : $" ({string.Join(" ", items)})");
+        }
+
+        private static bool NameChanged(string? now, string? typed) =>
+            !string.IsNullOrWhiteSpace(typed) && !string.Equals(now, TableEditNames.FromInput(typed), StringComparison.Ordinal);
+
+        private static string ParallelClause(int degree) => degree switch
+        {
+            1 => "NOPARALLEL",
+            <= 0 => "PARALLEL",
+            _ => "PARALLEL " + Num(degree),
+        };
+
+        private static string Num(int n) => n.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         /// <summary>새 열·새 테이블의 신원 절(옵션은 값이 있는 것 모두).</summary>
         private static string IdentityClause(IdentityInfo identity) => IdentityText(identity.Generation, identity.StartWith, identity.IncrementBy);

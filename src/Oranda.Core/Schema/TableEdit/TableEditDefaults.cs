@@ -1,3 +1,6 @@
+using Oranda.Core.Connection;
+using Oranda.Core.Metadata;
+
 namespace Oranda.Core.Schema.TableEdit;
 
 /// <summary>
@@ -11,6 +14,76 @@ public static class TableEditDefaults
         ArgumentNullException.ThrowIfNull(name);
         return name.StartsWith("SYS_", StringComparison.Ordinal) || name.StartsWith("BIN$", StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// 테이블 압축 절(<see cref="ITableEditDialect.CompressionClause"/>). Oracle 12c 이상 <c>ROW STORE COMPRESS …</c>, 11g·모름 <c>COMPRESS BASIC</c>·<c>COMPRESS FOR OLTP</c>(12c 도 받는다),
+    /// Tibero <c>COMPRESS</c>(실측 12).
+    /// </summary>
+    public static string CompressionClause(TableCompression compression, ServerInfo? server)
+    {
+        if (server is { Dbms: Dbms.Tibero })
+        {
+            return compression == TableCompression.None ? "NOCOMPRESS" : "COMPRESS";
+        }
+
+        var rowStore = server is { Dbms: Dbms.Oracle, MajorVersion: >= 12 };
+        return compression switch
+        {
+            TableCompression.None => "NOCOMPRESS",
+            TableCompression.Basic => rowStore ? "ROW STORE COMPRESS BASIC" : "COMPRESS BASIC",
+            TableCompression.Advanced => rowStore ? "ROW STORE COMPRESS ADVANCED" : "COMPRESS FOR OLTP",
+            _ => throw new ArgumentOutOfRangeException(nameof(compression), compression, "읽기만 하는 압축은 문장에 쓰지 않는다."),
+        };
+    }
+
+    /// <summary>저장 페이지 기능의 Core 판정 이유 키 머리.</summary>
+    public const string StorageReasonPrefix = "tableEdit.unsupported.";
+
+    /// <summary>
+    /// 저장 페이지(설계 18.2) 기능의 Core 판정 — 방언 판정(<see cref="ITableEditDialect.UnsupportedReasonKey"/>)과 함께 본다(둘 중 하나라도 이유가 있으면 안 됨).
+    /// 방언이 아직 이 기능 값을 모르는 것(「된다」로 답함)에 대비해 보수적으로: 서버를 모르면 끔, Tibero 끔(실측 12·13),
+    /// <see cref="TableEditFeature.OnlineMove"/> = Oracle 12.2+ Enterprise, <see cref="TableEditFeature.MoveUpdateIndexes"/> = Oracle 12.2+,
+    /// <see cref="TableEditFeature.SecureFileLob"/> = Oracle 11+, <see cref="TableEditFeature.AdvancedRowCompression"/> = Oracle Enterprise,
+    /// <see cref="TableEditFeature.BasicTableCompression"/> = Oracle Enterprise·Tibero. 다른 기능은 null.
+    /// </summary>
+    public static string? StorageReasonKey(TableEditFeature feature, ServerInfo? server)
+    {
+        var oracle = server is { Dbms: Dbms.Oracle };
+        var enterprise = server?.Edition is not ("Standard" or "Express");
+        var supported = feature switch
+        {
+            TableEditFeature.OnlineMove => oracle && AtLeast(server!, 12, 2) && enterprise,
+            TableEditFeature.MoveUpdateIndexes => oracle && AtLeast(server!, 12, 2),
+            TableEditFeature.SecureFileLob => oracle && server!.MajorVersion >= 11,
+            TableEditFeature.AdvancedRowCompression => oracle && enterprise,
+            TableEditFeature.BasicTableCompression => server is { Dbms: Dbms.Tibero } || (oracle && enterprise),
+            _ => true,
+        };
+        if (supported)
+        {
+            return null;
+        }
+
+        return StorageReasonPrefix + feature switch
+        {
+            TableEditFeature.OnlineMove => "onlineMove",
+            TableEditFeature.MoveUpdateIndexes => "moveUpdateIndexes",
+            TableEditFeature.SecureFileLob => "secureFileLob",
+            TableEditFeature.BasicTableCompression => "basicTableCompression",
+            _ => "advancedRowCompression",
+        };
+    }
+
+    private static bool AtLeast(ServerInfo server, int major, int minor)
+    {
+        var parts = server.Version.Split('.');
+        var minorPart = parts.Length > 1 && int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : 0;
+        return server.MajorVersion > major || (server.MajorVersion == major && minorPart >= minor);
+    }
+
+    /// <summary>LOB 저장 절을 쓸 수 있는 형식(CLOB·NCLOB·BLOB). BFILE·LONG 은 아님.</summary>
+    public static bool IsLobType(string? dataType) =>
+        dataType?.Trim().ToUpperInvariant() is "CLOB" or "NCLOB" or "BLOB";
 
     /// <summary>Oracle SQL 예약어(<c>V$RESERVED_WORDS</c> 의 RESERVED = 'Y', SQL Language Reference 「Oracle SQL Reserved Words」).</summary>
     public static bool IsReservedWord(string upperName) => ReservedWords.Contains(upperName);

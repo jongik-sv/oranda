@@ -38,6 +38,9 @@ public enum TableEditCheckKind
 
     /// <summary>운영 큰 테이블(<see cref="ITableEditChecks.NumRowsAsync"/> ≥ 기준).</summary>
     LargeTable,
+
+    /// <summary>MOVE 로 다시 쓸 행 수(<see cref="ITableEditChecks.NumRowsAsync"/>, 늘 ⚠, 설계 18.2).</summary>
+    TableRewrite,
 }
 
 /// <summary>
@@ -114,6 +117,10 @@ public static partial class TableEditCheckPlanner
     [GeneratedRegex(@"\d+")]
     private static partial Regex Numbers();
 
+    /// <summary>STORAGE 크기 글(<c>64K</c>, <c>1M</c>, 바이트 수).</summary>
+    [GeneratedRegex(@"^\d+\s*[KMG]?$", RegexOptions.IgnoreCase)]
+    private static partial Regex ExtentSize();
+
     public static TableEditCheckPlan Plan(TableDraft original, TableDraft edited, ITableEditDialect dialect, TableEditCheckOptions options)
     {
         ArgumentNullException.ThrowIfNull(original);
@@ -172,6 +179,185 @@ public static partial class TableEditCheckPlanner
             }
         }
 
+        // ---------- 저장(설계 18.2) ----------
+
+        private bool Supports(TableEditFeature feature) => ReasonKey(feature) is null;
+
+        /// <summary>방언 판정, 없으면 Core 보수 판정(<see cref="TableEditDefaults.StorageReasonKey"/>, 저장 페이지 기능만).</summary>
+        private string? ReasonKey(TableEditFeature feature) =>
+            dialect.UnsupportedReasonKey(feature, options.Server) ?? TableEditDefaults.StorageReasonKey(feature, options.Server);
+
+        /// <summary>저장 칸 값 범위(PCTFREE 0~99, INITRANS 1~255, 병렬 0 이상)와 고급 압축 지원.</summary>
+        private void StorageValues(TableStorage s, StorageChange which)
+        {
+            if (which.HasFlag(StorageChange.PctFree) && s.PctFree is < 0 or > 99)
+            {
+                Invalid(TableDraft.TableRowKey, "PCTFREE", "pctFreeRange");
+            }
+
+            if (which.HasFlag(StorageChange.InitTrans) && s.InitTrans is < 1 or > 255)
+            {
+                Invalid(TableDraft.TableRowKey, "INITRANS", "initTransRange");
+            }
+
+            if (which.HasFlag(StorageChange.Parallel) && s.Parallel is < 0)
+            {
+                Invalid(TableDraft.TableRowKey, "PARALLEL", "parallelRange");
+            }
+
+            if (which.HasFlag(StorageChange.Compression))
+            {
+                if (s.Compression == TableCompression.Advanced)
+                {
+                    Unsupported(TableEditFeature.AdvancedRowCompression, TableDraft.TableRowKey, edited.Name);
+                }
+                else if (s.Compression == TableCompression.Basic)
+                {
+                    Unsupported(TableEditFeature.BasicTableCompression, TableDraft.TableRowKey, edited.Name);
+                }
+                else if (s.Compression == TableCompression.Other)
+                {
+                    Invalid(TableDraft.TableRowKey, edited.Name, "compressionOther");
+                }
+            }
+        }
+
+        /// <summary>
+        /// LOB 저장 절: LOB 형식이 아닌 열 ✖, 지원, 방식 낱말·SECUREFILE 전용 옵션(압축·중복 제거 — 방식을 못 쓰는 방언은 막음, Tibero 실측 밖), BASICFILE 에 그 옵션 ✖.
+        /// </summary>
+        private void LobValues(ColumnDraft c, LobStorage? current)
+        {
+            var target = c.Lob!;
+            if (!TableEditDefaults.IsLobType(c.DataType) && current is null)
+            {
+                Invalid(c.RowKey, c.Name, "lobOnNonLob");
+                return;
+            }
+
+            Unsupported(TableEditFeature.LobStorage, c.RowKey, c.Name);
+            var secureFileOnly = (target.Compression is { } tc && tc != current?.Compression) || (target.Deduplicate is { } td && td != current?.Deduplicate);
+            if ((target.Kind is { } kind && kind != current?.Kind) || secureFileOnly)
+            {
+                Unsupported(TableEditFeature.SecureFileLob, c.RowKey, c.Name);
+            }
+
+            // 편집 모델은 지금 값을 그대로 지니므로 바꾼 값만 본다(BASICFILE 로 바꾸면 문장은 지금 압축·중복 제거를 이어 쓰지 않는다).
+            var basicFile = (target.Kind ?? current?.Kind) == LobStorageKind.BasicFile;
+            var compressionSet = target.Compression is { } and not LobCompression.None && target.Compression != current?.Compression;
+            var deduplicateSet = target.Deduplicate == true && current?.Deduplicate != true;
+            if (basicFile && (compressionSet || deduplicateSet))
+            {
+                Invalid(c.RowKey, c.Name, "basicFileLobOption");
+            }
+        }
+
+        /// <summary>새 테이블 저장 절(설계 18.2): 지원·값 범위·STORAGE 크기 글. GTT 는 저장 절을 쓰지 않으므로 ⚠. IOT 압축은 키 압축이라 ✖.</summary>
+        private void NewStorage(IReadOnlyList<ColumnDraft> columns)
+        {
+            var empty = new TableDraft(edited.Owner, edited.Name);
+            var which = TableDraftDiff.StorageChanges(empty, edited) & ~StorageChange.Tablespace;
+            var lobs = columns.Where(c => TableDraftDiff.LobChanged(null, c.Lob)).ToList();
+            if (which == StorageChange.None && lobs.Count == 0)
+            {
+                return;
+            }
+
+            if (edited.Kind == TableKind.Temporary)
+            {
+                Findings.Add(new CheckFinding(CheckSeverity.Warning, CheckCode.SettingIgnored, TableDraft.TableRowKey) { Subject = edited.Name, Detail = "temporaryStorage" });
+                return;
+            }
+
+            if (which != StorageChange.None)
+            {
+                Unsupported(TableEditFeature.StorageAttributes, TableDraft.TableRowKey, edited.Name);
+                StorageValues(edited.Storage, which);
+                if (which.HasFlag(StorageChange.Compression) && edited.Kind == TableKind.Iot)
+                {
+                    Invalid(TableDraft.TableRowKey, edited.Name, "iotCompression");
+                }
+
+                foreach (var size in (string?[])[edited.Storage.InitialExtent, edited.Storage.NextExtent])
+                {
+                    if (!string.IsNullOrWhiteSpace(size) && !ExtentSize().IsMatch(size.Trim()))
+                    {
+                        Invalid(TableDraft.TableRowKey, size.Trim(), "extentSize");
+                    }
+                }
+            }
+
+            foreach (var c in lobs)
+            {
+                LobValues(c, null);
+            }
+        }
+
+        /// <summary>기존 테이블에 더하는 열의 LOB 저장 절(GTT 는 쓰지 않으므로 ⚠).</summary>
+        private void AddedLob(ColumnDraft c)
+        {
+            if (!TableDraftDiff.LobChanged(null, c.Lob))
+            {
+                return;
+            }
+
+            if (original.Kind == TableKind.Temporary)
+            {
+                Findings.Add(new CheckFinding(CheckSeverity.Warning, CheckCode.SettingIgnored, c.RowKey) { Subject = c.Name, Detail = "temporaryStorage" });
+                return;
+            }
+
+            LobValues(c, null);
+        }
+
+        /// <summary>기존 테이블 저장 변경(설계 18.2). MOVE 가 생기면 참: 행 수 ⚠, ONLINE 이 안 되면 잠금 ⚠, 파티션 테이블 MOVE ✖.</summary>
+        private bool AlterStorage(TableDraftChanges changes)
+        {
+            var lobs = changes.Columns.Where(d => d.State == DraftRowState.Modified && d.Changes.HasFlag(ColumnChange.Lob) && !TableDraftDiff.IsRecreated(d, dialect)).ToList();
+            var table = changes.Storage & ~StorageChange.Extents;
+            if (changes.Storage.HasFlag(StorageChange.Extents))
+            {
+                // TE-39: 기존 테이블의 STORAGE(INITIAL/NEXT)는 문장을 만들지 않는다.
+                Findings.Add(new CheckFinding(CheckSeverity.Warning, CheckCode.SettingIgnored, TableDraft.TableRowKey) { Subject = original.Name, Detail = "existingStorage" });
+            }
+
+            if (table != StorageChange.None)
+            {
+                Unsupported(TableEditFeature.StorageAttributes, TableDraft.TableRowKey, edited.Name);
+                StorageValues(edited.Storage, table);
+            }
+
+            foreach (var d in lobs)
+            {
+                LobValues(d.Edited!, d.Original!.Lob);
+            }
+
+            var moves = (table & (StorageChange.Tablespace | StorageChange.Compression)) != 0 || lobs.Count > 0;
+            if (!moves)
+            {
+                return false;
+            }
+
+            if (edited.Columns.FirstOrDefault(c => !c.IsDropped && c.DataType?.Trim().ToUpperInvariant() is "LONG" or "LONG RAW") is { } longColumn)
+            {
+                // LONG·LONG RAW 열이 있는 테이블은 MOVE 가 안 된다(ORA-00997).
+                Invalid(TableDraft.TableRowKey, longColumn.Name, "longColumnMove");
+            }
+
+            if (original.IsPartitioned)
+            {
+                // 파티션 테이블은 테이블 단위 MOVE 가 안 된다(ORA-14511) — 파티션 페이지(18.4)에서.
+                Invalid(TableDraft.TableRowKey, original.Name, "partitionedMove");
+            }
+
+            Checks.Add(new TableEditCheck(TableEditCheckKind.TableRewrite, CheckCode.TableRewrite, TableDraft.TableRowKey, original.Name));
+            if (!Supports(TableEditFeature.OnlineMove))
+            {
+                Findings.Add(new CheckFinding(CheckSeverity.Warning, CheckCode.MoveLocksDml, TableDraft.TableRowKey) { Subject = original.Name });
+            }
+
+            return true;
+        }
+
         private void Invalid(string rowKey, string subject, string reason) =>
             Findings.Add(new CheckFinding(CheckSeverity.Block, CheckCode.InvalidDefinition, rowKey) { Subject = subject, Detail = reason });
 
@@ -208,6 +394,11 @@ public static partial class TableEditCheckPlanner
             foreach (var d in changes.Indexes)
             {
                 Block(d.RowKey, (d.Edited ?? d.Original)!.Name);
+            }
+
+            if (changes.Storage != StorageChange.None)
+            {
+                Block(TableDraft.TableRowKey, edited.Name);
             }
 
             // GTT·IOT 이름 바꾸기는 된다(실측). 외부·클러스터는 막는다.
@@ -264,6 +455,8 @@ public static partial class TableEditCheckPlanner
             {
                 ColumnFeatures(c);
             }
+
+            NewStorage(columns);
 
             if (!string.IsNullOrWhiteSpace(edited.Name))
             {
@@ -327,6 +520,7 @@ public static partial class TableEditCheckPlanner
                 {
                     case DraftRowState.Added:
                         ColumnFeatures(d.Edited!);
+                        AddedLob(d.Edited!);
                         if (d.Edited!.IsVirtual)
                         {
                             Unsupported(TableEditFeature.VirtualColumn, d.RowKey, d.Edited.Name);
@@ -443,8 +637,10 @@ public static partial class TableEditCheckPlanner
                 }
             }
 
-            // 운영 큰 테이블(설계 10장): MODIFY·NOT NULL·제약 추가·인덱스 만들기
-            var locks = changes.Columns.Any(d => d.State == DraftRowState.Modified
+            var moves = AlterStorage(changes);
+
+            // 운영 큰 테이블(설계 10장): MODIFY·NOT NULL·제약 추가·인덱스 만들기·MOVE
+            var locks = moves || changes.Columns.Any(d => d.State == DraftRowState.Modified
                                                  && (d.Changes & (ColumnChange.Type | ColumnChange.Nullable | ColumnChange.Default | ColumnChange.VirtualExpression)) != 0)
                         || changes.Columns.Any(d => d.State == DraftRowState.Added && !d.Edited!.IsNullable)
                         || changes.Constraints.Any(d => d.State == DraftRowState.Added || d.Changes.HasFlag(ConstraintChange.Definition)
@@ -800,7 +996,7 @@ public static partial class TableEditCheckPlanner
 
         private void Unsupported(TableEditFeature feature, string rowKey, string subject)
         {
-            if (dialect.UnsupportedReasonKey(feature, options.Server) is { } reason)
+            if (ReasonKey(feature) is { } reason)
             {
                 Findings.Add(new CheckFinding(CheckSeverity.Block, CheckCode.Unsupported, rowKey) { Subject = subject, Detail = reason });
             }
@@ -900,6 +1096,15 @@ public static class TableEditCheckRunner
                     return dependents.Count == 0
                         ? null
                         : new CheckFinding(CheckSeverity.Warning, check.Code, check.RowKey) { Subject = check.Subject, Dependents = dependents };
+                }
+
+            case TableEditCheckKind.TableRewrite:
+                {
+                    var rows = await checks.NumRowsAsync(s, table, ct).ConfigureAwait(false);
+                    return new CheckFinding(CheckSeverity.Warning, check.Code, check.RowKey)
+                    {
+                        Subject = check.Subject, Count = rows, Detail = rows is null ? "unknown" : null,
+                    };
                 }
 
             case TableEditCheckKind.LargeTable:

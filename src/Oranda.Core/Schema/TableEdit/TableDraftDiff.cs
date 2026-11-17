@@ -1,3 +1,5 @@
+using Oranda.Core.Metadata;
+
 namespace Oranda.Core.Schema.TableEdit;
 
 /// <summary>편집 줄의 상태(화면 색: 노랑·초록·빨강, 설계 2장).</summary>
@@ -25,6 +27,32 @@ public enum ColumnChange
     Identity = 64,
     Invisible = 128,
     Domain = 256,
+
+    /// <summary>LOB 저장 절(「저장」 페이지, 설계 18.2 — 열 페이지 건수에 넣지 않는다).</summary>
+    Lob = 512,
+}
+
+/// <summary>테이블 저장 속성에서 바뀐 칸(설계 18.2).</summary>
+[Flags]
+public enum StorageChange
+{
+    None = 0,
+
+    /// <summary>테이블스페이스(MOVE).</summary>
+    Tablespace = 1,
+    PctFree = 2,
+    InitTrans = 4,
+
+    /// <summary>압축(MOVE).</summary>
+    Compression = 8,
+    Logging = 16,
+    Parallel = 32,
+
+    /// <summary><c>STORAGE (INITIAL/NEXT)</c>: 기존 테이블은 문장을 만들지 않는다(TE-39) — 검사가 ⚠ 로 알린다.</summary>
+    Extents = 64,
+
+    /// <summary>앞 실행에서 남은 REBUILD(<see cref="TableDraft.RebuildIndexes"/>).</summary>
+    Rebuild = 128,
 }
 
 /// <summary>제약에서 바뀐 칸.</summary>
@@ -77,16 +105,20 @@ public sealed record TableDraftChanges
     /// <summary>테이블 이름이 바뀌었나(기존 테이블, 설계 18.1).</summary>
     public bool Renamed { get; init; }
 
+    /// <summary>바뀐 저장 속성(기존 테이블, 설계 18.2). LOB 은 열 차이의 <see cref="ColumnChange.Lob"/>.</summary>
+    public StorageChange Storage { get; init; }
+
     /// <summary>바뀐 것이 없다(편집 켜고 안 고침 또는 고쳤다 되돌림 = 문장 0개).</summary>
-    public bool IsEmpty => Columns.Count == 0 && Constraints.Count == 0 && Indexes.Count == 0 && !CommentChanged && !Renamed;
+    public bool IsEmpty => Columns.Count == 0 && Constraints.Count == 0 && Indexes.Count == 0 && !CommentChanged && !Renamed && Storage == StorageChange.None;
 
     /// <summary>페이지 이름 옆 바뀐 건수(설계 7.1).</summary>
     public int CountFor(TableEditPage page) => page switch
     {
-        TableEditPage.Columns => Columns.Count,
+        TableEditPage.Columns => Columns.Count(d => d.Changes != ColumnChange.Lob),
         TableEditPage.Constraints => Constraints.Count,
         TableEditPage.Indexes => Indexes.Count,
         TableEditPage.Description => (CommentChanged ? 1 : 0) + (Renamed ? 1 : 0),
+        TableEditPage.Storage => System.Numerics.BitOperations.PopCount((uint)Storage) + Columns.Count(d => d.Changes.HasFlag(ColumnChange.Lob)),
         _ => 0,
     };
 
@@ -138,7 +170,70 @@ public static class TableDraftDiff
             Indexes = indexes,
             CommentChanged = !string.Equals(original.Comment ?? string.Empty, edited.Comment ?? string.Empty, StringComparison.Ordinal),
             Renamed = !edited.IsNewTable && !original.IsNewTable && !string.Equals(original.Name, edited.Name, StringComparison.Ordinal),
+            Storage = edited.IsNewTable ? StorageChange.None : StorageChanges(original, edited),
         };
+    }
+
+    /// <summary>
+    /// 저장 속성 차이: 편집 칸이 비어 있지 않고(null 아님) 원본과 다를 때만(설계 18.2 「바꿀 값」만 비교 — 서버 기본값 표기로 거짓 차이가 나지 않는다).
+    /// </summary>
+    public static StorageChange StorageChanges(TableDraft original, TableDraft edited)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(edited);
+        var (o, e) = (original.Storage, edited.Storage);
+        var changes = StorageChange.None;
+        if (NameSet(original.Tablespace, edited.Tablespace))
+        {
+            changes |= StorageChange.Tablespace;
+        }
+
+        changes |= Set(o.PctFree, e.PctFree, StorageChange.PctFree) | Set(o.InitTrans, e.InitTrans, StorageChange.InitTrans)
+                   | Set(o.Compression, e.Compression, StorageChange.Compression) | Set(o.Logging, e.Logging, StorageChange.Logging)
+                   | Set(o.Parallel, e.Parallel, StorageChange.Parallel);
+        if (TextSet(o.InitialExtent, e.InitialExtent) || TextSet(o.NextExtent, e.NextExtent))
+        {
+            changes |= StorageChange.Extents;
+        }
+
+        if (edited.RebuildIndexes.Count > 0)
+        {
+            changes |= StorageChange.Rebuild;
+        }
+
+        return changes;
+    }
+
+    /// <summary>
+    /// 이름 칸(테이블스페이스) 차이: 칸 글을 <see cref="TableEditNames.FromInput"/> 로 읽어(따옴표 없으면 대문자) 사전 표기와 비교. 빈 칸 = 그대로.
+    /// </summary>
+    private static bool NameSet(string? original, string? edited) =>
+        !string.IsNullOrWhiteSpace(edited) && !string.Equals(original, TableEditNames.FromInput(edited), StringComparison.Ordinal);
+
+    /// <summary>LOB 저장 절이 바뀌었나(같은 규칙: 편집 칸이 비지 않고 원본과 다름).</summary>
+    public static bool LobChanged(LobStorage? original, LobStorage? edited) =>
+        edited is not null
+        && (Set(original?.Kind, edited.Kind, true) || NameSet(original?.Tablespace, edited.Tablespace) || Set(original?.Compression, edited.Compression, true)
+            || Set(original?.Deduplicate, edited.Deduplicate, true) || Set(original?.InRow, edited.InRow, true));
+
+    private static T Set<TValue, T>(TValue? o, TValue? e, T flag)
+        where TValue : struct
+        where T : struct =>
+        e is { } v && !EqualityComparer<TValue?>.Default.Equals(o, v) ? flag : default;
+
+    private static bool TextSet(string? o, string? e) =>
+        !string.IsNullOrWhiteSpace(e) && !string.Equals(o?.Trim(), e.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 함수 기반 인덱스의 식이 이 편집에서 지우는 열을 쓰는가. 서버가 열과 함께 지우므로 문장은 만들지 않지만(T1b 결정), 뒤 문장(REBUILD·규칙 이름 바꾸기)은
+    /// 이 인덱스를 다루면 안 된다(ORA-01418).
+    /// </summary>
+    public static bool GoesWithDroppedColumn(IndexDraft index, TableDraftChanges changes)
+    {
+        ArgumentNullException.ThrowIfNull(index);
+        ArgumentNullException.ThrowIfNull(changes);
+        var dropped = changes.Columns.Where(d => d.State == DraftRowState.Dropped).Select(d => d.Original!.Name).ToHashSet(StringComparer.Ordinal);
+        return dropped.Count > 0 && index.Columns.Any(c => c.Expression is { } x && TableEditExpression.Names(x).Any(dropped.Contains));
     }
 
     /// <summary>열을 MODIFY 가 아니라 DROP + ADD 로 바꾸는가(가상↔일반, 또는 방언이 가상 식 MODIFY 를 못 함).</summary>
@@ -247,6 +342,11 @@ public static class TableDraftDiff
         if (!string.Equals(Blank(o.Domain), Blank(e.Domain), StringComparison.OrdinalIgnoreCase))
         {
             changes |= ColumnChange.Domain;
+        }
+
+        if (LobChanged(o.Lob, e.Lob))
+        {
+            changes |= ColumnChange.Lob;
         }
 
         return changes;

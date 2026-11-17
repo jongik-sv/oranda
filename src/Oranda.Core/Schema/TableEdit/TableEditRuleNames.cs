@@ -30,7 +30,7 @@ internal static class TableEditRuleNames
 
         foreach (var i in edited.Indexes.Where(i => !i.IsDropped && changes.StateOf(i.RowKey) != DraftRowState.Dropped))
         {
-            if (original.Index(i.RowKey) is not { } o || o.Name != i.Name)
+            if (original.Index(i.RowKey) is not { } o || o.Name != i.Name || TableDraftDiff.GoesWithDroppedColumn(o, changes))
             {
                 continue;
             }

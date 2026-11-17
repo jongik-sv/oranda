@@ -146,6 +146,12 @@ public sealed record TableInfo(DbObjectRef Table, IReadOnlyList<ColumnInfo> Colu
 
     /// <summary>파티션 방식·키·파티션 목록(설계 18.4, T14). 파티션 테이블이 아니거나 읽지 못했으면 null.</summary>
     public PartitioningInfo? Partitioning { get; init; }
+
+    /// <summary>저장 속성(설계 18.2). 읽지 않았으면(예전 캐시·뷰·공급자가 아직 안 읽음) null.</summary>
+    public TableStorage? Storage { get; init; }
+
+    /// <summary>LOB 열의 저장 절(<c>ALL_LOBS</c>, 설계 18.2). LOB 열이 없거나 읽지 않았으면 빔.</summary>
+    public IReadOnlyList<LobInfo> Lobs { get; init; } = [];
 }
 
 /// <summary>

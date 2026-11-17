@@ -87,8 +87,15 @@ public static class TableDraftRebase
             }
         }
 
+        // MOVE 가 반영됐으면 아직 안 한 REBUILD 를 넘긴다(새 원본과 차이에는 MOVE 가 없어 다시 나오지 않으므로).
+        var moved = script.Statements.Take(applied).Any(s => s.Effect.Kind == TableEditEffectKind.Move);
+        var rebuilt = script.Statements.Take(applied).Where(s => s.Effect.Kind == TableEditEffectKind.Rebuild).Select(s => s.Effect.Name!).ToHashSet(StringComparer.Ordinal);
+        var rebuilds = moved
+            ? script.Statements.Skip(applied).Where(s => s.Effect.Kind == TableEditEffectKind.Rebuild).Select(s => s.Effect.Name!)
+            : [];
         edited = edited with
         {
+            RebuildIndexes = [.. edited.RebuildIndexes.Where(n => !rebuilt.Contains(n)).Concat(rebuilds).Distinct(StringComparer.Ordinal)],
             Constraints = [.. edited.Constraints.Select(c => constraintNames.TryGetValue(c.RowKey, out var n) ? c with { Name = n } : c)],
             Indexes = [.. edited.Indexes.Select(i => indexNames.TryGetValue(i.RowKey, out var n) ? i with { Name = n } : i)],
         };

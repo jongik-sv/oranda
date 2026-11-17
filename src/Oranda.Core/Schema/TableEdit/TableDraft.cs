@@ -35,8 +35,23 @@ public sealed record TableDraft(string Owner, string Name)
     /// <summary>파티션 테이블인가. 파티션 정의는 1차에서 건드리지 않는다(설계 3장).</summary>
     public bool IsPartitioned { get; init; }
 
-    /// <summary>테이블스페이스. 새 테이블은 사용자가 칸을 열어 쓴 것만 문장에 넣는다(TE-22). 원본은 읽은 값.</summary>
+    /// <summary>
+    /// 테이블스페이스. 새 테이블은 사용자가 칸을 열어 쓴 것만 문장에 넣는다(TE-22). 원본은 읽은 값. 기존 테이블에서 다른 값을 쓰면 「저장」 페이지의 MOVE(설계 18.2),
+    /// 비우면(null·공백) 그대로 둔다.
+    /// </summary>
     public string? Tablespace { get; init; }
+
+    /// <summary>
+    /// 저장 속성(「저장」 페이지, 설계 18.2). 원본 = 읽은 값(모르면 null 칸). 편집 모델 = 「바꿀 값」: null 칸은 그대로 두고, 원본과 같은 값도 문장이 없다.
+    /// 화면은 원본과 같은 값을 「바꿀 값」 칸에 비워 보인다.
+    /// </summary>
+    public TableStorage Storage { get; init; } = new();
+
+    /// <summary>
+    /// 아직 REBUILD 하지 않은 인덱스 이름(지금 서버 이름). MOVE 는 성공하고 뒤 REBUILD 가 멈춘 뒤 <see cref="TableDraftRebase.Rebase"/> 가 채운다 —
+    /// 다시 읽은 원본에는 MOVE 할 것이 없어 차이만으로는 남은 REBUILD 를 알 수 없다(설계 18.2).
+    /// </summary>
+    public IReadOnlyList<string> RebuildIndexes { get; init; } = [];
 
     /// <summary>
     /// 테이블 이름을 바꿀 때 규칙 이름(<c>PK_&lt;옛 이름&gt;</c>·<c>IX_&lt;옛 이름&gt;_NN</c> 꼴) 제약·인덱스도 따라 바꾸나(설계 18.1 「규칙 이름도 바꾸기」, 기본 끔, TE-38).
@@ -108,6 +123,9 @@ public sealed record ColumnDraft(string RowKey, string Name)
 
     /// <summary>숨김 열(설계 18.5).</summary>
     public bool IsInvisible { get; init; }
+
+    /// <summary>LOB 열의 저장 절(「저장」 페이지 LOB 표, 설계 18.2). LOB 이 아니면 null. 편집 모델의 null 칸은 그대로 둔다(<see cref="TableDraft.Storage"/> 와 같은 규칙).</summary>
+    public LobStorage? Lob { get; init; }
 
     /// <summary>도메인 이름(23ai, 설계 18.5).</summary>
     public string? Domain { get; init; }

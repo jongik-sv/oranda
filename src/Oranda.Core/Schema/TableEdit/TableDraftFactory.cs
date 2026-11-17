@@ -20,7 +20,8 @@ public static partial class TableDraftFactory
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(dialect);
 
-        var columns = table.Columns.OrderBy(c => c.Position).Select((c, i) => Column(c, "c" + (i + 1))).ToList();
+        var lobs = table.Lobs.GroupBy(l => l.Column, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Storage, StringComparer.Ordinal);
+        var columns = table.Columns.OrderBy(c => c.Position).Select((c, i) => Column(c, "c" + (i + 1)) with { Lob = lobs.GetValueOrDefault(c.Name) }).ToList();
         var keys = columns.ToDictionary(c => c.Name, c => c.RowKey, StringComparer.Ordinal);
         string Key(string name) => keys.TryGetValue(name, out var k) ? k : UnknownColumnKeyPrefix + name;
 
@@ -51,6 +52,7 @@ public static partial class TableDraftFactory
             Kind = table.Kind,
             IsPartitioned = table.IsPartitioned,
             Tablespace = table.Tablespace,
+            Storage = table.Storage ?? new TableStorage(),
         };
     }
 
@@ -64,7 +66,7 @@ public static partial class TableDraftFactory
     /// <summary>
     /// 「이 구조로 새 테이블…」(설계 7.5): 열(가상 포함)·주석·제약·인덱스를 복사한 새 테이블 편집 모델. 제약·인덱스 이름은 새 이름으로 규칙대로 다시 만들고
     /// (<see cref="ConstraintNaming"/>, <see cref="ConstraintDraft.IsAutoName"/>), 줄 키는 모두 새 키다. 제약이 만든 인덱스와 다룰 수 없는 종류의 인덱스는 옮기지 않는다.
-    /// 테이블스페이스는 옮기지 않는다(TE-22). 신원 속성은 옮긴다(설계 18.5 — TE-7 의 예외를 없앰). 다만 속성을 못 읽은 신원 열(<see cref="ColumnDraft.IsIdentityUnknown"/>)은
+    /// 테이블스페이스·저장 속성·LOB 저장 절은 옮기지 않는다(TE-22, 설계 18.2). 신원 속성은 옮긴다(설계 18.5 — TE-7 의 예외를 없앰). 다만 속성을 못 읽은 신원 열(<see cref="ColumnDraft.IsIdentityUnknown"/>)은
     /// 신원 없이 옮긴다(생성 방식을 짐작하지 않는다). 원본은 <see cref="Empty"/> 와 짝이다.
     /// </summary>
     public static TableDraft CopyStructure(TableInfo source, string owner, string name, ITableEditDialect dialect, int maxIdentifierBytes)
@@ -89,6 +91,7 @@ public static partial class TableDraftFactory
             RowKey = Remap(c.RowKey),
             OriginalPosition = null,
             IsIdentityUnknown = false,
+            Lob = null,
         }).ToList();
         var constraints = from.Constraints.Select(c => c with
         {
