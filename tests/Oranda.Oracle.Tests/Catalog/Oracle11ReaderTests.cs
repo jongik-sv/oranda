@@ -17,7 +17,9 @@ public class Oracle11ReaderTests
     [InlineData("ID > 0", false)]
     [InlineData("ID IS NOT NULL AND ID > 0", false)]
     [InlineData("ID > 0 OR CODE IS NOT NULL", false)] // 끝만 같은 사용자 CHECK 는 남긴다(형식 변환이 되살림)
-    [InlineData(" \"A B\" IS NOT NULL ", true)]
+    [InlineData("\"A B\" IS NOT NULL", true)]
+    [InlineData(" \"A B\" IS NOT NULL ", false)] // 서버 꼴은 앞뒤 공백이 없다 — 사용자가 CHECK ( "A B" IS NOT NULL ) 로 쓴 것(조건을 쓴 그대로 둠, Tibero 실측 P07)
+    [InlineData("\"A\"  IS NOT NULL", false)]
     [InlineData("id is not null", false)] // SQL REGEXP_LIKE 처럼 대소문자를 가린다
     [InlineData("", false)]
     [InlineData(null, false)]

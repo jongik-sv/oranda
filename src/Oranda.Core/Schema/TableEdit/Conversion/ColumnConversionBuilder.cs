@@ -201,6 +201,7 @@ public static class ColumnConversionBuilder
                 {
                     ChangeTarget = changeTarget with { DataLoss = DataLossKind.DropColumns, DroppedColumns = [source.Name] },
                 },
+                .. DropLeftIndexes(request),
             ]),
             new(ColumnConversionStepKind.RenameTemporary, [Alter($"RENAME COLUMN {Q(temp)} TO {Q(target.Name)}")]),
         };
@@ -382,6 +383,31 @@ public static class ColumnConversionBuilder
         }
 
         return statements;
+    }
+
+    /// <summary>
+    /// 3단계 끝: 옛 열을 지운 뒤에도 남은, 이 열을 쓰던 인덱스(PK·UK 에 딸린 것 빼고)를 지운다. Tibero 는 <c>DROP COLUMN … CASCADE CONSTRAINTS</c> 뒤에도
+    /// 그 열을 쓰는 함수 기반 인덱스를 남겨 4단계 RENAME 이 TBR-8026 으로 막힌다(T17b 실측). Oracle 은 열과 함께 지우므로 블록이 아무것도 하지 않는다.
+    /// 사전에 아직 있는 것만 실제 소유자로 지워 다시 돌려도 안전하고(남은 단계 스크립트), 확인 블록과 DROP COLUMN 사이에 실패할 문장을 두지 않는다. 5단계가 다시 만든다.
+    /// </summary>
+    private static IEnumerable<SqlStatement> DropLeftIndexes(ColumnConversionRequest request)
+    {
+        var original = request.Original;
+        var names = original.Indexes
+            .Where(i => !i.IsDropped && i.ConstraintName is null && UsesColumn(i, request.RowKey, request.Source.Name))
+            .Select(i => SqlLiteral.Quote(i.Name))
+            .ToList();
+        if (names.Count == 0)
+        {
+            yield break;
+        }
+
+        var text = "BEGIN\n"
+                   + $"  FOR r IN (SELECT owner, index_name FROM all_indexes WHERE table_owner = {SqlLiteral.Quote(original.Owner)} AND table_name = {SqlLiteral.Quote(original.Name)}\n"
+                   + $"               AND index_name IN ({string.Join(", ", names)})) LOOP\n"
+                   + "    EXECUTE IMMEDIATE 'DROP INDEX \"' || r.owner || '\".\"' || r.index_name || '\"';\n"
+                   + "  END LOOP;\nEND;";
+        yield return new SqlStatement(text, default, StatementKind.PlSql) { Verb = "BEGIN" };
     }
 
     private static bool UsesColumn(IndexDraft index, string key, string column) =>

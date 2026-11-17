@@ -1,5 +1,6 @@
 using System.Text;
 using Oranda.Core.Execution;
+using Oranda.Core.Journal;
 using Oranda.Core.Metadata;
 
 namespace Oranda.Core.Schema.TableEdit.Conversion;
@@ -130,6 +131,7 @@ public sealed record ColumnConversionPlan(
             return string.Empty;
         }
 
+        applied = RestartIndex(applied);
         var sb = new StringBuilder();
         var first = StepOf(applied).Number;
         sb.Append("-- 형식 변환 남은 단계: ").Append(Table.Owner).Append('.').Append(Table.Name).Append('.').Append(Column)
@@ -145,6 +147,34 @@ public sealed record ColumnConversionPlan(
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// 남은 단계의 첫 문장: 3단계 안에서 옛 열 DROP 이 아직 안 됐으면 그 단계 처음(확인 블록부터 — 멈춘 사이 쓰인 행을 DROP 이 지우지 않게), 아니면 <paramref name="applied"/>.
+    /// </summary>
+    private int RestartIndex(int applied)
+    {
+        var start = 0;
+        foreach (var step in Steps)
+        {
+            if (applied < start + step.Statements.Count)
+            {
+                if (step.Kind == ColumnConversionStepKind.DropOriginal)
+                {
+                    var drop = step.Statements.ToList().FindIndex(x => x.ChangeTarget?.DataLoss == DataLossKind.DropColumns);
+                    if (drop >= 0 && applied <= start + drop)
+                    {
+                        return start;
+                    }
+                }
+
+                return applied;
+            }
+
+            start += step.Statements.Count;
+        }
+
+        return applied;
     }
 }
 

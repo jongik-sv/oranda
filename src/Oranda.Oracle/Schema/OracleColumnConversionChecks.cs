@@ -26,7 +26,7 @@ namespace Oranda.Oracle.Schema;
 /// <c>CAST('abcd' AS VARCHAR2(3))</c> 는 자르므로 검사는 CAST 가 아니라 변수 담기(ORA-06502)로 본다.
 /// </summary>
 [OrandaService(typeof(IColumnConversionChecks), Dbms = Dbms.Oracle)]
-internal sealed class OracleColumnConversionChecks : IColumnConversionChecks
+internal sealed partial class OracleColumnConversionChecks : IColumnConversionChecks
 {
     /// <summary>2차 검사가 모으는 ROWID 수(「그 행 보기」).</summary>
     internal const int MaxRowIds = 100;
@@ -55,7 +55,7 @@ internal sealed class OracleColumnConversionChecks : IColumnConversionChecks
             };
         }
 
-        (string, string)[] args = [("TABLE", Qualified(table)), ("TYPE", OracleTableEditChecks.CastType(target))];
+        (string, string)[] args = [("TABLE", Qualified(table)), ("TYPE", CheckedType(OracleTableEditChecks.CastType(target)))];
         var notNull = target.IsNullable ? 0 : 1;
         var scan = ValueQuery(table, expression);
         string? firstError;
@@ -75,6 +75,10 @@ internal sealed class OracleColumnConversionChecks : IColumnConversionChecks
             }
 
             firstError = Text(error!.Value);
+            if (firstError?.Contains("ORA-01013", StringComparison.Ordinal) == true)
+            {
+                throw new OperationCanceledException("변환 검사 블록이 취소됐다: " + firstError, ct); // 블록이 취소를 삼킴 — 실패로 세지 않는다
+            }
         }
         catch (OracleException ex) when (!ct.IsCancellationRequested)
         {
@@ -203,6 +207,16 @@ internal sealed class OracleColumnConversionChecks : IColumnConversionChecks
         rowIds.Count == 0
             ? null
             : TableEditCheckSql.RowsSql(table, "t.ROWID IN (" + string.Join(", ", rowIds.Select(r => "CHARTOROWID(" + SqlLiteral.Quote(r) + ")")) + ")");
+
+    /// <summary>
+    /// 블록 DECLARE 에 그대로 들어가는 형식 글은 형식 표기 글자(영숫자·<c>_</c>·괄호·쉼표·공백·<c>*</c>)만 받는다 — 검사 읽기는 정책 관문 밖이라
+    /// 자유 입력이 PL/SQL 로 새지 않게. 아니면 <see cref="ArgumentException"/>(부르는 쪽이 ⚠ 「확인 못 함」).
+    /// </summary>
+    internal static string CheckedType(string type) =>
+        TypePattern().IsMatch(type) ? type : throw new ArgumentException("형식 표기가 아니다: " + type, nameof(type));
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\A[A-Za-z][A-Za-z0-9_(), *]*\z")]
+    private static partial System.Text.RegularExpressions.Regex TypePattern();
 
     private static string N(int n) => n.ToString(CultureInfo.InvariantCulture);
 

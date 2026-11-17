@@ -171,6 +171,43 @@ public sealed class ColumnConversionBuilderTests
     }
 
     [Fact]
+    public void Swap_drops_left_indexes_after_the_column_in_a_rerunnable_block()
+    {
+        // Tibero 는 DROP COLUMN … CASCADE CONSTRAINTS 뒤에도 그 열을 쓰는 함수 기반 인덱스를 남겨 4단계 RENAME 이 TBR-8026 으로 막힌다(T17b 실측) →
+        // 옛 열을 지운 다음 사전에 아직 남은 그 열의 인덱스(제약에 딸리지 않은 것)만 실제 소유자로 지운다. 확인 블록과 DROP COLUMN 은 붙어 있다.
+        var note = ColumnConversionBuilder.BuildSwap(Request("NOTE", c => c with { Length = 100 }), Dialect, null);
+        var name = ColumnConversionBuilder.BuildSwap(Request("CUSTOMER_NAME", c => c with { DataType = "NUMBER", Length = null, CharSemantics = null }), Dialect, null);
+
+        var drop = note.Steps[2].Statements;
+        Assert.Equal([StatementKind.PlSql, StatementKind.Ddl, StatementKind.PlSql], drop.Select(s => s.Kind));
+        Assert.Equal("ALTER TABLE SAMPLE.ORDERS DROP COLUMN NOTE CASCADE CONSTRAINTS", drop[1].Text);
+        Assert.Equal(
+            "BEGIN\n  FOR r IN (SELECT owner, index_name FROM all_indexes WHERE table_owner = 'SAMPLE' AND table_name = 'ORDERS'\n"
+            + "               AND index_name IN ('IX_ORDERS_02')) LOOP\n"
+            + "    EXECUTE IMMEDIATE 'DROP INDEX \"' || r.owner || '\".\"' || r.index_name || '\"';\n  END LOOP;\nEND;",
+            drop[2].Text);
+        Assert.Contains("IN ('IX_ORDERS_01')", name.Steps[2].Statements[2].Text, StringComparison.Ordinal);
+        Assert.Equal(2, ColumnConversionBuilder.BuildSwap(Request("CUSTOMER_ID", c => c with { DataType = "VARCHAR2", Length = 20, Precision = null, Scale = null }), Dialect, null)
+            .Steps[2].Statements.Count); // 제약 인덱스만 있으면 블록 없음
+        Assert.Contains("CREATE INDEX SAMPLE.IX_ORDERS_02 ON SAMPLE.ORDERS (UPPER(\"NOTE\"))", Texts(note)); // 5단계가 다시 만든다
+    }
+
+    [Fact]
+    public void Remaining_script_reruns_step_three_from_the_check_until_the_column_is_dropped()
+    {
+        var plan = ColumnConversionBuilder.BuildSwap(Request("NOTE", c => c with { Length = 100 }), Dialect, null);
+
+        var atCheck = plan.RemainingScript(3);   // ADD·UPDATE·COMMIT 뒤 확인 블록에서 멈춤
+        var atDrop = plan.RemainingScript(4);    // 확인 블록 뒤 DROP COLUMN 에서 멈춤 → 확인부터 다시
+        var atCleanup = plan.RemainingScript(5); // 옛 열은 지워짐 → 남은 인덱스 블록부터(다시 돌려도 안전)
+
+        Assert.Equal(atCheck, atDrop);
+        Assert.StartsWith("-- 형식 변환 남은 단계: SAMPLE.ORDERS.NOTE (3단계부터)\n\nDECLARE", atDrop, StringComparison.Ordinal);
+        Assert.StartsWith("-- 형식 변환 남은 단계: SAMPLE.ORDERS.NOTE (3단계부터)\n\nBEGIN\n  FOR r IN", atCleanup, StringComparison.Ordinal);
+        Assert.DoesNotContain("DROP COLUMN", atCleanup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Swap_with_a_new_name_renames_the_temporary_column_and_conditions()
     {
         var request = Request("STATUS", c => c with { Name = "STATE", Length = 2 });

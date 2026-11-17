@@ -321,3 +321,28 @@ USER_RECYCLEBIN 열: OBJECT_NAME, ORIGINAL_NAME, TYPE, TS_NAME, CREATETIME, DROP
 | LIST `MERGE PARTITIONS PA, PB INTO PARTITION PAB UPDATE INDEXES` | OK | | | 같음. BOUND = `'A','B'` |
 
 사전: `ALL_PART_TABLES`(OWNER·PARTITIONING_TYPE·SUBPARTITIONING_TYPE·INTERVAL)·`ALL_PART_KEY_COLUMNS`·`ALL_SUBPART_KEY_COLUMNS`(OWNER·NAME·OBJECT_TYPE·COLUMN_NAME·COLUMN_POSITION)·`ALL_PART_INDEXES`(OWNER·INDEX_NAME·TABLE_NAME·LOCALITY) 는 Oracle 과 열 이름이 같다. 파티션 목록만 BOUND·PARTITION_NO(11장). 경계 채우기의 `DATE 'YYYY-MM-DD'` 는 BOUND 에 쓴 그대로 남는다(`TiberoPartitionEditIt`).
+
+## 20. 열 형식 변경 자동 변환 검사 (T17b, 2026-11-17, Tibero 6.2.15, 시험 계정 `ORT_TE_` 객체)
+
+회귀 시험 = `TiberoColumnConversionIt.Probe_conversion_building_blocks`(번호를 단언), 구현 = `TiberoColumnConversionChecks`.
+
+| 항목 | 결과 | 쓰는 곳 |
+|---|---|---|
+| `VALIDATE_CONVERSION(s AS NUMBER)` | TBR-8007(없음) | 「변환 안 되는 행」은 늘 PL/SQL 행 단위 시험(Oracle 12.2+ 기본식만 집합 질의) |
+| `CAST('abcd' AS VARCHAR2(3))` | `abc`(자름, Oracle 같음) | 검사는 CAST 가 아니라 변수 담기로 본다 |
+| `CAST(12345.67 AS NUMBER(3,0))` · `CAST('x' AS NUMBER)` · `TO_DATE('x', 'YYYY-MM-DD')` | TBR-5111 · TBR-5074 · TBR-5113 | 첫 오류 문구(✖ 줄에 붙음). 드라이버 문구는 `TBR-` 또는 `ODP-` 로 시작 |
+| 변수 담기: `VARCHAR2(3) := 'abcd'`, `NUMBER(3,0) := 12345.67`, `CHAR(2) := 'abc'`, `VARCHAR2(4 BYTE) := '가나'`, `RAISE VALUE_ERROR` | 모두 TBR-15115 | `WHEN OTHERS` 로 센다. SQLCODE = -15115 |
+| `NUMBER(5,0) := 12345.4` · `VARCHAR2(2 CHAR) := '가나'` | OK(반올림·글자 기준) | Oracle 과 같음 |
+| 글 변수 `OPEN c FOR q` + `FETCH … BULK COLLECT INTO … LIMIT 500`(TABLE OF 새 형식) | 됨, 넘침·숫자 아님은 TBR-15115 | 1차(모든 행) |
+| `EXECUTE IMMEDIATE q INTO v USING r.rid`(끝에 `ROWID = :rid`) · `ROWIDTOCHAR`·`CHARTOROWID` | 됨 | 2차(행마다 세고 ROWID 100개) · 「그 행 보기」 |
+| 동적 SQL 문법 오류(`SELECT (s +) …`) | OPEN 에서 TBR-8015 | 틀린 변환식 = 모든 행 실패 + 서버 오류 |
+| 블록 결과 | OUT 바인드(NUMBER·VARCHAR2 4000)로 받음 | `TiberoBindBuilder` 경로(DBMS_OUTPUT 거두기와 같음) |
+| 새 형식이 틀림(`TABLE OF NO_SUCH_TYPE`) | ODP-15146 PSM 컴파일 오류(+ ODP-15044) | 블록 자체 실패 → 「1건 이상」 + 서버 오류 |
+| 취소(`DbCommand.Cancel`) | ODP-12040. 행 하나 계산이 가벼우면 0.8초(토큰 시각)에 멈춤. 행마다 사전 전체를 두 번 훑는 무거운 식이면 일반 질의 약 11초, PL/SQL 블록 약 29~56초 — 행 계산이 끝나야 듣는 것으로 보임 | 블록은 SQLCODE -12040(·-1013)을 다시 던짐, 삼켜져 오류 문구로 돌아오면 취소로 되돌림. 무거운 변환식이면 시간 제한(기본 10초)이 늦게 끊길 수 있음 |
+| `ADD ("S$1" …)`·`UPDATE … SET S$1`·`RENAME COLUMN S$1 TO S2`·`RENAME COLUMN "S2" TO "S$1"` | 됨(따옴표 있든 없든) | 임시 열 이름 `<열>$N` |
+| `DROP COLUMN c CASCADE CONSTRAINTS` | 됨. 일반·DESC 인덱스·UK 는 함께 지워지지만 **그 열을 쓰는 함수 기반 인덱스(`UPPER("C")`)는 남는다** | 남은 인덱스 때문에 4단계 `RENAME COLUMN c$1 TO c` 가 TBR-8026 → 바꿔치기 3단계가 DROP COLUMN 뒤 `ALL_INDEXES` 에 아직 남은 그 열의 인덱스(PK·UK 에 딸리지 않은 것)를 실제 소유자로 지우는 블록을 돈다(다시 돌려도 안전, Oracle 은 이미 지워져 아무것도 안 함). 남은 단계 스크립트는 옛 열 DROP 전이면 확인 블록부터. 5단계가 다시 만든다 |
+| `RAISE_APPLICATION_ERROR(-20990, …)` | TBR-20990 | 3단계 확인 블록 |
+
+함정(구현 중 발견): `meta.constraints` 의 `LIKE '%IS NOT NULL'` 이 `ID > 0 OR ORDER_NO IS NOT NULL` 같은 사용자 CHECK 를 빼서 바꿔치기 뒤 사라졌다 → SQL 에서 거르지 않고 `MetadataRows.IsNotNullCheck`(서버 꼴 `"열" IS NOT NULL` 그대로만) 가 뺀다. 사용자가 `CHECK ( "N3" IS NOT NULL )` 로 쓴 것은 앞뒤 공백이 남아(`TableEditProbeIt.P07`) 사용자 CHECK 로 남는다.
+
+IT `TiberoColumnConversionIt`(7개): 실측 조각 / 「변환 안 되는 행」 3건·NOT NULL 이면 NULL 행 +1·길이 줄이기(자르지 않고 셈)·「그 행 보기」 / 틀린 식·틀린 형식 / 변환한 값의 UK 중복·CHECK 위반·계산 오류 / 참조 FK / 취소 / 바꿔치기 1~6 실행 뒤 형식·NOT NULL·기본값·주석·UK·CHECK·인덱스 3개(일반·함수 기반·DESC)·값.

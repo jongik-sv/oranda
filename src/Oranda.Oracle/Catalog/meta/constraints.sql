@@ -1,4 +1,4 @@
--- 제약(기본키·유일·외래키·검사). NOT NULL 검사 제약(조건 전체가 `"열" IS NOT NULL`)은 열 정보에 있으므로 뺀다(MetadataRows.IsNotNullCheck 와 같은 판정). 바인드: owner, name
+-- 제약(기본키·유일·외래키·검사). NOT NULL 검사 제약(조건 전체가 서버 꼴 그대로 `"열" IS NOT NULL`, 앞뒤 공백 없음)은 열 정보에 있으므로 뺀다(MetadataRows.IsNotNullCheck 와 같은 판정). 바인드: owner, name
 -- 그 뒤 열(테이블 편집기 TE-29): delete_rule(FK), r_column_name(FK 참조 열, 같은 위치), index_name(PK·UK 가 쓰는 인덱스).
 -- id: meta.constraints
 -- min-version: 19
@@ -15,5 +15,5 @@ SELECT c.constraint_name, c.constraint_type, c.status, c.search_condition_vc, c.
  WHERE c.owner = :owner
    AND c.table_name = :name
    AND c.constraint_type IN ('P', 'U', 'R', 'C')
-   AND NOT (c.constraint_type = 'C' AND REGEXP_LIKE(c.search_condition_vc, '^\s*"[^"]+"\s+IS NOT NULL\s*$'))
+   AND NOT (c.constraint_type = 'C' AND REGEXP_LIKE(c.search_condition_vc, '^"[^"]+" IS NOT NULL$'))
  ORDER BY c.constraint_name, cc.position

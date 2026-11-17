@@ -83,13 +83,14 @@ public static partial class MetadataRows
     }
 
     /// <summary>
-    /// NOT NULL 검사 제약인가: 조건 전체가 따옴표 열 하나 + <c>IS NOT NULL</c>(<c>"C" IS NOT NULL</c>, 서버가 만드는 꼴, 대소문자 구분). Oracle <c>meta.constraints</c>(19+) SQL 의
-    /// <c>REGEXP_LIKE</c> 와 같은 판정. <c>a &gt; 0 OR b IS NOT NULL</c> 처럼 끝만 같은 CHECK 는 사용자 제약이라 남긴다(형식 변환 5단계가 되살린다, 설계 18.9).
+    /// NOT NULL 검사 제약인가: 조건 전체가 서버가 만드는 꼴 그대로 <c>"C" IS NOT NULL</c>(따옴표 열 하나, 공백 하나씩, 앞뒤 공백 없음, 대소문자 구분).
+    /// Oracle <c>meta.constraints</c>(19+) SQL 의 <c>REGEXP_LIKE</c> 와 같은 판정. 사용자 CHECK 는 쓴 그대로 남으므로(Tibero 실측 P07 <c>( "N3" IS NOT NULL )</c> → 앞뒤 공백)
+    /// 꼴이 조금이라도 다르면 사용자 제약으로 남기고, <c>a &gt; 0 OR b IS NOT NULL</c> 처럼 끝만 같은 CHECK 도 남긴다(형식 변환 5단계가 되살린다, 설계 18.9).
     /// </summary>
     public static bool IsNotNullCheck(string? condition)
         => condition is not null && NotNullCheckPattern().IsMatch(condition);
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*""[^""]+""\s+IS NOT NULL\s*$")]
+    [System.Text.RegularExpressions.GeneratedRegex(@"\A""[^""]+"" IS NOT NULL\z")]
     private static partial System.Text.RegularExpressions.Regex NotNullCheckPattern();
 
     /// <summary><c>meta.indexes</c> 행(index_name, uniqueness, index_type, column_name, column_position) → 인덱스 목록.</summary>

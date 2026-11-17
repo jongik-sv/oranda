@@ -114,3 +114,14 @@
 
 - 함정(구현 중 발견): `meta.constraints` 가 조건이 `IS NOT NULL` 로 **끝나는** CHECK 를 NOT NULL 제약으로 보고 뺐다(`id > 0 OR order_no IS NOT NULL` 도). 변환 5단계가 그 제약을 되살리지 못해 사라진다 → 조건 전체가 `"열" IS NOT NULL` 인 것만 빼도록 좁힘(19+ SQL `REGEXP_LIKE`, 11g 는 `MetadataRows.IsNotNullCheck`). Tibero `meta.constraints` 도 같은 `LIKE '%IS NOT NULL'` 이다(win30 몫).
 - IT `ColumnConversionIntegrationTests`(26ai·11g 각 6개): 바꿔치기 실행 뒤 형식·NOT NULL·기본값·주석·UK·CHECK·인덱스 2개·뷰 VALID·값, 「변환 안 되는 행」 3건(기본식 = 26ai VALIDATE / 11g 행 시험, 사용자 식 = 둘 다 행 시험)과 「그 행 보기」 SQL, 틀린 식 = 「1건 이상」 + 서버 오류, 참조 FK, 다시 만들기(CTAS) 열 순서 유지.
+
+## 7. 파티션 편집 Oracle IT (T17b, 2026-11-17, 26ai FREEPDB1 `23.26.3` Free · 11g XE)
+
+- 26ai Free 는 `V$OPTION` Partitioning = TRUE(에디션 `Free` → 방언이 막지 않음). 11g XE 는 FALSE → 방언 `TableEdit.unsupported.oracleEnterprise`, 서버 `CREATE TABLE … PARTITION BY` = ORA-00439.
+- IT `PartitionEditIntegrationTests`(5개, 11g 는 4개를 건너뛰고 방언·비파티션 읽기만): 
+  - 범위: 안 고치면 0문장 → TRUNCATE·SPLIT AT·RENAME·ADD·SET INTERVAL 실행 뒤 다시 읽어 같음(다시 읽은 원본도 0문장), 전역 인덱스 VALID(Oracle 방언은 REBUILD 를 붙이지 않음 — UPDATE INDEXES 로 남음), 로컬 인덱스 파티션 모두 USABLE. INTERVAL 끄기(`SET INTERVAL ()`)가 맨 앞이라 마지막 파티션 DROP 이 됨, MERGE.
+  - 목록: DEFAULT 에서 `SPLIT PARTITION px VALUES ('W', 'V') INTO (…)`, 행이 새 파티션으로 감. Oracle HIGH_VALUE = `'W', 'V'`(쉼표 뒤 공백, Tibero 는 `'W','V'`).
+  - 해시: 이름 = 서버 이름(`SYS_P…`), `ADD PARTITION h3 UPDATE INDEXES`·`COALESCE PARTITION UPDATE INDEXES` 됨(Tibero 방언은 막음).
+  - 경계 채우기 월 줄 `DATE '2026-03-01'` 이 ADD 되고, 다시 읽으면 `TO_DATE(' 2026-03-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN')`(Tibero 는 쓴 그대로) — 원본끼리는 0문장. INTERVAL `NUMTOYMINTERVAL(1, 'MONTH')` 새 테이블 절 됨.
+  - 일반 → 파티션: 12.2+ `MODIFY PARTITION BY RANGE (id) (…) ONLINE` 한 문장, 데이터·PK 그대로.
+- 함께 고친 것: 바꿔치기 3단계가 DROP COLUMN 뒤 남은 그 열의 인덱스를 지우는 블록을 돈다(Tibero 실측 20장 — Oracle 은 이미 지워져 아무것도 안 함, `ColumnConversionIntegrationTests` 26ai·11g 다시 통과). NOT NULL 제약 판정을 서버 꼴 `"열" IS NOT NULL`(앞뒤 공백 없음)로 좁힘(19+ SQL `REGEXP_LIKE` 와 `MetadataRows.IsNotNullCheck` 같이).
