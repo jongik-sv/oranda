@@ -310,12 +310,13 @@ Oranda 에는 테이블을 만들거나 구조를 고치는 화면이 없다. �
 - 매뉴얼 그림: `Manual*Screens` 시험으로 편집 모드 열 페이지·새 테이블·묶음 창·검사 창(Windows 렌더는 win30).
 - 시험 데이터·접속 이름은 예시 값만.
 
-## 15. 나눠 맡기 (설계 승인 뒤, 계획서에서 확정)
+## 15. 나눠 맡기 (2026-11-17 계획서에서 확정, Mac 없이 고침)
 
-- **Mac**: Core(편집 모델·차이·문장·순서·정규화), 반영 묶음 저장·자동 넣기·스크립트 저장, 객체 상세 편집 화면, 새 테이블 탭, 검사, Oracle 통합 시험.
-- **win30**: Tibero 방언과 12장 실측, Tibero 통합 시험, 매뉴얼 그림(Windows 렌더).
-- **win144**: Windows 실제 앱 확인(편집 표 키 조작, 창 배치, 한글 입력).
-- 세 브랜치(main·dev-jji-mac·dev-jji-win144)는 fast-forward 로만 같게 유지한다.
+- **win144**: Core(편집 모델·차이·문장·순서·정규화), Oracle 방언, 반영 묶음(저장·자동 넣기·스크립트 저장·소유자 바꾸기), 객체 상세 편집 화면, 새 테이블 탭, 실행 전 검사, Oracle 통합 시험, 매뉴얼 글, 2차(18장) 화면·Core.
+- **win30**: Tibero 실측(12장 + 18장 항목), Tibero 방언, Tibero 통합 시험, 매뉴얼 그림(Windows 렌더).
+- **Mac**: 2026-11-17 16:30 까지 이름 규칙·의뢰 스크립트 형식 하나(TE-26). 이후는 win144.
+- Windows 실제 앱 확인은 자동 조작하지 않고 사용자 확인 목록으로 넘긴다(TE-27).
+- 세 브랜치(main·dev-jji-mac·dev-jji-win144)는 fast-forward 로만 같게 유지한다. 계획·레인 = `docs/superpowers/plans/2026-11-17-table-editor.md`.
 
 ## 16. 설계자 결정 목록 (사용자가 뒤집을 수 있음)
 
@@ -345,6 +346,19 @@ Oranda 에는 테이블을 만들거나 구조를 고치는 화면이 없다. �
 | TE-22 | 저장·묶음 실행 때 「소유자 바꾸기」 칸, 테이블스페이스는 생략(머리 주석으로 알림) |
 | TE-23 | 한 시스템의 개발·테스트·운영은 같은 DBMS 로 봄. 섞인 묶음은 범위 밖 |
 | TE-24 | 묶음마다 대상 소유자 목록, 그 소유자 객체를 바꾸는 DDL 만 자동으로 넣음. 넣을 때 소유자를 붙인 꼴로 저장 |
+| TE-25 | 계획서는 기존 계획 형식으로 씀(win144 에 writing-plans 스킬 없음) |
+| TE-26 | Mac 은 16:30 까지 이름 규칙·의뢰 스크립트 형식만, 못 끝내면 win144 가 이어받음 |
+| TE-27 | Windows 실제 앱 확인은 자동 조작하지 않음 — Headless 시험 + 사용자 확인 목록 |
+| TE-28 | TE-4 새로 읽기 = 그 테이블 캐시 무효화(`InvalidateAsync`) 뒤 `GetTableAsync`. 새 플래그 없음 |
+| TE-29 | 메타데이터 보강: 열 길이 기준, FK 삭제 규칙·참조 열, 인덱스 열 DESC·테이블스페이스·만든 제약, 테이블 종류·테이블스페이스. 캐시 형식 3 |
+| TE-30 | 가상 식은 공급자가 `DefaultValue` 로 주는 그대로 받고 편집 모델에서 나눔 |
+| TE-31 | 소유자 붙이기·바꾸기는 `Oranda.Language` 렉서(`OwnerRewriter`). 데이터 복사의 `Reowned` 는 그대로 |
+| TE-32 | 새 열 형식 표기는 자체 표기(길이 기준 생략, TE-6). `CreateTableDdl` 복사 표기는 바꾸지 않음 |
+| TE-33 | 검사·미리보기 읽기 = `ITableEditChecks`(실행 엔진 밖, 메타데이터 읽기 경로) |
+| TE-34 | 운영 확인 한 번 = `IExecutionInteraction.ConfirmBatchAsync`(검사 결과를 같은 창에), 받은 문장은 `PreConfirmed` |
+| TE-35 | `HistorySource` 에 `TableEditor`·`ChangeBundle` 을 끝에 더함 |
+| TE-36 | 2차 범위를 같은 회차에 넣음(18장). TE-1(자동 변환·특수 테이블)·TE-7·TE-9·TE-10 을 18장 규칙으로 뒤집음 |
+| TE-37 | 2차 기능은 첫판과 같은 화면 규칙. Tibero 가 지원하지 않는 것은 실측으로 확인하고 흐리게 + 이유(18.8) |
 
 ## 17. 빌더 점검 결과 (2026-11-17)
 
@@ -355,3 +369,69 @@ Oranda 에는 테이블을 만들거나 구조를 고치는 화면이 없다. �
 3. 운영 확인 한 번을 무엇으로 → TE-21(`PreConfirmed` 문장별 실행).
 4. 「지금 묶음」 범위 → TE-24(묶음별 대상 소유자).
 5. Tibero 첫 배포 포함 → 포함(2장, 12장), 실측을 계획 맨 앞에.
+
+## 18. 2차 범위 (2026-11-17 사용자 지시 「2차도 이번에 다」, 설계자 결정 TE-36~)
+
+첫판(2장)을 끝낸 뒤 같은 회차에서 만든다. 화면 규칙은 첫판과 같다: ✎ 편집 → 표·칸에서 고치기 → 아래 DDL 미리보기(차이에서 매번 다시 만듦, TE-3) → 실행 전 검사(✖ 막음 / ⚠ 알림) → 실행·스크립트 저장·묶음 넣기. Oracle·Tibero 같은 수준을 목표로 하고, Tibero 실측(T0 2차)에서 안 되는 것은 18.8 규칙으로 흐리게 둔다. 범위 밖: 스키마 비교, 시퀀스·트리거·동의어·권한 편집, DBMS 가 섞인 묶음.
+
+### 18.1 테이블 이름 바꾸기
+- 「설명」 페이지 이름 칸(편집 중 고칠 수 있음). 문장 `ALTER TABLE o.t RENAME TO n`(소유자는 새 이름에 붙이지 않음 — Oracle 문법). 순서: 다른 모든 문장 **뒤** 맨 끝(앞 문장이 옛 이름을 쓰므로).
+- 규칙 이름 제약·인덱스(`PK_<옛 이름>` 꼴)는 이름 바꾸기 때 따라 바꾸지 않는다. 「규칙 이름도 바꾸기」 체크(기본 끔)를 켜면 `RENAME CONSTRAINT`·`ALTER INDEX … RENAME TO` 를 더한다 **[TE-38]**.
+- ⚠: 이 테이블을 쓰는 뷰·PL/SQL·동의어 목록(의존 정보) — 무효가 된다.
+
+### 18.2 저장 속성
+- 새 페이지 「저장」(TABLE 만). 칸: 테이블스페이스, PCTFREE, INITRANS, 압축(없음·BASIC·ADVANCED(OLTP)·Tibero 는 실측 값), 로깅. STORAGE(INITIAL/NEXT)는 새 테이블에서만 칸이 열린다 **[TE-39: 기존 테이블의 INITIAL 은 MOVE 가 필요해 첫판처럼 고치지 않음]**.
+- 기존 테이블: `ALTER TABLE o.t PCTFREE n INITRANS m` · `ALTER TABLE o.t COMPRESS …`(앞으로 들어올 행만, ⚠ 「기존 행은 MOVE 해야 압축됨」) · 테이블스페이스 변경 = `ALTER TABLE o.t MOVE TABLESPACE ts` + 인덱스마다 `ALTER INDEX … REBUILD` 문장을 같이 만든다 ⚠「잠금·인덱스 다시 만들기」.
+- 거짓 차이: 서버 기본값(PCTFREE 10, INITRANS 1 등)은 원본에서 읽은 값과 같으면 문장 없음. 새 테이블은 사용자가 칸에 값을 넣은 것만 쓴다.
+
+### 18.3 LOB 저장 절
+- 열 페이지에서 LOB 열(CLOB·NCLOB·BLOB)을 고르면 아래 「LOB 저장」 칸(테이블스페이스, SECUREFILE/BASICFILE, ENABLE/DISABLE STORAGE IN ROW, CHUNK, CACHE/NOCACHE)이 열린다.
+- 새 열·새 테이블: `ADD (c CLOB) LOB (c) STORE AS [SECUREFILE] (TABLESPACE ts …)`, CREATE TABLE 은 끝에 `LOB (c) STORE AS …`.
+- 기존 열: `ALTER TABLE o.t MOVE LOB (c) STORE AS (…)` ⚠「잠금, 큰 테이블은 오래 걸림」. CACHE 만 바꾸면 `MODIFY LOB (c) (CACHE)`.
+
+### 18.4 파티션
+- 새 페이지 「파티션」. 파티션 테이블이면 방식(RANGE·LIST·HASH, INTERVAL 식), 파티션 키 열, 파티션 목록(이름·경계 값/값 목록·테이블스페이스)을 표로 보인다.
+- 새 테이블: 방식·키·파티션을 넣으면 `CREATE TABLE … PARTITION BY RANGE (c) [INTERVAL (…)] (PARTITION p1 VALUES LESS THAN (…), …)`.
+- 기존 파티션 테이블: 줄 추가 = `ADD PARTITION`(RANGE 는 마지막 경계 뒤만, 사이는 「나누기」), 지우기 = `DROP PARTITION` ⚠ 데이터 삭제, 이름 = `RENAME PARTITION`, 「나누기」 = `SPLIT PARTITION p AT (v) INTO (…)`, 「합치기」(두 줄 골라) = `MERGE PARTITIONS a, b INTO PARTITION c`, 「비우기」 = `TRUNCATE PARTITION` ⚠. 전역 인덱스가 있으면 문장에 `UPDATE INDEXES` 를 붙인다 **[TE-40]**.
+- 일반 테이블 → 파티션 테이블 바꾸기(`ALTER TABLE … MODIFY PARTITION BY …`, 12.2+)는 Oracle 12.2 이상에서만 켜고, 그 밖(11g·Tibero)은 18.8 규칙으로 흐리게 **[TE-41]**.
+- 검사: 새 RANGE 경계가 기존 행을 가르면 ⚠, DROP/TRUNCATE PARTITION 의 행 수 표시, 파티션 키 열 지우기·형식 바꾸기는 ✖.
+- 서브파티션은 보여 주기만 한다 **[TE-42]**.
+
+### 18.5 신원·숨김·도메인 열 (TE-7 뒤집음)
+- 신원: 열 페이지 「신원」 칸(없음·ALWAYS·BY DEFAULT·BY DEFAULT ON NULL) + 시작 값·증가. 새 열/새 테이블 = `GENERATED … AS IDENTITY (START WITH n INCREMENT BY m)`, 기존 열 = `MODIFY (c GENERATED … AS IDENTITY (…))` 또는 `MODIFY (c DROP IDENTITY)`. 데이터 있는 일반 열을 신원으로 바꾸기는 Oracle 이 막으므로 ✖. 12c 미만·Tibero(실측) 는 18.8.
+- 숨김: 「숨김」 체크 → `MODIFY (c INVISIBLE|VISIBLE)` ⚠「열 순서가 바뀜(맨 뒤로)」. Tibero 는 미지원(알려진 차이) → 흐리게.
+- 도메인: 「도메인」 칸(23ai 이상) → `MODIFY (c DOMAIN d)` / `MODIFY (c DROP DOMAIN)`. 23ai 미만·Tibero 는 흐리게.
+- 「이 구조로 새 테이블…」은 이제 신원 속성도 복사한다(TE-7 의 예외를 없앰).
+
+### 18.6 함수 기반·비트맵 인덱스 (TE-9 뒤집음)
+- 인덱스 페이지 「종류」: NORMAL·FUNCTION-BASED·BITMAP. 함수 기반은 열 칸 대신 식 칸(여러 개), `CREATE INDEX o.n ON o.t (UPPER(c), …)`. 비트맵은 `CREATE BITMAP INDEX`(유일 불가, Standard Edition 에서는 ✖ — 서버 판정은 열 순서 바꾸기의 edition 판정 재사용).
+- 식은 가상 식처럼 서버 표기로 정규화해 거짓 차이를 막는다.
+
+### 18.7 새 테이블 작업 저장 (TE-10 뒤집음)
+- 「✎ 새 테이블」 탭의 편집 모델을 `oranda.db` 표 `table_draft`(마이그레이션 `0007_table_draft.sql`: id, 접속 이름, DBMS, 소유자, 이름, 모델 JSON, 고친 때)에 30초마다·탭을 닫을 때 저장한다. 앱을 다시 켜면 작업 공간 복원 때 그 탭을 되살린다. 실행이 성공하거나 사용자가 「버리기」를 고르면 지운다.
+- 닫기 확인은 「버리기 / 남겨 두기 / 취소」. 남겨 둔 것은 스키마 브라우저 소유자 노드 오른쪽 클릭 「만들던 새 테이블…」로 다시 연다 **[TE-43]**.
+
+### 18.8 Tibero·구버전에서 안 되는 것
+- 방언 `Capabilities` 가 기능마다 (지원 여부, 이유 문자열 키)를 낸다. 안 되는 칸·단추는 흐리게 두고 마우스를 올리면 이유(예: 「Tibero 는 숨김 열을 지원하지 않습니다」, 「Oracle 12.2 이상에서만」)를 보인다. 실측 결과는 `docs/design/tibero-table-edit-probe.md` 가 정본이다.
+
+### 18.9 형식 변경 자동 데이터 변환 (TE-1 일부 뒤집음)
+- 데이터 있는 열의 형식 바꾸기가 ✖(설계 10장)일 때 검사 창에 「데이터 옮겨 바꾸기로 만들기」 단추를 둔다. 누르면 그 열의 MODIFY 대신 네 문장: `ADD (c__NEW newtype)` → `UPDATE o.t SET c__NEW = <변환 식>` (기본 `CAST(c AS newtype)`, 칸에서 고침, 예: `TO_NUMBER(c)`) → `DROP COLUMN c` → `RENAME COLUMN c__NEW TO c`. ⚠「열 순서가 맨 뒤로 바뀜·UPDATE 는 DML 이라 커밋 필요·제약/인덱스 다시 만듦」.
+- 이 UPDATE 는 DML 이므로 반영 묶음에 넣을 때도 DDL 만 규칙(9.4)의 예외로 `ChangeBundleItem` 의 종류를 「변환 DML」로 표시해 저장 파일에 넣는다. 저장 파일에는 UPDATE 뒤 `COMMIT;` 을 붙인다 **[TE-44]**.
+- 변환 식 미리보기는 가상 식 미리보기(7.6)와 같은 방식으로 5줄 계산, 실패하는 행 수를 검사(✖).
+
+### 18.10 특수 테이블 만들기 (TE-1 일부 뒤집음)
+- 새 테이블 탭 위쪽 「종류」: 일반·임시(GTT: ON COMMIT DELETE/PRESERVE ROWS)·인덱스 구성(IOT: PK 필수, `ORGANIZATION INDEX`). 외부 테이블·클러스터 테이블 만들기는 그대로 범위 밖 **[TE-45: 디렉터리 객체·접근 드라이버 설정이 따로 커서]**.
+- 기존 GTT·IOT 의 편집 범위는 첫판 규칙(주석·기본값) 위에, 서버가 허용하는 열 추가·지우기까지 넓힌다(실측으로 확정).
+
+### 18.11 2차 결정 목록
+
+| 번호 | 결정 |
+|---|---|
+| TE-38 | 테이블 이름 바꾸기 때 규칙 이름 제약·인덱스는 기본으로 따라 바꾸지 않음(체크로 켬) |
+| TE-39 | 기존 테이블의 STORAGE(INITIAL/NEXT)는 고치지 않음, 새 테이블만 |
+| TE-40 | 파티션 DDL 은 전역 인덱스가 있으면 `UPDATE INDEXES` 를 붙임 |
+| TE-41 | 일반 → 파티션 테이블 바꾸기는 Oracle 12.2 이상만 |
+| TE-42 | 서브파티션은 보기만 |
+| TE-43 | 남겨 둔 새 테이블 작업은 작업 공간 복원 + 소유자 노드 메뉴로 다시 엶 |
+| TE-44 | 자동 변환의 UPDATE 는 「변환 DML」로 묶음·저장 파일에 들어가고 `COMMIT;` 을 붙임 |
+| TE-45 | 외부·클러스터 테이블 만들기는 계속 범위 밖 |
