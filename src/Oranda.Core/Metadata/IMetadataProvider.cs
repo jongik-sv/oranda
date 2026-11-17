@@ -134,6 +134,74 @@ public sealed record TableInfo(DbObjectRef Table, IReadOnlyList<ColumnInfo> Colu
     public IReadOnlyList<IndexInfo> Indexes { get; init; } = [];
 
     public string? Comment { get; init; }
+
+    /// <summary>테이블의 테이블스페이스(<c>TABLESPACE_NAME</c>). 파티션 테이블·임시 테이블처럼 사전에 없거나 모르면 null(TE-29).</summary>
+    public string? Tablespace { get; init; }
+
+    /// <summary>테이블 종류(TE-29). 모르면(예전 캐시·뷰) <see cref="TableKind.Heap"/>.</summary>
+    public TableKind Kind { get; init; }
+
+    /// <summary>파티션 테이블인가(<c>PARTITIONED = 'YES'</c>). 종류(<see cref="Kind"/>)와 따로 둔다 — IOT 도 파티션될 수 있다(TE-29).</summary>
+    public bool IsPartitioned { get; init; }
+}
+
+/// <summary>
+/// 테이블 종류(TE-29, 테이블 편집기 설계 3장). 일반 표가 아닌 것은 편집기가 주석·기본값만 고치게 한다.
+/// JSON(메타데이터 캐시)에는 이름 문자열로 쓴다. 값을 더할 때는 끝에 덧붙인다.
+/// </summary>
+public enum TableKind
+{
+    /// <summary>일반(힙) 테이블. 모르면 이 값.</summary>
+    Heap,
+
+    /// <summary>전역 임시 테이블(GTT, <c>TEMPORARY = 'Y'</c>).</summary>
+    Temporary,
+
+    /// <summary>외부 테이블(<c>ALL_EXTERNAL_TABLES</c>).</summary>
+    External,
+
+    /// <summary>인덱스 구성 테이블(<c>IOT_TYPE = 'IOT'</c>).</summary>
+    Iot,
+
+    /// <summary>클러스터 테이블(<c>CLUSTER_NAME</c> 이 있음).</summary>
+    Cluster,
+}
+
+/// <summary>문자 열 길이 기준(<c>CHAR_USED</c>: B = 바이트, C = 글자). TE-29. 문장 표기는 <c>n BYTE</c>·<c>n CHAR</c>.</summary>
+public enum CharSemantics
+{
+    /// <summary>바이트 기준(<c>BYTE</c>).</summary>
+    Bytes,
+
+    /// <summary>글자 기준(<c>CHAR</c>).</summary>
+    Characters,
+}
+
+/// <summary>외래키 삭제 규칙(<c>DELETE_RULE</c>). TE-29.</summary>
+public enum DeleteRule
+{
+    /// <summary><c>NO ACTION</c>(규칙 없음). 기본값.</summary>
+    NoAction,
+
+    Cascade,
+
+    SetNull,
+}
+
+/// <summary>신원 열 생성 방식(<c>ALL_TAB_IDENTITY_COLS.GENERATION_TYPE</c>, ON NULL 은 <c>DEFAULT_ON_NULL</c>). 설계 18.5.</summary>
+public enum IdentityGeneration
+{
+    Always,
+    ByDefault,
+    ByDefaultOnNull,
+}
+
+/// <summary>신원 열 속성(설계 18.5). 시작 값·증가는 모르면 null.</summary>
+public sealed record IdentityInfo(IdentityGeneration Generation)
+{
+    public long? StartWith { get; init; }
+
+    public long? IncrementBy { get; init; }
 }
 
 /// <summary>열 1개. <see cref="DataType"/> 은 서버 타입 이름(<c>VARCHAR2</c>, <c>VECTOR</c> …).</summary>
@@ -165,6 +233,12 @@ public sealed record ColumnInfo(string Name, int Position, string DataType)
 
     /// <summary>23ai 이상 Data Use Case Domain 이름.</summary>
     public string? Domain { get; init; }
+
+    /// <summary>문자 열의 길이 기준(<c>CHAR_USED</c>). 문자 열이 아니거나 모르면 null(TE-29).</summary>
+    public CharSemantics? CharSemantics { get; init; }
+
+    /// <summary>신원 열 속성(설계 18.5). <see cref="IsIdentity"/> 인데 속성을 읽지 못했으면 null 일 수 있다.</summary>
+    public IdentityInfo? Identity { get; init; }
 }
 
 public enum ConstraintKind
@@ -188,11 +262,32 @@ public sealed record ConstraintInfo(string Name, ConstraintKind Kind, IReadOnlyL
     public string? Condition { get; init; }
 
     public bool IsEnabled { get; init; } = true;
+
+    /// <summary>외래키 삭제 규칙(TE-29). 외래키가 아니거나 모르면 <see cref="DeleteRule.NoAction"/>.</summary>
+    public DeleteRule DeleteRule { get; init; }
+
+    /// <summary>외래키가 참조하는 부모 키 열(위치 순서로 <see cref="Columns"/> 와 짝). 외래키가 아니거나 모르면 빈 목록(TE-29).</summary>
+    public IReadOnlyList<string> ReferencedColumns { get; init; } = [];
 }
 
 public sealed record IndexInfo(string Name, bool IsUnique, IReadOnlyList<string> Columns)
 {
     public string? IndexType { get; init; }
+
+    /// <summary>열별 내림차순 여부(<see cref="Columns"/> 와 같은 순서). 빈 목록 = 모두 오름차순(예전 캐시 포함). TE-29.</summary>
+    public IReadOnlyList<bool> Descending { get; init; } = [];
+
+    /// <summary>인덱스 테이블스페이스. 모르면 null(TE-29).</summary>
+    public string? Tablespace { get; init; }
+
+    /// <summary>이 인덱스를 만든 PK·UK 제약 이름(<c>ALL_CONSTRAINTS.INDEX_NAME</c> 으로 맞춤). 제약 인덱스가 아니면 null(TE-29).</summary>
+    public string? ConstraintName { get; init; }
+
+    /// <summary>
+    /// 함수 기반 인덱스의 열별 식(<c>ALL_IND_EXPRESSIONS.COLUMN_EXPRESSION</c>, <see cref="Columns"/> 와 같은 순서, 일반 열 자리는 null).
+    /// 빈 목록 = 식 없음(설계 18.6).
+    /// </summary>
+    public IReadOnlyList<string?> Expressions { get; init; } = [];
 }
 
 /// <summary>DBMS_METADATA 변환 옵션(SCH DDL 보기).</summary>

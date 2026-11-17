@@ -134,12 +134,47 @@ public sealed class CachedMetadataProviderTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Table_edit_metadata_survives_the_payload_round_trip()
+    {
+        var provider = NewProvider(Obj("HR", "EMP"));
+        await provider.RefreshAsync(_session);
+        var info = new TableInfo(new DbObjectRef("HR", "EMP", "TABLE"),
+            [
+                new ColumnInfo("NAME", 1, "VARCHAR2") { Length = 10, CharSemantics = CharSemantics.Characters },
+                new ColumnInfo("ID", 2, "NUMBER") { IsIdentity = true, Identity = new IdentityInfo(IdentityGeneration.ByDefaultOnNull) { StartWith = 5, IncrementBy = 2 } },
+            ])
+        {
+            Constraints = [new ConstraintInfo("FK_EMP_01", ConstraintKind.ForeignKey, ["ID"]) { DeleteRule = DeleteRule.SetNull, ReferencedColumns = ["DEPT_ID"] }],
+            Indexes = [new IndexInfo("IX_EMP_01", false, ["NAME", "SYS_NC00003$"]) { Descending = [false, true], Tablespace = "USERS", ConstraintName = "PK_EMP", Expressions = [null, "UPPER(\"NAME\")"] }],
+            Tablespace = "USERS",
+            Kind = TableKind.Iot,
+            IsPartitioned = true,
+        };
+        await provider.StoreAsync(_session, info.Table, "table", info);
+
+        var row = await provider.FindAsync(_session, info.Table);
+        Assert.True(provider.Read(row!.PayloadJson!, "table", out TableInfo? hit));
+        Assert.Equal(CharSemantics.Characters, hit!.Columns[0].CharSemantics);
+        Assert.Equal(new IdentityInfo(IdentityGeneration.ByDefaultOnNull) { StartWith = 5, IncrementBy = 2 }, hit.Columns[1].Identity);
+        var fk = Assert.Single(hit.Constraints);
+        Assert.Equal(DeleteRule.SetNull, fk.DeleteRule);
+        Assert.Equal(["DEPT_ID"], fk.ReferencedColumns);
+        var ix = Assert.Single(hit.Indexes);
+        Assert.Equal([false, true], ix.Descending);
+        Assert.Equal(("USERS", "PK_EMP"), (ix.Tablespace, ix.ConstraintName));
+        Assert.Equal([null, "UPPER(\"NAME\")"], ix.Expressions);
+        Assert.Equal(("USERS", TableKind.Iot, true), (hit.Tablespace, hit.Kind, hit.IsPartitioned));
+    }
+
+    [Fact]
     public void Payload_of_another_version_or_field_is_not_read()
     {
         var provider = NewProvider();
 
         Assert.False(provider.Read("""{"v":1,"table":{}}""", "table", out TableInfo? _));
         Assert.False(provider.Read("""{"v":2,"procs":[]}""", "table", out TableInfo? _));
+        // 3(TE-29): 테이블 편집기 메타데이터 이전 캐시는 버린다.
+        Assert.False(provider.Read("""{"v":2,"table":{"Table":{"Owner":"HR","Name":"EMP","ObjectType":"TABLE"},"Columns":[]}}""", "table", out TableInfo? _));
         Assert.False(provider.Read("not json", "table", out TableInfo? _));
     }
 
