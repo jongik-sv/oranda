@@ -38,10 +38,10 @@ public sealed partial class ObjectDetailViewModel
         _ => null,
     };
 
-    /// <summary>「저장」 구역 이름(공급자는 만들지 않는다 — 편집 중에만 끼운다, 설계 18.2).</summary>
-    internal const string StorageTitle = "저장";
+    /// <summary>「저장」 구역 이름(공급자가 테이블마다 만든다 — 보기 모드에서도 지금 값을 보인다, 설계 18.2).</summary>
+    internal const string StorageTitle = TableStorageSection.Title;
 
-    /// <summary>「파티션」 구역 이름(공급자가 파티션 테이블에만 만든다 — 편집 중에는 일반 테이블에도 빈 구역을 끼워 파티션 테이블로 바꾸는 길을 연다, 설계 18.4).</summary>
+    /// <summary>「파티션」 구역 이름(공급자가 파티션 테이블에만 만든다 — 일반 테이블은 「저장」 페이지의 「파티션 테이블로 바꾸기…」로 끼운다, 설계 18.4).</summary>
     internal const string PartitionsTitle = "파티션";
 
     /// <summary>✎ 편집 토글이 보인다: 대상이 TABLE 이고 편집 페이지를 보고 있다(설계 7.1, <see cref="CanReorderColumns"/> 와 같은 판정 자리).</summary>
@@ -237,7 +237,8 @@ public sealed partial class ObjectDetailViewModel
             var edit = new TableEditSession(original, dialect, context, engine);
             edit.SetPartitions(table);
             TableEdit = edit;
-            EnsurePartitionsSection();
+            EnsureStorageSection();
+            edit.OpenPartitionsPage = ShowPartitionsSection;
             StatusText = TableEdit.IsRestricted
                 ? TableEdit.RestrictionText
                 : TableEditText.T("편집 중 — 고친 내용은 아래 DDL 로 보입니다", "Editing — your changes appear as DDL below");
@@ -422,28 +423,38 @@ public sealed partial class ObjectDetailViewModel
     private readonly List<ObjectDetailSection> _syntheticSections = [];
 
     /// <summary>
-    /// 편집 중에만 있는 구역을 끼운다: 「파티션」(일반 테이블에는 없음 — 일반 → 파티션 길, 설계 18.4)은 「인덱스」 뒤, 「저장」(공급자가 만들지 않음, 설계 18.2)은 그 뒤.
+    /// 「저장」 구역이 없으면(저장 정보를 못 읽은 공급자·옛 캐시) 편집 중에만 「인덱스」 뒤에 끼운다. 공급자가 만들었으면 아무것도 하지 않는다 — 목록이 바뀌지 않게.
     /// </summary>
-    private void EnsurePartitionsSection()
+    private void EnsureStorageSection()
     {
-        if (!Sections.Any(s => s.Title == PartitionsTitle))
-        {
-            Insert(new ObjectDetailSection(new DetailSection(PartitionsTitle, ["항목", "값"],
-                [[TableEditText.T("파티션", "Partitioning"), TableEditText.T("파티션 테이블이 아님", "not partitioned")]])), "인덱스");
-        }
-
         if (!Sections.Any(s => s.Title == StorageTitle))
         {
-            Insert(new ObjectDetailSection(new DetailSection(StorageTitle, ["항목", "값"],
-                [[TableEditText.T("저장 속성", "Storage"), TableEditText.T("편집 중에만 보입니다", "shown while editing")]])), PartitionsTitle);
+            InsertSynthetic(new ObjectDetailSection(new DetailSection(StorageTitle, ["항목", "값"],
+                [[TableEditText.T("저장 속성", "Storage"), TableEditText.T("편집 중에만 보입니다", "shown while editing")]])), "인덱스");
+        }
+    }
+
+    /// <summary>
+    /// 「파티션 테이블로 바꾸기…」(설계 18.4): 일반 테이블에 「파티션」 구역을 「저장」 뒤에 끼우고 고른다. 편집을 끄면 뺀다.
+    /// </summary>
+    private void ShowPartitionsSection()
+    {
+        var section = Sections.FirstOrDefault(s => s.Title == PartitionsTitle);
+        if (section is null)
+        {
+            section = new ObjectDetailSection(new DetailSection(PartitionsTitle, ["항목", "값"],
+                [[TableEditText.T("파티션", "Partitioning"), TableEditText.T("파티션 테이블이 아님", "not partitioned")]]));
+            InsertSynthetic(section, StorageTitle);
         }
 
-        void Insert(ObjectDetailSection section, string after)
-        {
-            var anchor = Sections.FirstOrDefault(s => s.Title == after) ?? Sections.FirstOrDefault(s => s.Title == "인덱스");
-            Sections.Insert(anchor is null ? Sections.Count : Sections.IndexOf(anchor) + 1, section);
-            _syntheticSections.Add(section);
-        }
+        SelectedSection = section;
+    }
+
+    private void InsertSynthetic(ObjectDetailSection section, string after)
+    {
+        var anchor = Sections.FirstOrDefault(s => s.Title == after) ?? Sections.FirstOrDefault(s => s.Title == "인덱스");
+        Sections.Insert(anchor is null ? Sections.Count : Sections.IndexOf(anchor) + 1, section);
+        _syntheticSections.Add(section);
     }
 
     private void RemoveSyntheticPartitionsSection()

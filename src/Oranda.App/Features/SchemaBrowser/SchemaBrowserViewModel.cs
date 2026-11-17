@@ -1,3 +1,4 @@
+using Oranda.App.Features.Localization;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -27,34 +28,80 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     /// <summary>한 번에 화면에 올리는 객체 수. 1만 개짜리 범주도 이 크기씩 올려 UI 가 멈추지 않게 한다.</summary>
     public const int PageSize = 500;
 
-    private static readonly (string Type, string Title)[] Categories =
+    private static readonly (string Type, string Title, string English)[] Categories =
     [
-        ("TABLE", "테이블"),
-        ("VIEW", "뷰"),
-        ("MATERIALIZED VIEW", "머티리얼라이즈드 뷰"),
-        ("INDEX", "인덱스"),
-        ("SEQUENCE", "시퀀스"),
-        ("SYNONYM", "시노님"),
-        ("PROCEDURE", "프로시저"),
-        ("FUNCTION", "함수"),
-        ("PACKAGE", "패키지"), // 명세와 본문을 한 줄로(PKG1): 「패키지 본문」 범주는 없다
-        ("TRIGGER", "트리거"),
-        ("TYPE", "타입"), // 타입 본문도 같은 줄
-        ("DATABASE LINK", "DB 링크"),
-        ("JOB", "스케줄러 잡"),
-        ("DIRECTORY", "디렉터리"),
-        ("DOMAIN", "도메인"),
-        ("PROPERTY GRAPH", "속성 그래프"),
-        ("JAVA SOURCE", "Java 소스"),
-        ("JAVA CLASS", "Java 클래스"),
-        ("JAVA RESOURCE", "Java 리소스"),
+        ("TABLE", "테이블", "Tables"),
+        ("VIEW", "뷰", "Views"),
+        ("MATERIALIZED VIEW", "머티리얼라이즈드 뷰", "Materialized views"),
+        ("INDEX", "인덱스", "Indexes"),
+        ("SEQUENCE", "시퀀스", "Sequences"),
+        ("SYNONYM", "시노님", "Synonyms"),
+        ("PROCEDURE", "프로시저", "Procedures"),
+        ("FUNCTION", "함수", "Functions"),
+        ("PACKAGE", "패키지", "Packages"), // 명세와 본문을 한 줄로(PKG1): 「패키지 본문」 범주는 없다
+        ("TRIGGER", "트리거", "Triggers"),
+        ("TYPE", "타입", "Types"), // 타입 본문도 같은 줄
+        ("DATABASE LINK", "DB 링크", "Database links"),
+        ("JOB", "스케줄러 잡", "Scheduler jobs"),
+        ("DIRECTORY", "디렉터리", "Directories"),
+        ("DOMAIN", "도메인", "Domains"),
+        ("PROPERTY GRAPH", "속성 그래프", "Property graphs"),
+        ("JAVA SOURCE", "Java 소스", "Java sources"),
+        ("JAVA CLASS", "Java 클래스", "Java classes"),
+        ("JAVA RESOURCE", "Java 리소스", "Java resources"),
     ];
 
     /// <summary>범주 순서에 있는 객체 유형(필터 콤보 목록). 본문(PACKAGE BODY·TYPE BODY)은 명세 범주에 묶여 따로 없다(PKG1).</summary>
     public static IReadOnlyList<string> KnownTypes { get; } = [.. Categories.Select(c => c.Type)];
 
-    /// <summary>범주 순서의 (객체 유형, 트리 제목). 저장 필터 편집의 객체 탭 줄.</summary>
-    internal static IReadOnlyList<(string Type, string Title)> CategoryTitles => Categories;
+    /// <summary>범주 순서의 (객체 유형, 트리 제목 — 지금 화면 언어). 저장 필터 편집의 객체 탭 줄.</summary>
+    internal static IReadOnlyList<(string Type, string Title)> CategoryTitles => [.. Categories.Select(c => (c.Type, CategoryTitle(c.Type)))];
+
+    /// <summary>범주 트리 제목(화면 언어에 맞춤). 범주 표에 없는 유형은 유형 이름 그대로.</summary>
+    internal static string CategoryTitle(string type)
+    {
+        foreach (var c in Categories)
+        {
+            if (string.Equals(c.Type, type, StringComparison.Ordinal))
+            {
+                return LiteralTranslator.IsEnglish ? c.English : c.Title;
+            }
+        }
+
+        return type;
+    }
+
+    /// <summary>「즐겨찾기」 노드 제목(화면 언어에 맞춤).</summary>
+    internal static string FavoritesTitle => LiteralTranslator.IsEnglish ? "Favorites" : "즐겨찾기";
+
+    /// <summary>범주 노드 제목: 「테이블 (557)」.</summary>
+    internal static string CategoryNodeTitle(string type, int count) => $"{CategoryTitle(type)} ({count})";
+
+    /// <summary>화면 언어가 바뀌면 이미 그린 트리의 범주·즐겨찾기 제목을 바꾼다(다시 읽지 않는다).</summary>
+    private void RelabelTree()
+    {
+        foreach (var root in Roots)
+        {
+            Relabel(root);
+        }
+
+        static void Relabel(SchemaNode node)
+        {
+            if (node.Kind == SchemaNodeKind.Category && node.CategoryType is { } type)
+            {
+                node.Title = CategoryNodeTitle(type, node.Items.Count);
+            }
+            else if (node.Kind == SchemaNodeKind.Favorites)
+            {
+                node.Title = FavoritesTitle;
+            }
+
+            foreach (var child in node.Children)
+            {
+                Relabel(child);
+            }
+        }
+    }
 
     private readonly IServiceProvider? _services;
     private bool _resolved;
@@ -102,6 +149,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         _services = services;
         _favoriteStore = new InMemorySchemaFavoriteStore();
         Types.Changed += OnTypesChanged;
+        _languageWatched = UiText.WatchLanguage(OnLanguageChanged);
         if (services.GetService(typeof(IEventBus)) is IEventBus bus)
         {
             _subscriptions.Add(bus.Subscribe<SessionOpened>(this, e => PostToUi(() => _ = OnSessionOpenedAsync(e))));
@@ -231,8 +279,17 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         }
     }
 
+    private readonly bool _languageWatched;
+
+    private void OnLanguageChanged(object? sender, EventArgs e) => PostToUi(RelabelTree);
+
     public void Dispose()
     {
+        if (_languageWatched)
+        {
+            UiText.UnwatchLanguage(OnLanguageChanged);
+        }
+
         _properties?.Dispose();
         _debounce?.Cancel();
         _debounce?.Dispose();

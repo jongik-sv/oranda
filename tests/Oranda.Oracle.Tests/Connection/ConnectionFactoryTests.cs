@@ -20,6 +20,7 @@ public sealed class ConnectionFactoryTests
         Assert.Equal("db:1521/XE", cs.DataSource);
         Assert.Equal("SYSDBA", cs.DBAPrivilege);
         Assert.False(cs.Pooling);
+        Assert.False(cs.MetadataPooling); // 열을 바꾼 뒤 옛 열 정보로 결과를 풀지 않게
     }
 
     [Fact]

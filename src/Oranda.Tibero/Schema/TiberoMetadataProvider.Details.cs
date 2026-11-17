@@ -356,6 +356,12 @@ internal sealed partial class TiberoMetadataProvider
             sections.Add(new DetailSection("인덱스", ["이름", "유일", "종류", "열"],
                 [.. table.Indexes.Select(i => (IReadOnlyList<object?>)[i.Name, i.IsUnique ? "UNIQUE" : "NONUNIQUE", i.IndexType, string.Join(", ", i.Columns)])]));
         }
+
+        // 「저장」(설계 18.2): 늘 보여서 ✎ 편집을 켤 때 왼쪽 목록이 바뀌지 않는다.
+        if (TableStorageSection.Build(table) is { } storage)
+        {
+            sections.Add(storage);
+        }
     }
 
     /// <summary>객체 하나를 고르는 바인드(<c>:owner</c>, <c>:name</c>, <c>:type</c>).</summary>

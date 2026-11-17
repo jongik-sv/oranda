@@ -141,10 +141,13 @@ internal static class TableEditTestSupport
             return Task.FromResult(Table);
         }
 
+        /// <summary>돌려줄 상세(null = <see cref="OrdersDetail"/>).</summary>
+        public Oranda.Core.Metadata.ObjectDetail? Detail { get; set; }
+
         public Task<Oranda.Core.Metadata.ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct)
         {
             DetailReads++;
-            return Task.FromResult(OrdersDetail());
+            return Task.FromResult(Detail ?? OrdersDetail());
         }
 
         public Task<string> GetDdlAsync(ISession s, DbObjectRef obj, DdlOptions o, CancellationToken ct) => Task.FromResult("CREATE TABLE SAMPLE.ORDERS (…)");

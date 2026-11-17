@@ -12,5 +12,6 @@ public partial class TableEditStorageView : UserControl
     public TableEditStorageView()
     {
         InitializeComponent();
+        OpenPartitioningButton.Click += (_, _) => (DataContext as TableEditSession)?.OpenPartitioning();
     }
 }

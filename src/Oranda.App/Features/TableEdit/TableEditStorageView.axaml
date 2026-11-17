@@ -49,6 +49,15 @@
       <TextBlock x:Name="StorageLockedText" Text="{Binding StorageLockedReason}" Margin="4,0" TextWrapping="Wrap" />
     </Border>
 
+    <!-- 일반 테이블 → 파티션 테이블(설계 18.4). 「파티션」 페이지는 파티션 테이블에만 있어서 이 단추로 연다. -->
+    <Border x:Name="PartitioningBar" DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding CanOpenPartitioning}">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button x:Name="OpenPartitioningButton" Classes="tool" Content="파티션 테이블로 바꾸기…"
+                ToolTip.Tip="「파티션」 페이지를 열어 방식·키 열·파티션을 정합니다" AutomationProperties.Name="파티션 테이블로 바꾸기" />
+        <TextBlock Text="파티션 테이블이 아닙니다" VerticalAlignment="Center" Opacity="0.7" />
+      </StackPanel>
+    </Border>
+
     <!-- 아래: MOVE 경고 줄. -->
     <TextBlock x:Name="StorageMoveText" DockPanel.Dock="Bottom" Classes="warn" Margin="8,4" Text="{Binding StorageMoveText}" IsVisible="{Binding HasStorageMove}" />
 

@@ -564,6 +564,7 @@ public sealed partial class TableEditSession : ObservableObject
         OnPropertyChanged(nameof(PartitionDraft));
         OnPropertyChanged(nameof(IsPartitionDirty));
         OnPropertyChanged(nameof(CanEditPartitions));
+        OnPropertyChanged(nameof(CanOpenPartitioning));
         OnPropertyChanged(nameof(PartitionLockedReason));
         Recomputed?.Invoke(this, EventArgs.Empty);
     }

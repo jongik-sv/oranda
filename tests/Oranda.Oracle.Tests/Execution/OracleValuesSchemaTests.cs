@@ -15,6 +15,15 @@ public class OracleValuesSchemaTests
     }
 
     [Fact]
+    public void Stale_cached_schema_is_skipped_so_result_still_shows()
+    {
+        // ODP 가 캐시한 옛 열 정보로 스키마 표를 풀다 나는 예외(열을 더한 뒤 같은 표를 다시 읽을 때)
+        var schema = OracleValues.SchemaOrNull(() => Array.Empty<DataTable>()[0]);
+
+        Assert.Null(schema);
+    }
+
+    [Fact]
     public void Successful_schema_lookup_is_returned()
     {
         using var table = new DataTable();

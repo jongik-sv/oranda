@@ -79,7 +79,8 @@ internal static class OracleValues
 
     /// <summary>
     /// 스키마 표 조회. ODP 는 이 호출에서 FROM 뒤 낱말을 표 이름으로 읽어 보조 질의를 보내므로, <c>표 VERSIONS BETWEEN …</c>·<c>표 AS OF …</c> 같은
-    /// 문장에서는 ORA-00942 로 실패한다. 열 출처·ROWID 표시는 덤이므로 실패하면 건너뛰고 본 결과는 그대로 보여 준다.
+    /// 문장에서는 ORA-00942 로 실패한다. 캐시한 열 정보가 옛것이면(같은 앱에서 열을 바꾼 뒤) IndexOutOfRangeException 을 던진다.
+    /// 열 출처·ROWID 표시는 덤이므로 실패하면 건너뛰고 본 결과는 그대로 보여 준다.
     /// </summary>
     internal static DataTable? SchemaOrNull(Func<DataTable?> read)
     {
@@ -87,7 +88,7 @@ internal static class OracleValues
         {
             return read();
         }
-        catch (Exception e) when (e is OracleException or InvalidOperationException)
+        catch (Exception e) when (e is OracleException or InvalidOperationException or IndexOutOfRangeException)
         {
             return null;
         }

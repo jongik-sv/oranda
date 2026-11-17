@@ -237,6 +237,12 @@ internal sealed partial class OracleMetadataProvider
             sections.Add(new DetailSection("인덱스", ["이름", "유일", "종류", "열"],
                 [.. table.Indexes.Select(i => (IReadOnlyList<object?>)[i.Name, i.IsUnique ? "UNIQUE" : "NONUNIQUE", i.IndexType, string.Join(", ", i.Columns)])]));
         }
+
+        // 「저장」(설계 18.2): 늘 보여서 ✎ 편집을 켤 때 왼쪽 목록이 바뀌지 않는다.
+        if (TableStorageSection.Build(table) is { } storage)
+        {
+            sections.Add(storage);
+        }
     }
 
     /// <summary>dba 권한이 있으면 dba_segments, 없으면 자기 스키마일 때만 user_segments. 못 읽으면 null(크기 절을 빼고 계속한다).</summary>

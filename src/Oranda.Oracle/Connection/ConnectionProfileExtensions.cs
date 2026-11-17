@@ -20,6 +20,9 @@ public static class ConnectionProfileExtensions
             ConnectionTimeout = profile.ConnectTimeoutSeconds,
             // 모니터링 도구는 도구마다 전용 세션을 쓰므로 풀링을 끈다. 세션 하나 = 연결 하나.
             Pooling = false,
+            // ODP 는 GetSchemaTable 의 열 정보를 표마다 프로세스 안에 캐시한다. 앱에서 열을 더하거나 지운 뒤(테이블 편집기·SQL 편집기 DDL)
+            // 같은 표를 다시 읽으면 옛 열 수로 풀다가 IndexOutOfRangeException 을 던진다. DDL 을 내는 도구라 캐시를 끈다.
+            MetadataPooling = false,
         };
 
         // TNS 디렉터리·지갑 위치는 접속마다 넘긴다. 전역 OracleConfiguration.TnsAdmin·WalletLocation 은 한 번 접속을 시도한 뒤에는

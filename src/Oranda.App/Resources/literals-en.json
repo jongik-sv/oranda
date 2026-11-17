@@ -2061,5 +2061,9 @@
   "남겨 두었거나 앱이 끝날 때 열려 있던 새 테이블 작업입니다. 고른 것을 열면 「✎ 새 테이블」 탭으로 이어서 만듭니다.": "New table work you kept, or that was open when the app ended. Open one to continue in a ✎ New table tab.",
   "작업 지우기": "Delete draft",
   "작업 열기": "Open draft",
-  "만들던 새 테이블 목록": "New table drafts"
+  "만들던 새 테이블 목록": "New table drafts",
+  "「파티션」 페이지를 열어 방식·키 열·파티션을 정합니다": "Opens the Partitions page to choose the method, key columns and partitions",
+  "파티션 테이블로 바꾸기": "Convert to a partitioned table",
+  "파티션 테이블로 바꾸기…": "Convert to a partitioned table…",
+  "파티션 테이블이 아닙니다": "Not a partitioned table"
 }

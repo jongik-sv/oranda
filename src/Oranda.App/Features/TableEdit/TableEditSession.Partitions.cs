@@ -34,6 +34,34 @@ public sealed partial class TableEditSession
     public bool CanEditPartitions => _partitionOriginal is not null && !IsRestricted && !IsNewTable
         && Dialect.UnsupportedReasonKey(TableEditFeature.Partitioning, Context.Server) is null;
 
+    private Action? _openPartitionsPage;
+
+    /// <summary>
+    /// 「파티션 테이블로 바꾸기…」가 부르는 동작: 객체 상세가 「파티션」 페이지를 끼우고 고른다. 일반 테이블에만 쓴다
+    /// (파티션 테이블은 「파티션」 페이지가 늘 있다). null = 그 길이 없음(새 테이블 탭 등).
+    /// </summary>
+    public Action? OpenPartitionsPage
+    {
+        get => _openPartitionsPage;
+        set
+        {
+            _openPartitionsPage = value;
+            OnPropertyChanged(nameof(CanOpenPartitioning));
+        }
+    }
+
+    /// <summary>「저장」 페이지의 「파티션 테이블로 바꾸기…」 단추를 보인다: 일반 테이블이고 파티션을 고칠 수 있다.</summary>
+    public bool CanOpenPartitioning => _openPartitionsPage is not null && ShowsPartitionMethodChoice && CanEditPartitions;
+
+    /// <summary>「파티션 테이블로 바꾸기…」: 「파티션」 페이지로 간다(방식·키 열은 그 페이지에서 고른다).</summary>
+    public void OpenPartitioning()
+    {
+        if (CanOpenPartitioning)
+        {
+            _openPartitionsPage!();
+        }
+    }
+
     /// <summary>파티션을 못 고치는 까닭(고칠 수 있으면 빈 글).</summary>
     public string PartitionLockedReason => CanEditPartitions ? string.Empty
         : IsRestricted ? RestrictionText

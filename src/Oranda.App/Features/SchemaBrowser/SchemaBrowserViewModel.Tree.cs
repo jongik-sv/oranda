@@ -102,7 +102,7 @@ public sealed partial class SchemaBrowserViewModel
             _allSchemas = schemas;
             _matcher = matcher;
             _filter = BuildFilter();
-            _favoritesNode = new SchemaNode(this, SchemaNodeKind.Favorites, "즐겨찾기");
+            _favoritesNode = new SchemaNode(this, SchemaNodeKind.Favorites, FavoritesTitle);
             _favoritesNode.ResetChildren();
             Roots.Add(_favoritesNode);
             var visible = VisibleSchemas(session);
@@ -524,14 +524,14 @@ public sealed partial class SchemaBrowserViewModel
         var known = new HashSet<string>(Categories.Select(c => c.Type), StringComparer.Ordinal);
         var ordered = Categories.Select(c => (c.Type, c.Title))
             .Concat(groups.Keys.Where(k => !known.Contains(k)).OrderBy(k => k, StringComparer.Ordinal).Select(k => (Type: k, Title: k)));
-        foreach (var (type, title) in ordered)
+        foreach (var (type, _) in ordered)
         {
             if (!groups.TryGetValue(type, out var items) || items.Count == 0)
             {
                 continue;
             }
 
-            var cat = new SchemaNode(this, SchemaNodeKind.Category, $"{title} ({items.Count})")
+            var cat = new SchemaNode(this, SchemaNodeKind.Category, CategoryNodeTitle(type, items.Count))
             {
                 Owner = node.Owner,
                 CategoryType = type,
