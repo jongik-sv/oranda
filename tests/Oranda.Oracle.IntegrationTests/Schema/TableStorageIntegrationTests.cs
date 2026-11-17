@@ -186,6 +186,64 @@ public sealed class TableStorageIntegrationTests : IAsyncLifetime
         Assert.Equal(0m, (decimal)(await cmd.ExecuteScalarAsync())!);
     }
 
+    /// <summary>
+    /// 객체 상세 「저장」 구역(te-followup, <see cref="TableStorageSection"/>): 공급자가 늘 만들고, 행 값이 실제 저장 속성·LOB 저장 절과 맞다.
+    /// LOB 줄 = 사전 순서(열 이름순). PCTFREE·압축을 바꾸면 다시 읽은 구역이 따라간다.
+    /// </summary>
+    [Fact]
+    public async Task Detail_storage_section_shows_the_table_and_lob_storage()
+    {
+        if (Skip())
+        {
+            return;
+        }
+
+        var s = await OpenAsync();
+        var orders = await StorageRowsAsync(s, "ORDERS");
+        Assert.Equal(["테이블스페이스", "PCTFREE", "INITRANS", "압축", "LOGGING", "병렬", "LOB DOC", "LOB MEMO", "LOB PIC"], orders.Keys);
+        Assert.Equal("USERS", orders["테이블스페이스"]);
+        Assert.Equal(("20", "4", "아니오", "PARALLEL 4"), (orders["PCTFREE"], orders["INITRANS"], orders["LOGGING"], orders["병렬"]));
+        Assert.Equal(_major >= 12 ? "BASIC" : "없음", orders["압축"]);
+        Assert.Equal("SECUREFILE · USERS · 압축 없음 · 중복 유지 · 행 밖에", orders["LOB MEMO"]);
+        Assert.Equal("BASICFILE · USERS · 행 안에", orders["LOB DOC"]); // BASICFILE 은 압축·중복 제거 열이 NONE/NO 가 아니다 → 모름은 뺀다
+        Assert.EndsWith("· USERS" + (orders["LOB PIC"].StartsWith("SECUREFILE", StringComparison.Ordinal) ? " · 압축 없음 · 중복 유지 · 행 안에" : " · 행 안에"), orders["LOB PIC"]);
+
+        var plain = await StorageRowsAsync(s, "PLAIN");
+        Assert.Equal(["테이블스페이스", "PCTFREE", "INITRANS", "압축", "LOGGING", "병렬"], plain.Keys);
+        Assert.Equal(("10", "없음", "예", "NOPARALLEL"), (plain["PCTFREE"], plain["압축"], plain["LOGGING"], plain["병렬"]));
+
+        await using (var owner = Connect(_owner, _password))
+        {
+            await owner.OpenAsync();
+            await ExecAsync(owner, "ALTER TABLE plain PCTFREE 30");
+            if (_major >= 12)
+            {
+                await ExecAsync(owner, "ALTER TABLE plain ROW STORE COMPRESS BASIC");
+            }
+        }
+
+        var changed = await StorageRowsAsync(s, "PLAIN");
+        Assert.Equal(("30", _major >= 12 ? "BASIC" : "없음"), (changed["PCTFREE"], changed["압축"]));
+
+        var view = await NewProvider().GetObjectDetailAsync(s, new DbObjectRef(_owner, "V_ORDERS", "VIEW"), default);
+        Assert.DoesNotContain(view.Sections, x => x.Title == TableStorageSection.Title);
+    }
+
+    private async Task<Dictionary<string, string>> StorageRowsAsync(ISession s, string table)
+    {
+        var detail = await NewProvider().GetObjectDetailAsync(s, new DbObjectRef(_owner, table, "TABLE"), default);
+        _output.WriteLine($"{table} sections = {string.Join(", ", detail.Sections.Select(x => x.Title))}");
+        var section = Assert.Single(detail.Sections, x => x.Title == TableStorageSection.Title);
+        Assert.Equal(["항목", "값"], section.Columns);
+        var rows = section.Rows.ToDictionary(r => (string)r[0]!, r => (string)r[1]!, StringComparer.Ordinal);
+        foreach (var (k, v) in rows)
+        {
+            _output.WriteLine($"  {k} = {v}");
+        }
+
+        return rows;
+    }
+
     private bool Skip()
     {
         if (_enabled)

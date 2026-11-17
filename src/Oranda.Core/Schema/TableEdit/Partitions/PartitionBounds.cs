@@ -224,6 +224,14 @@ public static partial class PartitionBounds
             return time.Length == 0 || time == "00:00:00" ? date : date + " " + time;
         }
 
+        if (ToDateCall().Match(t) is { Success: true } call && NetDateFormat(call.Groups["m"].Value) is { } format
+            && TryParseDate(call.Groups["v"].Value.Trim(), format, out var parsed))
+        {
+            return parsed.TimeOfDay == TimeSpan.Zero
+                ? parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                : parsed.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        }
+
         if (t.Length >= 2 && t[0] == '\'' && t[^1] == '\'')
         {
             var inner = t[1..^1];
@@ -291,8 +299,71 @@ public static partial class PartitionBounds
         return items;
     }
 
-    /// <summary>사전·문장의 날짜 경계: <c>TO_DATE(' 2026-10-01 00:00:00', 'SYYYY-MM-DD …')</c>, <c>TIMESTAMP' 2026-10-01 00:00:00'</c>, <c>DATE '2026-10-01'</c>.</summary>
-    [GeneratedRegex(@"^(?:TO_DATE\(\s*'\s*(?<d>\d{4}-\d{2}-\d{2})(?:\s+(?<t>\d{2}:\d{2}:\d{2}))?\s*'\s*,[^)]*\)|(?:TIMESTAMP|DATE)\s*'\s*(?<d>\d{4}-\d{2}-\d{2})(?:\s+(?<t>\d{2}:\d{2}:\d{2})(?:\.0+)?)?\s*')$",
+    /// <summary>
+    /// 날짜 형식 글(<c>SYYYY-MM-DD HH24:MI:SS</c>·<c>DD-MM-YYYY HH24:mi:ss</c>·<c>YYYYMMDD</c> 등) → .NET 형식. 연·월·일·시(24)·분·초와 구분 글자(<c>- / : . 공백</c>)만 안다.
+    /// 그 밖의 요소(<c>MON</c>·<c>HH12</c>·<c>AM</c> 등)가 있으면 null(경계를 그대로 둔다).
+    /// </summary>
+    private static (string Full, string DateOnly)? NetDateFormat(string mask)
+    {
+        var format = new StringBuilder();
+        var m = mask.ToUpperInvariant();
+        var dateOnly = -1;
+        var parts = 0;
+        var i = 0;
+        while (i < m.Length)
+        {
+            var (token, net) = m.AsSpan(i) switch
+            {
+                var r when r.StartsWith("SYYYY") => ("SYYYY", "yyyy"),
+                var r when r.StartsWith("YYYY") => ("YYYY", "yyyy"),
+                var r when r.StartsWith("HH24") => ("HH24", "HH"),
+                var r when r.StartsWith("MM") => ("MM", "MM"),
+                var r when r.StartsWith("DD") => ("DD", "dd"),
+                var r when r.StartsWith("MI") => ("MI", "mm"),
+                var r when r.StartsWith("SS") => ("SS", "ss"),
+                var r when "-/:. ".Contains(r[0], StringComparison.Ordinal) => (r[..1].ToString(), "\\" + r[0]),
+                _ => (string.Empty, string.Empty),
+            };
+            if (token.Length == 0)
+            {
+                return null;
+            }
+
+            if (token == "HH24" && dateOnly < 0)
+            {
+                dateOnly = format.Length;
+            }
+
+            parts |= token switch { "SYYYY" or "YYYY" => 1, "MM" => 2, "DD" => 4, _ => 0 };
+            format.Append(net);
+            i += token.Length;
+        }
+
+        // 연·월·일이 다 있어야 한다: 빠진 요소를 서버는 이번 해·이번 달·1일로, .NET 은 1월·오늘로 채워 값이 달라진다.
+        if (parts != 7)
+        {
+            return null;
+        }
+
+        var full = format.ToString();
+        return (full, dateOnly < 0 ? full : full[..dateOnly].TrimEnd('\\', ' '));
+    }
+
+    /// <summary>형식대로 읽고, 안 되면 시각 앞까지만(서버는 형식보다 짧은 값 <c>TO_DATE('2026-11-01', 'YYYY-MM-DD HH24:MI:SS')</c> 도 받는다).</summary>
+    private static bool TryParseDate(string value, (string Full, string DateOnly) format, out DateTime parsed) =>
+        DateTime.TryParseExact(value, format.Full, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed)
+        || (format.DateOnly != format.Full
+            && DateTime.TryParseExact(value, format.DateOnly, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed));
+
+    /// <summary>사전·문장의 날짜 리터럴 경계: <c>TIMESTAMP' 2026-10-01 00:00:00'</c>, <c>DATE '2026-10-01'</c>.</summary>
+    [GeneratedRegex(@"^(?:TIMESTAMP|DATE)\s*'\s*(?<d>\d{4}-\d{2}-\d{2})(?:\s+(?<t>\d{2}:\d{2}:\d{2})(?:\.0+)?)?\s*'$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DateLiteral();
+
+    /// <summary>
+    /// <c>TO_DATE('값', '형식'[, 'NLS…'])</c>: Oracle 사전 <c>TO_DATE(' 2026-10-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN')</c>,
+    /// Tibero 사전(만든 문장 글 그대로, INTERVAL 로 서버가 만든 파티션은 <c>TO_DATE('01-02-2027 00:00:00', 'DD-MM-YYYY HH24:mi:ss')</c>).
+    /// </summary>
+    [GeneratedRegex(@"^TO_DATE\(\s*'(?<v>[^']*)'\s*,\s*'(?<m>[^']*)'\s*(?:,\s*'[^']*'\s*)?\)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ToDateCall();
 }

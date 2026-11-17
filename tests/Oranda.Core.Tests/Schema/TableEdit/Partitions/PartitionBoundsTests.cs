@@ -18,6 +18,34 @@ public class PartitionBoundsTests
     [InlineData(null, "")]
     public void Server_bounds_read_as_plain_values(string? bound, string plain) => Assert.Equal(plain, PartitionBounds.ToPlain(bound));
 
+    /// <summary>
+    /// Tibero 실측(te-w30-verify): 사전 BOUND 는 만든 문장 글 그대로이고, INTERVAL 로 서버가 만든 파티션은 <c>DD-MM-YYYY HH24:mi:ss</c> 꼴이다.
+    /// TO_DATE 는 날짜 형식 글을 읽어 보통 값으로 바꾼다(모르는 형식 요소면 그대로).
+    /// </summary>
+    [Theory]
+    [InlineData("TO_DATE('01-02-2027 00:00:00', 'DD-MM-YYYY HH24:mi:ss')", "2027-02-01")]
+    [InlineData("TO_DATE('01-02-2027 13:30:05', 'DD-MM-YYYY HH24:mi:ss')", "2027-02-01 13:30:05")]
+    [InlineData("TO_DATE('2026-11-01', 'YYYY-MM-DD')", "2026-11-01")]
+    [InlineData("TO_DATE('2026-12-01 13:30:00', 'YYYY-MM-DD HH24:MI:SS')", "2026-12-01 13:30:00")]
+    [InlineData("TO_DATE('2026/11/01', 'YYYY/MM/DD')", "2026-11-01")]
+    [InlineData("to_date('20261101', 'yyyymmdd')", "2026-11-01")]
+    [InlineData("TO_DATE('01-NOV-2026', 'DD-MON-YYYY')", "TO_DATE('01-NOV-2026', 'DD-MON-YYYY')")]
+    [InlineData("TO_DATE('31-02-2027', 'DD-MM-YYYY')", "TO_DATE('31-02-2027', 'DD-MM-YYYY')")]
+    [InlineData("TO_DATE('01-02-2027', 'DD-MM-YYYY'), 5", "2027-02-01, 5")]
+    [InlineData("TO_DATE('2026-11-01', 'YYYY-MM-DD HH24:MI:SS')", "2026-11-01")] // 값이 형식보다 짧다(시각 생략) — 서버는 받는다
+    [InlineData("TO_DATE('2027', 'YYYY')", "TO_DATE('2027', 'YYYY')")] // 빠진 월 = 서버는 이번 달, .NET 은 1월 → 읽지 않는다
+    [InlineData("TO_DATE('13:00:00', 'HH24:MI:SS')", "TO_DATE('13:00:00', 'HH24:MI:SS')")]
+    [InlineData("TO_DATE('11-2026', 'MM-YYYY')", "TO_DATE('11-2026', 'MM-YYYY')")]
+    public void To_date_bounds_read_with_their_format_mask(string bound, string plain) => Assert.Equal(plain, PartitionBounds.ToPlain(bound));
+
+    [Fact]
+    public void Server_made_interval_bound_continues_as_a_date()
+    {
+        string[] bounds = ["DATE '2026-11-01'", "TO_DATE('01-12-2026 00:00:00', 'DD-MM-YYYY HH24:mi:ss')"];
+        Assert.Equal(new DateTime(2026, 12, 1), PartitionBounds.AsDate(bounds[1]));
+        Assert.Equal(("P_2026_12", "DATE '2027-01-01'"), PartitionBounds.NextRange(bounds));
+    }
+
     [Theory]
     [InlineData("2026-12-01", PartitionKeyKind.Date, "DATE '2026-12-01'")]
     [InlineData("2026-12", PartitionKeyKind.Date, "DATE '2026-12-01'")]
