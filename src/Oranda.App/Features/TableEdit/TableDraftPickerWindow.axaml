@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:te="using:Oranda.App.Features.TableEdit"
+        x:Class="Oranda.App.Features.TableEdit.TableDraftPickerWindow"
+        x:DataType="te:TableDraftPickerViewModel"
+        Title="만들던 새 테이블" Width="560" Height="360" MinWidth="420" MinHeight="240"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+  <!-- 「만들던 새 테이블…」(테이블 편집기 설계 18.7, TE-43): 남겨 둔 것·끝난 앱이 남긴 것 → 열기·지우기. -->
+  <DockPanel Margin="12">
+    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" TextWrapping="Wrap"
+               Text="남겨 두었거나 앱이 끝날 때 열려 있던 새 테이블 작업입니다. 고른 것을 열면 「✎ 새 테이블」 탭으로 이어서 만듭니다." />
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+        <Button x:Name="DeleteButton" Content="지우기" IsEnabled="{Binding CanDelete}" AutomationProperties.Name="작업 지우기" />
+        <Button x:Name="OpenButton" Classes="accent" Content="열기" IsDefault="True" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="작업 열기" />
+        <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
+      </StackPanel>
+      <TextBlock x:Name="PickerStatusText" Text="{Binding StatusText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+    </DockPanel>
+    <ListBox x:Name="DraftList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" AutomationProperties.Name="만들던 새 테이블 목록">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="te:TableDraftPickerItem">
+          <Grid ColumnDefinitions="*,Auto,Auto" Margin="2">
+            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="{Binding StateText}" Margin="12,0" Opacity="0.7" />
+            <TextBlock Grid.Column="2" Text="{Binding UpdatedText}" Opacity="0.7" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</Window>

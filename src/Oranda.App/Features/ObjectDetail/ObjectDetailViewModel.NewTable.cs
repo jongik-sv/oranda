@@ -14,6 +14,14 @@ using Oranda.Core.Sessions;
 
 namespace Oranda.App.Features.ObjectDetail;
 
+/// <summary>작업 저장에 붙은 새 테이블 탭을 닫을 때의 답(설계 18.7 「버리기 / 남겨 두기 / 취소」).</summary>
+public enum NewTableCloseChoice
+{
+    Cancel,
+    Discard,
+    Keep,
+}
+
 /// <summary>새 테이블 「종류」 칸 한 줄(설계 18.10). <see cref="Reason"/> 가 있으면 이 서버에서 못 만들어 흐리게 둔다(설계 18.8).</summary>
 /// <param name="PreserveRows">임시 테이블의 <c>ON COMMIT PRESERVE ROWS</c>(거짓 = DELETE ROWS)</param>
 /// <param name="Reason">못 만드는 이유 문구 키(<see cref="ITableEditDialect.UnsupportedReasonKey"/>). null = 만들 수 있다</param>
@@ -152,7 +160,7 @@ public sealed partial class ObjectDetailViewModel
     /// <summary>시험용: 스키마 브라우저 목록 다시 받기(기본 = 같은 접속이면 스키마 브라우저 범주 새로 고침, 아니면 메타데이터 목록만).</summary>
     internal Func<ISession, string, CancellationToken, Task>? RefreshSchemaTables { get; set; }
 
-    /// <summary>시험용: 작업 저장 연결(기본 = 서비스의 <see cref="INewTableDraftHook"/>, 이 빌드는 없음).</summary>
+    /// <summary>시험용: 작업 저장 연결(기본 = 서비스의 <see cref="INewTableDraftHook"/> = <see cref="TableDraftHook"/>).</summary>
     internal INewTableDraftHook? NewTableDraftHook { get; set; }
 
     /// <summary>
@@ -161,12 +169,27 @@ public sealed partial class ObjectDetailViewModel
     /// </summary>
     /// <param name="owner">소유자 칸 기본값(고른 노드의 소유자)</param>
     /// <param name="owners">소유자 칸 목록(스키마 브라우저의 스키마). <paramref name="owner"/> 는 늘 들어간다</param>
+    /// <param name="resumed">되살린 저장분(이미 이 인스턴스가 쥠, <see cref="TableDraftHook.ResumeAsync"/>) — 만든 편집 세션을 묶는다. 없으면 새로 붙인다
+    /// (<see cref="INewTableDraftHook.Attach"/>). 편집을 시작하지 못하면 놓는다(저장분은 그대로 — 목록에 다시 보인다).</param>
     public async Task<bool> OpenNewTableAsync(ISession session, string owner, IReadOnlyList<string>? owners = null,
-                                              DbObjectRef? copyFrom = null, TableDraft? restore = null, CancellationToken ct = default)
+                                              DbObjectRef? copyFrom = null, TableDraft? restore = null, ResumedDraft? resumed = null,
+                                              CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        var started = await OpenNewTableCoreAsync(session, owner, owners, copyFrom, restore, resumed, ct);
+        if (!started && resumed is not null)
+        {
+            await ReleaseAsync(resumed.Link); // 편집을 시작하지 못했다: 써 두고 놓는다(목록에 다시 보인다)
+        }
 
+        return started;
+    }
+
+    private async Task<bool> OpenNewTableCoreAsync(ISession session, string owner, IReadOnlyList<string>? owners,
+                                                   DbObjectRef? copyFrom, TableDraft? restore, ResumedDraft? resumed, CancellationToken ct)
+    {
+        ReleaseDraftLink();
         EndTableEdit();
         _session = session;
         Target = null;
@@ -265,25 +288,164 @@ public sealed partial class ObjectDetailViewModel
         OnPropertyChanged(nameof(NewTableName));
         RaiseNewTableHeader();
         StatusText = TableEditText.T("새 테이블 — 이름과 열을 쓰면 아래에 CREATE TABLE 이 보입니다", "New table — fill in the name and columns to see CREATE TABLE below");
-        _draftLink = (NewTableDraftHook ?? _services?.GetService(typeof(INewTableDraftHook)) as INewTableDraftHook)?.Attach(session, TableEdit);
+        if (resumed is not null)
+        {
+            resumed.Bind(TableEdit); // 자동 저장은 이 편집 세션 하나를 읽는다(탭이 나중에 다른 편집으로 바뀌어도)
+            _draftLink = resumed.Link;
+        }
+        else
+        {
+            _draftLink = DraftHook?.Attach(session, TableEdit);
+        }
+
         return true;
     }
 
-    /// <summary>탭이 닫혔다(닫기 확인을 지난 뒤): 아직 새 테이블이면 작업 저장에 버렸다고 알린다(설계 18.7).</summary>
+    private INewTableDraftHook? DraftHook => NewTableDraftHook ?? _services?.GetService(typeof(INewTableDraftHook)) as INewTableDraftHook;
+
+    /// <summary>작업 저장에 붙어 있다(닫기가 3갈래 「버리기 / 남겨 두기 / 취소」 다, 설계 18.7).</summary>
+    internal bool HasDraftLink => IsNewTableMode && _draftLink is not null;
+
+    /// <summary>시험용: 닫기 3갈래 묻기(기본 = 편집기 대화상자 단추 셋).</summary>
+    internal Func<string, CancellationToken, Task<NewTableCloseChoice>>? AskCloseNewTable { get; set; }
+
+    /// <summary>
+    /// 탭이 닫혔다(<c>DocumentClosed</c>). 닫기 확인이 이미 끝맺었으면 할 일이 없다. 확인 없이 닫혔으면 지우지 않고 써 두고 놓는다 —
+    /// 말없이 잃지 않는다(소유자 노드 「만들던 새 테이블…」에 보인다). 앱 종료 중이면 종료 작업이 먼저 멈춰 두어 쥔 채 남는다(다음 실행이 되살린다).
+    /// </summary>
     internal void EndNewTableDraft()
     {
         _newTableClosed = true;
-        if (IsNewTableMode)
-        {
-            EndDraftLink(NewTableDraftEnd.Discarded);
-        }
+        ReleaseDraftLink();
     }
 
-    private void EndDraftLink(NewTableDraftEnd end)
+    /// <summary>끝맺지 않고 연결을 놓는다(뒤에서 써 두고 놓음, 「남겨 두기」와 같다).</summary>
+    private void ReleaseDraftLink()
     {
         var link = _draftLink;
         _draftLink = null;
-        link?.Finish(end);
+        if (link is not null)
+        {
+            _ = ReleaseAsync(link);
+        }
+    }
+
+    /// <summary>써 두고 놓는다. 못 하면(쓸 수 없는 저장소 등) 멈추기만 한다(쥔 채 — 다음 실행이 되살린다). 예외를 내지 않는다.</summary>
+    private static async Task ReleaseAsync(INewTableDraftLink link)
+    {
+        try
+        {
+            await link.FinishAsync(NewTableDraftEnd.Kept, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            try
+            {
+                await link.DisposeAsync();
+            }
+            catch (Exception inner) when (inner is not OutOfMemoryException)
+            {
+                // 마지막 자동 저장분이 남는다.
+            }
+        }
+    }
+
+    /// <summary>연결을 끝맺는다(실행 성공·버리기 = 지움, 남겨 두기 = 써 두고 놓음). 저장소가 실패하면 예외를 내고 연결은 그대로다.</summary>
+    private async Task FinishDraftLinkAsync(NewTableDraftEnd end, CancellationToken ct)
+    {
+        if (_draftLink is not { } link)
+        {
+            return;
+        }
+
+        await link.FinishAsync(end, ct);
+        if (ReferenceEquals(_draftLink, link))
+        {
+            _draftLink = null;
+        }
+    }
+
+    /// <summary>
+    /// 작업 저장에 붙은 새 테이블 탭의 닫기 확인(설계 18.7).
+    /// <list type="bullet">
+    /// <item>앱 종료: 묻지 않고 지금 써 둔다(쥔 채 — 다음 실행이 되살린다, SQL 탭 종료 자동 저장과 같은 규칙 D-016). 부작용이 지우기가 아니라 쓰기라
+    /// 뒤의 종료 확인이 취소돼도 해가 없다. 쓰지 못하면(저장소 실패·쓸 수 없음) 예전처럼 버릴지 묻는다 — 말없이 잃지 않는다.</item>
+    /// <item>탭 닫기: 고친 것이 없으면 묻지 않고 지운다. 고쳤으면 「버리기 / 남겨 두기 / 취소」. 저장소가 실패하거나 남겨 둘 수 없으면 알리고 탭을 남긴다.</item>
+    /// </list>
+    /// </summary>
+    private Func<CancellationToken, Task<bool>>? NewTableCloseConfirmation(bool appExit)
+    {
+        var dirty = TableEdit is { IsDirty: true };
+        if (appExit)
+        {
+            if (!dirty || _draftLink is not { } link)
+            {
+                return null;
+            }
+
+            return async ct =>
+            {
+                try
+                {
+                    if (await link.SaveNowAsync(ct))
+                    {
+                        return true;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+                {
+                    StatusText = TableEditText.T("작업을 써 두지 못했다: ", "Could not save the draft: ") + ex.Message;
+                }
+
+                return await ConfirmDiscardTableEditAsync(TableEditText.T(
+                    "만들던 새 테이블을 작업 저장소에 써 두지 못했습니다. 버리고 끝낼까요?",
+                    "The new table could not be saved as a draft. Discard it and exit?"), ct);
+            };
+        }
+
+        return async ct =>
+        {
+            var end = NewTableDraftEnd.Discarded;
+            if (dirty)
+            {
+                var name = TableEdit is { Draft.Name.Length: > 0 } e ? $"{e.Draft.Owner}.{e.Draft.Name}" : NewTableTitle;
+                var choice = await (AskCloseNewTable ?? AskCloseNewTableDefaultAsync)(name, ct);
+                if (choice == NewTableCloseChoice.Cancel)
+                {
+                    return false;
+                }
+
+                end = choice == NewTableCloseChoice.Keep ? NewTableDraftEnd.Kept : NewTableDraftEnd.Discarded;
+            }
+
+            try
+            {
+                await FinishDraftLinkAsync(end, ct);
+                return true;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+            {
+                StatusText = TableEditText.T("작업 저장을 끝맺지 못해 탭을 남겼다: ", "Could not finish the saved draft; the tab stays open: ") + ex.Message;
+                return false;
+            }
+        };
+    }
+
+    private static async Task<NewTableCloseChoice> AskCloseNewTableDefaultAsync(string name, CancellationToken ct)
+    {
+        var index = await SqlEditor.SqlEditorHost.Current.Dialogs.AskButtonsAsync(
+            name,
+            TableEditText.T("만들던 새 테이블을 어떻게 할까요?\n「남겨 두기」 한 것은 소유자 노드의 「새 테이블 ▸ 만들던 새 테이블…」로 다시 엽니다.",
+                            "What should happen to this new table?\nA kept one opens again from the owner node: New Table ▸ Resume New Table…"),
+            [TableEditText.T("버리기", "Discard"), TableEditText.T("남겨 두기", "Keep"), TableEditText.T("취소", "Cancel")],
+            defaultIndex: 1,
+            ct);
+        return index switch
+        {
+            0 => NewTableCloseChoice.Discard,
+            1 => NewTableCloseChoice.Keep,
+            _ => NewTableCloseChoice.Cancel,
+        };
     }
 
     /// <summary>
@@ -292,8 +454,18 @@ public sealed partial class ObjectDetailViewModel
     /// </summary>
     private async Task<string?> AfterNewTableAppliedAsync(ISession session, DbObjectRef target, TableEditSession edit, TableEditRunResult result, CancellationToken ct)
     {
-        EndDraftLink(NewTableDraftEnd.Created);
         string? note = null;
+        try
+        {
+            await FinishDraftLinkAsync(NewTableDraftEnd.Created, CancellationToken.None); // 만들었으니 남긴 작업을 지운다(설계 18.7)
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            ReleaseDraftLink(); // 지우지 못했으면 놓는다 — 「만들던 새 테이블…」 목록에 보여 거기서 지운다
+            note = TableEditText.T("남긴 작업을 지우지 못했다(「새 테이블 ▸ 만들던 새 테이블…」에서 지우세요): ",
+                                   "could not delete the saved draft (delete it from New Table ▸ Resume New Table…): ") + ex.Message;
+        }
+
         try
         {
             await InvalidateAsync(session, target, ct);
@@ -301,7 +473,7 @@ public sealed partial class ObjectDetailViewModel
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            note = TableEditText.T("스키마 브라우저 목록을 다시 받지 못했다: ", "could not refresh the schema browser: ") + ex.Message;
+            note = Join(note, TableEditText.T("스키마 브라우저 목록을 다시 받지 못했다: ", "could not refresh the schema browser: ") + ex.Message);
         }
 
         IsNewTableMode = false;
@@ -416,7 +588,7 @@ public sealed partial class ObjectDetailViewModel
     {
         if (!value)
         {
-            EndDraftLink(NewTableDraftEnd.Discarded); // 만들지 않고 다른 객체를 열었다(만들었으면 이미 Created 로 끝났다)
+            ReleaseDraftLink(); // 만들지 않고 다른 객체를 열었다: 써 두고 놓는다(만들었으면 이미 Created 로 끝났다)
         }
 
         RaiseTableEditProperties();

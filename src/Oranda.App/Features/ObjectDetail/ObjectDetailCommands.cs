@@ -134,7 +134,7 @@ public sealed class ObjectDetailCommandHandler : ICommandHandler
 
         foreach (var doc in docking.Documents.ToList())
         {
-            if (doc.Panel is ObjectDetailViewModel detail && detail.CloseConfirmation() is { } confirm && !await confirm(ct).ConfigureAwait(true))
+            if (doc.Panel is ObjectDetailViewModel detail && detail.CloseConfirmation(appExit: true) is { } confirm && !await confirm(ct).ConfigureAwait(true))
             {
                 return false;
             }

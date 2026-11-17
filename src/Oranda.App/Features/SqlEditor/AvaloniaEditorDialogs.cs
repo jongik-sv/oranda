@@ -135,6 +135,73 @@ public sealed class AvaloniaEditorDialogs : IEditorDialogs
     public Task<bool> ConfirmAsync(string message, CancellationToken ct)
         => ShowAsync("Oranda", new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 }, false, ok => ok);
 
+    public async Task<int> AskButtonsAsync(string title, string message, IReadOnlyList<string> buttons, int defaultIndex, CancellationToken ct)
+    {
+        var owner = Owner;
+        if (owner is null)
+        {
+            return -1;
+        }
+
+        var answer = -1; // 창의 닫기 단추·Esc 도 고르지 않음
+        var dialog = BuildButtonsDialog(title, message, buttons, defaultIndex, i => answer = i);
+        await dialog.ShowDialog(owner).ConfigureAwait(true);
+        return answer;
+    }
+
+    /// <summary>단추 여럿 대화상자를 만든다(보여 주지는 않는다). 마지막 단추가 Esc(취소 자리), <paramref name="defaultIndex"/> 가 Enter 다.</summary>
+    public static Window BuildButtonsDialog(string title, string message, IReadOnlyList<string> buttons, int defaultIndex, Action<int> onAnswer)
+    {
+        ArgumentNullException.ThrowIfNull(buttons);
+        ArgumentNullException.ThrowIfNull(onAnswer);
+        var dialog = new Window
+        {
+            Title = "Oranda",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            ShowInTaskbar = false,
+            MinWidth = 320,
+        };
+        var row = new List<Button>();
+        for (var i = 0; i < buttons.Count; i++)
+        {
+            var index = i;
+            var button = new Button
+            {
+                Content = buttons[i],
+                MinWidth = 80,
+                IsDefault = i == defaultIndex,
+                IsCancel = i == buttons.Count - 1,
+            };
+            if (i == defaultIndex)
+            {
+                button.Classes.Add("accent");
+            }
+
+            button.Click += (_, _) =>
+            {
+                onAnswer(index);
+                dialog.Close();
+            };
+            row.Add(button);
+        }
+
+        dialog.Content = DialogShell.Framed(
+            new StackPanel
+            {
+                Spacing = 4,
+                Children =
+                {
+                    new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+                    new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
+                },
+            },
+            DialogShell.Buttons([.. row]));
+        dialog.Opened += (_, _) => (defaultIndex >= 0 && defaultIndex < row.Count ? row[defaultIndex] : row.LastOrDefault())?.Focus();
+        return dialog;
+    }
+
     public async Task<SaveChoice> AskSaveChangesAsync(string tabName, CancellationToken ct)
     {
         var owner = Owner;

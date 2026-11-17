@@ -172,6 +172,7 @@ internal static class PrdMatrix
         "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
         "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "ChangeBundleRecorder", "ChangeBundleNotices", "PlSqlWarmUpTask",
         "SessionsAutoShow", "MetadataCachePruner", "RollbackMaintenance",
+        "TableDraftStartup", // tableEditor: 새 테이블 작업 저장(2026-11-17 T16d)
         "AiContextKeys", "AgentBridgeStartup", // aiTuning(2026-10-29 기본 켬)
     ];
 
@@ -184,6 +185,7 @@ internal static class PrdMatrix
             "PlsqlWorkspacePersistence" => on.Contains("plsqlEditor"),
             "ChangeJournalRecorder" => on.Contains("changeJournal"),
             "ChangeBundleRecorder" or "ChangeBundleNotices" => on.Contains("changeBundle"), // 반영 묶음 자동 넣기·알림(2026-11-17)
+            "TableDraftStartup" => on.Contains("tableEditor"), // 새 테이블 작업 저장(T16d)
             "AiContextKeys" or "AgentBridgeStartup" => on.Contains("aiTuning"),
             _ => true,
         }),

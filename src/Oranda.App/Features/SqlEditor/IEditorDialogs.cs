@@ -58,6 +58,12 @@ public interface IEditorDialogs
 
     /// <summary>알림 한 개(확인 단추만). 기본은 아무것도 하지 않는다.</summary>
     Task ShowMessageAsync(string title, string message, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// 단추 여럿 중 하나를 고르게 한다(예: 새 테이블 탭 닫기 「버리기 / 남겨 두기 / 취소」, 설계 18.7). 누른 단추의 번호, 창을 닫거나 Esc 면 -1.
+    /// 기본은 -1(대화상자가 없으면 아무것도 고르지 않는다 = 취소).
+    /// </summary>
+    Task<int> AskButtonsAsync(string title, string message, IReadOnlyList<string> buttons, int defaultIndex, CancellationToken ct) => Task.FromResult(-1);
 }
 
 /// <summary>고친 탭을 닫을 때 저장 확인 대화상자의 답.</summary>

@@ -311,15 +311,9 @@ public class NewTableTests
     }
 
     [Fact]
-    public async Task Close_asks_with_the_new_table_question_and_tells_the_draft_hook()
+    public async Task Without_draft_saving_close_asks_the_two_way_new_table_question()
     {
-        var hook = new FakeHook();
-        var (vm, _, probe) = Create();
-        vm.NewTableDraftHook = hook;
-        var session = new FakeSession();
-        Assert.True(await vm.OpenNewTableAsync(session, "SAMPLE"));
-        Assert.Same(session, hook.Session);
-        Assert.Same(vm.TableEdit, hook.Edit);
+        var (vm, _, probe) = await OpenBlankAsync(); // 작업 저장 없음(서비스 없음)
         FillOrderItems(vm);
 
         var confirm = vm.CloseConfirmation();
@@ -327,10 +321,69 @@ public class NewTableTests
         probe.Answer = false;
         Assert.False(await confirm!(CancellationToken.None));
         Assert.Contains("만들던 새 테이블", Assert.Single(probe.Asked), StringComparison.Ordinal);
-        Assert.Null(hook.Ended);
+        Assert.NotNull(vm.CloseConfirmation(appExit: true)); // 저장이 없으면 앱 종료도 묻는다
+    }
 
-        vm.EndNewTableDraft(); // 탭이 닫혔다(버리기로 함)
+    [Theory]
+    [InlineData(NewTableCloseChoice.Cancel, null)]
+    [InlineData(NewTableCloseChoice.Keep, NewTableDraftEnd.Kept)]
+    [InlineData(NewTableCloseChoice.Discard, NewTableDraftEnd.Discarded)]
+    public async Task With_draft_saving_close_asks_discard_keep_or_cancel(NewTableCloseChoice answer, NewTableDraftEnd? ended)
+    {
+        var hook = new FakeHook();
+        var (vm, _, probe) = Create();
+        vm.NewTableDraftHook = hook;
+        var asked = new List<string>();
+        vm.AskCloseNewTable = (name, _) =>
+        {
+            asked.Add(name);
+            return Task.FromResult(answer);
+        };
+        var session = new FakeSession();
+        Assert.True(await vm.OpenNewTableAsync(session, "SAMPLE"));
+        Assert.Same(session, hook.Session);
+        Assert.Same(vm.TableEdit, hook.Edit);
+        FillOrderItems(vm);
+        Assert.True(await vm.CloseConfirmation(appExit: true)!(CancellationToken.None)); // 앱 종료는 묻지 않고 써 둔다(다음 실행이 되살린다)
+        Assert.Equal(1, hook.SavedNow);
+        Assert.Empty(asked);
+
+        var closed = await vm.CloseConfirmation()!(CancellationToken.None);
+
+        Assert.Equal(answer != NewTableCloseChoice.Cancel, closed);
+        Assert.Equal(["SAMPLE.ORDER_ITEMS"], asked);
+        Assert.Empty(probe.Asked); // 두 갈래 확인 창은 뜨지 않는다
+        Assert.Equal(ended, hook.Ended);
+    }
+
+    [Fact]
+    public async Task With_draft_saving_an_untouched_tab_closes_without_asking_and_discards()
+    {
+        var hook = new FakeHook();
+        var (vm, _, _) = Create();
+        vm.NewTableDraftHook = hook;
+        vm.AskCloseNewTable = (_, _) => throw new InvalidOperationException("묻지 않는다");
+        Assert.True(await vm.OpenNewTableAsync(new FakeSession(), "SAMPLE"));
+
+        Assert.True(await vm.CloseConfirmation()!(CancellationToken.None));
         Assert.Equal(NewTableDraftEnd.Discarded, hook.Ended);
+        vm.EndNewTableDraft(); // 닫힘 알림: 이미 끝맺었으니 더 하는 일이 없다
+        Assert.Equal(0, hook.Disposed);
+    }
+
+    [Fact]
+    public async Task A_tab_closed_without_the_confirmation_stops_saving_but_keeps_the_draft()
+    {
+        var hook = new FakeHook();
+        var (vm, _, _) = Create();
+        vm.NewTableDraftHook = hook;
+        Assert.True(await vm.OpenNewTableAsync(new FakeSession(), "SAMPLE"));
+        FillOrderItems(vm);
+
+        vm.EndNewTableDraft(); // 확인 없이 닫힘
+
+        Assert.Equal(NewTableDraftEnd.Kept, hook.Ended); // 지우지 않고 써 두고 놓는다
+        Assert.Equal(0, hook.Disposed);
     }
 
     [Fact]
@@ -365,8 +418,8 @@ public class NewTableTests
         Assert.False(vm.IsNewTableMode);
         Assert.False(vm.IsTableEditing);
         Assert.All(vm.Sections, s => Assert.True(s.IsAvailable));
-        Assert.Equal(NewTableDraftEnd.Discarded, hook.Ended); // 만들지 않고 떠났다
-        vm.EndNewTableDraft(); // 탭을 닫아도 두 번 알리지 않는다
+        Assert.Equal(NewTableDraftEnd.Kept, hook.Ended); // 만들지 않고 떠났다: 지우지 않고 써 두고 놓는다(말없이 잃지 않음)
+        vm.EndNewTableDraft(); // 탭을 닫아도 더 하는 일이 없다
         Assert.Single(hook.Finished);
     }
 
@@ -449,6 +502,13 @@ public class NewTableTests
         /// <summary>끝난 까닭(한 번만 불려야 한다).</summary>
         public NewTableDraftEnd? Ended => Finished.Count == 0 ? null : Assert.Single(Finished);
 
+        /// <summary>끝맺지 않고 놓은 횟수(써 둔 채 멈춤).</summary>
+        public int Disposed { get; set; }
+
+        public int SavedNow { get; set; }
+
+        public bool SaveNowResult { get; set; } = true;
+
         public INewTableDraftLink Attach(ISession session, TableEditSession edit)
         {
             Session = session;
@@ -458,7 +518,23 @@ public class NewTableTests
 
         private sealed class Link(FakeHook owner) : INewTableDraftLink
         {
-            public void Finish(NewTableDraftEnd reason) => owner.Finished.Add(reason);
+            public Task FinishAsync(NewTableDraftEnd reason, CancellationToken ct)
+            {
+                owner.Finished.Add(reason);
+                return Task.CompletedTask;
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                owner.Disposed++;
+                return ValueTask.CompletedTask;
+            }
+
+            public Task<bool> SaveNowAsync(CancellationToken ct)
+            {
+                owner.SavedNow++;
+                return Task.FromResult(owner.SaveNowResult);
+            }
         }
     }
 }

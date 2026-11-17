@@ -311,9 +311,15 @@ public sealed partial class ObjectDetailViewModel
     /// <summary>
     /// 탭을 닫을 때(도킹 <c>CloseConfirm</c>)·앱을 끝낼 때 물을 것. 포커스된 칸 글을 먼저 넣고 본다. 고친 내용이 없으면 null.
     /// </summary>
-    internal Func<CancellationToken, Task<bool>>? CloseConfirmation()
+    /// <param name="appExit">앱 종료 확인(작업 저장에 붙은 새 테이블 탭은 묻지 않는다 — 써 두고 다음 실행이 되살린다, 설계 18.7)</param>
+    internal Func<CancellationToken, Task<bool>>? CloseConfirmation(bool appExit = false)
     {
         TableEdit?.FlushPendingInput?.Invoke();
+        if (HasDraftLink)
+        {
+            return NewTableCloseConfirmation(appExit); // 새 테이블 작업 저장(ObjectDetailViewModel.NewTable.cs)
+        }
+
         return TableEdit is { IsDirty: true } edit
             ? ct => ConfirmDiscardTableEditAsync(edit.IsNewTable
                 ? TableEditText.T("만들던 새 테이블을 버리고 탭을 닫을까요?", "Discard the new table and close the tab?")

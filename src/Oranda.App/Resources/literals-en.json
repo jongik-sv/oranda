@@ -2056,5 +2056,10 @@
   "열 바꿔치기": "Swap columns",
   "열 순서 유지 · 오래 걸림 · 스크립트를 검토한 뒤 직접 실행합니다": "Keeps the column order · slow · review the script and run it yourself",
   "따옴표 없이 쓰면 대문자 이름이 됩니다": "Unquoted names become upper case",
-  "테이블 종류": "Table kind"
+  "테이블 종류": "Table kind",
+  "만들던 새 테이블": "Resume new table",
+  "남겨 두었거나 앱이 끝날 때 열려 있던 새 테이블 작업입니다. 고른 것을 열면 「✎ 새 테이블」 탭으로 이어서 만듭니다.": "New table work you kept, or that was open when the app ended. Open one to continue in a ✎ New table tab.",
+  "작업 지우기": "Delete draft",
+  "작업 열기": "Open draft",
+  "만들던 새 테이블 목록": "New table drafts"
 }
