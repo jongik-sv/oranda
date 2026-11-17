@@ -211,6 +211,35 @@ public static class TableEditCellText
         return name.Length == 0 || owner.Length == 0 ? null : (new DbObjectRef(owner, name, "TABLE"), cols);
     }
 
+    /// <summary>형식 글(창 머리·안내용): <c>VARCHAR2(20 BYTE)</c>, <c>NUMBER(12,2)</c>, <c>DATE</c>.</summary>
+    public static string TypeLabel(ColumnDraft column)
+    {
+        ArgumentNullException.ThrowIfNull(column);
+        var type = column.DataType ?? string.Empty;
+        if (type.Contains('(', StringComparison.Ordinal))
+        {
+            return type;
+        }
+
+        if (column.Precision is { } p)
+        {
+            return column.Scale is { } s ? $"{type}({p},{s})" : $"{type}({p})";
+        }
+
+        if (column.Scale is { } scale)
+        {
+            return $"{type}(*,{scale})";
+        }
+
+        if (column.Length is { } n)
+        {
+            var unit = column.CharSemantics switch { CharSemantics.Characters => " CHAR", CharSemantics.Bytes => " BYTE", _ => string.Empty };
+            return $"{type}({n}{unit})";
+        }
+
+        return type;
+    }
+
     /// <summary>정수 칸 글 → 값(빈 칸 = null). 숫자가 아니면 false.</summary>
     public static bool TryParseInt(string? text, out int? value)
     {

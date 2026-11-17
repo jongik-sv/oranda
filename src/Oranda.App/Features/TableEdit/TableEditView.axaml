@@ -227,6 +227,9 @@
       <!-- 파티션 페이지(설계 18.4, 시안 ⑥) -->
       <te:TableEditPartitionsView x:Name="PartitionsView" IsVisible="{Binding IsPartitionsPage}" />
 
+      <!-- 저장 페이지(설계 18.2, 시안 ⑦) -->
+      <te:TableEditStorageView x:Name="StorageView" IsVisible="{Binding IsStoragePage}" />
+
       <!-- 설명 페이지: 테이블 이름(바꾸기, 설계 18.1) · 규칙 이름도 바꾸기(TE-38) · 테이블 주석 -->
       <StackPanel IsVisible="{Binding IsDescriptionPage}" Margin="8" Spacing="4">
         <TextBlock Text="테이블 이름" />

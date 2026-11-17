@@ -144,6 +144,15 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
         }
     }
 
+    /// <summary>검사 줄의 「변환해서 바꾸기…」(설계 18.9).</summary>
+    private async void OnConvertClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string rowKey } && _vm is not null)
+        {
+            await _vm.OpenConversionAsync(rowKey);
+        }
+    }
+
     /// <summary>편집 도구줄 단추: 지금 편집 페이지의 세션에 맡긴다.</summary>
     private void WithEditPage(System.Action<Oranda.App.Features.TableEdit.TableEditSession, Oranda.Core.Schema.TableEdit.TableEditPage> action)
     {

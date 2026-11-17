@@ -135,6 +135,21 @@ public class TableEditPhase2ReviewFixTests
         Assert.False(edit.IsDirty);
     }
 
+    [Fact]
+    public void The_server_reaches_the_core_builder_so_a_tablespace_move_can_be_online()
+    {
+        var dialect = new Rules();
+        var server = new ServerInfo("19.0.0.0.0", null, null, null, null, null, false, 1, new ServerCapabilities(false, false, false, false, false), Edition: "Enterprise Edition");
+        var engine = CoreTableEditEngine.Instance;
+        var table = OrdersTable() with { Tablespace = "USERS" };
+        var edit = new TableEditSession(engine.FromTable(table, dialect), dialect, new TableEditContext(128, ConnectionEnvironment.Development, server), engine);
+
+        edit.Update(d => d with { Tablespace = "DATA01" });
+
+        var move = Assert.Single(edit.Script.Statements, s => s.Statement.Text.Contains(" MOVE ", StringComparison.Ordinal));
+        Assert.Contains("ONLINE", move.Statement.Text, StringComparison.Ordinal);
+    }
+
     private sealed class Rules : ITableEditDialect
     {
         public HashSet<PartitionOperation> RefusedPartitions { get; } = [];

@@ -27,6 +27,11 @@ public interface ITableEditEngine
     /// <summary>문장 목록(<see cref="TableEditScriptBuilder.Build"/>).</summary>
     TableEditScript Build(TableDraft original, TableDraft edited, ITableEditDialect dialect);
 
+    /// <summary>
+    /// 서버를 아는 문장 목록(저장 페이지의 ONLINE MOVE·UPDATE INDEXES·SECUREFILE·압축 절, 이름 한도가 판·에디션에 따라 다르다, 설계 18.2). 기본 = 서버 없이.
+    /// </summary>
+    TableEditScript Build(TableDraft original, TableDraft edited, ITableEditDialect dialect, ServerInfo? server) => Build(original, edited, dialect);
+
     /// <summary>검사 계획(<see cref="TableEditCheckPlanner.Plan"/>).</summary>
     TableEditCheckPlan Plan(TableDraft original, TableDraft edited, ITableEditDialect dialect, TableEditCheckOptions options);
 
@@ -56,6 +61,9 @@ public sealed class CoreTableEditEngine : ITableEditEngine
     public TableDraftChanges Diff(TableDraft original, TableDraft edited, ITableEditDialect dialect) => TableDraftDiff.Compute(original, edited, dialect);
 
     public TableEditScript Build(TableDraft original, TableDraft edited, ITableEditDialect dialect) => TableEditScriptBuilder.Build(original, edited, dialect);
+
+    public TableEditScript Build(TableDraft original, TableDraft edited, ITableEditDialect dialect, ServerInfo? server) =>
+        TableEditScriptBuilder.Build(original, edited, dialect, server);
 
     public TableEditCheckPlan Plan(TableDraft original, TableDraft edited, ITableEditDialect dialect, TableEditCheckOptions options) =>
         TableEditCheckPlanner.Plan(original, edited, dialect, options);

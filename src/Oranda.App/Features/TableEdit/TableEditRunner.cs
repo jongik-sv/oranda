@@ -67,6 +67,12 @@ public sealed class TableEditRunner
     /// <param name="exec">실행 엔진. 검사만 할 때(묶음에 넣기 앞)는 null 이어도 된다.</param>
     public TableEditRunner(IExecutionService? exec) => _exec = exec;
 
+    /// <summary>
+    /// 이 실행기의 이력 출처(기본 = <see cref="Source"/>). 열 형식 변환은 자동 넣기(DDL 만 넣음)가 UPDATE 를 빼 묶음이 깨지므로 자동 넣기 밖 출처로 보내고,
+    /// 끝난 뒤 계획 문장 전체(변환 DML 포함, TE-44)를 묶음에 직접 넣는다.
+    /// </summary>
+    public HistorySource RunSource { get; init; } = Source;
+
     /// <summary>정책(운영 확인을 한 번으로 모으려고 미리 판단한다). 없으면 미리 묻지 않고 실행 엔진의 관문에 맡긴다.</summary>
     public IExecutionPolicy? Policy { get; init; }
 
@@ -154,7 +160,30 @@ public sealed class TableEditRunner
             };
         }
 
-        var statements = script.SqlStatements;
+        var result = await ExecuteStatementsAsync(session, script.SqlStatements, findings, () => ReferenceEquals(edit.Script, script), ct);
+        return result with { Script = script };
+    }
+
+    /// <summary>
+    /// 문장 묶음 보내기(테이블 편집 실행·열 형식 자동 변환이 같이 쓴다): 정책 미리 판단(거부 = 아무것도 안 보냄) → 운영 확인 한 번(TE-34, 검사 줄을 같은 창에)
+    /// 또는 운영이 아닌 접속의 ⚠ 확인 → 미커밋 경고 → <paramref name="stillValid"/>(그새 편집이 바뀌었으면 안 보냄) → 문장별 실행(Stop, <c>PreConfirmed</c>).
+    /// 검사는 부르는 쪽이 이미 했다(✖ 가 있으면 부르지 않는다).
+    /// </summary>
+    public async Task<TableEditRunResult> ExecuteStatementsAsync(
+        ISession session, IReadOnlyList<SqlStatement> statements, IReadOnlyList<CheckFinding> findings, Func<bool> stillValid, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(statements);
+        ArgumentNullException.ThrowIfNull(findings);
+        ArgumentNullException.ThrowIfNull(stillValid);
+        if (_exec is null || statements.Count == 0)
+        {
+            return new TableEditRunResult(TableEditRunOutcome.Nothing, findings, 0, null)
+            {
+                Message = _exec is null ? TableEditText.T("실행 서비스가 없다", "No execution service") : TableEditText.T("실행할 문장이 없다", "Nothing to run"),
+            };
+        }
+
         var environment = session.Profile.Environment;
         var confirmed = new HashSet<string>(StringComparer.Ordinal);
 
@@ -164,7 +193,7 @@ public sealed class TableEditRunner
             var decisions = new List<PolicyDecision>();
             foreach (var stmt in statements)
             {
-                decisions.Add(await policy.EvaluateAsync(new PolicyContext(session.Profile, session.Server, Source), stmt, ct));
+                decisions.Add(await policy.EvaluateAsync(new PolicyContext(session.Profile, session.Server, RunSource), stmt, ct));
             }
 
             if (decisions.FirstOrDefault(d => d.Kind == PolicyDecisionKind.Deny) is { } deny)
@@ -200,7 +229,7 @@ public sealed class TableEditRunner
             return Declined(findings);
         }
 
-        if (!ReferenceEquals(edit.Script, script))
+        if (!stillValid())
         {
             // 검사·확인을 기다리는 사이 편집이 바뀌었다: 확인받은 문장과 지금 미리보기가 다르므로 보내지 않는다(설계 4장).
             return new TableEditRunResult(TableEditRunOutcome.Declined, findings, 0, null)
@@ -209,7 +238,7 @@ public sealed class TableEditRunner
             };
         }
 
-        var options = new ExecutionOptions { Source = Source, PreConfirmed = confirmed.Count == 0 ? null : confirmed };
+        var options = new ExecutionOptions { Source = RunSource, PreConfirmed = confirmed.Count == 0 ? null : confirmed };
         var succeeded = 0;
         ExecutionResult? failure = null;
         try
@@ -240,7 +269,6 @@ public sealed class TableEditRunner
         {
             return new TableEditRunResult(TableEditRunOutcome.Succeeded, findings, succeeded, null)
             {
-                Script = script,
                 Message = TableEditText.T($"{succeeded}문장을 실행했다", $"Ran {succeeded} statement(s)"),
             };
         }
@@ -255,7 +283,6 @@ public sealed class TableEditRunner
         var why = failure.Error?.Message ?? failure.Policy?.Message ?? failure.Status.ToString();
         return new TableEditRunResult(outcome, findings, succeeded, failure)
         {
-            Script = script,
             Message = succeeded == 0
                 ? TableEditText.T($"실행하지 못했다: {why}", $"Not run: {why}")
                 : TableEditText.T($"{statements.Count}문장 중 {succeeded}문장을 반영한 뒤 {succeeded + 1}번째 문장이 실패했다: {why}",

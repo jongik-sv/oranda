@@ -363,6 +363,7 @@
     {"id": "AiImageWarningDialog", "page": "ai/chat"},
     {"id": "AiProfileManagerWindow", "page": "ai/models"},
     {"id": "AiTextWarningDialog", "page": "ai/chat"},
+    {"id": "ColumnConversionWindow", "page": "schema/browser"},
     {"id": "ColumnReorderWindow", "page": "schema/browser"},
     {"id": "PointCompareWindow", "page": "run/rollback"},
     {"id": "CommandPaletteWindow", "page": "settings/shortcuts"},

@@ -19,7 +19,7 @@ public sealed partial class TableEditSession
 
     /// <summary>지금 보이는 편집 페이지(객체 상세가 구역을 고를 때 맞춘다). 편집 페이지가 아니면 null.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsColumnsPage), nameof(IsConstraintsPage), nameof(IsIndexesPage), nameof(IsDescriptionPage), nameof(IsPartitionsPage))]
+    [NotifyPropertyChangedFor(nameof(IsColumnsPage), nameof(IsConstraintsPage), nameof(IsIndexesPage), nameof(IsDescriptionPage), nameof(IsPartitionsPage), nameof(IsStoragePage))]
     private TableEditPage? _currentPage;
 
     public bool IsColumnsPage => CurrentPage == TableEditPage.Columns;
@@ -31,6 +31,8 @@ public sealed partial class TableEditSession
     public bool IsDescriptionPage => CurrentPage == TableEditPage.Description;
 
     public bool IsPartitionsPage => CurrentPage == TableEditPage.Partitions;
+
+    public bool IsStoragePage => CurrentPage == TableEditPage.Storage;
 
     /// <summary>형식 칸 목록(방언, 설계 7.2).</summary>
     public IReadOnlyList<string> TypeNames => Dialect.TypeNames;

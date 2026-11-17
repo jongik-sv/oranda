@@ -34,8 +34,12 @@ public sealed partial class ObjectDetailViewModel
         "인덱스" => TableEditPage.Indexes,
         "설명" => TableEditPage.Description,
         PartitionsTitle => TableEditPage.Partitions,
+        StorageTitle => TableEditPage.Storage,
         _ => null,
     };
+
+    /// <summary>「저장」 구역 이름(공급자는 만들지 않는다 — 편집 중에만 끼운다, 설계 18.2).</summary>
+    internal const string StorageTitle = "저장";
 
     /// <summary>「파티션」 구역 이름(공급자가 파티션 테이블에만 만든다 — 편집 중에는 일반 테이블에도 빈 구역을 끼워 파티션 테이블로 바꾸는 길을 연다, 설계 18.4).</summary>
     internal const string PartitionsTitle = "파티션";
@@ -87,8 +91,10 @@ public sealed partial class ObjectDetailViewModel
 
     public bool IsEditingPartitions => IsEditPageShown && EditPage == TableEditPage.Partitions;
 
-    /// <summary>위 도구줄의 줄 단추(＋ － ↑↓ ↺): 열·제약·인덱스·설명 페이지. 파티션 페이지는 그 화면의 도구줄을 쓴다.</summary>
-    public bool ShowsRowToolbar => IsEditPageShown && !IsEditingPartitions;
+    public bool IsEditingStorage => IsEditPageShown && EditPage == TableEditPage.Storage;
+
+    /// <summary>위 도구줄의 줄 단추(＋ － ↑↓ ↺): 열·제약·인덱스·설명 페이지. 파티션·저장 페이지는 그 화면의 칸을 쓴다.</summary>
+    public bool ShowsRowToolbar => IsEditPageShown && !IsEditingPartitions && !IsEditingStorage;
 
     /// <summary>「＋」「－」을 쓸 수 있다(편집 페이지가 줄 표이고 제한된 테이블이 아님).</summary>
     public bool CanAddRow => TableEdit is { } edit && EditPage is { } page && edit.CanAdd(page);
@@ -361,6 +367,7 @@ public sealed partial class ObjectDetailViewModel
         OnPropertyChanged(nameof(IsEditingConstraints));
         OnPropertyChanged(nameof(IsEditingDescription));
         OnPropertyChanged(nameof(IsEditingPartitions));
+        OnPropertyChanged(nameof(IsEditingStorage));
         OnPropertyChanged(nameof(ShowsRowToolbar));
         OnPropertyChanged(nameof(CanAddRow));
         OnPropertyChanged(nameof(CanSaveTableEditScript));
@@ -388,31 +395,43 @@ public sealed partial class ObjectDetailViewModel
                 "인덱스" => TableEditPage.Indexes,
                 "설명" => TableEditPage.Description,
                 PartitionsTitle => TableEditPage.Partitions,
+                StorageTitle => TableEditPage.Storage,
                 _ => (TableEditPage?)null,
             };
             s.EditCount = TableEdit is { } edit && page is { } p ? edit.CountFor(p) : 0;
         }
     }
 
-    private ObjectDetailSection? _syntheticPartitions;
+    private readonly List<ObjectDetailSection> _syntheticSections = [];
 
-    /// <summary>편집 중 「파티션」 구역이 없으면(일반 테이블) 빈 구역을 「인덱스」 뒤에 끼운다.</summary>
+    /// <summary>
+    /// 편집 중에만 있는 구역을 끼운다: 「파티션」(일반 테이블에는 없음 — 일반 → 파티션 길, 설계 18.4)은 「인덱스」 뒤, 「저장」(공급자가 만들지 않음, 설계 18.2)은 그 뒤.
+    /// </summary>
     private void EnsurePartitionsSection()
     {
-        if (Sections.Any(s => s.Title == PartitionsTitle))
+        if (!Sections.Any(s => s.Title == PartitionsTitle))
         {
-            return;
+            Insert(new ObjectDetailSection(new DetailSection(PartitionsTitle, ["항목", "값"],
+                [[TableEditText.T("파티션", "Partitioning"), TableEditText.T("파티션 테이블이 아님", "not partitioned")]])), "인덱스");
         }
 
-        _syntheticPartitions = new ObjectDetailSection(new DetailSection(PartitionsTitle, ["항목", "값"],
-            [[TableEditText.T("파티션", "Partitioning"), TableEditText.T("파티션 테이블이 아님", "not partitioned")]]));
-        var after = Sections.FirstOrDefault(s => s.Title == "인덱스");
-        Sections.Insert(after is null ? Sections.Count : Sections.IndexOf(after) + 1, _syntheticPartitions);
+        if (!Sections.Any(s => s.Title == StorageTitle))
+        {
+            Insert(new ObjectDetailSection(new DetailSection(StorageTitle, ["항목", "값"],
+                [[TableEditText.T("저장 속성", "Storage"), TableEditText.T("편집 중에만 보입니다", "shown while editing")]])), PartitionsTitle);
+        }
+
+        void Insert(ObjectDetailSection section, string after)
+        {
+            var anchor = Sections.FirstOrDefault(s => s.Title == after) ?? Sections.FirstOrDefault(s => s.Title == "인덱스");
+            Sections.Insert(anchor is null ? Sections.Count : Sections.IndexOf(anchor) + 1, section);
+            _syntheticSections.Add(section);
+        }
     }
 
     private void RemoveSyntheticPartitionsSection()
     {
-        if (_syntheticPartitions is { } s)
+        foreach (var s in _syntheticSections)
         {
             if (ReferenceEquals(SelectedSection, s))
             {
@@ -420,8 +439,9 @@ public sealed partial class ObjectDetailViewModel
             }
 
             Sections.Remove(s);
-            _syntheticPartitions = null;
         }
+
+        _syntheticSections.Clear();
     }
 
     /// <summary>캐시를 무효화하고 테이블을 새로 읽는다(TE-4·TE-28).</summary>

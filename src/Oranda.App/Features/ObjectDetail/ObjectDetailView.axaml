@@ -126,6 +126,8 @@
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="te:FindingRow">
                             <DockPanel>
+                              <Button DockPanel.Dock="Right" Classes="tool" Content="변환해서 바꾸기…" IsVisible="{Binding HasConversion}" Tag="{Binding ConversionRowKey}"
+                                      Click="OnConvertClick" ToolTip.Tip="새 열에 변환식으로 옮겨 담아 형식을 바꿉니다(설계 18.9)" />
                               <Button DockPanel.Dock="Right" Classes="tool" Content="그 행 보기" IsVisible="{Binding HasViewRows}" Tag="{Binding ViewRowsSql}"
                                       Click="OnViewRowsClick" ToolTip.Tip="그 행을 고르는 SELECT 를 새 SQL 탭에 엽니다" />
                               <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />

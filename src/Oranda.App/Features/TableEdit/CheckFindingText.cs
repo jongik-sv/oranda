@@ -54,6 +54,16 @@ public static class CheckFindingText
                                                + Dependents(finding),
             CheckCode.ColumnOrderChanges => TableEditText.T($"{s}: 숨김을 바꾸면 열 순서가 바뀝니다(맨 뒤로)", $"{s}: changing visibility moves the column to the end"),
             CheckCode.SettingIgnored => TableEditText.T($"{s}: 쓴 설정을 문장에 넣지 않습니다", $"{s}: this setting is not used") + (detail is null ? string.Empty : " (" + detail + ")"),
+            CheckCode.TableRewrite => TableEditText.T(
+                finding.Count is null ? "MOVE: 테이블 전체를 다시 씁니다" : $"MOVE: 테이블 전체를 다시 씁니다(약 {n}행)",
+                finding.Count is null ? "MOVE: the whole table is rewritten" : $"MOVE: the whole table is rewritten (about {n} rows)"),
+            CheckCode.MoveLocksDml => TableEditText.T("이 서버는 ONLINE MOVE 가 안 되어 그동안 DML 이 잠깁니다", "This server cannot MOVE ONLINE — DML is locked meanwhile"),
+            CheckCode.ConversionFails => finding.Count is 0
+                ? TableEditText.T($"{s}: 변환 안 되는 행 없음", $"{s}: every row converts")
+                : TableEditText.T($"{s}: 변환 안 되는 행 {(detail == "atLeast" ? n + "건 이상" : n + "건")}", $"{s}: {n}{(detail == "atLeast" ? "+" : string.Empty)} row(s) do not convert")
+                  + (detail is null or "atLeast" ? string.Empty : " — " + detail),
+            CheckCode.ConversionNeedsQuiet => TableEditText.T($"{s}: 변환하는 동안 이 테이블에 쓰지 않게 하세요", $"{s}: keep writes off this table while converting")
+                                              + (detail is null ? string.Empty : " (" + detail + ")"),
             CheckCode.Unsupported => TableEditText.T($"{s}: 이 서버에서는 할 수 없습니다", $"{s}: not supported on this server") + (detail is null ? string.Empty : " (" + UiText(detail) + ")"),
             _ => s,
         };
@@ -76,4 +86,9 @@ public static class CheckFindingText
 public sealed record FindingRow(string Text, string? ViewRowsSql)
 {
     public bool HasViewRows => !string.IsNullOrWhiteSpace(ViewRowsSql);
+
+    /// <summary>「변환해서 바꾸기…」 대상 열 줄 키(데이터가 있어 형식을 못 바꾸는 ✖, 설계 18.9). 없으면 null.</summary>
+    public string? ConversionRowKey { get; init; }
+
+    public bool HasConversion => ConversionRowKey is not null;
 }

@@ -521,7 +521,7 @@ public sealed partial class TableEditSession : ObservableObject
         try
         {
             // 빌더가 아직 못 만드는 꼴(계약만 있는 몸 포함)·틀린 입력이면 실행·저장을 막고 이유를 미리보기에 보인다. 줄 상태(차이)는 그대로 둔다.
-            Script = ScriptError is null && !Changes.IsEmpty ? _engine.Build(Original, Draft, Dialect) : TableEditScript.Empty;
+            Script = ScriptError is null && !Changes.IsEmpty ? _engine.Build(Original, Draft, Dialect, Context.Server) : TableEditScript.Empty;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

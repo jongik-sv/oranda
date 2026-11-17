@@ -1,0 +1,78 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:te="using:Oranda.App.Features.TableEdit"
+        xmlns:se="using:Oranda.App.Features.SqlEditor"
+        x:Class="Oranda.App.Features.TableEdit.ColumnConversionWindow"
+        x:DataType="te:ColumnConversionViewModel"
+        Title="변환해서 바꾸기" Width="900" Height="640" MinWidth="640" MinHeight="420" WindowStartupLocation="CenterOwner">
+  <!-- 열 형식 변경 자동 변환(설계 18.9, 시안 ⑧): 방법 둘 · 변환식 · 검사(✖ 막음, 그 행 보기) · 단계 목록 · 묶음에 넣기 · 스크립트 저장 · 실행. -->
+  <DockPanel Margin="12">
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8">
+      <TextBlock x:Name="HeadingText" Text="{Binding Heading}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <Border BorderThickness="1" CornerRadius="3" Padding="5,0" VerticalAlignment="Center" BorderBrush="{DynamicResource OrandaIconNeutralBrush}">
+        <TextBlock x:Name="EnvironmentText" Text="{Binding EnvironmentText}" />
+      </Border>
+    </StackPanel>
+
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,10,0,0">
+      <TextBlock Text="방법" VerticalAlignment="Center" />
+      <RadioButton x:Name="SwapChoice" GroupName="method" Content="열 바꿔치기" IsChecked="{Binding IsSwap}" IsEnabled="{Binding !IsBusy}"
+                   ToolTip.Tip="빠름 · 열이 맨 뒤로 갑니다" />
+      <RadioButton x:Name="RebuildChoice" GroupName="method" Content="테이블 다시 만들기" IsChecked="{Binding IsRebuild}" IsEnabled="{Binding !IsBusy}"
+                   ToolTip.Tip="열 순서 유지 · 오래 걸림 · 스크립트를 검토한 뒤 직접 실행합니다" />
+    </StackPanel>
+
+    <DockPanel DockPanel.Dock="Top" Margin="0,8,0,0">
+      <TextBlock DockPanel.Dock="Left" Text="변환식" VerticalAlignment="Center" Margin="0,0,8,0" />
+      <Button x:Name="CheckButton" DockPanel.Dock="Right" Classes="tool" Content="다시 검사" Margin="8,0,0,0" IsEnabled="{Binding !IsBusy}" />
+      <TextBox x:Name="ExpressionBox" Text="{Binding Expression, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding !IsBusy}" FontFamily="{DynamicResource OrandaMonoFont}"
+               AutomationProperties.Name="변환식" />
+    </DockPanel>
+
+    <!-- 아래 단추 -->
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+      <TextBlock x:Name="StatusText" DockPanel.Dock="Left" Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="460" />
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+        <Button x:Name="RemainingButton" Content="남은 단계 스크립트" IsVisible="{Binding HasRemaining}" ToolTip.Tip="남은 단계를 새 SQL 탭에 엽니다(실행하지 않음)" />
+        <Button x:Name="OpenRebuildButton" Content="편집기로 열기" IsVisible="{Binding IsRebuild}" ToolTip.Tip="다시 만들기 스크립트를 새 SQL 탭에 엽니다(검토 뒤 직접 실행)" />
+        <Button x:Name="AddToBundleButton" Content="묶음에 넣기" IsEnabled="{Binding CanAddToBundle}" IsVisible="{Binding IsSwap}"
+                ToolTip.Tip="변환 문장(변환 DML 포함)을 지금 묶음에 넣습니다" />
+        <Button x:Name="SaveScriptButton" Content="스크립트 저장…" IsEnabled="{Binding CanSaveScript}" Classes.accent="{Binding IsProduction}" />
+        <Button x:Name="RunButton" Content="실행" IsEnabled="{Binding CanRun}" IsVisible="{Binding IsSwap}" Classes.accent="{Binding !IsProduction}"
+                ToolTip.Tip="✖ 가 없어질 때까지 막습니다 · 중간에 실패하면 끝난 단계까지 표시합니다" />
+        <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
+      </StackPanel>
+    </DockPanel>
+
+    <!-- 검사 줄 -->
+    <ScrollViewer DockPanel.Dock="Top" MaxHeight="140" Margin="0,8,0,0" IsVisible="{Binding HasChecked}">
+      <ItemsControl x:Name="FindingsList" ItemsSource="{Binding Findings}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="te:FindingRow">
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Classes="tool" Content="그 행 보기" IsVisible="{Binding HasViewRows}" Tag="{Binding ViewRowsSql}" Click="OnViewRowsClick" />
+              <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DockPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <Panel Margin="0,8,0,0">
+      <!-- 열 바꿔치기: 단계 1~6 -->
+      <ListBox x:Name="StepList" ItemsSource="{Binding Steps}" IsVisible="{Binding IsSwap}" AutomationProperties.Name="변환 단계">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="te:ConversionStepRow">
+            <Grid ColumnDefinitions="28,*,Auto">
+              <TextBlock Grid.Column="0" Text="{Binding Mark}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="{Binding Text}" FontFamily="{DynamicResource OrandaMonoFont}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="{Binding Note}" IsVisible="{Binding HasNote}" Margin="8,0,0,0" VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <!-- 테이블 다시 만들기: 검토용 스크립트 -->
+      <se:SqlCodeView x:Name="RebuildView" Text="{Binding RebuildScript}" IsVisible="{Binding IsRebuild}" />
+    </Panel>
+  </DockPanel>
+</Window>

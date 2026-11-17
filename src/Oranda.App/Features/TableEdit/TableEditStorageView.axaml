@@ -1,0 +1,130 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:te="using:Oranda.App.Features.TableEdit"
+             x:Class="Oranda.App.Features.TableEdit.TableEditStorageView"
+             x:DataType="te:TableEditSession">
+  <!-- 저장 페이지(설계 18.2, 시안 ⑦). 위: 테이블 저장 속성 표(속성 · 지금 값 · 바꿀 값 · 효과). 가운데: LOB 표(LOB 열이 없으면 없음).
+       아래: MOVE 경고 줄. 비운 바꿀 값 칸은 그대로 둔다(문장 없음). -->
+  <UserControl.Styles>
+    <Style Selector="TextBox.cell">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.cell.changed">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
+    </Style>
+    <Style Selector="ComboBox.cell">
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ComboBox.cell.changed">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
+    </Style>
+    <Style Selector="Border.head TextBlock">
+      <Setter Property="Margin" Value="4,2" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.row TextBlock.value">
+      <Setter Property="Margin" Value="4,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="4,8,4,2" />
+    </Style>
+    <Style Selector="TextBlock.warn">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <!-- 못 고치는 까닭(특수 테이블 제한 · 방언이 못 함). -->
+    <Border x:Name="StorageLockedBar" DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding IsStorageLocked}">
+      <TextBlock x:Name="StorageLockedText" Text="{Binding StorageLockedReason}" Margin="4,0" TextWrapping="Wrap" />
+    </Border>
+
+    <!-- 아래: MOVE 경고 줄. -->
+    <TextBlock x:Name="StorageMoveText" DockPanel.Dock="Bottom" Classes="warn" Margin="8,4" Text="{Binding StorageMoveText}" IsVisible="{Binding HasStorageMove}" />
+
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+      <StackPanel Margin="0,0,0,8">
+        <!-- 테이블 저장 속성 표. -->
+        <TextBlock Classes="title" Text="테이블" />
+        <Border Classes="head" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+          <Grid ColumnDefinitions="26,180,160,200,*">
+            <TextBlock Grid.Column="1" Text="속성" />
+            <TextBlock Grid.Column="2" Text="지금 값" />
+            <TextBlock Grid.Column="3" Text="바꿀 값" />
+            <TextBlock Grid.Column="4" Text="효과" />
+          </Grid>
+        </Border>
+        <ItemsControl x:Name="StorageRowList" ItemsSource="{Binding StorageRows}" AutomationProperties.Name="저장 속성 표">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="te:StorageRowViewModel">
+              <Border Classes="row" ToolTip.Tip="{Binding Tip}" Padding="0,1">
+                <Grid ColumnDefinitions="26,180,160,200,*">
+                  <TextBlock Grid.Column="0" Text="{Binding StateMark}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Classes="value" Text="{Binding Label}" />
+                  <TextBlock Grid.Column="2" Classes="value" Text="{Binding CurrentText}" />
+                  <Panel Grid.Column="3">
+                    <TextBox Classes="cell" Classes.changed="{Binding IsChanged}" IsVisible="{Binding IsText}" IsEnabled="{Binding CanEdit}"
+                             Text="{Binding Text, UpdateSourceTrigger=LostFocus}" PlaceholderText="{Binding Placeholder}" AutomationProperties.Name="{Binding Label}" />
+                    <ComboBox Classes="cell" Classes.changed="{Binding IsChanged}" IsVisible="{Binding IsChoice}" IsEnabled="{Binding CanEdit}"
+                              ItemsSource="{Binding Options}" SelectedIndex="{Binding ChoiceIndex, Mode=TwoWay}" AutomationProperties.Name="{Binding Label}" />
+                  </Panel>
+                  <TextBlock Grid.Column="4" Classes="value" Classes.warn="{Binding IsWarning}" Text="{Binding EffectText}" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- LOB 표(LOB 열이 없으면 없음). -->
+        <StackPanel x:Name="LobPanel" IsVisible="{Binding HasLobRows}">
+          <TextBlock Classes="title" Text="LOB 열" Margin="4,12,4,2" />
+          <Border Classes="head" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+            <Grid ColumnDefinitions="26,160,170,160,170,150,150">
+              <TextBlock Grid.Column="1" Text="열" />
+              <TextBlock Grid.Column="2" Text="방식" />
+              <TextBlock Grid.Column="3" Text="테이블스페이스" />
+              <TextBlock Grid.Column="4" Text="압축" />
+              <TextBlock Grid.Column="5" Text="중복 제거" />
+              <TextBlock Grid.Column="6" Text="행 안에" />
+            </Grid>
+          </Border>
+          <ItemsControl x:Name="LobRowList" ItemsSource="{Binding LobRows}" AutomationProperties.Name="LOB 열 표">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="te:LobRowViewModel">
+                <Border Classes="row" Padding="0,1">
+                  <Grid ColumnDefinitions="26,160,170,160,170,150,150">
+                    <TextBlock Grid.Column="1" Classes="value" Text="{Binding ColumnName}" />
+                    <ComboBox Grid.Column="2" Classes="cell" Classes.changed="{Binding IsKindChanged}" IsEnabled="{Binding CanEditKind}"
+                              ItemsSource="{Binding KindOptions}" SelectedIndex="{Binding KindIndex, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding KindTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="LOB 저장 방식" />
+                    <TextBox Grid.Column="3" Classes="cell" Classes.changed="{Binding IsTablespaceChanged}" IsEnabled="{Binding CanEditTablespace}"
+                             Text="{Binding Tablespace, UpdateSourceTrigger=LostFocus}" PlaceholderText="{Binding TablespacePlaceholder}"
+                             AutomationProperties.Name="LOB 테이블스페이스" />
+                    <ComboBox Grid.Column="4" Classes="cell" Classes.changed="{Binding IsCompressionChanged}" IsEnabled="{Binding CanEditCompression}"
+                              ItemsSource="{Binding CompressionOptions}" SelectedIndex="{Binding CompressionIndex, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding CompressionTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="LOB 압축" />
+                    <ComboBox Grid.Column="5" Classes="cell" Classes.changed="{Binding IsDeduplicateChanged}" IsEnabled="{Binding CanEditDeduplicate}"
+                              ItemsSource="{Binding DeduplicateOptions}" SelectedIndex="{Binding DeduplicateIndex, Mode=TwoWay}"
+                              ToolTip.Tip="{Binding CompressionTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="LOB 중복 제거" />
+                    <ComboBox Grid.Column="6" Classes="cell" Classes.changed="{Binding IsInRowChanged}" IsEnabled="{Binding CanEditInRow}"
+                              ItemsSource="{Binding InRowOptions}" SelectedIndex="{Binding InRowIndex, Mode=TwoWay}" AutomationProperties.Name="LOB 행 안에 저장" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

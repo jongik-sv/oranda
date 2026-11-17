@@ -44,7 +44,10 @@ public sealed partial class ObjectDetailViewModel
 
     /// <summary>검사 줄(문구 + 「그 행 보기」 SELECT).</summary>
     public IReadOnlyList<FindingRow> TableEditFindingRows =>
-        [.. TableEditFindings.Select(f => new FindingRow(CheckFindingText.Format(f, TableEdit?.Dialect.PurgesOnDrop == true), f.ViewRowsSql))];
+        [.. TableEditFindings.Select(f => new FindingRow(CheckFindingText.Format(f, TableEdit?.Dialect.PurgesOnDrop == true), f.ViewRowsSql)
+        {
+            ConversionRowKey = f.Code == CheckCode.IncompatibleTypeChange && CanConvert(f.RowKey) ? f.RowKey : null,
+        })];
 
     /// <summary>「그 행 보기」: 검사가 준 SELECT 를 새 SQL 탭에 연다(이 접속, 실행하지 않음). 열었으면 true.</summary>
     public bool OpenViewRows(string sql)

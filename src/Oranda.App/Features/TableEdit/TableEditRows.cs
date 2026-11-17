@@ -90,6 +90,14 @@ public sealed class ColumnRowViewModel : TableEditRowViewModel
 {
     private static readonly HashSet<string> Numeric = new(StringComparer.Ordinal) { "NUMBER", "FLOAT", "DECIMAL", "INTEGER", "NUMERIC" };
 
+    /// <summary>크기 칸 계열: number(정밀도·소수) · float(2진 정밀도) · other(길이·길이 기준).</summary>
+    private static string Family(string? type) => type switch
+    {
+        "FLOAT" => "float",
+        { } t when Numeric.Contains(t) => "number",
+        _ => "other",
+    };
+
     private ColumnDraft _column = new(string.Empty, string.Empty);
     private ColumnChange _changes;
 
@@ -273,18 +281,35 @@ public sealed class ColumnRowViewModel : TableEditRowViewModel
             }
 
             var (type, size) = TableEditCellText.ParseType(value);
-            if (size is { } sz)
+            if (size is null && type == _column.DataType)
             {
-                // VARCHAR2(20 CHAR)·NUMBER(10,2): 괄호 값은 길이·정밀도 칸으로(모델은 형식 이름에 괄호를 넣지 않는다).
-                var numeric = Numeric.Contains(type!);
-                Session.UpdateColumn(Key, c => numeric
-                    ? c with { DataType = type, Precision = sz.First, Scale = sz.Second }
-                    : c with { DataType = type, Length = sz.First, CharSemantics = sz.Semantics ?? c.CharSemantics });
+                return;
             }
-            else if (type != _column.DataType)
+
+            var original = Session.Original.Column(Key);
+            var familyChanged = Family(type) != Family(_column.DataType);
+            Session.UpdateColumn(Key, c =>
             {
-                Session.UpdateColumn(Key, c => c with { DataType = type });
-            }
+                var next = c with { DataType = type };
+                if (familyChanged)
+                {
+                    // 계열(숫자·FLOAT·문자/그 밖)이 바뀌면 크기 칸을 모두 비운다 — 숨은 옛 길이·정밀도가 문장에 남지 않게(FLOAT 정밀도는 2진 자리라 따로).
+                    next = next with { Length = null, CharSemantics = null, Precision = null, Scale = null };
+                }
+
+                if (size is { } sz)
+                {
+                    // VARCHAR2(20 CHAR)·NUMBER(10,2): 괄호 값은 길이·정밀도 칸으로(모델은 형식 이름에 괄호를 넣지 않는다).
+                    return Family(type) is "number" or "float"
+                        ? next with { Precision = sz.First, Scale = sz.Second, Length = null, CharSemantics = null }
+                        : next with { Length = sz.First, CharSemantics = sz.Semantics ?? next.CharSemantics, Precision = null, Scale = null };
+                }
+
+                // 원래 형식으로 돌아오면 원래 크기를 되살린다(CHAR(10) → NUMBER → CHAR 가 거짓 MODIFY 를 만들지 않게).
+                return original is not null && type == original.DataType && familyChanged
+                    ? next with { Length = original.Length, CharSemantics = original.CharSemantics, Precision = original.Precision, Scale = original.Scale }
+                    : next;
+            });
         }
     }
 
