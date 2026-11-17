@@ -12,6 +12,7 @@ import mybatis from '../assets/landing/mybatis.png';
 import planCompare from '../assets/landing/plan-compare.png';
 import rollbackCompare from '../assets/landing/rollback-compare.png';
 import rollbackJournal from '../assets/landing/rollback-journal.png';
+import tableEdit from '../assets/screens/table-edit-columns.png';
 import { page, siteUrl } from '../lib/links';
 
 const releases = 'https://github.com/jongik-sv/oranda/releases/latest';
@@ -320,6 +321,26 @@ const wideSizes = '(max-width: 1320px) 100vw, 1240px';
             widths={[800, mybatis.width]}
             sizes={wideSizes}
             alt="왼쪽에 MyBatis 매퍼 XML이, 오른쪽에 조건을 채워 펼친 SQL이 보입니다."
+          />
+        </div>
+      </div>
+    </section>
+
+    <section class="moment dark">
+      <div class="wrap moment-inner">
+        <div class="moment-head">
+          <h2 class="oranda-display">열 하나 더하는 의뢰 스크립트를 만들어야 합니다</h2>
+          <div class="moment-text">
+            <p>테이블 편집기에서 열, 제약, 인덱스, 파티션을 표에서 고치면 바뀐 만큼의 DDL이 바로 보입니다. 실행 전에 데이터를 읽어 실패할 변경을 먼저 알려 주고, 의뢰용 스크립트 파일로 저장합니다.</p>
+            <a href={page('schema/table-editor/')}>테이블 편집기 읽기</a>
+          </div>
+        </div>
+        <div class="capture framed" tabindex="0" role="group" aria-label="테이블 편집기 화면. 좁은 화면에서는 옆으로 밀어서 봅니다.">
+          <Image
+            src={tableEdit}
+            widths={[800, tableEdit.width]}
+            sizes={wideSizes}
+            alt="테이블 편집기 열 페이지. 열 표에서 고친 줄이 표시되고, 아래에 바뀐 만큼의 DDL이 보입니다."
           />
         </div>
       </div>
