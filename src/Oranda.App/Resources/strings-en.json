@@ -1036,5 +1036,10 @@
   "Cmd.oranda.rollback.openScript": "Open Rollback Script",
   "Cmd.oranda.rollback.runScript": "Run Rollback (No Commit)",
   "Panel.oranda.panel.rollbackScript": "Rollback Script",
-  "Cmd.oranda.rollback.compare": "Compare with Before This Run…"
+  "Cmd.oranda.rollback.compare": "Compare with Before This Run…",
+  "TableEdit.unsupported.tibero.virtualColumnModify": "Tibero cannot change a virtual column expression. The column is dropped and added again (it moves to the end)",
+  "TableEdit.unsupported.tibero.identityColumn": "Tibero does not support identity columns (GENERATED … AS IDENTITY)",
+  "TableEdit.unsupported.tibero.invisibleColumn": "Tibero does not support invisible columns",
+  "TableEdit.unsupported.tibero.domainColumn": "Tibero does not support domain columns",
+  "TableEdit.unsupported.tibero.partitionConversion": "Tibero cannot convert a regular table to a partitioned table in place"
 }

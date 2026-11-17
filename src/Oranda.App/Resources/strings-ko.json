@@ -1036,5 +1036,10 @@
   "Cmd.oranda.rollback.openScript": "원복 스크립트 열기",
   "Cmd.oranda.rollback.runScript": "원복 실행 (커밋 안 함)",
   "Panel.oranda.panel.rollbackScript": "원복 스크립트",
-  "Cmd.oranda.rollback.compare": "이 실행 전과 비교…"
+  "Cmd.oranda.rollback.compare": "이 실행 전과 비교…",
+  "TableEdit.unsupported.tibero.virtualColumnModify": "Tibero 는 가상 식을 바꾸지 못합니다. 열을 지우고 다시 넣습니다(열이 맨 뒤로 갑니다)",
+  "TableEdit.unsupported.tibero.identityColumn": "Tibero 는 신원 열(GENERATED … AS IDENTITY)을 지원하지 않습니다",
+  "TableEdit.unsupported.tibero.invisibleColumn": "Tibero 는 숨김 열(INVISIBLE)을 지원하지 않습니다",
+  "TableEdit.unsupported.tibero.domainColumn": "Tibero 는 도메인 열을 지원하지 않습니다",
+  "TableEdit.unsupported.tibero.partitionConversion": "Tibero 에서는 일반 테이블을 파티션 테이블로 바로 바꿀 수 없습니다"
 }
