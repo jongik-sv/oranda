@@ -32,8 +32,6 @@ public partial class HistoryView : UserControl
         DetailSplitter.DragCompleted += (_, _) => RememberDetailHeight();
         DataContextChanged += (_, _) => ObserveViewModel();
         ApplyDetailRow();
-        RerunButton.Click += OnRerun;
-        NarrowRerunButton.Click += OnRerun;
         ToEditorButton.Click += OnToEditor;
         NarrowToEditorButton.Click += OnToEditor;
         DeleteButton.Click += OnDelete;
@@ -126,14 +124,6 @@ public partial class HistoryView : UserControl
         }
     }
 
-    private async void OnRerun(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is HistoryViewModel { Selected: { } item } vm)
-        {
-            await vm.RerunAsync(item);
-        }
-    }
-
     private async void OnToEditor(object? sender, RoutedEventArgs e)
     {
         if (DataContext is HistoryViewModel { Selected: { } item } vm)
@@ -203,11 +193,6 @@ public partial class HistoryView : UserControl
         else if (e.Key == Key.Delete && DataContext is HistoryViewModel vm)
         {
             await vm.DeleteAsync([.. List.SelectedItems?.OfType<HistoryItem>() ?? []]);
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Enter && DataContext is HistoryViewModel { Selected: { } item } vm2)
-        {
-            await vm2.RerunAsync(item);
             e.Handled = true;
         }
     }

@@ -78,7 +78,7 @@
     </Style>
   </UserControl.Styles>
   <DockPanel>
-    <!-- 좁은 도구 줄(시안 History): 1줄 = 검색 + 「필터」 / (필터를 켜면) 칩 줄 = 이 접속만 · 상태 / 2줄 = 다시 실행 · 편집기로 … 「⋯」(지우기 · 모두 비우기). -->
+    <!-- 좁은 도구 줄(시안 History): 1줄 = 검색 + 「필터」 / (필터를 켜면) 칩 줄 = 이 접속만 · 상태 / 2줄 = 편집기로 … 「⋯」(지우기 · 모두 비우기). -->
     <Border x:Name="NarrowToolbar" DockPanel.Dock="Top" Classes="panel-toolbar">
       <StackPanel Spacing="4">
         <Grid ColumnDefinitions="*,Auto">
@@ -107,8 +107,6 @@
         </WrapPanel>
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-            <Button Classes="toolbar" x:Name="NarrowRerunButton" Content="다시 실행" icons:ButtonIcon.Key="run" icons:ButtonIcon.IconOnly="True"
-                    ToolTip.Tip="고른 문장 다시 실행 (Enter)" />
             <Button Classes="toolbar" x:Name="NarrowToEditorButton" Content="편집기로" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True"
                     ToolTip.Tip="고른 문장을 편집기로 (두 번 누르기)" />
           </StackPanel>
@@ -124,7 +122,7 @@
         </Grid>
       </StackPanel>
     </Border>
-    <!-- 툴바 한 줄: 검색 · 상태 · 이 접속만 | 다시 실행 · 편집기로 | 지우기 · 모두 비우기 -->
+    <!-- 툴바 한 줄: 검색 · 상태 · 이 접속만 | 편집기로 | 지우기 · 모두 비우기 -->
     <Border x:Name="WideToolbar" DockPanel.Dock="Top" Classes="panel-toolbar">
       <WrapPanel>
         <TextBox x:Name="SearchBox" Classes="compact search" Width="240" Margin="0,0,6,0" VerticalAlignment="Center"
@@ -145,8 +143,6 @@
         <ToggleButton Classes="tool" Content="이 접속만" icons:ButtonIcon.Key="connect" IsChecked="{Binding CurrentConnectionOnly, Mode=TwoWay}"
                       ToolTip.Tip="지금 접속의 이력만 보기" />
         <Separator Classes="toolbar" />
-        <Button Classes="toolbar" x:Name="RerunButton" Content="다시 실행" icons:ButtonIcon.Key="run" icons:ButtonIcon.IconOnly="True"
-                ToolTip.Tip="고른 문장 다시 실행 (Enter)" />
         <Button Classes="toolbar" x:Name="ToEditorButton" Content="편집기로" icons:ButtonIcon.Key="docEdit" icons:ButtonIcon.IconOnly="True"
                 ToolTip.Tip="고른 문장을 편집기로 (두 번 누르기)" />
         <Separator Classes="toolbar" />

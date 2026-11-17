@@ -128,7 +128,8 @@ public sealed class HistoryScriptsTests : IDisposable
 
             var list = ((HistoryView)window.Content).FindControl<ListBox>("List")!;
             Assert.Equal(2, list.ItemCount);
-            Assert.NotNull(((HistoryView)window.Content).FindControl<Button>("RerunButton"));
+            Assert.Null(((HistoryView)window.Content).FindControl<Button>("RerunButton")); // 이력 창에서는 실행하지 않는다
+            Assert.NotNull(((HistoryView)window.Content).FindControl<Button>("ToEditorButton"));
             window.Close();
         });
     }

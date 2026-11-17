@@ -19,7 +19,7 @@ namespace Oranda.App.Tests.Styles;
 [Collection(Oranda.App.Tests.Features.PlsqlWorkspace.PlsqlStatics.Name)] // 정적 컴파일 오류 창(CompileErrorsViewModel.Current)을 쓴다
 public class BottomPanelTableTests
 {
-    private static readonly string[] HistoryActions = ["RerunButton", "ToEditorButton", "DeleteButton", "ClearButton"];
+    private static readonly string[] HistoryActions = ["ToEditorButton", "DeleteButton", "ClearButton"];
     private static readonly string[] JournalActions = ["RefreshButton", "OpenButton"];
 
     [Theory]
