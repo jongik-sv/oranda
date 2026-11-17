@@ -81,6 +81,7 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
             Indexes = OracleTableEditRows.BuildIndexes(idxRows, consRows),
             Comment = commentRows.Count > 0 ? Str(commentRows[0][0]) : null,
         }, propRows);
+        info = await WithPartitioningAsync(s, info, BindTable, ct); // 테이블 편집기 파티션(T14)
 
         await StorePayloadAsync(s, cachedRow, "table", info, ct);
         return info;

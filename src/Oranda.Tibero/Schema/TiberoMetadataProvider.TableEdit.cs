@@ -92,6 +92,21 @@ internal sealed partial class TiberoMetadataProvider
         static bool IsYes(string? v) => string.Equals(v, "YES", StringComparison.Ordinal) || string.Equals(v, "Y", StringComparison.Ordinal);
     }
 
+    /// <summary>파티션 방식·파티션·LOCAL 인덱스(T14). 파티션 테이블(<c>meta.table_kind</c> 의 partitioned = YES)일 때만 부른다.</summary>
+    private async Task<PartitioningInfo?> ReadPartitioningAsync(Oranda.Core.Sessions.ISession s, IReadOnlyDictionary<string, object?> binds, CancellationToken ct)
+    {
+        // 못 읽으면(권한 등) null — 테이블 읽기는 그대로 두고 파티션 편집만 못 켠다(PartitionTableDraft.FromTable 가 null).
+        var scheme = await TryRunAsync(s, "meta.part_scheme", binds, ct).ConfigureAwait(false);
+        if (scheme is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var partitions = await TryRunAsync(s, "meta.detail_partitions", binds, ct).ConfigureAwait(false);
+        var indexes = await TryRunAsync(s, "meta.part_indexes", binds, ct).ConfigureAwait(false);
+        return partitions is null || indexes is null ? null : PartitionRows.Build(scheme, partitions, indexes);
+    }
+
     /// <summary>행의 <paramref name="index"/> 칸 글(없거나 NULL 이면 null).</summary>
     private static string? At(object?[] row, int index) => index < row.Length ? Str(row[index]) : null;
 }

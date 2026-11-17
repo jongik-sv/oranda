@@ -299,3 +299,25 @@ Oracle 과 같다.
 | `ALTER TABLE t SET UNUSED (ID)` | 실패 TBR-7001 |
 
 USER_RECYCLEBIN 열: OBJECT_NAME, ORIGINAL_NAME, TYPE, TS_NAME, CREATETIME, DROPTIME, DROPTSN, BASE_OBJECT, SPACE. 방언 영향: DROP TABLE·DROP COLUMN ⚠ 에 「Tibero 휴지통이 꺼져 있어 되살릴 수 없음」, DROP COLUMN 뒤 시점 읽기로 데이터를 찾을 수 없음을 적는다(설계 12장 알려진 차이 확정).
+
+## 19. 파티션 정비 문장 절 (T14 추가 실측, 2026-11-17)
+
+`TableEditProbeIt.P19_partition_maintenance_clauses`. 전역 인덱스(일반 `CREATE INDEX`)와 LOCAL 인덱스가 있는 범위 파티션 테이블에서, 문장마다 인덱스를 VALID/USABLE 로 되돌린 뒤 보내고 상태를 읽었다.
+
+| 문장 | 결과 | 전역 인덱스 | LOCAL 인덱스 | Oracle 과 다른 점 / 방언 영향 |
+|---|---|---|---|---|
+| `TRUNCATE PARTITION p UPDATE INDEXES` · 절 없이 | OK | VALID · VALID | USABLE | 같음 |
+| `SPLIT PARTITION p AT (v) INTO (…) UPDATE INDEXES` | OK | **UNUSABLE** | USABLE | **Oracle 은 VALID**. 방언 `KeepsGlobalIndexesOnSplitMerge = false` → 빌더가 끝에 전역 인덱스 `ALTER INDEX … REBUILD` |
+| `MERGE PARTITIONS a, b INTO PARTITION b UPDATE INDEXES` | OK | **UNUSABLE** | USABLE | 위와 같음. INTO 에 원래 이름(b)을 써도 된다 |
+| SPLIT · MERGE 절 없이 | OK | UNUSABLE | MERGE 는 합친 파티션 UNUSABLE | 같음(Oracle 도 절 없으면 UNUSABLE) |
+| `DROP PARTITION p UPDATE INDEXES` · `UPDATE GLOBAL INDEXES` | OK | VALID | — | 같음 |
+| `DROP PARTITION p`(절 없이) | OK | UNUSABLE | — | 같음 → 빌더는 늘 `UPDATE INDEXES`(TE-40) |
+| `ADD PARTITION … VALUES LESS THAN (…) UPDATE INDEXES` | OK | VALID | USABLE | 같음 |
+| `RENAME PARTITION a TO b` | OK | — | — | 같음 |
+| `SET INTERVAL (100)` · `SET INTERVAL ()` | OK | — | — | 같음. USER_PART_TABLES.INTERVAL = `100` · NULL |
+| `SPLIT … ONLINE` | TBR-7001 | | | **ONLINE 없음** |
+| `MODIFY PARTITION BY RANGE (…) (…) [ONLINE]`(일반 → 파티션) | TBR-7001 | | | **없음**(Oracle 12.2+ 는 됨) → `SupportsOnlinePartitionConversion = false`, 일반 → 파티션은 다시 만들기 방식(TE-41) |
+| LIST `ADD PARTITION p VALUES ('C', 'D')` · `VALUES (DEFAULT)` | OK | | | 같음. BOUND = `'C','D'` · `DEFAULT` |
+| LIST `MERGE PARTITIONS PA, PB INTO PARTITION PAB UPDATE INDEXES` | OK | | | 같음. BOUND = `'A','B'` |
+
+사전: `ALL_PART_TABLES`(OWNER·PARTITIONING_TYPE·SUBPARTITIONING_TYPE·INTERVAL)·`ALL_PART_KEY_COLUMNS`·`ALL_SUBPART_KEY_COLUMNS`(OWNER·NAME·OBJECT_TYPE·COLUMN_NAME·COLUMN_POSITION)·`ALL_PART_INDEXES`(OWNER·INDEX_NAME·TABLE_NAME·LOCALITY) 는 Oracle 과 열 이름이 같다. 파티션 목록만 BOUND·PARTITION_NO(11장). 경계 채우기의 `DATE 'YYYY-MM-DD'` 는 BOUND 에 쓴 그대로 남는다(`TiberoPartitionEditIt`).

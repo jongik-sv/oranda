@@ -2,6 +2,7 @@ using System.Text.Json;
 using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema.TableEdit;
+using Oranda.Core.Schema.TableEdit.Partitions;
 using Oranda.Tibero.Schema;
 
 namespace Oranda.Tibero.Tests.Schema;
@@ -24,6 +25,23 @@ public class TiberoTableEditDialectTests
         Assert.DoesNotContain("LONG", Dialect.TypeNames);
         Assert.Contains("NVARCHAR2", Dialect.TypeNames);
         Assert.Contains("TIMESTAMP WITH TIME ZONE", Dialect.TypeNames);
+    }
+
+    /// <summary>파티션(실측 11·19): 해시 수 바꾸기·일반 → 파티션은 막고, 범위·목록 정비는 됨. 나누기·합치기 뒤 전역 인덱스 다시 만들기.</summary>
+    [Fact]
+    public void Partition_operations_follow_the_probe()
+    {
+        ITableEditDialect d = Dialect;
+        Assert.False(d.KeepsGlobalIndexesOnSplitMerge);
+        Assert.False(d.SupportsOnlinePartitionConversion(Server(7)));
+        Assert.Equal(TiberoTableEditDialect.HashPartitionChangeKey, d.UnsupportedPartitionReasonKey(PartitionOperation.Add, PartitionMethod.Hash, null));
+        Assert.Equal(TiberoTableEditDialect.HashPartitionChangeKey, d.UnsupportedPartitionReasonKey(PartitionOperation.Coalesce, PartitionMethod.Hash, null));
+        Assert.Equal(TiberoTableEditDialect.ReasonPrefix + "partitionConversion", d.UnsupportedPartitionReasonKey(PartitionOperation.Convert, PartitionMethod.Range, null));
+        foreach (var op in new[] { PartitionOperation.Add, PartitionOperation.Drop, PartitionOperation.Rename, PartitionOperation.Split, PartitionOperation.Merge, PartitionOperation.Truncate, PartitionOperation.SetInterval })
+        {
+            Assert.Null(d.UnsupportedPartitionReasonKey(op, PartitionMethod.Range, null));
+            Assert.Null(d.UnsupportedPartitionReasonKey(op, PartitionMethod.List, null));
+        }
     }
 
     [Fact]
@@ -65,14 +83,17 @@ public class TiberoTableEditDialectTests
     [InlineData(TableEditFeature.ConvertingTypeChange)]
     public void Measured_features_are_supported(TableEditFeature feature) => Assert.Null(Dialect.UnsupportedReasonKey(feature, Server(6)));
 
-    /// <summary>이유 키는 한국어·영어 문자열 파일 모두에 있다.</summary>
+    /// <summary>이유 키(방언 + 파티션 차이의 문제 키)는 한국어·영어 문자열 파일 모두에 있다.</summary>
     [Fact]
     public void Reason_keys_exist_in_both_string_files()
     {
+        var partitionKeys = typeof(PartitionDiff).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToList();
+        Assert.True(partitionKeys.Count >= 7, "partition problem keys were not found");
         foreach (var file in new[] { "strings-ko.json", "strings-en.json" })
         {
             using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "src", "Oranda.App", "Resources", file)));
-            var missing = TiberoTableEditDialect.ReasonKeys.Where(k => !json.RootElement.TryGetProperty(k, out _)).ToList();
+            var missing = TiberoTableEditDialect.ReasonKeys.Concat(partitionKeys).Where(k => !json.RootElement.TryGetProperty(k, out _)).ToList();
             Assert.True(missing.Count == 0, file + " has no " + string.Join(", ", missing));
         }
     }

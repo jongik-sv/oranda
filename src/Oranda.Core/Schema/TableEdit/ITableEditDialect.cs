@@ -48,6 +48,18 @@ public interface ITableEditDialect
 
     /// <summary>비교용 CHECK 조건 표기.</summary>
     string? NormalizeCondition(string? serverText) => TableEditDefaults.NormalizeCondition(serverText);
+
+    /// <summary>파티션 문장 하나를 못 쓰는 이유 키(설계 18.4·18.8). 쓸 수 있으면 null. 기본 = Oracle(모두 됨).</summary>
+    string? UnsupportedPartitionReasonKey(Partitions.PartitionOperation operation, Partitions.PartitionMethod method, ServerInfo? server) => null;
+
+    /// <summary>
+    /// 나누기·합치기에 <c>UPDATE INDEXES</c> 를 붙이면 전역 인덱스도 쓸 수 있게 남나. 아니면 문장 빌더가 그 뒤에 전역 인덱스 <c>REBUILD</c> 를 붙인다
+    /// (Tibero 실측 19: 로컬은 남고 전역은 UNUSABLE). 기본 = Oracle(남음).
+    /// </summary>
+    bool KeepsGlobalIndexesOnSplitMerge => true;
+
+    /// <summary>일반 → 파티션을 <c>MODIFY PARTITION BY … ONLINE</c> 한 문장으로 하나(TE-41). 아니면 테이블 다시 만들기. 기본 = Oracle 12.2 이상.</summary>
+    bool SupportsOnlinePartitionConversion(ServerInfo? server) => Partitions.PartitionDefaults.SupportsOnlinePartitionConversion(server);
 }
 
 /// <summary>

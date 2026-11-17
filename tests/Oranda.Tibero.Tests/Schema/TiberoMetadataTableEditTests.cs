@@ -104,6 +104,38 @@ public class TiberoMetadataTableEditTests
         Assert.Equal((kind, isPartitioned, (string?)null), (table.Kind, table.IsPartitioned, table.Tablespace));
     }
 
+    /// <summary>파티션 테이블이면(table_kind partitioned = YES) 방식·파티션·LOCAL 인덱스를 더 읽는다(T14). 아니면 묻지 않는다.</summary>
+    [Fact]
+    public async Task Partitioned_tables_read_the_scheme_partitions_and_local_indexes()
+    {
+        var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
+        var provider = new TiberoMetadataProvider(Recording(calls, ById(
+            ("meta.columns", Table(ColumnHeader, ["ID", 1m, "NUMBER", null, null, null, "N", null, "NO", null, "NO", null, null, null, null])),
+            ("meta.table_kind", Table(KindHeader, [null, "NO", null, null, "YES", 0m])),
+            ("meta.part_scheme", Table(["PARTITIONING_TYPE", "SUBPARTITIONING_TYPE", "INTERVAL", "LEVEL_KIND", "COLUMN_NAME", "COLUMN_POSITION"],
+                ["RANGE", "NONE", "NUMTOYMINTERVAL(1, 'MONTH')", "PART", "ID", 1m])),
+            ("meta.detail_partitions", Table(["PARTITION_POSITION", "PARTITION_NAME", "PARTITIONING_TYPE", "SUBPARTITIONING_TYPE", "HIGH_VALUE", "TABLESPACE_NAME", "NUM_ROWS", "LAST_ANALYZED"],
+                [1m, "P1", "RANGE", "NONE", "100", "TS_DATA", 0m, null], [2m, "P2", "RANGE", "NONE", "MAXVALUE", "TS_DATA", 7m, new DateTime(2026, 11, 1)])),
+            ("meta.part_indexes", Table(["INDEX_NAME"], ["ORDERS_LIX"])))));
+        await using var session = Session();
+
+        var table = await provider.GetTableAsync(session, Orders, CancellationToken.None);
+
+        var p = table.Partitioning!;
+        Assert.Equal(("RANGE", "NUMTOYMINTERVAL(1, 'MONTH')", (string?)null), (p.Method, p.Interval, p.SubpartitionMethod));
+        Assert.Equal(["ID"], p.KeyColumns);
+        Assert.Equal([("P1", "100", (long?)null), ("P2", "MAXVALUE", (long?)7)], p.Partitions.Select(x => (x.Name, x.Bound, x.NumRows)));
+        Assert.Equal(["ORDERS_LIX"], p.PartitionedIndexes);
+        Assert.Contains(calls, c => c.Id == "meta.part_scheme");
+
+        var plainCalls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
+        var plain = new TiberoMetadataProvider(Recording(plainCalls, ById(
+            ("meta.columns", Table(ColumnHeader, ["ID", 1m, "NUMBER", null, null, null, "N", null, "NO", null, "NO", null, null, null, null])),
+            ("meta.table_kind", Table(KindHeader, [null, "NO", null, null, "NO", 0m])))));
+        Assert.Null((await plain.GetTableAsync(session, Orders, CancellationToken.None)).Partitioning);
+        Assert.DoesNotContain(plainCalls, c => c.Id.StartsWith("meta.part_", StringComparison.Ordinal));
+    }
+
     /// <summary>예전 행 모양(끝 열 없음)과 테이블 종류 0행(뷰)이면 TE-29 값은 모두 기본값이고, 나머지 읽기는 그대로다.</summary>
     [Fact]
     public async Task Old_row_shapes_and_a_view_leave_the_table_edit_metadata_at_its_defaults()

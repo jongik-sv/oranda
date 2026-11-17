@@ -32,7 +32,7 @@ public class TiberoMetadataProviderTests
         var unresolved = TiberoMetadataProvider.CatalogIds.Where(id => string.IsNullOrWhiteSpace(TiberoCatalogQuery.Sql(session, id))).ToList();
 
         Assert.Empty(unresolved);
-        Assert.Equal(29, TiberoMetadataProvider.CatalogIds.Distinct(StringComparer.Ordinal).Count()); // +meta.table_kind(테이블 편집기 TE-29)
+        Assert.Equal(31, TiberoMetadataProvider.CatalogIds.Distinct(StringComparer.Ordinal).Count()); // +meta.table_kind(TE-29), +meta.part_scheme·part_indexes(T14)
     }
 
     /// <summary>

@@ -450,4 +450,103 @@ public partial class TableEditProbeIt
             await p.SilentAsync($"PURGE TABLE {t}");
         }
     }
+    /// <summary>
+    /// 19. 파티션 편집 문장 꼴(T14, 설계 18.4): <c>UPDATE INDEXES</c>(DROP·TRUNCATE·SPLIT·MERGE)·<c>ONLINE</c>·<c>SET INTERVAL</c>·MERGE 결과에 원래 이름 쓰기·
+    /// 일반 → 파티션 <c>MODIFY PARTITION BY</c>·LIST ADD·HASH 의 UPDATE INDEXES. 전역 인덱스가 있는 테이블에서 문장 뒤 인덱스 상태도 본다.
+    /// </summary>
+    [TiberoWriteFact]
+    public async Task P19_partition_maintenance_clauses()
+    {
+        await using var it = TiberoItSessions.Create();
+        if (it is null || TiberoItSessions.SkipWrite())
+        {
+            return;
+        }
+
+        var p = await OpenAsync(it);
+        var range = T("QR");
+        var list = T("QL");
+        var plain = T("QN");
+        var gix = T("QR_G");
+        string[] all = [range, list, plain];
+        foreach (var t in all)
+        {
+            await p.DropTableAsync(t);
+        }
+
+        try
+        {
+            await p.MustAsync($"CREATE TABLE {range} (ID NUMBER, D DATE) PARTITION BY RANGE (ID) (PARTITION P1 VALUES LESS THAN (100), PARTITION P2 VALUES LESS THAN (200), PARTITION P3 VALUES LESS THAN (300), PARTITION P4 VALUES LESS THAN (400))");
+            await p.MustAsync($"CREATE INDEX {gix} ON {range} (D)");
+            var lix = T("QR_L");
+            await p.MustAsync($"CREATE INDEX {lix} ON {range} (ID) LOCAL");
+            foreach (var v in new[] { 50, 150, 250, 350 })
+            {
+                await p.MustAsync($"INSERT INTO {range} VALUES ({v}, SYSDATE)");
+            }
+
+            await p.MustAsync("COMMIT");
+            const string Status = "SELECT STATUS FROM USER_INDEXES WHERE INDEX_NAME = ";
+
+            // 문장마다 전역 인덱스를 VALID 로 되돌린 뒤 보내고 상태를 읽는다(앞 문장의 UNUSABLE 이 이어지지 않게).
+            async Task<string?> AfterAsync(string label, string expected, string sql)
+            {
+                await p.MustAsync($"ALTER INDEX {gix} REBUILD");
+                foreach (var part in await p.RowsAsync($"SELECT PARTITION_NAME FROM USER_IND_PARTITIONS WHERE INDEX_NAME = '{lix}' AND STATUS <> 'USABLE'"))
+                {
+                    await p.MustAsync($"ALTER INDEX {lix} REBUILD PARTITION {part[0]}");
+                }
+
+                await p.ExpectAsync(label, expected, sql);
+                var status = await p.ScalarAsync($"{Status}'{gix}'");
+                var local = await p.RowsAsync($"SELECT PARTITION_NAME, STATUS FROM USER_IND_PARTITIONS WHERE INDEX_NAME = '{lix}' ORDER BY PARTITION_NO");
+                p.Log("19", $"after {label}: global = {status}, local = {string.Join(" ", local.Select(r => r[0] + ":" + r[1]))}");
+                return status;
+            }
+
+            var truncate = await AfterAsync("19 truncate update indexes", "OK", $"ALTER TABLE {range} TRUNCATE PARTITION P1 UPDATE INDEXES");
+            var truncatePlain = await AfterAsync("19 truncate", "OK", $"ALTER TABLE {range} TRUNCATE PARTITION P1");
+            var split = await AfterAsync("19 split update indexes", "OK", $"ALTER TABLE {range} SPLIT PARTITION P2 AT (120) INTO (PARTITION P2A, PARTITION P2) UPDATE INDEXES");
+            var merge = await AfterAsync("19 merge into existing name", "OK", $"ALTER TABLE {range} MERGE PARTITIONS P2A, P2 INTO PARTITION P2 UPDATE INDEXES");
+            var splitPlain = await AfterAsync("19 split", "OK", $"ALTER TABLE {range} SPLIT PARTITION P2 AT (120) INTO (PARTITION P2A, PARTITION P2)");
+            var mergePlain = await AfterAsync("19 merge", "OK", $"ALTER TABLE {range} MERGE PARTITIONS P2A, P2 INTO PARTITION P2");
+            var drop = await AfterAsync("19 drop update indexes", "OK", $"ALTER TABLE {range} DROP PARTITION P3 UPDATE INDEXES");
+            var dropPlain = await AfterAsync("19 drop", "OK", $"ALTER TABLE {range} DROP PARTITION P4");
+            var add = await AfterAsync("19 add update indexes", "OK", $"ALTER TABLE {range} ADD PARTITION P5 VALUES LESS THAN (500) UPDATE INDEXES");
+            var global = await AfterAsync("19 drop update global indexes", "OK", $"ALTER TABLE {range} DROP PARTITION P5 UPDATE GLOBAL INDEXES");
+            await p.ExpectAsync("19 add again", "OK", $"ALTER TABLE {range} ADD PARTITION P5 VALUES LESS THAN (500)");
+            // UPDATE INDEXES 는 모두 받지만 SPLIT·MERGE 뒤 전역 인덱스는 UNUSABLE 로 남는다(로컬은 USABLE) → 방언이 전역 인덱스 REBUILD 를 붙인다.
+            Assert.Equal(
+                ["VALID", "VALID", "UNUSABLE", "UNUSABLE", "UNUSABLE", "UNUSABLE", "VALID", "UNUSABLE", "VALID", "VALID"],
+                new[] { truncate, truncatePlain, split, merge, splitPlain, mergePlain, drop, dropPlain, add, global });
+            await p.ExpectAsync("19 rename", "OK", $"ALTER TABLE {range} RENAME PARTITION P5 TO P5X");
+            await p.ExpectAsync("19 set interval", "OK", $"ALTER TABLE {range} SET INTERVAL (100)");
+            Assert.Equal("100", await p.ScalarAsync($"SELECT INTERVAL FROM USER_PART_TABLES WHERE TABLE_NAME = '{range}'"));
+            await p.ExpectAsync("19 set interval off", "OK", $"ALTER TABLE {range} SET INTERVAL ()");
+            Assert.Null(await p.ScalarAsync($"SELECT INTERVAL FROM USER_PART_TABLES WHERE TABLE_NAME = '{range}'"));
+            await p.ExpectAsync("19 split online", "TBR-7001", $"ALTER TABLE {range} SPLIT PARTITION P5X AT (450) INTO (PARTITION P5A, PARTITION P5X) ONLINE");
+            var parts = await p.DumpAsync("19 parts", $"SELECT PARTITION_NAME, BOUND FROM USER_TAB_PARTITIONS WHERE TABLE_NAME = '{range}' ORDER BY PARTITION_NO");
+            Assert.Equal([["P1", "100"], ["P2", "200"], ["P5X", "500"]], parts.Select(r => r.ToArray())); // MERGE INTO 에 원래 이름(P2)을 써도 된다
+            Assert.Equal("1", await p.ScalarAsync($"SELECT COUNT(*) FROM {range} WHERE ID = 150"));
+            Assert.Equal("150", await p.ScalarAsync($"SELECT LISTAGG(ID, ',') WITHIN GROUP (ORDER BY ID) FROM {range}")); // 50 TRUNCATE, 250·350 DROP
+
+            await p.MustAsync($"CREATE TABLE {list} (ID NUMBER, C VARCHAR2(5)) PARTITION BY LIST (C) (PARTITION PA VALUES ('A'), PARTITION PB VALUES ('B'))");
+            await p.ExpectAsync("19 list add", "OK", $"ALTER TABLE {list} ADD PARTITION PC VALUES ('C', 'D')");
+            await p.ExpectAsync("19 list add default", "OK", $"ALTER TABLE {list} ADD PARTITION PZ VALUES (DEFAULT)");
+            await p.ExpectAsync("19 list merge", "OK", $"ALTER TABLE {list} MERGE PARTITIONS PA, PB INTO PARTITION PAB UPDATE INDEXES");
+            var listParts = await p.DumpAsync("19 list parts", $"SELECT PARTITION_NAME, BOUND FROM USER_TAB_PARTITIONS WHERE TABLE_NAME = '{list}' ORDER BY PARTITION_NO");
+            Assert.Equal([["PAB", "'A','B'"], ["PC", "'C','D'"], ["PZ", "DEFAULT"]], listParts.Select(r => r.ToArray()));
+
+            await p.MustAsync($"CREATE TABLE {plain} (ID NUMBER, D DATE)");
+            await p.ExpectAsync("19 modify partition by online", "TBR-7001", $"ALTER TABLE {plain} MODIFY PARTITION BY RANGE (ID) (PARTITION P1 VALUES LESS THAN (100), PARTITION P2 VALUES LESS THAN (MAXVALUE)) ONLINE");
+            await p.ExpectAsync("19 modify partition by", "TBR-7001", $"ALTER TABLE {plain} MODIFY PARTITION BY RANGE (ID) (PARTITION P1 VALUES LESS THAN (100), PARTITION P2 VALUES LESS THAN (MAXVALUE))");
+        }
+        finally
+        {
+            foreach (var t in all)
+            {
+                await p.DropTableAsync(t);
+            }
+        }
+    }
 }

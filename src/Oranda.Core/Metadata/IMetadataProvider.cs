@@ -143,6 +143,9 @@ public sealed record TableInfo(DbObjectRef Table, IReadOnlyList<ColumnInfo> Colu
 
     /// <summary>파티션 테이블인가(<c>PARTITIONED = 'YES'</c>). 종류(<see cref="Kind"/>)와 따로 둔다 — IOT 도 파티션될 수 있다(TE-29).</summary>
     public bool IsPartitioned { get; init; }
+
+    /// <summary>파티션 방식·키·파티션 목록(설계 18.4, T14). 파티션 테이블이 아니거나 읽지 못했으면 null.</summary>
+    public PartitioningInfo? Partitioning { get; init; }
 }
 
 /// <summary>
@@ -343,4 +346,33 @@ public sealed record CompileError(int Line, int Column, string Message, bool IsW
 
     /// <summary>오류가 난 단위의 유형(<c>PACKAGE</c>·<c>PACKAGE BODY</c> 등). 명세와 본문을 한 탭에 보일 때 어느 쪽 오류인지 가른다. 모르면 null.</summary>
     public string? ObjectType { get; init; }
+}
+
+/// <summary>
+/// 파티션 테이블의 방식(설계 18.4). <see cref="Method"/>·<see cref="SubpartitionMethod"/> 는 사전 표기(<c>RANGE</c>·<c>LIST</c>·<c>HASH</c>, 하위 없음 = null).
+/// <see cref="Interval"/> 은 INTERVAL 식(사전 표기 그대로, 없으면 null). 하위 파티션은 보기만 한다(TE-42).
+/// </summary>
+public sealed record PartitioningInfo(string Method, IReadOnlyList<string> KeyColumns, IReadOnlyList<PartitionInfo> Partitions)
+{
+    public string? Interval { get; init; }
+
+    public string? SubpartitionMethod { get; init; }
+
+    public IReadOnlyList<string> SubpartitionKeyColumns { get; init; } = [];
+
+    /// <summary>
+    /// 파티션 인덱스 이름(LOCAL·GLOBAL 파티션). 나머지 인덱스 = 비파티션 전역 인덱스 — 나누기·합치기 뒤 통째로 다시 만들 대상(Tibero, 파티션 인덱스는 통째 REBUILD 가 안 됨).
+    /// </summary>
+    public IReadOnlyList<string> PartitionedIndexes { get; init; } = [];
+}
+
+/// <summary>
+/// 파티션 하나. <see cref="Bound"/> = 경계 글(RANGE 의 LESS THAN 값 목록, LIST 의 값 목록, HASH 는 null — 사전 HIGH_VALUE/BOUND 그대로).
+/// <see cref="Position"/> 은 1부터. 행 수는 통계(없으면 null).
+/// </summary>
+public sealed record PartitionInfo(string Name, int Position, string? Bound)
+{
+    public string? Tablespace { get; init; }
+
+    public long? NumRows { get; init; }
 }

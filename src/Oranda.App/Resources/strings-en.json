@@ -1047,5 +1047,20 @@
   "TableEdit.unsupported.oracle23": "Requires Oracle 23ai or later",
   "TableEdit.unsupported.oracleEnterprise": "Not available in this Oracle edition (Standard, Express)",
   "TableEdit.unsupported.unknownServer": "Turned off because the server version is unknown",
-  "Feature.changeBundle": "Change Bundle"
+  "Feature.changeBundle": "Change Bundle",
+  "TableEdit.unsupported.tibero.hashPartitionChange": "Tibero cannot change the number of hash partitions (ADD/COALESCE PARTITION)",
+  "TableEdit.partition.boundChange": "The bound of an existing partition cannot be changed. Use split or merge",
+  "TableEdit.partition.tablespaceChange": "The tablespace of an existing partition is not changed here",
+  "TableEdit.partition.schemeChange": "The partitioning method and key columns cannot be changed (the table must be rebuilt)",
+  "TableEdit.partition.addAfterMaxValue": "No partition can be added after the MAXVALUE partition. Split the MAXVALUE partition instead",
+  "TableEdit.partition.unpartition": "Turning a partitioned table back into a regular table is not supported",
+  "TableEdit.partition.badMerge": "The partition to merge into does not exist or is being dropped",
+  "TableEdit.partition.convertNeedsRebuild": "This server cannot convert to a partitioned table in one statement. The table is rebuilt instead (takes long)",
+  "TableEdit.partition.addWithInterval": "No partition can be added while automatic (INTERVAL) partitioning is on. It creates them itself",
+  "TableEdit.partition.addWithDefault": "No partition can be added while a DEFAULT partition exists. Split the DEFAULT partition instead",
+  "TableEdit.partition.duplicateName": "Two or more partitions have the same name",
+  "TableEdit.partition.nameInUse": "That name is still used by another partition (swap names in two edits)",
+  "TableEdit.partition.splitSourceUnavailable": "The partition to split is dropped or cannot be changed, so it cannot be split",
+  "TableEdit.partition.hashMerge": "Hash partitions cannot be merged (remove from the end to reduce them)",
+  "TableEdit.partition.hashCoalesceLast": "Hash partitions can only be removed from the end (the server removes the last one)"
 }

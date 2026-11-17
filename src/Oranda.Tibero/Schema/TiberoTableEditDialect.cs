@@ -5,6 +5,7 @@ using Oranda.Core.Composition;
 using Oranda.Core.Connection;
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema.TableEdit;
+using Oranda.Core.Schema.TableEdit.Partitions;
 
 namespace Oranda.Tibero.Schema;
 
@@ -40,8 +41,11 @@ internal sealed partial class TiberoTableEditDialect : ITableEditDialect
         [TableEditFeature.PartitionConversion] = ReasonPrefix + "partitionConversion", // 실측 밖(MODIFY PARTITION BY 없음 추정) — 보수적으로 막음
     };
 
-    /// <summary><see cref="Unsupported"/> 의 이유 키 모두(문자열 파일에 있는지 시험이 본다).</summary>
-    internal static IEnumerable<string> ReasonKeys => Unsupported.Values;
+    /// <summary>해시 파티션 수 바꾸기(ADD·COALESCE) 미지원 이유 키.</summary>
+    internal const string HashPartitionChangeKey = ReasonPrefix + "hashPartitionChange";
+
+    /// <summary>이 방언이 내는 이유 키 모두(문자열 파일에 있는지 시험이 본다).</summary>
+    internal static IEnumerable<string> ReasonKeys => Unsupported.Values.Append(HashPartitionChangeKey);
 
     public Dbms Dbms => Dbms.Tibero;
 
@@ -55,6 +59,23 @@ internal sealed partial class TiberoTableEditDialect : ITableEditDialect
     public int MaxIdentifierBytes(ServerInfo? server) => server is { MajorVersion: >= 6 } ? 128 : 30;
 
     public string? UnsupportedReasonKey(TableEditFeature feature, ServerInfo? server) => Unsupported.GetValueOrDefault(feature);
+
+    /// <summary>
+    /// 파티션(실측 11·19): 해시 <c>ADD PARTITION</c>(7002)·<c>COALESCE</c>(7001) 와 일반 → 파티션(<c>MODIFY PARTITION BY</c> 7001)은 안 된다.
+    /// RANGE/LIST 의 ADD·DROP·SPLIT·MERGE·RENAME·TRUNCATE·SET INTERVAL 은 된다.
+    /// </summary>
+    public string? UnsupportedPartitionReasonKey(PartitionOperation operation, PartitionMethod method, ServerInfo? server) => operation switch
+    {
+        PartitionOperation.Convert => Unsupported[TableEditFeature.PartitionConversion],
+        PartitionOperation.Add or PartitionOperation.Coalesce when method == PartitionMethod.Hash => HashPartitionChangeKey,
+        _ => null,
+    };
+
+    /// <summary>나누기·합치기에 <c>UPDATE INDEXES</c> 를 붙여도 전역 인덱스가 UNUSABLE 로 남는다(로컬은 남음, 실측 19) → 빌더가 REBUILD 를 붙인다.</summary>
+    public bool KeepsGlobalIndexesOnSplitMerge => false;
+
+    /// <summary><c>MODIFY PARTITION BY … ONLINE</c> 이 없다(실측 19) → 다시 만들기 방식.</summary>
+    public bool SupportsOnlinePartitionConversion(ServerInfo? server) => false;
 
     public bool IsServerName(string name)
     {
