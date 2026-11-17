@@ -44,6 +44,8 @@ public static class TableDraftJson
     /// <summary>
     /// 빠진 목록 칸을 빈 목록으로. 소스 생성 직렬화기는 생성자가 있는 형식의 init 속성을 생성자 인자처럼 다뤄, JSON 에 없으면 초기값(<c>= []</c>) 대신
     /// default(null)를 넣는다(명시한 <c>null</c> 은 <c>RespectNullableAnnotations</c> 가 이미 거부). 쓸 때는 목록·bool 을 늘 쓰므로 손으로 고친 글·버전 차이에서만 생긴다.
+    /// 기본값이 참인 bool(<see cref="ColumnDraft.IsNullable"/>·<see cref="ConstraintDraft.IsEnabled"/>)이 빠지면 거짓으로 읽히는 것은 알고 둔다 — 빠졌는지 읽은 뒤에는 알 수 없고,
+    /// 이 앱이 쓴 글에는 늘 들어 있다.
     /// </summary>
     private static TableDraft Normalize(TableDraft d) => d with
     {
@@ -54,11 +56,14 @@ public static class TableDraftJson
             ReferencedColumns = c.ReferencedColumns ?? [],
         }).ToList(),
         Indexes = (d.Indexes ?? []).Select(i => i is null ? i! : i with { Columns = i.Columns ?? [] }).ToList(),
+        Storage = d.Storage ?? new TableStorage(), // 저장 칸이 없던 옛 저장분 = 「바꾸지 않음」(설계 18.2)
+        RebuildIndexes = d.RebuildIndexes ?? [],
     };
 
     /// <summary>생성자 인자로 받는 필수 문자열(빠지면 직렬화기가 null 을 넣는다)이 다 있나.</summary>
     private static bool IsComplete(TableDraft d)
         => d.Owner is not null && d.Name is not null
+            && d.RebuildIndexes.All(n => n is not null)
             && d.Columns.All(c => c is not null && c.RowKey is not null && c.Name is not null)
             && d.Constraints.All(c => c is not null && c.RowKey is not null && c.Name is not null
                 && c.ColumnKeys.All(k => k is not null) && c.ReferencedColumns.All(k => k is not null)
@@ -75,6 +80,7 @@ public static class TableDraftJson
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     IgnoreReadOnlyProperties = true,
     RespectNullableAnnotations = true,
+    RespectRequiredConstructorParameters = true, // 생성자 인자(이름·줄 키·제약 종류·신원 방식)가 빠지면 거부 — 빠진 종류가 PK 로 읽히지 않게
     UseStringEnumConverter = true, // 아래 목록에 없는 열거형(나중에 모델에 더한 것)도 이름으로 쓴다 — 숫자 거부는 목록에 더해야 한다
     Converters =
     [
@@ -84,6 +90,9 @@ public static class TableDraftJson
         typeof(TableDraftEnumConverter<ConstraintKind>),
         typeof(TableDraftEnumConverter<DeleteRule>),
         typeof(TableDraftEnumConverter<IndexKind>),
+        typeof(TableDraftEnumConverter<TableCompression>),
+        typeof(TableDraftEnumConverter<LobStorageKind>),
+        typeof(TableDraftEnumConverter<LobCompression>),
     ])]
 [JsonSerializable(typeof(TableDraft))]
 public sealed partial class TableDraftJsonContext : JsonSerializerContext

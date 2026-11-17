@@ -15,6 +15,12 @@ public sealed class TableDraftJsonTests
         OnCommitPreserveRows = true,
         Tablespace = "USERS",
         RenameRuleNames = true,
+        Storage = new TableStorage
+        {
+            PctFree = 20, InitTrans = 4, Compression = TableCompression.Advanced, Logging = false, Parallel = 8,
+            InitialExtent = "64K", NextExtent = "1M",
+        },
+        RebuildIndexes = ["IX_ORDER_ITEMS_01", "PK_ORDER_ITEMS"],
         Columns =
         [
             new ColumnDraft("n1", "ITEM_ID")
@@ -24,6 +30,11 @@ public sealed class TableDraftJsonTests
             },
             new ColumnDraft("n2", "ORDER_ID") { DataType = "NUMBER", Precision = 10, Scale = 0, IsNullable = false, Comment = "주문" },
             new ColumnDraft("n3", "NAME") { DataType = "VARCHAR2", Length = 100, CharSemantics = CharSemantics.Characters, DefaultValue = "'-'" },
+            new ColumnDraft("n8", "DOC")
+            {
+                DataType = "CLOB",
+                Lob = new LobStorage { Kind = LobStorageKind.SecureFile, Tablespace = "LOBS", Compression = LobCompression.Medium, Deduplicate = true, InRow = false },
+            },
             new ColumnDraft("n4", "CODE") { DataType = "CHAR", Length = 2, CharSemantics = CharSemantics.Bytes, IsInvisible = true, Domain = "SAMPLE.CODE_D" },
             new ColumnDraft("n5", "TOTAL") { VirtualExpression = "\"QTY\"*2" },
             new ColumnDraft("n6", "OLD") { DataType = "DATE", IsDropped = true },
@@ -92,6 +103,14 @@ public sealed class TableDraftJsonTests
         Assert.True(back.Index("i1")!.Columns[1].Descending);
         Assert.Equal(IndexKind.Bitmap, back.Index("i3")!.Kind);
         Assert.Equal("PK_ORDER_ITEMS", back.Index("i4")!.ConstraintName);
+
+        // 저장 페이지(설계 18.2): 테이블 저장 속성·LOB 저장 절·남은 REBUILD.
+        Assert.Equal(draft.Storage, back.Storage); // 목록 없는 record = 값 비교
+        Assert.Equal(TableCompression.Advanced, back.Storage.Compression);
+        Assert.False(back.Storage.Logging);
+        Assert.Equal(draft.Column("n8")!.Lob, back.Column("n8")!.Lob);
+        Assert.Null(back.Column("n3")!.Lob);
+        Assert.Equal(["IX_ORDER_ITEMS_01", "PK_ORDER_ITEMS"], back.RebuildIndexes);
     }
 
     [Fact]
@@ -119,6 +138,8 @@ public sealed class TableDraftJsonTests
         Assert.Null(c.Length);
         Assert.Null(c.Identity);
         Assert.True(c.IsNullable); // 기본값이 참인 칸
+        Assert.Equal(new TableStorage(), back.Storage); // 모든 칸 null = 「바꾸지 않음」
+        Assert.Empty(back.RebuildIndexes);
     }
 
     [Fact]
@@ -147,6 +168,9 @@ public sealed class TableDraftJsonTests
     [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"columns\":[null]}")]
     [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"constraints\":[{\"rowKey\":\"k1\",\"name\":\"PK\",\"kind\":\"PrimaryKey\",\"columnKeys\":[null]}]}")]
     [InlineData("null")]
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"constraints\":[{\"rowKey\":\"k1\",\"name\":\"UK\",\"columnKeys\":[]}]}")] // 제약 종류 빠짐(PK 로 읽히면 안 됨)
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"columns\":[{\"rowKey\":\"n1\",\"name\":\"A\",\"identity\":{\"startWith\":1}}]}")] // 신원 방식 빠짐
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"constraints\":[{\"rowKey\":\"k1\",\"name\":\"FK\",\"kind\":\"ForeignKey\",\"referencedTable\":{\"owner\":\"SAMPLE\",\"name\":\"ORDERS\"}}]}")]
     public void TryDeserialize_returns_null_for_broken_text(string? json)
         => Assert.Null(TableDraftJson.TryDeserialize(json));
 
@@ -172,5 +196,67 @@ public sealed class TableDraftJsonTests
         Assert.Empty(back.Constraints[0].ColumnKeys);
         Assert.Empty(back.Constraints[0].ReferencedColumns);
         Assert.Empty(back.Indexes[0].Columns);
+        Assert.NotNull(back.Storage); // 저장 칸이 없던 옛 저장분
+        Assert.Equal(new TableStorage(), back.Storage);
+        Assert.Empty(back.RebuildIndexes);
+    }
+
+    [Theory]
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"storage\":{\"compression\":2}}")] // 숫자 열거형
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"storage\":{\"compression\":\"Hcc\"}}")]
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"columns\":[{\"rowKey\":\"n1\",\"name\":\"A\",\"lob\":{\"kind\":0}}]}")]
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"columns\":[{\"rowKey\":\"n1\",\"name\":\"A\",\"lob\":{\"compression\":\"Ultra\"}}]}")]
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"storage\":null}")]
+    [InlineData("{\"owner\":\"SAMPLE\",\"name\":\"T\",\"rebuildIndexes\":[null]}")]
+    public void TryDeserialize_rejects_broken_storage(string json)
+        => Assert.Null(TableDraftJson.TryDeserialize(json));
+
+    [Fact]
+    public void Every_enum_in_the_draft_model_has_a_name_only_converter()
+    {
+        // TableDraft 에 열거형 칸을 더하면 Converters 목록에도 더해야 숫자 값을 거부한다 — 빠뜨리면 여기서 걸린다.
+        var enums = new HashSet<Type>();
+        CollectEnums(typeof(TableDraft), [], enums);
+        var converted = TableDraftJsonContext.Default.Options.Converters
+            .Select(c => c.GetType())
+            .Where(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(TableDraftEnumConverter<>))
+            .Select(t => t.GetGenericArguments()[0])
+            .ToHashSet();
+
+        Assert.Contains(typeof(TableCompression), enums); // 훑기가 중첩 형식(TableStorage·LobStorage)까지 간다
+        Assert.Contains(typeof(LobCompression), enums);
+        Assert.Empty(enums.Except(converted).Select(t => t.Name));
+    }
+
+    /// <summary>쓰기 가능한 공개 속성을 따라 Oranda 형식 안의 열거형을 모은다(목록 원소·Nullable 포함).</summary>
+    private static void CollectEnums(Type type, HashSet<Type> seen, HashSet<Type> enums)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (type.IsEnum)
+        {
+            enums.Add(type);
+            return;
+        }
+
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>))
+        {
+            CollectEnums(type.GetGenericArguments()[0], seen, enums);
+            return;
+        }
+
+        // IReadOnlyList 말고 다른 모음(배열·List·사전 …)이 생기면 그 원소를 훑지 못하니 여기서 알린다(훑기를 넓힌다).
+        Assert.False(
+            type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type),
+            $"모르는 모음 형식 {type} — CollectEnums 가 원소를 훑게 고친다");
+
+        if (type.Namespace?.StartsWith("Oranda.", StringComparison.Ordinal) != true || !seen.Add(type))
+        {
+            return;
+        }
+
+        foreach (var p in type.GetProperties().Where(p => p.CanWrite))
+        {
+            CollectEnums(p.PropertyType, seen, enums);
+        }
     }
 }

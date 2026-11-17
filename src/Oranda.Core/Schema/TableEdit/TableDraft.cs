@@ -190,9 +190,9 @@ public sealed record IndexDraft(string RowKey, string Name)
 
 /// <summary>
 /// 인덱스 열 하나. 일반 열은 <see cref="ColumnKey"/>(이 테이블 열 줄 키), 함수 기반 인덱스의 식 자리는 <see cref="Expression"/>(설계 18.6).
-/// 둘 중 하나만 쓴다.
+/// 둘 중 하나만 쓴다. <see cref="ColumnKey"/> 의 기본값 null 은 작업 저장 JSON(<see cref="TableDraftJson"/>)이 식 자리의 빠진 열 키를 받게 하려는 것.
 /// </summary>
-public sealed record IndexColumnDraft(string? ColumnKey, bool Descending = false)
+public sealed record IndexColumnDraft(string? ColumnKey = null, bool Descending = false)
 {
     public string? Expression { get; init; }
 }
