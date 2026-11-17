@@ -1,7 +1,7 @@
 namespace Oranda.Core.Features;
 
 /// <summary>
-/// 기능 id 27개(PRD 12.2, D-002). 설정 <c>features.enabled</c>·<c>disabled</c> 와 문맥 키 <c>feature.&lt;id&gt;</c> 에 그대로 쓰이므로
+/// 기능 id 28개(PRD 12.2, D-002). 설정 <c>features.enabled</c>·<c>disabled</c> 와 문맥 키 <c>feature.&lt;id&gt;</c> 에 그대로 쓰이므로
 /// 한 번 내보낸 값은 바꾸지 않는다. 소유: TSK-07-01(계약).
 /// </summary>
 public static class FeatureIds

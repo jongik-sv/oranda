@@ -119,6 +119,7 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
                 _vm.PropertyChanged += OnVmChanged;
                 Sync();
                 SyncKeyPane();
+                SyncTableEditToggle(); // 새 테이블 탭은 편집 중인 채로 붙는다(설계 7.5)
             }
         };
     }

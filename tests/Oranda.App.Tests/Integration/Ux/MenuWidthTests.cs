@@ -39,15 +39,15 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     internal static readonly Dictionary<string, Config> Configs = new(StringComparer.Ordinal)
     {
-        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 287, 11, ["view/도구 창=18", "sql=27", "result=18", "database=24", "monitor=21", "tuning=24"], 18, 21, 21, 5, 18, 235, 305, 275, 11), // 팔레트 +1 테이블 편집 켜기·끄기
-        ["none(default-R1)"] = new(null, 217, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 202, 227, 210, 10), // 팔레트 +1 테이블 편집 켜기·끄기
-        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 217, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 202, 227, 210, 10), // 팔레트 +1 테이블 편집 켜기·끄기
-        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 231, 10, ["view/도구 창=16", "sql=24", "result=18", "database=21"], 18, 19, 19, 5, 16, 210, 241, 220, 10), // 팔레트 +1 테이블 편집 켜기·끄기
-        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 223, 10, ["view/도구 창=17", "sql=26", "result=17"], 17, 17, 17, 5, 17, 199, 239, 217, 10), // 팔레트 +1 테이블 편집 켜기·끄기
+        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 289, 11, ["view/도구 창=18", "sql=27", "result=18", "database=25", "monitor=21", "tuning=24"], 18, 21, 21, 5, 18, 237, 307, 275, 11), // 팔레트 +1 테이블 편집 켜기·끄기
+        ["none(default-R1)"] = new(null, 219, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 204, 229, 210, 10), // 팔레트 +1 테이블 편집 켜기·끄기
+        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 219, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 204, 229, 210, 10), // 팔레트 +1 테이블 편집 켜기·끄기
+        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 233, 10, ["view/도구 창=16", "sql=24", "result=18", "database=22"], 18, 19, 19, 5, 16, 212, 243, 220, 10), // 팔레트 +1 테이블 편집 켜기·끄기
+        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 225, 10, ["view/도구 창=17", "sql=26", "result=17"], 17, 17, 17, 5, 17, 201, 241, 217, 10), // 팔레트 +1 테이블 편집 켜기·끄기
         ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 248, 11, ["sql=23", "result=16", "database=19", "monitor=21", "tuning=24"], 16, 21, 21, 5, 14, 208, 258, 240, 11),
-        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 269, 11, ["view/도구 창=16", "sql=24", "result=18", "database=23", "monitor=21", "tuning=21"], 18, 21, 21, 5, 16, 226, 279, 257, 11), // 팔레트 +1 테이블 편집 켜기·끄기
+        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 271, 11, ["view/도구 창=16", "sql=24", "result=18", "database=24", "monitor=21", "tuning=21"], 18, 21, 21, 5, 16, 228, 281, 257, 11), // 팔레트 +1 테이블 편집 켜기·끄기
         ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 186, 9, ["sql=22", "result=16"], 16, 14, 16, 5, 12, 172, 196, 184, 9),
-        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 269, 11, ["view/도구 창=16", "sql=24", "result=18", "database=21", "monitor=21", "tuning=24"], 18, 21, 21, 5, 16, 227, 281, 258, 11), // 팔레트 +1 테이블 편집 켜기·끄기
+        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 271, 11, ["view/도구 창=16", "sql=24", "result=18", "database=22", "monitor=21", "tuning=24"], 18, 21, 21, 5, 16, 229, 283, 258, 11), // 팔레트 +1 테이블 편집 켜기·끄기
         // AI 튜닝 기본 켬(2026-10-29): 조회 전용(R6)·Role 0개를 뺀 구성은 툴바 AI 단추 1·튜닝 메뉴 「AI 튜닝」 1·보기 > 도구 창 ▸ AI 대화 토글 1(항목 +2, 툴바 +1, 도구 창 등록 +1, 팔레트 +5).
         // TSK-14-17: SQL 모니터 기능이 있는 구성(all-features·R4·R5·R1+R4)은 튜닝 메뉴 「튜닝 추천」 한 줄이 늘었다(항목·tuning·SQL 탭·팔레트 +1).
         // 실행하고 실제 계획(oranda.plan.runActual): 툴바 +1·튜닝 메뉴 +1(튜닝 메뉴가 없는 R6·roles-empty 는 항목 그대로)·팔레트 +1.
@@ -63,6 +63,7 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
         // 이 실행 전과 비교(oranda.rollback.compare, 메뉴 없음, 되돌리기 지점 RB-32): 모든 구성의 팔레트 +1.
         // 이 행 상태로 되돌리기(oranda.grid.flashback.restoreRow, fb-w1): 결과 ▸ 플래시백 ▸ 한 줄 — 플래시백이 있는 구성(all-features·none·R1·R2·R5·R1+R4)의 항목·SQL 탭·팔레트 +1.
         // 반영 묶음(oranda.view.changeBundle·oranda.panel.changeBundle, 2026-11-17 te-bundle T9): 도구 ▸ 「반영 묶음」 1 + 보기 > 도구 창 ▸ 토글 1 — changeBundle 이 켜진 구성(all-features·none·R1·R2·R3·R5·R1+R4)의 항목 +2·도구 창 등록·SQL 탭·팔레트 +1, 보기 > 도구 창 ▸ +1(R2·R5·R1+R4 는 16줄이 되어 15넘음 +1).
+        // 새 테이블(oranda.schema.newTable·newTableLike, 테이블 편집기 T8): 스키마 브라우저 오른쪽 클릭 「새 테이블 ▸」 하위 메뉴 2줄 — 테이블 편집기 기능(tableEditor)이 켜진 구성(all-features·none·R1·R2·R3·R5·R1+R4, 튜너·조회 전용·Role 0개는 끔)의 항목·SQL 탭·팔레트 +2, database 한 단계 +1(하위 메뉴 한 줄, database 가 15줄을 넘는 구성).
         ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 179, 9, ["sql=22"], 12, 16, 16, 5, 11, 168, 189, 176, 9),
     };
 
@@ -73,6 +74,9 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     /// <summary>AI 튜닝(aiTuning)이 켜진 구성이 더하는 메뉴 줄: 튜닝 메뉴 「AI 튜닝」 1, 보기 &gt; 도구 창 ▸ 「AI 대화」 토글 1.</summary>
     private const int AiMenuItems = 2;
+
+    /// <summary>테이블 편집기(tableEditor)가 켜진 구성이 더하는 메뉴 줄: 스키마 브라우저 오른쪽 클릭 「새 테이블 ▸」 의 「새 테이블…」·「이 구조로 새 테이블…」 2(T8).</summary>
+    private const int TableEditorMenuItems = 2;
 
     /// <summary>보기 메뉴에서 자리를 뺀 명령(「도구 창 ▸」 토글과 같은 창, UX-05).</summary>
     private static readonly string[] ViewDuplicates =
@@ -176,7 +180,7 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
             var sql = TopOf(app, bar, "sql");
             var sub = sql.Children.SingleOrDefault(c => c.Kind == MenuNodeKind.Submenu && c.Key == "Menu.sql.plsql");
             await Task.CompletedTask;
-            return (bar.Sum(b => UxWidth.Items(b.Children)) - recommend, dupCount + templates + reset, sub is null ? 0 : UxWidth.Items(sub.Children), app.Gate.IsEnabled("aiTuning") ? AiMenuItems : 0);
+            return (bar.Sum(b => UxWidth.Items(b.Children)) - recommend, dupCount + templates + reset, sub is null ? 0 : UxWidth.Items(sub.Children), (app.Gate.IsEnabled("aiTuning") ? AiMenuItems : 0) + (app.Gate.IsEnabled("tableEditor") ? TableEditorMenuItems : 0));
         });
 
         output.WriteLine($"{name}: 조사 {Configs[name].Survey} − 중복 {dups} + PL/SQL {plsql} + 추가 {AddedSinceSurvey} = {Configs[name].Survey - dups + plsql + AddedSinceSurvey + ai}, 지금 {items}");

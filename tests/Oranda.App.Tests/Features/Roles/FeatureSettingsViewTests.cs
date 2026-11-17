@@ -233,7 +233,7 @@ public sealed class FeatureSettingsViewTests
         Assert.True(page.HasOverrides);
         AssertSet(FeatureCatalog.Resolve(vm.Features.ToSettings()), Checked(page));
 
-        // 접힌 머리의 숫자 = 켜진 기능 수 / 27 · 배지 수.
+        // 접힌 머리의 숫자 = 켜진 기능 수 / 28 · 배지 수.
         var on = FeatureCatalog.Resolve(vm.Features.ToSettings()).Count;
         Assert.Equal(on, page.EnabledCount);
         Assert.Equal(2, page.OverrideCount);

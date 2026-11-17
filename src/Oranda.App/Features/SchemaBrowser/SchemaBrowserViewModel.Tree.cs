@@ -159,6 +159,9 @@ public sealed partial class SchemaBrowserViewModel
         await LoadAsync(ct);
     }
 
+    /// <summary>다른 화면이 객체를 만든 뒤(새 테이블 탭 실행, 테이블 편집기 설계 7.5): 그 소유자·유형 목록을 서버에서 다시 받아 트리에 보인다.</summary>
+    internal Task RefreshObjectTypeAsync(string owner, string type, CancellationToken ct) => RefreshCategoryAsync(owner, type, ct);
+
     /// <summary>범주 하나(소유자·유형)를 서버에서 다시 받는다. 끝나면 펼쳐 둔 범주와 고른 노드를 그대로 두고 다시 그린다.</summary>
     private async Task RefreshCategoryAsync(string owner, string type, CancellationToken ct)
     {

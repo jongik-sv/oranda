@@ -373,6 +373,8 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         {
             keys.Set("schemaNodeSelected", value is { Ref: not null });
             keys.Set("tableNodeSelected", IsInsideTable(value));
+            keys.Set("ownerNodeSelected", IsOwnerNode(value)); // 「새 테이블…」(테이블 편집기 설계 7.5)
+            keys.Set("tableObjectSelected", IsTableObject(value)); // 「이 구조로 새 테이블…」
             keys.Set("plsqlNodeSelected", value?.Ref?.ObjectType is "PROCEDURE" or "FUNCTION" or "PACKAGE" or "PACKAGE BODY"
                 or "TRIGGER" or "TYPE" or "TYPE BODY");
         }

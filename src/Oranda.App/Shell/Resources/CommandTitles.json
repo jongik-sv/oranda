@@ -207,6 +207,8 @@
   "Cmd.oranda.schema.showDdl": "DDL 보기",
   "Cmd.oranda.tableEdit.toggle": "테이블 편집 켜기·끄기",
   "Cmd.oranda.schema.reorderColumns": "열 순서 바꾸기…",
+  "Cmd.oranda.schema.newTable": "새 테이블…",
+  "Cmd.oranda.schema.newTableLike": "이 구조로 새 테이블…",
   "Cmd.oranda.schema.reveal": "스키마 브라우저에서 찾기",
   "Cmd.oranda.schema.compileInvalid": "INVALID 객체 일괄 컴파일",
   "Cmd.oranda.schema.recyclebinPurge": "휴지통 비우기(Purge)",

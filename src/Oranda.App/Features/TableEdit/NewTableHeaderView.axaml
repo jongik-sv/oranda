@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:od="using:Oranda.App.Features.ObjectDetail"
+             x:Class="Oranda.App.Features.TableEdit.NewTableHeaderView"
+             x:DataType="od:ObjectDetailViewModel">
+  <!-- 「✎ 새 테이블」 탭 위 칸(테이블 편집기 설계 7.5·18.10, 시안 화면 ①): 소유자·이름·주석·종류. 이름을 고치면 규칙 이름 제약·인덱스가 따라 바뀐다. -->
+  <Border x:Name="NewTableHeaderPanel" Classes="panel-toolbar" Padding="6,4" IsEnabled="{Binding CanEditTable}">
+    <WrapPanel Orientation="Horizontal">
+      <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0">
+        <TextBlock Text="소유자" VerticalAlignment="Center" />
+        <ComboBox x:Name="NewTableOwnerBox" MinWidth="120" ItemsSource="{Binding NewTableOwners}" SelectedItem="{Binding NewTableOwner, Mode=TwoWay}"
+                  AutomationProperties.Name="소유자" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0">
+        <TextBlock Text="이름" VerticalAlignment="Center" />
+        <TextBox x:Name="NewTableNameBox" MinWidth="180" Text="{Binding NewTableName, Mode=TwoWay}" PlaceholderText="테이블 이름"
+                 ToolTip.Tip="따옴표 없이 쓰면 대문자 이름이 됩니다" AutomationProperties.Name="테이블 이름" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0">
+        <TextBlock Text="주석" VerticalAlignment="Center" />
+        <TextBox x:Name="NewTableCommentBox" MinWidth="200" Text="{Binding NewTableComment, Mode=TwoWay}" AutomationProperties.Name="테이블 주석" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <TextBlock Text="종류" VerticalAlignment="Center" />
+        <ComboBox x:Name="NewTableKindBox" MinWidth="200" ItemsSource="{Binding NewTableKinds}" SelectedItem="{Binding SelectedNewTableKind, Mode=TwoWay}"
+                  AutomationProperties.Name="테이블 종류">
+          <ComboBox.ItemContainerTheme>
+            <ControlTheme TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}" x:DataType="od:NewTableKindOption">
+              <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+              <Setter Property="ToolTip.Tip" Value="{Binding ReasonText}" />
+              <Setter Property="ToolTip.ShowOnDisabled" Value="True" />
+            </ControlTheme>
+          </ComboBox.ItemContainerTheme>
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="od:NewTableKindOption">
+              <TextBlock Text="{Binding Text}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+    </WrapPanel>
+  </Border>
+</UserControl>

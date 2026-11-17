@@ -100,7 +100,7 @@ public sealed partial class ObjectDetailViewModel
     public async Task<TableEditRunResult?> RunTableEditAsync(CancellationToken ct = default)
     {
         TableEdit?.FlushPendingInput?.Invoke(); // 칸에 쓰던 글까지 넣은 문장을 실행한다(미리보기 = 실행)
-        if (TableEdit is not { } edit || Target is not { } target || _session is not { } basis || !CanRunTableEdit)
+        if (TableEdit is not { } edit || (Target ?? NewTableTarget) is not { } target || _session is not { } basis || !CanRunTableEdit)
         {
             return null;
         }
@@ -160,6 +160,11 @@ public sealed partial class ObjectDetailViewModel
     /// <summary>문장이 하나라도 반영됐다: 캐시를 무효화하고, 다 됐으면 다시 열고(편집 끔), 아니면 다시 읽어 남은 편집만 남긴다.</summary>
     private async Task<string?> AfterAppliedAsync(ISession session, DbObjectRef target, TableEditSession edit, TableEditRunResult result, CancellationToken ct)
     {
+        if (IsNewTableMode)
+        {
+            return await AfterNewTableAppliedAsync(session, target, edit, result, ct); // 새 테이블(설계 7.5): ObjectDetailViewModel.NewTable.cs
+        }
+
         var meta = ResolveMeta();
         if (result.Outcome == TableEditRunOutcome.Succeeded)
         {
@@ -265,7 +270,8 @@ public sealed partial class ObjectDetailViewModel
     {
         _virtualPreviewCts?.Cancel();
         _virtualPreviewCts = null; // 앞 계산의 취소가 새 글을 덮지 않게
-        if (TableEdit is not { } edit || edit.Draft.Column(rowKey) is not { IsVirtual: true } column || _session is not { } session || Target is not { } target)
+        if (TableEdit is not { } edit || edit.Draft.Column(rowKey) is not { IsVirtual: true } column || _session is not { } session
+            || (Target ?? NewTableTarget ?? (edit.IsNewTable ? new DbObjectRef(edit.Draft.Owner, "NEW_TABLE", "TABLE") : null)) is not { } target)
         {
             VirtualPreviewText = string.Empty;
             return;

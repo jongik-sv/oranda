@@ -201,6 +201,7 @@ public class ContextSubmenuTests
     public void Other_context_surfaces_have_no_submenus()
     {
         // 편집기·스키마·모니터 등 오른쪽 클릭 모양은 그대로(셋째 마디를 쓰는 표면은 그리드뿐).
+        // 예외 하나: 스키마 「새 테이블 ▸」(새 테이블·이 구조로 새 테이블, 테이블 편집기 T8 — database 메뉴 폭 목표 때문에 한 줄로 묶음).
         var surfaces = AppCommands.SelectMany(c => c.Placements)
             .Where(p => p.StartsWith("context:", StringComparison.Ordinal))
             .Select(p => p["context:".Length..].Split('@')[0].Split('/')[0])
@@ -212,7 +213,8 @@ public class ContextSubmenuTests
         Assert.Contains("monitor", surfaces);
         foreach (var surface in surfaces)
         {
-            Assert.DoesNotContain(MenuModelBuilder.BuildContext(AppCommands, Ko, _ => null, surface), n => n.Kind == MenuNodeKind.Submenu);
+            Assert.DoesNotContain(MenuModelBuilder.BuildContext(AppCommands, Ko, _ => null, surface),
+                n => n.Kind == MenuNodeKind.Submenu && !(surface == "schema" && n.Key == "Menu.context.schema.newTable"));
         }
     }
 

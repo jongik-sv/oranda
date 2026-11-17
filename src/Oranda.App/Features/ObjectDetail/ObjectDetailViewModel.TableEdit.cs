@@ -46,7 +46,7 @@ public sealed partial class ObjectDetailViewModel
 
     /// <summary>✎ 편집 토글이 보인다: 대상이 TABLE 이고 편집 페이지를 보고 있다(설계 7.1, <see cref="CanReorderColumns"/> 와 같은 판정 자리).</summary>
     /// 기능이 꺼져도 편집 중이면 끌 수 있게 토글은 남긴다(기능 게이트가 바뀌어도 고친 내용을 잃지 않게).
-    public bool CanToggleTableEdit => Target is { ObjectType: "TABLE" } && EditPage is not null && (IsTableEditing || TableEditCommands.IsEnabled(_services));
+    public bool CanToggleTableEdit => (Target is { ObjectType: "TABLE" } || IsNewTableMode) && EditPage is not null && (IsTableEditing || TableEditCommands.IsEnabled(_services));
 
     private Oranda.Core.Features.IFeatureGate? _watchedGate;
 
@@ -194,6 +194,11 @@ public sealed partial class ObjectDetailViewModel
     {
         if (!on)
         {
+            if (IsNewTableMode)
+            {
+                return IsTableEditing; // 새 테이블 탭은 끌 수 없다(설계 7.5)
+            }
+
             if (TableEdit is not null && !await ConfirmDiscardTableEditAsync(
                     TableEditText.T("고친 내용을 버리고 편집을 끌까요?", "Discard your changes and turn editing off?"), ct))
             {
@@ -309,8 +314,10 @@ public sealed partial class ObjectDetailViewModel
     internal Func<CancellationToken, Task<bool>>? CloseConfirmation()
     {
         TableEdit?.FlushPendingInput?.Invoke();
-        return TableEdit is { IsDirty: true }
-            ? ct => ConfirmDiscardTableEditAsync(TableEditText.T("고친 내용을 버리고 탭을 닫을까요?", "Discard your changes and close the tab?"), ct)
+        return TableEdit is { IsDirty: true } edit
+            ? ct => ConfirmDiscardTableEditAsync(edit.IsNewTable
+                ? TableEditText.T("만들던 새 테이블을 버리고 탭을 닫을까요?", "Discard the new table and close the tab?")
+                : TableEditText.T("고친 내용을 버리고 탭을 닫을까요?", "Discard your changes and close the tab?"), ct)
             : null;
     }
 

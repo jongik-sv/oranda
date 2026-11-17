@@ -71,6 +71,9 @@ public sealed class ObjectDetailSection : ObservableObject
     /// <summary>「데이터」 탭(표 대신 데이터 그리드를 보인다, <see cref="ObjectDataViewModel"/>).</summary>
     public bool IsData { get; private init; }
 
+    /// <summary>고를 수 있는 페이지. 거짓 = 흐림(새 테이블 탭의 데이터·통계·크기, 설계 7.5).</summary>
+    public bool IsAvailable { get; init; } = true;
+
     public IReadOnlyList<string> Columns { get; }
 
     public IReadOnlyList<IReadOnlyList<object?>> Rows
@@ -352,6 +355,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 
         WatchFeatureGate();
         EndTableEdit(); // 다시 열면 편집은 꺼진다(묻는 일은 부르는 쪽: 새로 고침·실행 성공 뒤, 설계 7.1)
+        IsNewTableMode = false; // 있는 객체를 열면 새 테이블 탭이 아니다(설계 7.5)
         _session = session;
         Target = target;
         Title = $"{target.Owner}.{target.Name}";

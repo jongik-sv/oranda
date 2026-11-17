@@ -206,6 +206,13 @@ public sealed partial class SchemaBrowserViewModel
         return c.IsEnabled ? $"{kind} {detail}" : $"{kind} {detail} DISABLED";
     }
 
+    /// <summary>소유자 노드 또는 그 아래 「테이블」 범주 노드(<c>ownerNodeSelected</c>, 「새 테이블…」 대상, 테이블 편집기 설계 7.5).</summary>
+    internal static bool IsOwnerNode(SchemaNode? node) =>
+        node is { Kind: SchemaNodeKind.Schema, Owner.Length: > 0 } or { Kind: SchemaNodeKind.Category, CategoryType: "TABLE", Owner.Length: > 0 };
+
+    /// <summary>테이블 객체 노드(<c>tableObjectSelected</c>, 「이 구조로 새 테이블…」 대상). 뷰·폴더·열 노드는 아니다.</summary>
+    internal static bool IsTableObject(SchemaNode? node) => node is { Kind: SchemaNodeKind.Item, Ref.ObjectType: "TABLE" };
+
     /// <summary>노드가 표·뷰 노드이거나 그 하위 노드(폴더·열·인덱스 등)인지(<c>tableNodeSelected</c> 문맥 키).</summary>
     internal static bool IsInsideTable(SchemaNode? node)
     {

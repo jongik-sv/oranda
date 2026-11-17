@@ -15,14 +15,14 @@ public sealed record FeaturePreset(string Label, IReadOnlyList<string>? Roles, I
     /// <summary>Role id 6개(RoleIds, PRD 12.1).</summary>
     public static readonly string[] RoleIdList = ["sqlDev", "plsqlDev", "myBatisDev", "tuner", "dba", "viewer"];
 
-    /// <summary>기능 id 27개(FeatureIds.All, PRD 12.2, 직접 켜는 기능 aiTuning 포함).</summary>
+    /// <summary>기능 id 28개(FeatureIds.All, PRD 12.2, 직접 켜는 기능 aiTuning 포함).</summary>
     public static readonly string[] FeatureIdList =
     [
         "gridEdit", "lobRowView", "dataExport", "dataImport", "dedicatedSession", "flashback", "changeJournal", "tableSpec", "myBatisLog", "changeBundle",
         "plsqlEditor", "plsqlWorkspace", "plsqlRun",
         "myBatis",
         "planAdvanced", "sqlMonitor", "tuningAssistant", "childCursors", "tableStats", "trace", "tuningReport", "aiTuning",
-        "sessionMonitor", "lockMonitor", "blockerAlert", "dbTools", "columnReorder",
+        "sessionMonitor", "lockMonitor", "blockerAlert", "dbTools", "columnReorder", "tableEditor",
     ];
 
     private static readonly Dictionary<string, string> Aliases = BuildAliases();

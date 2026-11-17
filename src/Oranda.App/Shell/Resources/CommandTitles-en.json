@@ -245,6 +245,8 @@
   "Cmd.oranda.schema.refresh": "Refresh",
   "Cmd.oranda.tableEdit.toggle": "Toggle Table Edit",
   "Cmd.oranda.schema.reorderColumns": "Reorder Columns…",
+  "Cmd.oranda.schema.newTable": "New Table…",
+  "Cmd.oranda.schema.newTableLike": "New Table Like This…",
   "Cmd.oranda.schema.resetMetadataCache": "Reset Metadata Cache",
   "Cmd.oranda.schema.reveal": "Select in Schema Browser",
   "Cmd.oranda.schema.showDdl": "Show DDL",

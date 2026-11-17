@@ -3,7 +3,7 @@ using Oranda.Core.Settings;
 namespace Oranda.Core.Features;
 
 /// <summary>
-/// 기능 카탈로그(TRD 10.2·10.4, PRD 12.2): 기능 27개의 묶음·문구 키·StartupBound·WritesOnly·Requires, Role 별 기본 켬 목록,
+/// 기능 카탈로그(TRD 10.2·10.4, PRD 12.2): 기능 28개의 묶음·문구 키·StartupBound·WritesOnly·Requires, Role 별 기본 켬 목록,
 /// 꼬리표 규칙 표 셋(네임스페이스 접두·id 덮어쓰기·형 이름 덮어쓰기). 데이터와 순수 계산만 둔다 — 게이트(시작 때 값·PendingRestart·변경 알림)는
 /// App 의 <c>FeatureGate</c>(TSK-07-02) 몫이다. Core 는 App 형을 참조하지 않으므로 네임스페이스·형 이름은 문자열로 적는다. 소유: TSK-07-01.
 /// </summary>
@@ -14,7 +14,7 @@ public static class FeatureCatalog
 
     private static readonly string[] None = [];
 
-    /// <summary>기능 27개(<see cref="FeatureIds.All"/> 순서).</summary>
+    /// <summary>기능 28개(<see cref="FeatureIds.All"/> 순서).</summary>
     public static IReadOnlyList<FeatureDefinition> Features { get; } =
     [
         new(FeatureIds.GridEdit, FeatureGroup.DevAssist, StartupBound: false, WritesOnly: true, None),

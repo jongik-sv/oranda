@@ -34,8 +34,16 @@
     <TabControl x:Name="Tabs">
       <TabItem Header="상세">
         <DockPanel>
+          <!-- 「✎ 새 테이블」 탭 위 칸(소유자·이름·주석·종류, 설계 7.5·18.10). 새 테이블 탭에서만 보인다. -->
+          <te:NewTableHeaderView x:Name="NewTableHeader" DockPanel.Dock="Top" IsVisible="{Binding ShowsNewTableHeader}" />
           <!-- Orange Schema Browser 의 객체 정보처럼 왼쪽은 구역(열·인덱스·제약·권한…), 오른쪽은 표. -->
           <ListBox x:Name="SectionList" DockPanel.Dock="Left" Classes="log" MinWidth="120" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection, Mode=TwoWay}">
+            <ListBox.Styles>
+              <!-- 흐린 구역(새 테이블 탭의 데이터·통계·크기)은 고를 수 없다. -->
+              <Style Selector="ListBoxItem" x:DataType="vm:ObjectDetailSection">
+                <Setter Property="IsEnabled" Value="{Binding IsAvailable}" />
+              </Style>
+            </ListBox.Styles>
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ObjectDetailSection">
                 <TextBlock Text="{Binding DisplayTitle}" Margin="4,3" />
@@ -49,8 +57,8 @@
               <Border DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding ShowsTableToolbar}">
                 <StackPanel Orientation="Horizontal" Spacing="2">
                   <Button x:Name="RefreshDetailButton" Classes="toolbar" Content="새로 고침" icons:ButtonIcon.Key="refresh" icons:ButtonIcon.IconOnly="True"
-                          IsVisible="{Binding CanToggleTableEdit}" IsEnabled="{Binding !IsBusy}" ToolTip.Tip="상세를 새로 읽습니다(고친 내용이 있으면 먼저 묻습니다)" />
-                  <ToggleButton x:Name="TableEditToggle" Classes="tool" Content="✎ 편집" IsVisible="{Binding CanToggleTableEdit}" IsEnabled="{Binding CanEditTable}"
+                          IsVisible="{Binding CanRefreshDetail}" IsEnabled="{Binding !IsBusy}" ToolTip.Tip="상세를 새로 읽습니다(고친 내용이 있으면 먼저 묻습니다)" />
+                  <ToggleButton x:Name="TableEditToggle" Classes="tool" Content="✎ 편집" IsVisible="{Binding CanToggleTableEdit}" IsEnabled="{Binding CanUseTableEditToggle}"
                                 ToolTip.Tip="표에서 고치면 바뀐 만큼의 DDL 이 아래에 보입니다" AutomationProperties.Name="테이블 편집" />
                   <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding ShowsRowToolbar}" IsEnabled="{Binding CanEditTable}">
                     <Button x:Name="AddRowButton" Classes="tool" Content="＋" IsVisible="{Binding !IsEditingConstraints}" IsEnabled="{Binding CanAddRow}"
@@ -173,7 +181,7 @@
           </Border>
         </DockPanel>
       </TabItem>
-      <TabItem Header="DDL" x:Name="DdlTab">
+      <TabItem Header="DDL" x:Name="DdlTab" IsEnabled="{Binding !IsNewTableMode}">
         <DockPanel>
           <Border DockPanel.Dock="Top" Classes="panel-toolbar">
             <WrapPanel>

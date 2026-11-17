@@ -2054,5 +2054,7 @@
   "빠름 · 열이 맨 뒤로 갑니다": "Fast · the column moves to the end",
   "새 열에 변환식으로 옮겨 담아 형식을 바꿉니다(설계 18.9)": "Changes the type by copying the values into a new column through a conversion expression",
   "열 바꿔치기": "Swap columns",
-  "열 순서 유지 · 오래 걸림 · 스크립트를 검토한 뒤 직접 실행합니다": "Keeps the column order · slow · review the script and run it yourself"
+  "열 순서 유지 · 오래 걸림 · 스크립트를 검토한 뒤 직접 실행합니다": "Keeps the column order · slow · review the script and run it yourself",
+  "따옴표 없이 쓰면 대문자 이름이 됩니다": "Unquoted names become upper case",
+  "테이블 종류": "Table kind"
 }

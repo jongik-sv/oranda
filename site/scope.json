@@ -229,6 +229,8 @@
     {"id": "oranda.schema.insertName", "page": "schema/browser"},
     {"id": "oranda.schema.insertSelect", "page": "schema/browser"},
     {"id": "oranda.schema.newSqlWithSelect", "page": "schema/browser"},
+    {"id": "oranda.schema.newTable", "page": "schema/browser"},
+    {"id": "oranda.schema.newTableLike", "page": "schema/browser"},
     {"id": "oranda.schema.objectSearch", "page": "schema/browser"},
     {"id": "oranda.schema.openDetail", "page": "schema/browser"},
     {"id": "oranda.schema.resetMetadataCache", "page": "schema/browser"},
