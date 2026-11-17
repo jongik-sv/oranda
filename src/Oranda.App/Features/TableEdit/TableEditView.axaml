@@ -13,6 +13,18 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+    <!-- 흐린 칸은 바탕 없이 글만 흐리게(테마의 비활성 바탕이 칸마다 회색 덩어리로 보이지 않게). -->
+    <Style Selector="TextBox.cell:disabled /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="AutoCompleteBox.cell:disabled TextBox /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="TextBox.cell.changed:disabled /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
+    </Style>
     <Style Selector="TextBox.cell.changed">
       <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
     </Style>
