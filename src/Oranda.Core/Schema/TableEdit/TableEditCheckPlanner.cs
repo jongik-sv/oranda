@@ -549,6 +549,14 @@ public static partial class TableEditCheckPlanner
                 }
             }
 
+            // Tibero 서버 결함: 가상 열이 있는 테이블에서 열을 지우면(가상 식 바꾸기의 DROP + ADD 포함) 지운 값이 나중에 더한 열에 보인다.
+            if (dialect.Dbms == Dbms.Tibero
+                && (original.Columns.Any(c => c.IsVirtual) || liveColumns.Any(c => c.IsVirtual))
+                && (changes.Columns.Any(d => d.State == DraftRowState.Dropped) || Findings.Any(f => f.Code == CheckCode.VirtualRecreated)))
+            {
+                Findings.Add(new CheckFinding(CheckSeverity.Warning, CheckCode.TiberoDroppedColumnData, TableDraft.TableRowKey) { Subject = original.Name });
+            }
+
             // 제약
             var liveConstraints = edited.Constraints.Where(c => !c.IsDropped && changes.StateOf(c.RowKey) != DraftRowState.Dropped).ToList();
             var freedConstraints = changes.Constraints.Where(d => d.State == DraftRowState.Dropped || d.Changes.HasFlag(ConstraintChange.Name))

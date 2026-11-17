@@ -315,6 +315,8 @@ Oracle 실측에서 더한 규칙: 기준(BYTE/CHAR)을 쓰지 않은 MODIFY 는
 
 알려진 차이: 숨김 열 없음(`TiberoColumnReorderScripts.cs:31` `InvisibleNotSupported`), 휴지통 꺼짐이 기본이라 DROP 이 영구(`TiberoColumnReorderScripts.cs:87-88`) — DROP 계열 ⚠ 문구에 반영한다. 클러스터 테이블 판정 없음.
 
+**Tibero 서버 결함 (2026-11-18 실측, win30 `TiberoTableEditFollowupIt`)**: 가상 열이 있는 테이블에서 `DROP COLUMN` 한 열의 값이 저장소에 남아, 나중에 `ADD` 한 열(이름·형식이 달라도)에 보인다. 같은 이름을 DATE 로 다시 더하면 읽기가 `ODP-590750 corrupted DATE` 로 깨진다. 새 세션에서도 같고, 가상 열이 없으면 생기지 않는다. → 검사 ⚠ `TiberoDroppedColumnData`(Tibero · 가상 열 있음 · 열 지우기 또는 가상 식 DROP+ADD). 그 밖: Tibero 드라이버에는 ODP.NET 의 `GetSchemaTable` 메타데이터 캐시 문제가 없다(열을 바꾼 뒤 같은 세션 다시 읽기 성공). INTERVAL 없는 범위 밖 INSERT = TBR-10018. 서버가 만든 파티션 이름 = `<계정>_P<n>`.
+
 ## 13. 기존 기능과의 관계
 
 - **열 순서 바꾸기**: 기존 열 순서는 그대로 그 창이 맡는다. 편집 모드 열 페이지 도구줄에 「열 순서 바꾸기…」를 그대로 둔다. 편집 중 고친 내용이 있으면 그 창을 열기 전에 실행하거나 버리라고 묻는다.
@@ -489,6 +491,13 @@ Oracle 실측에서 더한 규칙: 기준(BYTE/CHAR)을 쓰지 않은 MODIFY 는
 - 하위(복합) 파티션은 보여 주기만 하고 편집은 미룬다 **[사용자, TE-42]**.
 - 검사: 새 RANGE 경계가 기존 행을 가르면 ⚠, DROP/TRUNCATE 행 수, 파티션 키 열 지우기·형식 바꾸기 ✖.
 - Tibero(실측 11): RANGE/LIST/HASH/INTERVAL CREATE·ADD/SPLIT/MERGE/RENAME/TRUNCATE/DROP 됨. 해시 ADD PARTITION·COALESCE·LIST ADD VALUES·EXCHANGE·`SUBPARTITIONS n` 줄임꼴은 안 됨 → 흐리게 + 이유. 카탈로그 HIGH_VALUE → BOUND, PARTITION_POSITION → PARTITION_NO. 서버 이름 파티션 `<계정>_P<n>`. ONLINE·`UPDATE INDEXES` 수용 여부는 T14 에서 실측.
+
+- **쉬운 편집 [사용자, 2026-11-18 「쉽게 바꾸고 추가는 자동으로」]**:
+  - 일반 테이블: 「저장」 페이지의 「파티션 테이블로 바꾸기…」 → 「쉬운 설정」(날짜 열 · 일/월/년) 한 번으로 RANGE + INTERVAL + 첫 파티션 `P_BEFORE_<기간>`(지금 기간 전 전부). INTERVAL 을 못 쓰는 DB 는 앞으로 12개를 미리 만든다. 방식·키 열 직접 고르기는 그 아래 그대로.
+  - 자동 추가 칸 = 끔·매일·매월·매년·직접 입력(날짜 키), 그 밖 키 = 끔·직접 입력. 자동 추가가 꺼진 날짜 범위 테이블에는 「매월 자동 추가 켜기」(단위는 경계 간격으로 짐작).
+  - 경계 칸은 보통 값(`2026-12-01`·`1000`·`A, B`)으로 보이고 받는다. SQL 은 `PartitionBounds` 가 만든다(날짜 = `DATE '…'`, 시각 있음 = `TO_DATE`). 사전의 `TO_DATE(' 2026-10-01 00:00:00', 'SYYYY-…')`·Tibero 서버가 만든 파티션의 `TO_DATE('01-02-2027 00:00:00', 'DD-MM-YYYY …')` 도 날짜로 읽는다.
+  - 「＋ 다음 파티션」 = 앞 간격(달·날·수 차)을 이어 이름·경계를 채운다. 새 줄 이름은 경계로 짓고(구간 시작 `P_YYYY_MM` 등), 사람이 지은 이름·나누기 줄 이름은 그대로 둔다. 자동 추가가 켜진 범위 테이블에서는 흐림(ADD = ORA-14760, DB 가 만든다).
+  - 「파티션」 페이지는 파티션 테이블에만 늘 있고, 「저장」 페이지는 보기 모드에도 늘 있다(편집을 켜도 왼쪽 목록이 바뀌지 않는다).
 
 ### 18.5 신원·숨김·도메인 열 (TE-7 뒤집음)
 - 신원: 열 페이지 「신원」 칸(없음·ALWAYS·BY DEFAULT·BY DEFAULT ON NULL) + 시작 값·증가. 새 열/새 테이블 = `GENERATED … AS IDENTITY (START WITH n INCREMENT BY m)`, 기존 열 = `MODIFY (c GENERATED … AS IDENTITY (…))` 또는 `MODIFY (c DROP IDENTITY)`. 데이터 있는 일반 열을 신원으로 바꾸기는 Oracle 이 막으므로 ✖. 12c 미만·Tibero(실측) 는 18.8.

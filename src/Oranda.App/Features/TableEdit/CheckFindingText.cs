@@ -71,6 +71,9 @@ public static class CheckFindingText
                   + (detail is null || atLeast ? string.Empty : " — " + detail),
             CheckCode.ConversionNeedsQuiet => TableEditText.T($"{s}: 변환하는 동안 이 테이블에 쓰지 않게 하세요", $"{s}: keep writes off this table while converting")
                                               + (detail is null ? string.Empty : " (" + detail + ")"),
+            CheckCode.TiberoDroppedColumnData => TableEditText.T(
+                $"{s}: Tibero 는 가상 열이 있는 테이블에서 지운 열의 값을 지우지 않아, 나중에 더하는 열에 그 값이 보일 수 있습니다(같은 이름을 다른 형식으로 다시 더하면 읽기가 깨짐). 열을 다시 더할 일이 있으면 테이블을 새로 만드세요",
+                $"{s}: on Tibero, with a virtual column in the table, a dropped column's values stay and can show up in a column added later (re-adding the same name with another type breaks reads). Rebuild the table if you will add columns again"),
             CheckCode.Unsupported => TableEditText.T($"{s}: 이 서버에서는 할 수 없습니다", $"{s}: not supported on this server") + (detail is null ? string.Empty : " (" + detail + ")"),
             _ => s,
         };

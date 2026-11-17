@@ -243,6 +243,33 @@ public sealed class TableEditCheckPlannerTests
     }
 
     [Fact]
+    public void Tibero_warns_that_dropped_column_values_resurface_when_the_table_has_a_virtual_column()
+    {
+        var tibero = new FakeTableEditDialect { Dbms = Dbms.Tibero };
+        var (original, edited) = Start(dialect: tibero);
+        Assert.Contains(original.Columns, c => c.IsVirtual); // 예시 테이블에 가상 열 TOTAL
+        edited = edited.WithColumn("NOTE", c => c with { IsDropped = true });
+
+        var finding = Assert.Single(Plan(original, edited, tibero).Findings, f => f.Code == CheckCode.TiberoDroppedColumnData);
+        Assert.Equal((CheckSeverity.Warning, TableDraft.TableRowKey), (finding.Severity, finding.RowKey));
+
+        // Oracle 은 이 결함이 없다.
+        var (o2, e2) = Start();
+        Assert.DoesNotContain(Plan(o2, e2.WithColumn("NOTE", c => c with { IsDropped = true })).Findings, f => f.Code == CheckCode.TiberoDroppedColumnData);
+    }
+
+    [Fact]
+    public void Tibero_does_not_warn_without_a_virtual_column_or_without_a_drop()
+    {
+        var tibero = new FakeTableEditDialect { Dbms = Dbms.Tibero };
+        var (original, edited) = Start(dialect: tibero);
+        Assert.DoesNotContain(Plan(original, edited.WithColumn("NOTE", c => c with { Length = 500 }), tibero).Findings, f => f.Code == CheckCode.TiberoDroppedColumnData);
+
+        var plain = original with { Columns = [.. original.Columns.Where(c => !c.IsVirtual)] };
+        Assert.DoesNotContain(Plan(plain, plain.WithColumn("NOTE", c => c with { IsDropped = true }), tibero).Findings, f => f.Code == CheckCode.TiberoDroppedColumnData);
+    }
+
+    [Fact]
     public void Unsupported_features_are_blocked_with_the_reason_key()
     {
         var dialect = new FakeTableEditDialect();

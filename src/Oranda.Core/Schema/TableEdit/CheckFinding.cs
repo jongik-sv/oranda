@@ -84,6 +84,12 @@ public enum CheckCode
     /// (<see cref="CheckFinding.Dependents"/> = 트리거).
     /// </summary>
     ConversionNeedsQuiet,
+
+    /// <summary>
+    /// ⚠ Tibero 서버 결함(2026-11-18 실측, win30): 가상 열이 있는 테이블에서 지운 열의 값이 저장소에 남아, 나중에 더한 열(이름·형식이 달라도)에 보인다.
+    /// 같은 이름을 다른 형식으로 다시 더하면 읽기가 깨진다(ODP-590750 corrupted DATE). 가상 열이 없으면 생기지 않는다.
+    /// </summary>
+    TiberoDroppedColumnData,
 }
 
 /// <summary>
