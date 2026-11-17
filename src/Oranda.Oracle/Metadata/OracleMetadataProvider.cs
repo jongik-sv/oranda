@@ -72,13 +72,15 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
         var consRows = await QueryAsync(s, "meta.constraints", BindTable, ct);
         var idxRows = await QueryAsync(s, "meta.indexes", BindTable, ct);
         var commentRows = await QueryAsync(s, "meta.table_comment", BindTable, ct);
+        var propRows = await QueryAsync(s, "meta.table_props", BindTable, ct);
 
-        var info = new TableInfo(table, [.. colRows.Select(MetadataRows.ToColumn)])
+        // 앞 열은 Tibero 와 같은 규칙(MetadataRows), 뒤에 붙인 열(테이블 편집기 TE-29)은 OracleTableEditRows 가 읽는다.
+        var info = OracleTableEditRows.WithTableProps(new TableInfo(table, [.. colRows.Select(OracleTableEditRows.ToColumn)])
         {
-            Constraints = MetadataRows.BuildConstraints(consRows),
-            Indexes = MetadataRows.BuildIndexes(idxRows),
+            Constraints = OracleTableEditRows.WithConstraintExtras(MetadataRows.BuildConstraints(consRows), consRows),
+            Indexes = OracleTableEditRows.BuildIndexes(idxRows, consRows),
             Comment = commentRows.Count > 0 ? Str(commentRows[0][0]) : null,
-        };
+        }, propRows);
 
         await StorePayloadAsync(s, cachedRow, "table", info, ct);
         return info;

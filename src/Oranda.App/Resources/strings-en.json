@@ -1041,5 +1041,10 @@
   "TableEdit.unsupported.tibero.identityColumn": "Tibero does not support identity columns (GENERATED … AS IDENTITY)",
   "TableEdit.unsupported.tibero.invisibleColumn": "Tibero does not support invisible columns",
   "TableEdit.unsupported.tibero.domainColumn": "Tibero does not support domain columns",
-  "TableEdit.unsupported.tibero.partitionConversion": "Tibero cannot convert a regular table to a partitioned table in place"
+  "TableEdit.unsupported.tibero.partitionConversion": "Tibero cannot convert a regular table to a partitioned table in place",
+  "TableEdit.unsupported.oracle12c": "Requires Oracle 12c or later",
+  "TableEdit.unsupported.oracle122": "Requires Oracle 12.2 or later",
+  "TableEdit.unsupported.oracle23": "Requires Oracle 23ai or later",
+  "TableEdit.unsupported.oracleEnterprise": "Not available in this Oracle edition (Standard, Express)",
+  "TableEdit.unsupported.unknownServer": "Turned off because the server version is unknown"
 }

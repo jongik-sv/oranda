@@ -2,6 +2,7 @@
 -- 11g 에는 identity_column·user_generated 가 없다. identity 는 NULL, 사용자 열은 hidden_column = 'NO' 로 고른다
 -- (11g 의 숨은 열은 시스템이 만든 열뿐이다. invisible 열은 12c 부터).
 -- 끝 열 byte_length = 문자 열(VARCHAR2·CHAR)의 data_length(바이트). data_length 열(글자 수)과 같으면 바이트 단위 열이다 — 다시 만들기가 큰 바이트 열을 BYTE 로 남기는 데 쓴다(TR1).
+-- 그 뒤 열(테이블 편집기 TE-29): char_used(B/C), identity_generation(ALWAYS·BY DEFAULT), identity_options(START WITH: n, INCREMENT BY: m, …), on_null_flag(default_on_null, 12c+).
 -- id: meta.columns
 -- min-version: 11
 -- requires: dba_tab_cols, all_tab_cols, dba_col_comments, all_col_comments
@@ -20,7 +21,11 @@ SELECT c.column_name,
        c.hidden_column,
        CAST(NULL AS VARCHAR2(128)) AS domain_name,
        cm.comments,
-       CASE WHEN c.data_type IN ('VARCHAR2', 'CHAR') THEN c.data_length END AS byte_length
+       CASE WHEN c.data_type IN ('VARCHAR2', 'CHAR') THEN c.data_length END AS byte_length,
+       c.char_used,
+       CAST(NULL AS VARCHAR2(10)) AS identity_generation,
+       CAST(NULL AS VARCHAR2(298)) AS identity_options,
+       CAST(NULL AS VARCHAR2(3)) AS on_null_flag
   FROM @PFX@_tab_cols c
   LEFT JOIN @PFX@_col_comments cm
     ON cm.owner = c.owner AND cm.table_name = c.table_name AND cm.column_name = c.column_name

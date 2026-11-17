@@ -1,8 +1,9 @@
 -- 테이블·뷰의 열. 바인드: owner, name. data_default 는 LONG(InitialLONGFetchSize = -1 로 읽는다). domain_name 은 23 이상 전용 열(Data Use Case Domain).
 -- 끝 열 byte_length = 문자 열(VARCHAR2·CHAR)의 data_length(바이트). data_length 열(글자 수)과 같으면 바이트 단위 열이다 — 다시 만들기가 큰 바이트 열을 BYTE 로 남기는 데 쓴다(TR1).
+-- 그 뒤 열(테이블 편집기 TE-29): char_used(B/C), identity_generation(ALWAYS·BY DEFAULT), identity_options(START WITH: n, INCREMENT BY: m, …), on_null_flag(default_on_null, 12c+).
 -- id: meta.columns
 -- min-version: 23
--- requires: dba_tab_cols, all_tab_cols, dba_col_comments, all_col_comments
+-- requires: dba_tab_cols, all_tab_cols, dba_col_comments, all_col_comments, dba_tab_identity_cols, all_tab_identity_cols
 -- license: none
 SELECT c.column_name,
        COALESCE(c.column_id, c.internal_column_id) AS position,
@@ -18,10 +19,16 @@ SELECT c.column_name,
        c.hidden_column,
        c.domain_name,
        cm.comments,
-       CASE WHEN c.data_type IN ('VARCHAR2', 'CHAR') THEN c.data_length END AS byte_length
+       CASE WHEN c.data_type IN ('VARCHAR2', 'CHAR') THEN c.data_length END AS byte_length,
+       c.char_used,
+       ic.generation_type AS identity_generation,
+       ic.identity_options,
+       c.default_on_null AS on_null_flag
   FROM @PFX@_tab_cols c
   LEFT JOIN @PFX@_col_comments cm
     ON cm.owner = c.owner AND cm.table_name = c.table_name AND cm.column_name = c.column_name
+  LEFT JOIN @PFX@_tab_identity_cols ic
+    ON ic.owner = c.owner AND ic.table_name = c.table_name AND ic.column_name = c.column_name
  WHERE c.owner = :owner
    AND c.table_name = :name
    AND c.user_generated = 'YES'
