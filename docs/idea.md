@@ -180,7 +180,7 @@ PRD 6장에 이미 있는 기능은 뺐고, PRD 기능과 겹치거나 PRD 기�
 #### 23ai
 
 - SQL Domain 관리: Domain 목록·정의(`DBA_DOMAINS`)와 그 Domain을 쓰는 컬럼을 보인다.
-  - 테이블 구조 편집기에서 컬럼에 Domain을 붙인다.
+  - 컬럼에 Domain을 붙이고 떼는 일은 테이블 구조 편집기의 「도메인」 칸으로 이미 한다(23ai 이상, 매뉴얼 schema/table-editor). 남은 일은 목록·정의 보기다.
 - 스키마 annotation 편집: 테이블·컬럼 annotation을 보고 고친다(`USER_ANNOTATIONS_USAGE`).
   - annotation은 주석과 함께 그리드 열 머리글의 표시 이름으로 쓸 수 있고, AI 보조(APP-09)의 메타데이터로도 쓴다.
 - SQL 분석 보고서: 23ai `DBMS_XPLAN` 출력에 붙는 「SQL Analysis Report」 경고를 계획 화면(PLAN-03)에 따로 보인다.

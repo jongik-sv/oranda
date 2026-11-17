@@ -62,7 +62,11 @@ public sealed partial class ObjectDetailViewModel
         gate.Changed += OnFeatureGateChanged;
     }
 
-    private void OnFeatureGateChanged(object? sender, EventArgs e) => Oranda.App.Shell.UiThread.PostIfAppRunning(RaiseTableEditProperties);
+    private void OnFeatureGateChanged(object? sender, EventArgs e) => Oranda.App.Shell.UiThread.PostIfAppRunning(() =>
+    {
+        UpdateCanReorderColumns(); // 「열 순서 바꾸기…」 단추도 기능 columnReorder 를 따른다
+        RaiseTableEditProperties();
+    });
 
     /// <summary>문서를 닫을 때 게이트 구독을 푼다(닫힌 탭이 남지 않게).</summary>
     internal void DetachFeatureGate()

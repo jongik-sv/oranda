@@ -326,7 +326,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
 
     partial void OnSelectedSectionChanged(ObjectDetailSection? value)
     {
-        CanReorderColumns = value is { Title: "열" } && Target is { ObjectType: "TABLE" };
+        UpdateCanReorderColumns();
         IsDataSelected = value is { IsData: true };
         RaiseTableEditProperties();
         ResetKeyColumns(value);
@@ -628,6 +628,15 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
             }
         }
     }
+
+    /// <summary>
+    /// 「열 순서 바꾸기…」 단추: 테이블의 「열」 구역이고 기능 <see cref="Oranda.Core.Features.FeatureIds.ColumnReorder"/> 가 켜졌을 때(스키마 브라우저 메뉴와 같게).
+    /// 게이트가 없으면 켬(지금 동작).
+    /// </summary>
+    private void UpdateCanReorderColumns()
+        => CanReorderColumns = SelectedSection is { Title: "열" } && Target is { ObjectType: "TABLE" }
+            && (_services?.GetService(typeof(Oranda.Core.Features.IFeatureGate)) is not Oranda.Core.Features.IFeatureGate gate
+                || gate.IsEnabled(Oranda.Core.Features.FeatureIds.ColumnReorder));
 
     private IMetadataProvider? ResolveMeta()
         => _meta ??= (IMetadataProvider?)_services?.GetService(typeof(IMetadataProvider));

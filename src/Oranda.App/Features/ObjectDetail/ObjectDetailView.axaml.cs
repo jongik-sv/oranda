@@ -167,9 +167,9 @@ public partial class ObjectDetailView : UserControl, Oranda.App.Shell.Docking.IF
     /// <summary>「열 순서 바꾸기…」: 고친 내용이 있으면 먼저 버릴지 묻고(설계 13장), 대화상자를 열고, 방식 ① 이 끝나면 상세를 새로 읽는다.</summary>
     private async Task OpenReorderDialogAsync()
     {
-        if (_vm is not { Services: { } services, Session: { } session, Target: { } target } vm)
+        if (_vm is not { Services: { } services, Session: { } session, Target: { } target, CanReorderColumns: true } vm)
         {
-            return;
+            return; // 기능 columnReorder 를 막 끈 순간의 누름도 막는다
         }
 
         if (!await vm.ConfirmBeforeReorderAsync())
