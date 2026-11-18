@@ -1,0 +1,86 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ad="using:Oranda.App.Features.TableEdit.Advisor"
+        x:Class="Oranda.App.Features.TableEdit.Advisor.PartitionAdvisorStartWindow"
+        x:DataType="ad:PartitionAdvisorStartViewModel"
+        Title="{Binding Title}" Width="720" Height="620" MinWidth="560" MinHeight="420" WindowStartupLocation="CenterOwner">
+  <!-- AI 파티션 추천 확인 창(설계 3장 ②, 시안 ②): 받는 곳 · 목적 · 보낼 정보 · 실제 값(PA-3 잠금) · 건너뛴 항목 · 보낼 내용 보기 · 진행 단계와 취소. -->
+  <DockPanel Margin="12">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,0,0,8">
+      <TextBlock Grid.Row="0" Grid.Column="0" Text="받는 곳" FontWeight="SemiBold" Margin="0,0,12,4" VerticalAlignment="Center" />
+      <TextBlock Grid.Row="0" Grid.Column="1" x:Name="RecipientText" Text="{Binding RecipientText}" VerticalAlignment="Center" TextWrapping="Wrap"
+                 ToolTip.Tip="설정 › AI 모델에서 바꿉니다" />
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="목적" FontWeight="SemiBold" Margin="0,0,12,0" VerticalAlignment="Center" />
+      <ComboBox Grid.Row="1" Grid.Column="1" x:Name="GoalChoice" MinWidth="260" SelectedIndex="{Binding GoalIndex, Mode=TwoWay}" IsEnabled="{Binding CanStart}"
+                AutomationProperties.Name="추천 목적">
+        <ComboBoxItem Content="조회 성능 + 오래된 데이터 정리" />
+        <ComboBoxItem Content="조회 성능" />
+        <ComboBoxItem Content="오래된 데이터 정리" />
+      </ComboBox>
+    </Grid>
+
+    <!-- 아래 단추 -->
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+      <TextBlock DockPanel.Dock="Left" Text="AI 는 후보만 냅니다. DB 에는 아무것도 실행하지 않습니다." Opacity="0.75" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="400" />
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+        <Button x:Name="CancelButton" Content="{Binding CancelText}" IsCancel="True" />
+        <Button x:Name="SendButton" Classes="accent" Content="모아서 보내기" IsEnabled="{Binding CanStart}" IsDefault="True" AutomationProperties.Name="모아서 보내기" />
+      </StackPanel>
+    </DockPanel>
+
+    <TextBlock DockPanel.Dock="Bottom" x:Name="ErrorText" Text="{Binding ErrorText}" Foreground="{DynamicResource OrandaWarningForegroundBrush}" TextWrapping="Wrap"
+               IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <!-- 진행 단계(모으는 동안·AI 를 기다리는 동안). -->
+    <ItemsControl DockPanel.Dock="Bottom" x:Name="StepList" ItemsSource="{Binding Steps}" IsVisible="{Binding IsBusy}" Margin="0,6,0,0">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="ad:AdvisorStepViewModel">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{Binding Mark}" Width="14" />
+            <TextBlock Text="{Binding Text}" />
+          </StackPanel>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <ScrollViewer>
+      <StackPanel Spacing="4">
+        <TextBlock Text="보낼 정보" FontWeight="SemiBold" />
+        <CheckBox x:Name="ColumnsCheck" IsChecked="True" IsEnabled="False" Content="열 이름·형식·NULL 여부 (사전, 비용 없음)" />
+        <CheckBox x:Name="KeysCheck" IsChecked="True" IsEnabled="False" Content="PK·UK·FK, 인덱스 열 순서 (사전)" />
+        <CheckBox x:Name="StatsCheck" IsChecked="True" IsEnabled="False" Content="통계: 행 수, 열별 고유값 수·NULL 비율·히스토그램 종류, 마지막 수집일 (사전)" />
+        <CheckBox x:Name="PredicatesCheck" IsChecked="{Binding IncludePredicates}" IsEnabled="{Binding CanStart}"
+                  Content="이 테이블을 쓰는 SQL 의 조건 열과 횟수 (V$SQL_PLAN·V$SQL — SQL 본문은 안 보냄)" />
+        <StackPanel Spacing="0">
+          <CheckBox x:Name="DistributionsCheck" IsChecked="{Binding IncludeDistributions}" IsEnabled="{Binding CanStart}"
+                    Content="분포 조회: 날짜 열 월별 건수, 코드 열 상위 20개 건수" />
+          <TextBlock x:Name="DistributionCostText" Text="{Binding DistributionCostText}" Opacity="0.75" Margin="28,0,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Spacing="0">
+          <CheckBox x:Name="SendValuesCheck" IsChecked="{Binding SendValues}" IsEnabled="{Binding CanSendValues}" Content="코드·날짜 실제 값도 보내기"
+                    ToolTip.ShowOnDisabled="True" ToolTip.Tip="{Binding SendValuesNote}" />
+          <TextBlock x:Name="SendValuesNoteText" Text="{Binding SendValuesNote}" Opacity="0.75" Margin="28,0,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel Spacing="0" IsVisible="{Binding HasSkipped}" Margin="0,4,0,0">
+          <TextBlock Text="건너뛴 항목" FontWeight="SemiBold" />
+          <ItemsControl x:Name="SkippedList" ItemsSource="{Binding SkippedLines}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" Opacity="0.8" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+          <Button x:Name="PreviewButton" Classes="tool" Content="보낼 내용 보기" IsEnabled="{Binding CanStart}"
+                  ToolTip.Tip="근거를 모아 실제로 보낼 글을 펼칩니다(아직 보내지 않음)" AutomationProperties.Name="보낼 내용 보기" />
+          <Button x:Name="CopyPreviewButton" Classes="tool" Content="복사" IsVisible="{Binding IsPreviewOpen}" AutomationProperties.Name="보낼 내용 복사" />
+        </StackPanel>
+        <TextBox x:Name="PreviewBox" Text="{Binding PreviewText}" IsVisible="{Binding IsPreviewOpen}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                 MinHeight="120" MaxHeight="260" FontFamily="{DynamicResource OrandaMonoFont}" AutomationProperties.Name="보낼 내용" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

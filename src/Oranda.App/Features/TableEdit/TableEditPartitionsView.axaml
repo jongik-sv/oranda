@@ -49,6 +49,35 @@
       <TextBlock x:Name="PartitionLockedText" Text="{Binding PartitionLockedReason}" Margin="4,0" TextWrapping="Wrap" />
     </Border>
 
+    <!-- AI 파티션 추천(설계 2026-11-18 ①·④): 채운 뒤 띠(되돌리기 · 추천 다시 보기)와 「✨ AI 추천…」·「분포 보기」 단추 줄. -->
+    <Border x:Name="AdviceBanner" DockPanel.Dock="Top" Classes="panel-toolbar" IsVisible="{Binding ShowsAdviceBanner}">
+      <StackPanel Spacing="2" Margin="4,2">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock x:Name="AdviceBannerText" Text="{Binding AdviceBannerText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+          <Button x:Name="ReopenAdviceButton" Classes="tool" Content="추천 다시 보기" Command="{Binding ReopenAdviceCommand}" IsVisible="{Binding CanReopenAiAdvice}"
+                  AutomationProperties.Name="추천 다시 보기" />
+          <Button x:Name="UndoAdviceButton" Classes="tool" Content="되돌리기" Command="{Binding UndoAdviceCommand}"
+                  ToolTip.Tip="채우기 직전의 파티션 편집으로 돌립니다" AutomationProperties.Name="추천 채우기 되돌리기" />
+        </StackPanel>
+        <ItemsControl x:Name="AdviceBannerWarningList" ItemsSource="{Binding AdviceBannerWarnings}" IsVisible="{Binding HasAdviceBannerWarnings}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <TextBlock Classes="warn" Text="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+    <Border x:Name="AiAdvisorBar" DockPanel.Dock="Top" Padding="8,4" IsVisible="{Binding ShowsAiAdvisor}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button x:Name="AiAdvisorButton" Classes="tool" Content="✨ AI 추천…" Command="{Binding AskAiAdviceCommand}"
+                ToolTip.Tip="통계·분포·인덱스·조회 조건을 모아 AI 에게 파티션 후보를 받습니다(실행하지 않음)" AutomationProperties.Name="AI 파티션 추천" />
+        <Button x:Name="PartitionEvidenceButton" Classes="tool" Content="분포 보기" Command="{Binding ShowEvidenceCommand}"
+                ToolTip.Tip="AI 없이 통계·분포·조회 조건만 모아 봅니다" AutomationProperties.Name="파티션 분포 보기" />
+        <TextBlock Text="어떤 열로 어떻게 나눌지 모르겠으면 AI 추천을 쓰세요." VerticalAlignment="Center" Opacity="0.7" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+
     <!-- 쉬운 설정(일반 → 파티션): 날짜 열 · 단위만 고르면 범위 + 자동 추가 + 첫 파티션. -->
     <Border x:Name="EasyPartitionPanel" DockPanel.Dock="Top" IsVisible="{Binding ShowsEasyPartitioning}" Padding="8,6" Margin="0,4,0,0"
             BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">

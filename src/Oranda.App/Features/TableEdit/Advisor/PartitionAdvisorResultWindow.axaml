@@ -1,0 +1,185 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ad="using:Oranda.App.Features.TableEdit.Advisor"
+        x:Class="Oranda.App.Features.TableEdit.Advisor.PartitionAdvisorResultWindow"
+        x:DataType="ad:PartitionAdvisorResultViewModel"
+        Title="{Binding Title}" Width="1080" Height="700" MinWidth="720" MinHeight="420" WindowStartupLocation="CenterOwner">
+  <!-- AI 파티션 추천 결과(설계 3장 ③·⑤, 시안 ③·⑤). 왼쪽 근거(앱이 모음) · 오른쪽 후보 카드(AI 이유 + 앱 확인 ✔⚠✖) · 다시 받기 · 원문 · 보고서. -->
+  <Window.Styles>
+    <Style Selector="TextBlock.head">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,8,0,2" />
+    </Style>
+    <Style Selector="TextBlock.stop">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <Style Selector="TextBlock.warn">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaSeparatorBrush}" />
+    </Style>
+  </Window.Styles>
+  <DockPanel Margin="12">
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+        <Button x:Name="RetryButton" Classes="tool" Content="⟳ 다시 받기" IsVisible="{Binding HasAi}" IsEnabled="{Binding CanAsk}"
+                ToolTip.Tip="같은 근거로 AI 에 다시 묻습니다" AutomationProperties.Name="다시 받기" />
+        <Button x:Name="StopButton" Classes="tool" Content="멈추기" IsVisible="{Binding IsBusy}" AutomationProperties.Name="멈추기" />
+      </StackPanel>
+      <TextBlock x:Name="TitleText" Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
+    </DockPanel>
+
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+        <Button x:Name="SaveReportButton" Content="보고서로 저장…" IsEnabled="{Binding CanSaveReport}" ToolTip.Tip="이 결과를 HTML 파일로 저장합니다" />
+        <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
+      </StackPanel>
+      <TextBlock x:Name="StatusText" Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+    </DockPanel>
+
+    <Grid ColumnDefinitions="380,8,*">
+      <!-- 근거(앱이 모음) -->
+      <ScrollViewer Grid.Column="0">
+        <StackPanel Spacing="2">
+          <TextBlock Classes="head" Text="근거 (앱이 모음)" Margin="0,0,0,2" />
+          <TextBlock x:Name="StatsText" Text="{Binding StatsText}" Opacity="0.8" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="*,110,60,*" Margin="0,4,0,0">
+            <TextBlock Grid.Column="0" Text="열" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="형식" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="2" Text="고유값" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="3" Text="쓰임" FontWeight="SemiBold" />
+          </Grid>
+          <ItemsControl x:Name="EvidenceColumnList" ItemsSource="{Binding Columns}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ad:EvidenceColumnLine">
+                <Grid ColumnDefinitions="*,110,60,*">
+                  <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding DataType}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Text="{Binding Distinct}" />
+                  <TextBlock Grid.Column="3" Text="{Binding Usage}" TextWrapping="Wrap" Opacity="0.85" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <ItemsControl x:Name="DistributionList" ItemsSource="{Binding Distributions}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ad:EvidenceDistributionView">
+                <StackPanel>
+                  <TextBlock Classes="head" Text="{Binding Title}" TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding Lines}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" FontFamily="{DynamicResource OrandaMonoFont}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="head" Text="인덱스" />
+          <ItemsControl x:Name="IndexList" ItemsSource="{Binding IndexLines}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel IsVisible="{Binding HasSkipped}">
+            <TextBlock Classes="head" Text="건너뛴 항목" />
+            <ItemsControl x:Name="EvidenceSkippedList" ItemsSource="{Binding SkippedLines}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Text="{Binding}" Opacity="0.8" TextWrapping="Wrap" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+
+      <!-- AI 결과 -->
+      <ScrollViewer Grid.Column="2" IsVisible="{Binding HasAi}">
+        <StackPanel Spacing="4">
+          <TextBlock x:Name="UnreadableText" Classes="warn" Text="{Binding UnreadableText}" IsVisible="{Binding IsUnreadable}" TextWrapping="Wrap" />
+          <Border x:Name="NoPartitionPanel" Classes="card" IsVisible="{Binding IsNoPartition}">
+            <StackPanel Spacing="4">
+              <TextBlock Text="파티션 안 함 권장" FontWeight="SemiBold" />
+              <Button x:Name="RequestCandidatesButton" Classes="tool" Content="그래도 후보 3개 받기" IsVisible="{Binding ShowsRequestCandidates}" IsEnabled="{Binding CanAsk}"
+                      ToolTip.Tip="같은 근거로 다시 물으며 후보를 꼭 내라고 덧붙입니다" AutomationProperties.Name="후보 3개 받기" />
+            </StackPanel>
+          </Border>
+          <TextBlock x:Name="SummaryText" Text="{Binding Summary}" IsVisible="{Binding HasSummary}" TextWrapping="Wrap" />
+
+          <ItemsControl x:Name="CardList" ItemsSource="{Binding Cards}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ad:AdviceCandidateCard">
+                <Border Classes="card">
+                  <StackPanel Spacing="2">
+                    <DockPanel>
+                      <Button DockPanel.Dock="Right" Classes="accent" Content="편집기에 채우기" IsEnabled="{Binding CanFill}" Tag="{Binding}"
+                              ToolTip.Tip="{Binding FillTip}" ToolTip.ShowOnDisabled="True" Click="OnFillClick" AutomationProperties.Name="편집기에 채우기" />
+                      <TextBlock DockPanel.Dock="Right" Text="✔ 채움" IsVisible="{Binding IsFilled}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                      <TextBlock DockPanel.Dock="Right" Text="AI 권장" IsVisible="{Binding IsTop}" Opacity="0.7" VerticalAlignment="Center" Margin="0,0,8,0" />
+                      <TextBlock Text="{Binding Header}" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </DockPanel>
+                    <TextBlock Text="{Binding Shape}" Opacity="0.75" TextWrapping="Wrap" FontFamily="{DynamicResource OrandaMonoFont}" />
+                    <TextBlock Classes="head" Text="AI 이유" />
+                    <ItemsControl ItemsSource="{Binding Reasons}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                          <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding Cautions}" IsVisible="{Binding HasCautions}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                          <TextBlock Text="{Binding}" TextWrapping="Wrap" Opacity="0.8" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="head" Text="앱 확인" />
+                    <ItemsControl ItemsSource="{Binding Checks}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ad:AdviceCheckLine">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Mark}" Classes.stop="{Binding IsStop}" Classes.warn="{Binding IsWarn}" />
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" MaxWidth="560" />
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <ToggleButton x:Name="NotChosenToggle" Classes="tool" Content="왜 그 열은 안 했나" IsChecked="{Binding IsNotChosenOpen}" IsVisible="{Binding HasNotChosen}" />
+            <ToggleButton x:Name="RawToggle" Classes="tool" Content="AI 원문 보기" IsChecked="{Binding IsRawOpen}" IsVisible="{Binding HasRawText}" />
+          </StackPanel>
+          <ItemsControl x:Name="NotChosenList" ItemsSource="{Binding NotChosenLines}" IsVisible="{Binding IsNotChosenOpen}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBox x:Name="RawBox" Text="{Binding RawText}" IsVisible="{Binding IsRawOpen}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                   MaxHeight="320" FontFamily="{DynamicResource OrandaMonoFont}" AutomationProperties.Name="AI 원문" />
+        </StackPanel>
+      </ScrollViewer>
+      <TextBlock Grid.Column="2" Text="AI 없이 근거만 보는 창입니다. 이 숫자를 보고 파티션 편집기에서 직접 고를 수 있습니다." Opacity="0.7" TextWrapping="Wrap"
+                 IsVisible="{Binding IsEvidenceOnly}" Margin="8,0" />
+    </Grid>
+  </DockPanel>
+</Window>
