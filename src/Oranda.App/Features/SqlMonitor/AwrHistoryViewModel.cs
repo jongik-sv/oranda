@@ -39,6 +39,7 @@ public sealed partial class AwrHistoryViewModel : ObservableObject
 
     private readonly SqlMonitorViewModel _owner;
     private string? _loadedFor;
+    private Oranda.App.Features.Ai.Kit.AiEntryButton? _cause;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsLicenseOff), nameof(IsLoading), nameof(IsLoaded), nameof(HasMessage), nameof(CanCompare))]
@@ -82,6 +83,9 @@ public sealed partial class AwrHistoryViewModel : ObservableObject
     /// <summary>SQL 모니터(바로 가기 단추·팩 상태).</summary>
     public SqlMonitorViewModel Owner => _owner;
 
+    /// <summary>「AI로 원인 보기」 입구(AI 확대 §3.1): 계획이 2개 이상이고 AI·허용 수준이 맞을 때만 켜진다. AWR 을 못 쓰면 이 탭의 안내가 툴팁이 된다.</summary>
+    public Oranda.App.Features.Ai.Kit.AiEntryButton CauseEntry => _cause ??= _owner.CreateAwrCauseEntry();
+
     /// <summary>snap × plan_hash 줄(snap 순).</summary>
     public ObservableCollection<AwrRowItem> Rows { get; } = [];
 
@@ -123,6 +127,7 @@ public sealed partial class AwrHistoryViewModel : ObservableObject
     /// <summary>탭을 열 때: 아직 이 sql_id 를 읽지 않았으면 읽는다.</summary>
     public Task EnsureLoadedAsync()
     {
+        _cause?.Refresh(); // AI 설정·접속이 바뀌었을 수 있다
         var id = _owner.SelectedSqlId;
         return id is not null && string.Equals(id, _loadedFor, StringComparison.Ordinal) && State is AwrPaneState.Loaded or AwrPaneState.Empty
             ? Task.CompletedTask
@@ -383,4 +388,6 @@ public sealed partial class AwrHistoryViewModel : ObservableObject
     private double? Average(long hash) => Plans.FirstOrDefault(p => p.PlanHash == hash)?.AverageMs;
 
     partial void OnCompareMessageChanged(string value) => OnPropertyChanged(nameof(HasComparison));
+
+    partial void OnStateChanged(AwrPaneState value) => _cause?.Refresh();
 }

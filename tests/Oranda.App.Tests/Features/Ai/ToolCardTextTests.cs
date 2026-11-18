@@ -16,6 +16,8 @@ public class ToolCardTextTests
     [InlineData(AgentToolNames.GetSqlStats, "{\"sql_id\":\"7h35uxf5uhmm1\"}", "SQL 수행 통계", "7h35uxf5uhmm1")]
     [InlineData(AgentToolNames.GetTuningContext, "{\"literals\":\"masked\"}", "튜닝 정보 묶음", "요청의 대상 문장")]
     [InlineData(AgentToolNames.BenchmarkQueries, "{\"variants\":[{\"label\":\"a\",\"sql\":\"SELECT 1\"},{\"label\":\"b\",\"sql\":\"SELECT 2\"}],\"repeat\":3}", "변형 성능 비교", "변형 2개 · 반복 3회")]
+    [InlineData(AgentToolNames.GetAwrPlanHistory, "{\"sql_id\":\"7b2kq9x1m3f0d\"}", "AWR 계획 이력", "7b2kq9x1m3f0d")]
+    [InlineData(AgentToolNames.GetAwrPlan, "{\"sql_id\":\"7b2kq9x1m3f0d\",\"plan_hash_value\":3940012871}", "AWR 저장 계획", "7b2kq9x1m3f0d · plan 3940012871")]
     public void Each_tool_gets_a_human_title_and_its_key_argument(string tool, string args, string title, string detail)
     {
         var line = ToolCardText.Describe(tool, args);

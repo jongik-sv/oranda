@@ -98,7 +98,8 @@ public sealed partial class AgentGate
 
     /// <summary>SQL 글을 인자로 받거나(<c>sql</c>·<c>variants[].sql</c>) 결과에 SQL 글·술어를 싣는 도구. 리터럴 가림이 필요하면 사전이 있어야 쓸 수 있다.</summary>
     private static bool TouchesSql(string toolName) =>
-        toolName is AgentToolNames.ExplainPlan or AgentToolNames.GetCursorPlan or AgentToolNames.GetTuningContext or AgentToolNames.BenchmarkQueries;
+        toolName is AgentToolNames.ExplainPlan or AgentToolNames.GetCursorPlan or AgentToolNames.GetTuningContext or AgentToolNames.BenchmarkQueries
+            or AgentToolNames.GetAwrPlan;
 
     /// <summary>
     /// <c>sql</c>·<c>variants[].sql</c> 의 자리표시(<c>:v1</c>)를 원래 글로 되돌려 <paramref name="clean"/> 에 넣는다.

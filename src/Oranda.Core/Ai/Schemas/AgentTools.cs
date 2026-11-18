@@ -2,7 +2,7 @@ using Oranda.Core.Ai.Access;
 
 namespace Oranda.Core.Ai.Schemas;
 
-/// <summary>도구 이름 9개(설계 §5.2). MCP 도구 이름과 파이프 <c>tools/call</c> 의 <c>name</c> 이 같은 값이다.</summary>
+/// <summary>도구 이름 11개(설계 §5.2 9개 + AWR 계획 이력 2개, AI 확대 §3.1). MCP 도구 이름과 파이프 <c>tools/call</c> 의 <c>name</c> 이 같은 값이다.</summary>
 public static class AgentToolNames
 {
     public const string DescribeObject = "describe_object";
@@ -14,6 +14,12 @@ public static class AgentToolNames
     public const string GetSqlStats = "get_sql_stats";
     public const string GetTuningContext = "get_tuning_context";
     public const string BenchmarkQueries = "benchmark_queries";
+
+    /// <summary>AWR 계획 이력(스냅숏별 plan_hash_value·실행·실행당 시간·버퍼). Diagnostics Pack(Tibero 는 TPR).</summary>
+    public const string GetAwrPlanHistory = "get_awr_plan_history";
+
+    /// <summary>AWR 에 남은 한 계획의 줄(DBMS_XPLAN.DISPLAY_AWR 과 같은 내용).</summary>
+    public const string GetAwrPlan = "get_awr_plan";
 }
 
 /// <summary>
@@ -37,6 +43,9 @@ public static class AgentFields
     public const string Columns = "columns";
 
     public const string SqlId = "sql_id";
+
+    /// <summary>계획 해시 인자: <c>get_awr_plan</c>.</summary>
+    public const string PlanHashValue = "plan_hash_value";
 
     /// <summary>
     /// 문장 글 인자: <c>explain_plan</c>·<c>get_tuning_context</c> 의 <c>sql</c>, <c>benchmark_queries</c> 의 <c>variants[].sql</c>.
@@ -106,7 +115,7 @@ public sealed record AgentToolDefinition(
     bool RequiresExplainPlanSetting = false,
     bool DevTestOnly = false);
 
-/// <summary>튜닝 도구 9개의 정의(설계 §5.2 표). 목록 순서가 LLM 에 보이는 순서다.</summary>
+/// <summary>튜닝 도구 11개의 정의(설계 §5.2 표 + AWR 두 개). 목록 순서가 LLM 에 보이는 순서다.</summary>
 public static class AgentTools
 {
     private const string Conn = """
@@ -208,6 +217,25 @@ public static class AgentTools
             } }
             """,
             DevTestOnly: false),
+        new(AgentToolNames.GetAwrPlanHistory,
+            "AWR history of a statement: the plans it used (first and last snapshot time, snapshots, executions, elapsed time and buffer gets per execution) and each snapshot interval with its plan_hash_value. Read only. When the server cannot use AWR (no Diagnostics Pack declared, server setting, or the DBMS has no AWR) the result says supported=false with the reason.",
+            AiAccessLevel.Plan,
+            $$"""
+            { "type": "object", "additionalProperties": false, "required": ["sql_id"], "properties": {
+              {{Conn}},
+              "sql_id": { "type": "string" }
+            } }
+            """),
+        new(AgentToolNames.GetAwrPlan,
+            "Plan lines of one plan of a statement stored in AWR (the same as DBMS_XPLAN.DISPLAY_AWR): operation, object, cost, estimated rows, access and filter predicates. Read only. Use a plan_hash_value from get_awr_plan_history.",
+            AiAccessLevel.Plan,
+            $$"""
+            { "type": "object", "additionalProperties": false, "required": ["sql_id", "plan_hash_value"], "properties": {
+              {{Conn}},
+              "sql_id": { "type": "string" },
+              "plan_hash_value": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+            } }
+            """),
     ];
 
     /// <summary>이름으로 정의를 찾는다. 없으면 null.</summary>

@@ -402,6 +402,10 @@
                         <Button x:Name="AwrCompareButton" DockPanel.Dock="Right" Classes="tool" Content="두 plan_hash 비교" icons:ButtonIcon.Key="diff"
                                 IsEnabled="{Binding CanCompare}" ToolTip.ShowOnDisabled="True"
                                 ToolTip.Tip="고른 줄의 plan_hash 를 가장 빠른 다른 plan_hash 와 비교합니다(dba_hist_sql_plan, 읽기만)" />
+                        <!-- AI 확대 §3.1: 계획이 2개 이상일 때만 켜지는 「AI로 원인 보기」(채팅창 새 대화). 꺼진 까닭이 툴팁이다. -->
+                        <Button x:Name="AwrAiCauseButton" DockPanel.Dock="Right" Classes="tool" Margin="0,0,6,0" Content="{Binding CauseEntry.Label}"
+                                Command="{Binding CauseEntry.RunCommand}" ToolTip.ShowOnDisabled="True" ToolTip.Tip="{Binding CauseEntry.ToolTip}"
+                                AutomationProperties.Name="AI로 원인 보기" />
                         <TextBlock Text="{Binding SummaryText}" />
                       </DockPanel>
                     </Border>

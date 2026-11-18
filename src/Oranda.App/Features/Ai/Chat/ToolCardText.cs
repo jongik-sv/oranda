@@ -39,6 +39,8 @@ public static partial class ToolCardText
             AgentToolNames.GetSqlStats => new("SQL 수행 통계", args.Text(AgentFields.SqlId)),
             AgentToolNames.GetTuningContext => new("튜닝 정보 묶음", TuningContextDetail(args)),
             AgentToolNames.BenchmarkQueries => new("변형 성능 비교", BenchmarkDetail(args)),
+            AgentToolNames.GetAwrPlanHistory => new("AWR 계획 이력", args.Text(AgentFields.SqlId)),
+            AgentToolNames.GetAwrPlan => new("AWR 저장 계획", Join(args.Text(AgentFields.SqlId), args.Long(AgentFields.PlanHashValue)?.ToString(CultureInfo.InvariantCulture), " · plan ")),
             _ => new(toolName, null),
         };
     }
@@ -245,6 +247,10 @@ public static partial class ToolCardText
 
         public int? Number(string name)
             => _values.TryGetValue(name, out var element) && element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var n) ? n : null;
+
+        /// <summary>큰 정수 인자(plan_hash_value 등).</summary>
+        public long? Long(string name)
+            => _values.TryGetValue(name, out var element) && element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out var n) ? n : null;
 
         private static string Unescape(string value)
         {

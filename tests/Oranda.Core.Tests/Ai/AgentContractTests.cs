@@ -13,9 +13,9 @@ namespace Oranda.Core.Tests.Ai;
 public class AgentContractTests
 {
     [Fact]
-    public void Nine_tools_with_valid_schemas_and_expected_minimum_levels()
+    public void Eleven_tools_with_valid_schemas_and_expected_minimum_levels()
     {
-        Assert.Equal(9, AgentTools.All.Count);
+        Assert.Equal(11, AgentTools.All.Count); // 설계 §5.2 9개 + AWR 계획 이력 2개(AI 확대 §3.1)
         Assert.Equal(AgentTools.All.Count, AgentTools.All.Select(t => t.Name).Distinct().Count());
 
         foreach (var tool in AgentTools.All)
@@ -33,6 +33,9 @@ public class AgentContractTests
         Assert.Equal(AiAccessLevel.Query, bench.MinimumLevel);
         Assert.False(bench.DevTestOnly); // 운영도 Query 수준이면 허용(시간 상한은 처리기가 건다)
         Assert.Null(AgentTools.Find("drop_everything"));
+        Assert.Equal(AiAccessLevel.Plan, AgentTools.Find(AgentToolNames.GetAwrPlanHistory)!.MinimumLevel);
+        Assert.Equal(AiAccessLevel.Plan, AgentTools.Find(AgentToolNames.GetAwrPlan)!.MinimumLevel);
+        Assert.False(AgentTools.Find(AgentToolNames.GetAwrPlan)!.RequiresExplainPlanSetting);
     }
 
     [Fact]
@@ -48,6 +51,8 @@ public class AgentContractTests
         Assert.Equal([AgentFields.SqlId], Required(AgentToolNames.GetCursorPlan));
         Assert.Equal([AgentFields.Sql], Required(AgentToolNames.ExplainPlan));
         Assert.Equal([AgentFields.Variants], Required(AgentToolNames.BenchmarkQueries));
+        Assert.Equal([AgentFields.SqlId], Required(AgentToolNames.GetAwrPlanHistory));
+        Assert.Equal([AgentFields.SqlId, AgentFields.PlanHashValue], Required(AgentToolNames.GetAwrPlan));
     }
 
     [Fact]

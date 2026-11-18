@@ -359,10 +359,11 @@ public partial class AgentGateTests
 
         Assert.Equal([AgentToolNames.DescribeObject], Names(Session(Dev(AiAccessLevel.Metadata))));
         Assert.Empty(Names(Session(Dev(AiAccessLevel.Off))));
-        Assert.Equal(9, Names(Session(Dev(AiAccessLevel.QueryRows))).Length);
+        Assert.Equal(11, Names(Session(Dev(AiAccessLevel.QueryRows))).Length); // AWR 도구 2개 더함(AI 확대 §3.1)
 
         var plan = Names(Session(Dev(AiAccessLevel.Plan)));
-        Assert.Equal(8, plan.Length);
+        Assert.Equal(10, plan.Length);
+        Assert.Contains(AgentToolNames.GetAwrPlanHistory, plan);
         Assert.DoesNotContain(AgentToolNames.BenchmarkQueries, plan);
 
         Assert.DoesNotContain(AgentToolNames.BenchmarkQueries, Names(Session(Prod(AiAccessLevel.Plan))));
