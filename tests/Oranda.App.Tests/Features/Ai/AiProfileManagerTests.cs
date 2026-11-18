@@ -772,6 +772,80 @@ public class AiProfileManagerTests
     }
 
     [Fact]
+    public async Task Local_presets_start_at_8192_input_tokens_and_other_presets_keep_the_default()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+
+        vm.SelectPreset(AiProfilePreset.Ollama);
+        Assert.Equal("8192", vm.MaxInputTokensText);
+        vm.SelectPreset(AiProfilePreset.LmStudio);
+        Assert.Equal("8192", vm.MaxInputTokensText);
+        vm.SelectPreset(AiProfilePreset.OpenAi); // 손대지 않은 로컬 기본값은 다른 프리셋의 기본값으로 돌아간다
+        Assert.Equal("200000", vm.MaxInputTokensText);
+
+        vm.SelectPreset(AiProfilePreset.Ollama);
+        vm.MaxInputTokensText = "32000"; // 사용자가 고친 값은 프리셋을 바꿔도 남는다
+        vm.SelectPreset(AiProfilePreset.LmStudio);
+        Assert.Equal("32000", vm.MaxInputTokensText);
+    }
+
+    [Fact]
+    public async Task Connection_test_on_a_local_preset_fills_the_input_tokens_from_the_server_context_length()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+        vm.SelectPreset(AiProfilePreset.Ollama);
+        vm.Name = "로컬";
+        vm.ModelName = "llama3:8b";
+        harness.Probe.ContextLength = 131072;
+
+        await vm.TestConnectionAsync(null);
+
+        Assert.Equal(AiResultKind.Success, vm.ResultKind);
+        Assert.Equal("131072", vm.MaxInputTokensText);
+        Assert.Contains("131072", vm.ResultText, StringComparison.Ordinal);
+        Assert.Equal(1, harness.Probe.ContextCalls);
+    }
+
+    [Fact]
+    public async Task Connection_test_keeps_the_input_tokens_when_the_server_does_not_say_or_fails()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+        vm.SelectPreset(AiProfilePreset.LmStudio);
+        vm.Name = "로컬";
+        vm.ModelName = "m";
+        harness.Probe.ContextLength = null; // 모름
+
+        await vm.TestConnectionAsync(null);
+        Assert.Equal(AiResultKind.Success, vm.ResultKind);
+        Assert.Equal("8192", vm.MaxInputTokensText);
+
+        harness.Probe.ContextLength = 65536;
+        harness.Probe.TestResult = new AiConnectionTestResult(false, TimeSpan.FromSeconds(0.2), "HTTP 500"); // 연결 실패면 묻지도 채우지도 않는다
+        var calls = harness.Probe.ContextCalls;
+        await vm.TestConnectionAsync(null);
+        Assert.Equal(AiResultKind.Failure, vm.ResultKind);
+        Assert.Equal("8192", vm.MaxInputTokensText);
+        Assert.Equal(calls, harness.Probe.ContextCalls);
+    }
+
+    [Fact]
+    public async Task Connection_test_on_a_non_local_preset_does_not_ask_for_the_context_length()
+    {
+        var harness = await ProfileHarness.CreateAsync();
+        var vm = harness.Manager();
+        FillValid(vm);
+        harness.Probe.ContextLength = 4096;
+
+        await vm.TestConnectionAsync(null);
+
+        Assert.Equal("200000", vm.MaxInputTokensText);
+        Assert.Equal(0, harness.Probe.ContextCalls);
+    }
+
+    [Fact]
     public async Task Connection_test_requires_a_valid_url_and_a_model_and_uses_the_stored_key_when_the_field_is_empty()
     {
         var exampleProfile = ProfileSamples.Example();

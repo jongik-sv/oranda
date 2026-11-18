@@ -112,6 +112,12 @@ internal sealed class FakeProbe : IAiProfileProbe
 
     public TaskCompletionSource? Gate { get; set; }
 
+    /// <summary>서버가 알려 주는 문맥 크기. null = 모름.</summary>
+    public int? ContextLength { get; set; }
+
+    /// <summary>문맥 크기 조회 횟수.</summary>
+    public int ContextCalls { get; private set; }
+
     /// <summary>호출 쪽이 취소하지 않았는데도 던지는 취소(구현 자체의 시간 초과).</summary>
     public bool ThrowUnrequestedCancel { get; set; }
 
@@ -139,6 +145,14 @@ internal sealed class FakeProbe : IAiProfileProbe
         Calls++;
         await WaitAsync(ct).ConfigureAwait(false);
         return TestResult;
+    }
+
+    public async Task<int?> ReadContextLengthAsync(AiProfileProbeRequest request, CancellationToken ct)
+    {
+        LastRequest = request;
+        ContextCalls++;
+        await WaitAsync(ct).ConfigureAwait(false);
+        return ContextLength;
     }
 
     private async Task WaitAsync(CancellationToken ct)

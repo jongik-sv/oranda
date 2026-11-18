@@ -94,6 +94,56 @@ public sealed class AiProfileProbeTests
     }
 
     [Fact]
+    public async Task Ollama_context_length_is_read_from_api_show_model_info()
+    {
+        using var server = new StubServer(_ => Json("""{"details":{},"model_info":{"general.architecture":"llama","llama.context_length":131072,"llama.block_count":32}}"""));
+        using var probe = server.Probe();
+
+        var length = await probe.ReadContextLengthAsync(Request(AiProfilePreset.Ollama, AiApiFormat.OpenAi, "http://localhost:11434/v1", model: "llama3:8b"), CancellationToken.None);
+
+        Assert.Equal(131072, length);
+        var call = Assert.Single(server.Calls);
+        Assert.Equal("POST", call.Method);
+        Assert.Equal("http://localhost:11434/api/show", call.Url);
+        Assert.Contains("llama3:8b", call.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LmStudio_context_length_prefers_the_loaded_size_then_the_max_size()
+    {
+        using var server = new StubServer(_ => Json("""{"data":[{"id":"loaded-m","loaded_context_length":16384,"max_context_length":131072},{"id":"idle-m","max_context_length":32768},{"id":"bare-m"}]}"""));
+        using var probe = server.Probe();
+
+        Assert.Equal(16384, await probe.ReadContextLengthAsync(Request(AiProfilePreset.LmStudio, AiApiFormat.OpenAi, "http://localhost:1234/v1", model: "loaded-m"), CancellationToken.None));
+        Assert.Equal(32768, await probe.ReadContextLengthAsync(Request(AiProfilePreset.LmStudio, AiApiFormat.OpenAi, "http://localhost:1234/v1", model: "idle-m"), CancellationToken.None));
+        Assert.Null(await probe.ReadContextLengthAsync(Request(AiProfilePreset.LmStudio, AiApiFormat.OpenAi, "http://localhost:1234/v1", model: "bare-m"), CancellationToken.None));
+        Assert.Null(await probe.ReadContextLengthAsync(Request(AiProfilePreset.LmStudio, AiApiFormat.OpenAi, "http://localhost:1234/v1", model: "other"), CancellationToken.None));
+        Assert.All(server.Calls, c => Assert.Equal("http://localhost:1234/api/v0/models", c.Url));
+    }
+
+    [Fact]
+    public async Task Context_length_is_null_for_missing_fields_errors_bad_json_and_non_local_presets()
+    {
+        var ollama = Request(AiProfilePreset.Ollama, AiApiFormat.OpenAi, "http://localhost:11434/v1");
+
+        using var noInfo = new StubServer(_ => Json("""{"details":{}}"""));
+        Assert.Null(await noInfo.Probe().ReadContextLengthAsync(ollama, CancellationToken.None));
+
+        using var zero = new StubServer(_ => Json("""{"model_info":{"llama.context_length":0}}"""));
+        Assert.Null(await zero.Probe().ReadContextLengthAsync(ollama, CancellationToken.None));
+
+        using var notFound = new StubServer(_ => new Reply(HttpStatusCode.NotFound, """{"error":"model not found"}"""));
+        Assert.Null(await notFound.Probe().ReadContextLengthAsync(ollama, CancellationToken.None));
+
+        using var broken = new StubServer(_ => Json("not json {"));
+        Assert.Null(await broken.Probe().ReadContextLengthAsync(ollama, CancellationToken.None));
+
+        using var custom = new StubServer(_ => Json("""{"model_info":{"llama.context_length":4096}}"""));
+        Assert.Null(await custom.Probe().ReadContextLengthAsync(Request(AiProfilePreset.Custom, AiApiFormat.OpenAi, "http://llm.example:8080"), CancellationToken.None));
+        Assert.Empty(custom.Calls); // 로컬 서버가 아니면 묻지 않는다
+    }
+
+    [Fact]
     public async Task Failed_list_calls_return_results_without_the_key()
     {
         var request = Request(AiProfilePreset.OpenAi, AiApiFormat.OpenAi, "https://api.example/v1", Key);

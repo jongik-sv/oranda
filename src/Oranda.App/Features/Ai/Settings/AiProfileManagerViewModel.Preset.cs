@@ -49,6 +49,13 @@ public sealed partial class AiProfileManagerViewModel
             Format = draft.Format;
         }
 
+        // 최대 입력 토큰: 앞 프리셋의 기본값 그대로일 때만 새 프리셋의 기본값으로 바꾼다(고친 값은 남긴다).
+        if (previous is not null
+            && string.Equals(MaxInputTokensText.Trim(), AiProfilePresets.NewDraft(Preset).MaxInputTokens.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+        {
+            MaxInputTokensText = draft.MaxInputTokens.ToString(CultureInfo.InvariantCulture);
+        }
+
         if (previous is not null && (Name.Trim().Length == 0 || string.Equals(Name.Trim(), PresetName(previous), StringComparison.Ordinal)))
         {
             Name = PresetName(next);

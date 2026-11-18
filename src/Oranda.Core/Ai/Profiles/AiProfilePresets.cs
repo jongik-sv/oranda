@@ -61,6 +61,12 @@ public static class AiProfilePresets
         new(AiProfilePreset.Custom, "직접 입력", AiApiFormat.Anthropic, true, "", AiKeyRequirement.Optional),
     ];
 
+    /// <summary>로컬 AI(Ollama·LM Studio) 프리셋의 최대 입력 토큰 기본값. 로컬 서버는 넘친 입력을 오류 없이 잘라 버리는 일이 많아 작게 시작하고, 「연결 확인」이 서버가 알려 준 크기로 바꾼다.</summary>
+    public const int LocalDefaultMaxInputTokens = 8192;
+
+    /// <summary>프리셋이 새 프로필의 최대 입력 토큰을 정해 두는가(로컬 AI 만).</summary>
+    public static bool IsLocalServerPreset(AiProfilePreset preset) => preset is AiProfilePreset.Ollama or AiProfilePreset.LmStudio;
+
     public const string AntigravityCliId = "antigravity-cli";
 
     public const string CodexCliId = "codex-cli";
@@ -108,6 +114,7 @@ public static class AiProfilePresets
             Preset = preset,
             Format = info.Format,
             BaseUrl = info.DefaultBaseUrl,
+            MaxInputTokens = IsLocalServerPreset(preset) ? LocalDefaultMaxInputTokens : AiLlmProfile.DefaultMaxInputTokens,
         };
     }
 }

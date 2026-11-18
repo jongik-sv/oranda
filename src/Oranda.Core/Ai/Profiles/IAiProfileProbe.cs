@@ -15,6 +15,12 @@ public interface IAiProfileProbe
 
     /// <summary>고른 모델로 최대 출력이 작은 요청을 한 번 보내 성공·실패·걸린 시간을 돌려준다.</summary>
     Task<AiConnectionTestResult> TestConnectionAsync(AiProfileProbeRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// 로컬 서버(Ollama·LM Studio)가 알려 주는 고른 모델의 문맥 크기(토큰)를 읽는다. 알려 주지 않거나 오류이거나 로컬 서버가 아니면 null(실패를 예외로 내지 않는다).
+    /// 기본 구현은 모름(null)이라 이 조회를 모르는 구현은 그대로 둘 수 있다.
+    /// </summary>
+    Task<int?> ReadContextLengthAsync(AiProfileProbeRequest request, CancellationToken ct) => Task.FromResult<int?>(null);
 }
 
 /// <summary>조회 대상. 저장 전 프로필도 받으며, 키는 입력 칸에서 막 읽은 값이거나 <c>ICredentialStore</c> 에서 읽은 값이다.</summary>

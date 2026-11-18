@@ -191,6 +191,108 @@ internal sealed class AiProfileProbe : IAiProfileProbe, IDisposable
         }
     }
 
+    /// <summary>
+    /// 로컬 서버가 알려 주는 모델 문맥 크기. Ollama = 원점의 <c>POST /api/show</c> 의 <c>model_info</c> 에 있는 <c>*.context_length</c>,
+    /// LM Studio = 원점의 <c>GET /api/v0/models</c> 의 <c>loaded_context_length</c>(없으면 <c>max_context_length</c>). 그 밖의 서버·오류·모름은 null 이다.
+    /// </summary>
+    public async Task<int?> ReadContextLengthAsync(AiProfileProbeRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var profile = request.Profile;
+        var model = profile.Model?.Trim();
+        if (!AiProfilePresets.IsLocalServerPreset(profile.Preset) || string.IsNullOrEmpty(model) || Validate(profile) is not null
+            || AiProfileUrl.BaseFor(AiApiFormat.OpenAi, profile.BaseUrl) is not { } baseUrl)
+        {
+            return null;
+        }
+
+        var key = NormalizeKey(request.ApiKey);
+        var origin = new Uri(baseUrl).GetLeftPart(UriPartial.Authority);
+        try
+        {
+            if (profile.Preset == AiProfilePreset.Ollama)
+            {
+                var body = new JsonObject { ["model"] = model }.ToJsonString();
+                var reply = await SendAsync(HttpMethod.Post, origin + "/api/show", profile, key, body, _listTimeout, ct).ConfigureAwait(false);
+                return reply.IsSuccess ? ParseOllamaContext(reply.Body) : null;
+            }
+
+            var models = await SendAsync(HttpMethod.Get, origin + "/api/v0/models", profile, key, null, _listTimeout, ct).ConfigureAwait(false);
+            return models.IsSuccess ? ParseLmStudioContext(models.Body, model) : null;
+        }
+        catch (Exception ex) when (IsReportable(ex, ct))
+        {
+            ct.ThrowIfCancellationRequested();
+            return null; // 크기를 모르면 연결 확인 자체는 그대로 성공이다
+        }
+    }
+
+    /// <summary>Ollama <c>/api/show</c> 본문에서 <c>model_info</c> 의 <c>&lt;구조&gt;.context_length</c> 를 읽는다. 없거나 양수가 아니면 null.</summary>
+    internal static int? ParseOllamaContext(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("model_info", out var info)
+                || info.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            foreach (var property in info.EnumerateObject())
+            {
+                if (property.Name.EndsWith(".context_length", StringComparison.Ordinal) && PositiveInt(property.Value) is { } length)
+                {
+                    return length;
+                }
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>LM Studio <c>/api/v0/models</c> 본문에서 모델 <paramref name="model"/> 의 올라간 문맥 크기(없으면 최대 문맥 크기)를 읽는다.</summary>
+    internal static int? ParseLmStudioContext(string body, string model)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("data", out var data)
+                || data.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var item in data.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object && ReadId(item) is { } id && string.Equals(id, model, StringComparison.Ordinal))
+                {
+                    if (item.TryGetProperty("loaded_context_length", out var loaded) && PositiveInt(loaded) is { } now)
+                    {
+                        return now;
+                    }
+
+                    return item.TryGetProperty("max_context_length", out var max) ? PositiveInt(max) : null;
+                }
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static int? PositiveInt(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) && number > 0 ? number : null;
+
     // 설정의 실행 파일 경로(ExecutablePath)와 PATH 로 CliDriver 와 같은 규칙으로 찾는다.
     private static async Task<ClaudeStatus> FindClaudeAsync(ISettingsStore settings, CancellationToken ct)
     {

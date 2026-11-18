@@ -264,6 +264,22 @@ public sealed partial class AiProfileManagerViewModel
 
             var seconds = result.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture);
             var detail = string.IsNullOrWhiteSpace(result.Message) ? string.Empty : " · " + result.Message;
+            if (result.Success && AiProfilePresets.IsLocalServerPreset(Preset))
+            {
+                // 로컬 서버가 알려 주는 문맥 크기로 「최대 입력 토큰」 칸을 채운다. 모르면 그대로 둔다.
+                var length = await probe.ReadContextLengthAsync(new AiProfileProbeRequest(BuildProfile(), key), token).ConfigureAwait(true);
+                if (_disposed || version != _version)
+                {
+                    return;
+                }
+
+                if (length is > 0)
+                {
+                    MaxInputTokensText = length.Value.ToString(CultureInfo.InvariantCulture);
+                    detail += _t.T($" · 모델 문맥 {length.Value} 토큰을 최대 입력 토큰에 반영", $" · model context {length.Value} tokens set as max input tokens");
+                }
+            }
+
             SetResult(
                 result.Success ? AiResultKind.Success : AiResultKind.Failure,
                 result.Success
