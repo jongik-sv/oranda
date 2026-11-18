@@ -229,6 +229,119 @@ public static partial class ColumnReorderBuilder
         return head.Length > 0 && full.StartsWith(head, StringComparison.Ordinal) ? full[head.Length..].Trim() : full;
     }
 
+    /// <summary>
+    /// 파티션 테이블로 바꾸는 다시 만들기(PA-12): 종속 DDL 에서 <paramref name="localIndexes"/> 의 인덱스를 새 파티션 표에 LOCAL 로 만들게 고친다.
+    /// <list type="bullet">
+    /// <item><c>CREATE [UNIQUE|BITMAP] INDEX "o"."IX" ON … ;</c> → 끝 <c>;</c> 앞에 <c>LOCAL</c>(Oracle DBMS_METADATA 는 PK 인덱스도 이렇게 낸다).</item>
+    /// <item>그 이름의 CREATE INDEX 가 없는 PK·UK 제약(<c>ADD CONSTRAINT "IX" PRIMARY KEY (…) … ENABLE;</c>, Tibero 꼴) → <c>USING INDEX LOCAL</c>
+    /// (이미 <c>USING INDEX</c> 가 있으면 그 뒤에 <c>LOCAL</c>). Tibero 는 <c>USING INDEX</c> 만 쓰면 TBR-7001 이고 <c>USING INDEX LOCAL</c> 은 된다(실측 2026-11-18).</item>
+    /// </list>
+    /// 찾지 못한 이름은 맨 앞 주석으로 알린다. 고유 인덱스가 키 열을 담지 않으면 서버가 막는다(ORA-14039·TBR-7314).
+    /// </summary>
+    public static string WithLocalIndexes(string dependentDdl, IReadOnlyCollection<string> localIndexes)
+    {
+        ArgumentNullException.ThrowIfNull(dependentDdl);
+        ArgumentNullException.ThrowIfNull(localIndexes);
+        if (localIndexes.Count == 0)
+        {
+            return dependentDdl;
+        }
+
+        var wanted = localIndexes.ToHashSet(StringComparer.Ordinal);
+        var statements = SplitDdl(dependentDdl);
+        var created = statements.Select(s => CreateIndexName().Match(s)).Where(m => m.Success).Select(m => Unquote(m.Groups["name"].Value)).ToHashSet(StringComparer.Ordinal);
+        var done = new HashSet<string>(StringComparer.Ordinal);
+        var sb = new StringBuilder();
+        foreach (var statement in statements)
+        {
+            var text = statement;
+            if (CreateIndexName().Match(text) is { Success: true } ci && wanted.Contains(Unquote(ci.Groups["name"].Value)))
+            {
+                text = InsertBeforeTerminator(text, " LOCAL");
+                done.Add(Unquote(ci.Groups["name"].Value));
+            }
+            else if (KeyConstraintName().Match(text) is { Success: true } kc && Unquote(kc.Groups["name"].Value) is var name
+                     && wanted.Contains(name) && !created.Contains(name))
+            {
+                var usingIndex = UsingIndex().Match(text);
+                text = usingIndex.Success
+                    ? text.Insert(usingIndex.Index + usingIndex.Length, " LOCAL")
+                    : EnableTail().Match(text) is { Success: true } en ? text.Insert(en.Index, " USING INDEX LOCAL") : InsertBeforeTerminator(text, " USING INDEX LOCAL");
+                done.Add(name);
+            }
+
+            sb.Append(text);
+        }
+
+        var missing = localIndexes.Where(n => !done.Contains(n)).ToList();
+        return missing.Count == 0
+            ? sb.ToString()
+            : $"-- 주의: LOCAL 로 만들 인덱스의 DDL 을 찾지 못했다: {string.Join(", ", missing)}. 새 테이블에서 직접 CREATE INDEX … LOCAL 로 만든다{Environment.NewLine}" + sb;
+    }
+
+    /// <summary>DDL 글을 문장(줄 끝 <c>;</c> 까지, 줄바꿈 포함)으로 나눈다. 주석 줄은 한 줄이 한 덩어리.</summary>
+    private static List<string> SplitDdl(string ddl)
+    {
+        var result = new List<string>();
+        var current = new StringBuilder();
+        foreach (var line in ddl.Split('\n'))
+        {
+            var piece = line + "\n";
+            if (current.Length == 0 && line.TrimStart().StartsWith("--", StringComparison.Ordinal))
+            {
+                result.Add(piece);
+                continue;
+            }
+
+            current.Append(piece);
+            if (line.TrimEnd().EndsWith(';'))
+            {
+                result.Add(current.ToString());
+                current.Clear();
+            }
+        }
+
+        if (current.Length > 0)
+        {
+            result.Add(current.ToString());
+        }
+
+        // 마지막 덩어리의 덧붙인 줄바꿈은 원문에 없었다.
+        if (result.Count > 0)
+        {
+            result[^1] = result[^1][..^1];
+        }
+
+        return result;
+    }
+
+    private static string InsertBeforeTerminator(string statement, string text)
+    {
+        var at = statement.LastIndexOf(';');
+        if (at < 0)
+        {
+            return statement.TrimEnd() + text;
+        }
+
+        var head = statement[..at];
+        var trimmed = head.TrimEnd();
+        return trimmed + text + head[trimmed.Length..] + statement[at..]; // 원래 줄 모양(빈칸·줄바꿈)은 남긴다
+    }
+
+    private static string Unquote(string name) => name.Length > 1 && name[0] == '"' && name[^1] == '"' ? name[1..^1] : name.ToUpperInvariant();
+
+    [System.Text.RegularExpressions.GeneratedRegex("""^\s*CREATE\s+(?:UNIQUE\s+|BITMAP\s+)?INDEX\s+(?:(?:"[^"]+"|\w+)\.)?(?<name>"[^"]+"|[\w$#]+)\s+ON\s""", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex CreateIndexName();
+
+    [System.Text.RegularExpressions.GeneratedRegex("""^\s*ALTER\s+TABLE\s+\S+\s+ADD\s+CONSTRAINT\s+(?<name>"[^"]+"|[\w$#]+)\s+(?:PRIMARY\s+KEY|UNIQUE)\b""", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex KeyConstraintName();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\bUSING\s+INDEX\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex UsingIndex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\s+ENABLE\s*;\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex EnableTail();
+
     private static void AppendWarnings(StringBuilder sb, IReadOnlyList<ColumnInfo> ordered, bool enterprise)
     {
         var virtuals = ordered.Where(c => c.IsVirtual).Select(c => c.Name).ToList();

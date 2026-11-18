@@ -22,6 +22,9 @@ public partial class TableEditPartitionsView : UserControl
         TruncatePartitionButton.Click += (_, _) => Session?.TruncateSelectedPartition();
         RevertPartitionButton.Click += (_, _) => Session?.RevertSelectedPartition();
         FillBoundsButton.Click += (_, _) => Session?.ToggleBoundFill();
+        MonthAddScriptButton.Click += async (_, _) => await (Session?.SaveMonthAddScriptAsync() ?? Task.CompletedTask);
+        AddSubpartitionRowButton.Click += (_, _) => Session?.AddSubpartitionRow();
+        RemoveSubpartitionRowButton.Click += (_, _) => Session?.RemoveSelectedSubpartitionRow();
         ApplyBoundFillButton.Click += (_, _) => Session?.ApplyBoundFill();
         CloseBoundFillButton.Click += (_, _) =>
         {

@@ -228,6 +228,10 @@ public sealed partial class TableEditSession
                     Detail = TableEditText.T("파티션을 하나 이상 더하세요", "add at least one partition"),
                 });
             }
+
+            // 하위 파티션 템플릿(PA-11)·LOCAL 인덱스(PA-12): 깨진 절이 나가지 않게.
+            list.AddRange(SubpartitionFindings(live));
+            list.AddRange(LocalIndexFindings());
         }
 
         // 키 열: 기존 파티션 테이블의 키, 또는 일반 → 파티션으로 바꾸며 고른 키.

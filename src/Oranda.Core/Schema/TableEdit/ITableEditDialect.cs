@@ -59,6 +59,12 @@ public interface ITableEditDialect
     /// </summary>
     bool KeepsGlobalIndexesOnSplitMerge => true;
 
+    /// <summary>
+    /// 해시 하위 파티션을 개수(<c>SUBPARTITIONS n</c>) 대신 이름 템플릿(<c>SUBPARTITION TEMPLATE (SUBPARTITION SP1, …)</c>)으로 쓴다(PA-11).
+    /// Tibero 실측(2026-11-18): <c>SUBPARTITIONS n</c> = TBR-7001, 템플릿은 됨. 기본 = Oracle(개수).
+    /// </summary>
+    bool HashSubpartitionsAsTemplate => false;
+
     /// <summary>일반 → 파티션을 <c>MODIFY PARTITION BY … ONLINE</c> 한 문장으로 하나(TE-41). 아니면 테이블 다시 만들기. 기본 = Oracle 12.2 이상.</summary>
     bool SupportsOnlinePartitionConversion(ServerInfo? server) => Partitions.PartitionDefaults.SupportsOnlinePartitionConversion(server);
 

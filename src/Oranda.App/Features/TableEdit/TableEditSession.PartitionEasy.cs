@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.App.Features.Localization;
 using Oranda.Core.Schema.TableEdit;
 using Oranda.Core.Schema.TableEdit.Partitions;
+using Oranda.Core.Schema.TableEdit.Partitions.Advisor;
 
 namespace Oranda.App.Features.TableEdit;
 
@@ -55,9 +56,30 @@ public sealed partial class TableEditSession
     /// <summary>쉬운 설정 칸을 보인다: 일반 테이블이고 아직 바꾸기를 시작하지 않았고 바꾸기를 할 수 있다.</summary>
     public bool ShowsEasyPartitioning => CanChoosePartitionMethod && !IsPartitionConversion;
 
-    /// <summary>쉬운 설정에 고를 수 있는 날짜 열(DATE·TIMESTAMP).</summary>
+    private Dictionary<string, DateLikeFormat> _dateLikeColumns = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 날짜형 문자열·숫자 열(파티션 추천 설계 PA-10): 표본이 YYYYMMDD·YYYYMM·YYYY-MM-DD 꼴 95% 이상인 열 → 꼴. 채우는 쪽(공급자 호출)은 객체 상세 몫.
+    /// 이 열은 쉬운 설정 목록에 더해지고, 고르면 INTERVAL 없이 「시작 앞 한 줄 + 앞으로 12개월 + P_MAX」를 만든다. null·빈 목록 = 없음.
+    /// </summary>
+    public void SetDateLikeColumns(IReadOnlyDictionary<string, DateLikeFormat>? columns)
+    {
+        _dateLikeColumns = columns is null ? new(StringComparer.Ordinal) : new(columns, StringComparer.Ordinal);
+        RaiseEasyPartition();
+    }
+
+    /// <summary>날짜형으로 받은 열 가운데 지금 편집 모델에 있는 글·수 열과 그 꼴.</summary>
+    private Dictionary<string, DateLikeFormat> LiveDateLikeColumns() => Draft.Columns
+        .Where(c => !c.IsDropped && !c.IsVirtual && _dateLikeColumns.ContainsKey(c.Name) && PartitionBounds.KindOf(c.DataType) is PartitionKeyKind.Text or PartitionKeyKind.Number)
+        .ToDictionary(c => c.Name, c => _dateLikeColumns[c.Name], StringComparer.Ordinal);
+
+    /// <summary>쉬운 설정에 고를 수 있는 날짜 열(DATE·TIMESTAMP, 그 뒤에 날짜형 문자열·숫자 열).</summary>
     public IReadOnlyList<string> EasyDateColumns =>
-        [.. Draft.Columns.Where(c => !c.IsDropped && !c.IsVirtual && PartitionBounds.KindOf(c.DataType) == PartitionKeyKind.Date).Select(c => c.Name)];
+        [.. Draft.Columns.Where(c => !c.IsDropped && !c.IsVirtual && PartitionBounds.KindOf(c.DataType) == PartitionKeyKind.Date).Select(c => c.Name),
+            .. LiveDateLikeColumns().Keys];
+
+    /// <summary>고른 쉬운 설정 열이 날짜형 문자열·숫자다(INTERVAL 없음, 월 추가 스크립트로 이어 감).</summary>
+    public bool IsEasyDateLike => EasyPartitionColumn is { } column && LiveDateLikeColumns().ContainsKey(column);
 
     public bool HasEasyDateColumns => EasyDateColumns.Count > 0;
 
@@ -75,6 +97,20 @@ public sealed partial class TableEditSession
             var unit = EasyUnit;
             var start = PartitionBounds.PeriodStart(Today(), unit);
             var first = FirstEasyName(start, unit);
+            if (EasyPartitionColumn is { } column && LiveDateLikeColumns().TryGetValue(column, out var format))
+            {
+                var shape = format switch
+                {
+                    DateLikeFormat.Yyyymm => "YYYYMM",
+                    DateLikeFormat.YyyyDashMmDashDd => "YYYY-MM-DD",
+                    _ => "YYYYMMDD",
+                };
+                var from = start.ToString(unit == IntervalUnit.Year ? "yyyy" : unit == IntervalUnit.Day ? "yyyy-MM-dd" : "yyyy-MM", CultureInfo.InvariantCulture);
+                return TableEditText.T(
+                    $"{column} 은 날짜 모양 값({shape})이라 자동 추가를 쓸 수 없습니다. {from} 전 데이터는 {first} 에 들어가고, 앞으로 {EasyPeriodsAhead}개 기간 파티션과 나머지(P_MAX)를 미리 만듭니다. 그 뒤는 「월 추가 스크립트 저장…」으로 더합니다.",
+                    $"{column} holds date-shaped values ({shape}), so automatic add is not available. Rows before {from} go into {first}, and {EasyPeriodsAhead} periods ahead plus a catch-all (P_MAX) are created. Add later months with 'Save the month add script…'.");
+            }
+
             var period = unit switch
             {
                 IntervalUnit.Day => TableEditText.T("날마다", "every day"),
@@ -100,6 +136,12 @@ public sealed partial class TableEditSession
 
         var unit = EasyUnit;
         var start = PartitionBounds.PeriodStart(Today(), unit);
+        if (LiveDateLikeColumns().TryGetValue(column, out var format))
+        {
+            ApplyPartitionScheme(new PartitionScheme(PartitionMethod.Range, [column]), DateLikeRows(column, format, unit));
+            return IsPartitionConversion;
+        }
+
         var rows = new List<PartitionDraft> { new(DraftKeys.New(), FirstEasyName(start, unit)) { Bound = PartitionBounds.DateSql(start) } };
         string? interval = PartitionBounds.IntervalOf(unit);
         if (!EasyIntervalSupported)
@@ -111,14 +153,56 @@ public sealed partial class TableEditSession
             }, [rows[0].Name]));
         }
 
+        ApplyPartitionScheme(new PartitionScheme(PartitionMethod.Range, [column]) { Interval = interval }, rows);
+        return IsPartitionConversion;
+    }
+
+    /// <summary>쉬운 설정이 날짜형 열에 미리 만드는 기간 수(PA-10: 앞으로 12개월).</summary>
+    private const int EasyPeriodsAhead = PartitionMonthScript.DefaultMonths;
+
+    private void ApplyPartitionScheme(PartitionScheme scheme, List<PartitionDraft> rows)
+    {
         _partitionKeyInput = null;
         _partitionHeaderError = null;
-        UpdatePartitions(d => d with
+        UpdatePartitions(d => d with { Scheme = scheme, Partitions = rows });
+    }
+
+    /// <summary>
+    /// 날짜형 문자열·숫자 열(PA-10): 시작 앞 한 줄(<c>P_BEFORE_…</c>) + 앞으로 12개 기간 + <c>P_MAX</c>(MAXVALUE). 경계 글은 꼴대로(<c>'20261201'</c>·<c>202612</c>).
+    /// YYYYMM 은 하루 단위가 없어 달로 만든다.
+    /// </summary>
+    private List<PartitionDraft> DateLikeRows(string column, DateLikeFormat format, IntervalUnit unit)
+    {
+        if (format == DateLikeFormat.Yyyymm && unit == IntervalUnit.Day)
         {
-            Scheme = new PartitionScheme(PartitionMethod.Range, [column]) { Interval = interval },
-            Partitions = rows,
-        });
-        return IsPartitionConversion;
+            unit = IntervalUnit.Month;
+        }
+
+        var start = PartitionBounds.PeriodStart(Today(), unit);
+        var number = PartitionBounds.KindOf(Draft.Columns.First(c => c.Name == column).DataType) == PartitionKeyKind.Number;
+        var pattern = format switch
+        {
+            DateLikeFormat.Yyyymm => "yyyyMM",
+            DateLikeFormat.YyyyDashMmDashDd => "yyyy-MM-dd",
+            _ => "yyyyMMdd",
+        };
+        string Bound(DateTime d) => number ? d.ToString(pattern, CultureInfo.InvariantCulture) : "'" + d.ToString(pattern, CultureInfo.InvariantCulture) + "'";
+        DateTime Shift(DateTime d, int n) => unit switch
+        {
+            IntervalUnit.Day => d.AddDays(n),
+            IntervalUnit.Year => d.AddYears(n),
+            _ => d.AddMonths(n),
+        };
+
+        var rows = new List<PartitionDraft> { new(DraftKeys.New(), FirstEasyName(start, unit)) { Bound = Bound(start) } };
+        for (var i = 0; i < EasyPeriodsAhead; i++)
+        {
+            var name = "P_" + Shift(start, i).ToString(unit == IntervalUnit.Year ? "yyyy" : unit == IntervalUnit.Day ? "yyyy_MM_dd" : "yyyy_MM", CultureInfo.InvariantCulture);
+            rows.Add(new PartitionDraft(DraftKeys.New(), name) { Bound = Bound(Shift(start, i + 1)) });
+        }
+
+        rows.Add(new PartitionDraft(DraftKeys.New(), "P_MAX") { Bound = "MAXVALUE" });
+        return rows;
     }
 
     private IntervalUnit EasyUnit => EasyPartitionUnitIndex switch
@@ -134,6 +218,12 @@ public sealed partial class TableEditSession
         "P_BEFORE_" + start.ToString(unit == IntervalUnit.Year ? "yyyy" : unit == IntervalUnit.Day ? "yyyy_MM_dd" : "yyyy_MM", CultureInfo.InvariantCulture);
 
     partial void OnEasyPartitionUnitIndexChanged(int value) => OnPropertyChanged(nameof(EasyPartitionSummary));
+
+    partial void OnEasyPartitionColumnChanged(string? value)
+    {
+        OnPropertyChanged(nameof(EasyPartitionSummary));
+        OnPropertyChanged(nameof(IsEasyDateLike));
+    }
 
     // ---- 자동 추가(INTERVAL) ------------------------------------------------
 
@@ -331,6 +421,7 @@ public sealed partial class TableEditSession
         OnPropertyChanged(nameof(EasyDateColumns));
         OnPropertyChanged(nameof(HasEasyDateColumns));
         OnPropertyChanged(nameof(EasyPartitionSummary));
+        OnPropertyChanged(nameof(IsEasyDateLike));
         OnPropertyChanged(nameof(PartitionIntervalChoices));
         OnPropertyChanged(nameof(PartitionIntervalChoice));
         OnPropertyChanged(nameof(ShowsIntervalText));

@@ -73,6 +73,12 @@ internal sealed partial class TiberoTableEditDialect : ITableEditDialect
     /// <summary>나누기·합치기에 <c>UPDATE INDEXES</c> 를 붙여도 전역 인덱스가 UNUSABLE 로 남는다(로컬은 남음, 실측 19) → 빌더가 REBUILD 를 붙인다.</summary>
     public bool KeepsGlobalIndexesOnSplitMerge => false;
 
+    /// <summary>
+    /// 해시 하위 파티션은 <c>SUBPARTITIONS n</c> 을 받지 않고(TBR-7001) 이름 템플릿만 받는다(실측 2026-11-18). LIST 템플릿·INTERVAL + 템플릿·
+    /// RANGE/LIST/HASH × LIST·HASH 조합·<c>CREATE INDEX … LOCAL</c>·<c>USING INDEX LOCAL</c> 은 된다 → 하위 파티션은 막지 않는다.
+    /// </summary>
+    public bool HashSubpartitionsAsTemplate => true;
+
     /// <summary><c>MODIFY PARTITION BY … ONLINE</c> 이 없다(실측 19) → 다시 만들기 방식.</summary>
     public bool SupportsOnlinePartitionConversion(ServerInfo? server) => false;
 

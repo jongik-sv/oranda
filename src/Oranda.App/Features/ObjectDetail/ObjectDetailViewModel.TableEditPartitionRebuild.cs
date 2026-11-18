@@ -24,6 +24,21 @@ public sealed partial class ObjectDetailViewModel
     {
         edit.OpenPartitionRebuild = () => OpenPartitionRebuildScriptAsync();
         edit.SavePartitionRebuild = () => SavePartitionRebuildScriptAsync();
+        edit.SaveMonthAddScript = () => SaveMonthAddScriptAsync();
+    }
+
+    /// <summary>
+    /// 「월 추가 스크립트 저장…」(파티션 추천 설계 PA-5): INTERVAL 을 못 쓰는 범위 키의 다음 달 SPLIT 스크립트를 <c>.sql</c> 로(다시 만들기 스크립트와 같은 저장 방식).
+    /// 저장한 경로. 실행하지 않는다.
+    /// </summary>
+    public async Task<string?> SaveMonthAddScriptAsync(CancellationToken ct = default)
+    {
+        if (TableEdit is not { } edit || edit.BuildMonthAddScript() is not { } script)
+        {
+            return null;
+        }
+
+        return await SaveScriptAsync(edit.Original.Name + "_add_months.sql", script, ct);
     }
 
     /// <summary>「다시 만들기 스크립트 열기」: 새 SQL 탭에(이 접속, 실행하지 않음). 열었으면 true.</summary>
@@ -49,8 +64,14 @@ public sealed partial class ObjectDetailViewModel
             return null;
         }
 
-        var pick = PickScriptFile ?? ((suggested, token) => SqlEditor.SqlEditorHost.Current.Dialogs.PickSaveFileAsync(suggested, token));
-        var path = await pick(edit.Original.Name + "_partition.sql", ct);
+        return await SaveScriptAsync(edit.Original.Name + "_partition.sql", script, ct);
+    }
+
+    /// <summary>스크립트 글을 고른 파일에 쓴다(저장 대화 → UTF-8). 저장한 경로, 취소·실패 = null(상태 줄에 이유).</summary>
+    private async Task<string?> SaveScriptAsync(string suggested, string script, CancellationToken ct)
+    {
+        var pick = PickScriptFile ?? ((name, token) => SqlEditor.SqlEditorHost.Current.Dialogs.PickSaveFileAsync(name, token));
+        var path = await pick(suggested, ct);
         if (string.IsNullOrEmpty(path))
         {
             return null;
@@ -112,7 +133,15 @@ public sealed partial class ObjectDetailViewModel
             dependentDdl = null; // 읽지 못함(빈 글 = 읽었는데 없음과 다르다)
         }
 
-        var enterprise = session.Server?.Edition?.Contains("Enterprise", StringComparison.OrdinalIgnoreCase) == true;
+        // LOCAL 인덱스(PA-12): 종속 DDL 의 그 인덱스 CREATE·제약에 LOCAL 을 붙인다. 온라인 재정의(DBMS_REDEFINITION)는 인덱스를 원본 모양 그대로
+        // 복사하므로(COPY_TABLE_DEPENDENTS) LOCAL 을 고르면 CTAS + RENAME 으로 만든다.
+        var local = edit.PartitionDraft?.LocalIndexes ?? [];
+        if (local.Count > 0 && dependentDdl is not null)
+        {
+            dependentDdl = ColumnReorderBuilder.WithLocalIndexes(dependentDdl, local);
+        }
+
+        var enterprise = local.Count == 0 && session.Server?.Edition?.Contains("Enterprise", StringComparison.OrdinalIgnoreCase) == true;
         var usePrimaryKey = table.Constraints.Any(c => c.Kind == ConstraintKind.PrimaryKey && c.IsEnabled);
         try
         {

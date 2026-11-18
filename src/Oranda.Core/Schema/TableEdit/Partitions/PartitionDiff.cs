@@ -94,6 +94,9 @@ public static class PartitionDiff
     /// <summary>해시 줄이기(COALESCE)는 서버가 마지막 파티션을 없앤다 — 끝에서부터만 지울 수 있다.</summary>
     public const string HashCoalesceLastKey = "TableEdit.partition.hashCoalesceLast";
 
+    /// <summary>하위 파티션 템플릿은 LIST·HASH 만 만든다(PA-11).</summary>
+    public const string SubpartitionMethodKey = "TableEdit.partition.subpartitionMethod";
+
     /// <summary>원본 <paramref name="original"/> 과 편집 <paramref name="edited"/> 의 파티션 차이.</summary>
     public static PartitionChanges Compute(PartitionTableDraft original, PartitionTableDraft edited, ITableEditDialect dialect, ServerInfo? server = null)
     {
@@ -118,6 +121,19 @@ public static class PartitionDiff
                 problems.Add(new PartitionProblem(TableDraft.TableRowKey, ConvertNeedsRebuildKey));
             }
 
+            // 하위 파티션 템플릿(PA-11): LIST·HASH 만, 방언이 못 하면 그 이유.
+            if (edited.Scheme.SubpartitionTemplate is { } sub)
+            {
+                if (sub.Method == PartitionMethod.Range)
+                {
+                    problems.Add(new PartitionProblem(TableDraft.TableRowKey, SubpartitionMethodKey));
+                }
+                else if (dialect.UnsupportedPartitionReasonKey(PartitionOperation.Subpartition, sub.Method, server) is { } subKey)
+                {
+                    problems.Add(new PartitionProblem(TableDraft.TableRowKey, subKey));
+                }
+            }
+
             return new PartitionChanges { Converting = true, Problems = problems };
         }
 
@@ -127,7 +143,8 @@ public static class PartitionDiff
         }
 
         var scheme = original.Scheme;
-        if (scheme.Method != edited.Scheme.Method || !scheme.KeyColumns.SequenceEqual(edited.Scheme.KeyColumns, StringComparer.Ordinal))
+        if (scheme.Method != edited.Scheme.Method || !scheme.KeyColumns.SequenceEqual(edited.Scheme.KeyColumns, StringComparer.Ordinal)
+            || edited.Scheme.SubpartitionTemplate is not null)
         {
             return new PartitionChanges { Problems = [new PartitionProblem(TableDraft.TableRowKey, SchemeChangeKey)] };
         }

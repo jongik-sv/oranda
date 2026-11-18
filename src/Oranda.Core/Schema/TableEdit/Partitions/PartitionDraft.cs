@@ -40,10 +40,17 @@ public enum PartitionOperation
 
     /// <summary>일반 → 파티션 테이블(<c>MODIFY PARTITION BY … ONLINE</c>, TE-41).</summary>
     Convert,
+
+    /// <summary>
+    /// 바꾸기 때 하위 파티션 템플릿(PA-11). 방언 판정의 방식 인자 = <b>하위</b> 파티션 방식(LIST·HASH).
+    /// </summary>
+    Subpartition,
 }
 
 /// <summary>
-/// 파티션 방식·키 열·자동 추가(INTERVAL)·하위 파티션(보기만, TE-42). 키 열은 사전 표기(열 이름).
+/// 파티션 방식·키 열·자동 추가(INTERVAL)·하위 파티션. 키 열은 사전 표기(열 이름).
+/// 하위 파티션은 둘로 나뉜다: 서버에서 읽은 것(<see cref="SubpartitionMethod"/>·<see cref="SubpartitionKeyColumns"/>, 보기만, TE-42)과
+/// 일반 → 파티션 바꾸기 때 새로 만들 템플릿(<see cref="SubpartitionTemplate"/>, PA-11).
 /// </summary>
 public sealed record PartitionScheme(PartitionMethod Method, IReadOnlyList<string> KeyColumns)
 {
@@ -55,7 +62,26 @@ public sealed record PartitionScheme(PartitionMethod Method, IReadOnlyList<strin
 
     /// <summary>하위 파티션 키 열(보기만).</summary>
     public IReadOnlyList<string> SubpartitionKeyColumns { get; init; } = [];
+
+    /// <summary>바꾸기 때 만들 하위 파티션 템플릿(PA-11). 없으면 null. 이미 파티션된 테이블에 넣으면 차이 계산이 막는다.</summary>
+    public SubpartitionTemplate? SubpartitionTemplate { get; init; }
 }
+
+/// <summary>
+/// 하위 파티션 템플릿(PA-11, 바꾸기 때만). LIST = <see cref="Rows"/>(이름·값 목록), HASH = <see cref="HashCount"/>.
+/// 문장: <c>SUBPARTITION BY LIST (c) SUBPARTITION TEMPLATE (SUBPARTITION n VALUES (…), …)</c> / <c>SUBPARTITION BY HASH (c) SUBPARTITIONS n</c>.
+/// </summary>
+public sealed record SubpartitionTemplate(PartitionMethod Method, IReadOnlyList<string> KeyColumns)
+{
+    /// <summary>LIST 템플릿 줄(편집 순서).</summary>
+    public IReadOnlyList<SubpartitionTemplateRow> Rows { get; init; } = [];
+
+    /// <summary>HASH 하위 파티션 개수(1 이상).</summary>
+    public int HashCount { get; init; }
+}
+
+/// <summary>LIST 하위 파티션 템플릿 한 줄. <paramref name="Values"/> = <c>VALUES (…)</c> 의 안(<c>'A', 'B'</c>·<c>DEFAULT</c>).</summary>
+public sealed record SubpartitionTemplateRow(string Name, string? Values);
 
 /// <summary>
 /// 파티션 한 줄(설계 18.4 표: 이름·상한값/값 목록·테이블스페이스·행 수). <see cref="Bound"/> 는 괄호 안 글
@@ -89,6 +115,12 @@ public sealed record PartitionDraft(string RowKey, string Name)
 public sealed record PartitionTableDraft(PartitionScheme? Scheme, IReadOnlyList<PartitionDraft> Partitions)
 {
     public static PartitionTableDraft None { get; } = new(null, []);
+
+    /// <summary>
+    /// 바꾸기 때 LOCAL 로 만들 인덱스 이름(PA-12, 소유자 = 테이블 소유자). 한 문장 바꾸기 = <c>UPDATE INDEXES (ix LOCAL, …)</c>,
+    /// 다시 만들기 스크립트 = 새 표의 <c>CREATE INDEX … LOCAL</c>. 비면 서버 기본(Oracle = 접두 인덱스는 LOCAL, 나머지 GLOBAL).
+    /// </summary>
+    public IReadOnlyList<string> LocalIndexes { get; init; } = [];
 
     /// <summary>
     /// 테이블 정보 → 원본 모델. 파티션 테이블인데 정보가 없으면(못 읽음·파티션 정보 이전의 캐시) null — 「파티션 아님」으로 보면

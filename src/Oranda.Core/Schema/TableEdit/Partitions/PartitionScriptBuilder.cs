@@ -6,7 +6,7 @@ namespace Oranda.Core.Schema.TableEdit.Partitions;
 
 /// <summary>
 /// 파티션 차이 → 문장(설계 18.4, TE-40). 이름은 늘 소유자를 붙이고 따옴표는 대문자 규칙을 벗어나거나 예약어일 때만. 문장은 모두 DDL, 페이지 = 파티션.
-/// <para>순서: 일반 → 파티션(한 문장) / INTERVAL 끄기 → 지우기(DROP·COALESCE) → 비우기 → 이름 바꾸기 → 합치기 → 나누기 → (방언이 요구하면) 전역 인덱스 다시 만들기 → 추가 → INTERVAL 켜기·바꾸기.</para>
+/// <para>순서: 일반 → 파티션(한 문장, 하위 파티션 템플릿·LOCAL 인덱스 포함) / INTERVAL 끄기 → 지우기(DROP·COALESCE) → 비우기 → 이름 바꾸기 → 합치기 → 나누기 → (방언이 요구하면) 전역 인덱스 다시 만들기 → 추가 → INTERVAL 켜기·바꾸기.</para>
 /// <list type="bullet">
 /// <item>DROP·TRUNCATE·SPLIT·MERGE·해시 ADD·COALESCE 에는 늘 <c>UPDATE INDEXES</c>(인덱스가 UNUSABLE 이 안 되게, TE-40). Tibero 는 받지만 나누기·합치기 뒤 전역 인덱스가
 /// UNUSABLE 로 남아(실측 19) <see cref="ITableEditDialect.KeepsGlobalIndexesOnSplitMerge"/> 가 거짓이면 끝에 <c>ALTER INDEX … REBUILD</c> 를 붙인다.</item>
@@ -38,7 +38,12 @@ public static class PartitionScriptBuilder
         {
             if (changes.Problems.Count == 0)
             {
-                Add(TableDraft.TableRowKey, $"ALTER TABLE {target} MODIFY {Clause(edited.Scheme!, edited.Partitions, Q)} ONLINE");
+                // LOCAL 인덱스(PA-12): 고른 인덱스만 LOCAL, 이 테이블의 다른 인덱스는 GLOBAL 로 적어 서버 기본(접두 인덱스 → LOCAL)에 맡기지 않는다.
+                var local = edited.LocalIndexes.ToHashSet(StringComparer.Ordinal);
+                var indexes = local.Count == 0 ? string.Empty
+                    : " UPDATE INDEXES (" + string.Join(", ", edited.LocalIndexes.Select(i => Q(i) + " LOCAL")
+                        .Concat((globalIndexes ?? []).Where(i => !local.Contains(i)).Select(i => Q(i) + " GLOBAL"))) + ")";
+                Add(TableDraft.TableRowKey, $"ALTER TABLE {target} MODIFY {Clause(edited.Scheme!, edited.Partitions, Q, dialect)} ONLINE{indexes}");
             }
 
             return result;
@@ -157,13 +162,16 @@ public static class PartitionScriptBuilder
                 .OrderBy(d => editedOrder.GetValueOrDefault(d.RowKey, int.MaxValue));
     }
 
-    /// <summary>새 테이블 <c>CREATE TABLE</c> 안의 파티션 절(<c>PARTITION BY … [INTERVAL (…)] (PARTITION …, …)</c>). 하위 파티션은 만들지 않는다(TE-42).</summary>
+    /// <summary>
+    /// 새 테이블 <c>CREATE TABLE</c> 안의 파티션 절(<c>PARTITION BY … [INTERVAL (…)] [SUBPARTITION BY …] (PARTITION …, …)</c>).
+    /// 하위 파티션은 <see cref="PartitionScheme.SubpartitionTemplate"/> 가 있을 때만(TE-42·PA-11).
+    /// </summary>
     public static string CreateClause(PartitionScheme scheme, IReadOnlyList<PartitionDraft> partitions, ITableEditDialect dialect)
     {
         ArgumentNullException.ThrowIfNull(scheme);
         ArgumentNullException.ThrowIfNull(partitions);
         ArgumentNullException.ThrowIfNull(dialect);
-        return Clause(scheme, partitions, name => SqlIdentifier.Quote(name, dialect.IsReservedWord));
+        return Clause(scheme, partitions, name => SqlIdentifier.Quote(name, dialect.IsReservedWord), dialect);
     }
 
     /// <summary>
@@ -179,10 +187,10 @@ public static class PartitionScriptBuilder
             return null;
         }
 
-        return Clause(scheme, edited.Partitions, name => SqlIdentifier.Quote(name, dialect.IsReservedWord));
+        return Clause(scheme, edited.Partitions, name => SqlIdentifier.Quote(name, dialect.IsReservedWord), dialect);
     }
 
-    private static string Clause(PartitionScheme scheme, IReadOnlyList<PartitionDraft> partitions, Func<string, string> q)
+    private static string Clause(PartitionScheme scheme, IReadOnlyList<PartitionDraft> partitions, Func<string, string> q, ITableEditDialect dialect)
     {
         var method = scheme.Method switch
         {
@@ -194,6 +202,11 @@ public static class PartitionScriptBuilder
         if (scheme.Method == PartitionMethod.Range && !string.IsNullOrWhiteSpace(scheme.Interval))
         {
             text += $" INTERVAL ({scheme.Interval.Trim()})";
+        }
+
+        if (scheme.SubpartitionTemplate is { } sub)
+        {
+            text += " " + SubpartitionClause(sub, q, dialect.HashSubpartitionsAsTemplate);
         }
 
         var live = partitions.Where(p => !p.IsDropped && p.MergedInto is null).ToList();
@@ -209,6 +222,24 @@ public static class PartitionScriptBuilder
             _ => $"PARTITION {q(p.Name)}{Space(p.Tablespace, q)}",
         });
         return text + " (" + string.Join(", ", items) + ")";
+    }
+
+    /// <summary>
+    /// 하위 파티션 템플릿 절(PA-11): <c>SUBPARTITION BY LIST (c) SUBPARTITION TEMPLATE (SUBPARTITION n VALUES (…), …)</c>,
+    /// 해시 = <c>SUBPARTITION BY HASH (c) SUBPARTITIONS n</c>(방언이 개수를 못 받으면 <c>SUBPARTITION TEMPLATE (SUBPARTITION SP1, …)</c>).
+    /// </summary>
+    private static string SubpartitionClause(SubpartitionTemplate sub, Func<string, string> q, bool hashAsTemplate)
+    {
+        var keys = string.Join(", ", sub.KeyColumns.Select(q));
+        if (sub.Method == PartitionMethod.Hash)
+        {
+            return hashAsTemplate
+                ? $"SUBPARTITION BY HASH ({keys}) SUBPARTITION TEMPLATE ({string.Join(", ", Enumerable.Range(1, Math.Max(1, sub.HashCount)).Select(i => "SUBPARTITION SP" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)))})"
+                : $"SUBPARTITION BY HASH ({keys}) SUBPARTITIONS {Math.Max(1, sub.HashCount).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        }
+
+        var rows = sub.Rows.Select(r => $"SUBPARTITION {q(r.Name)} VALUES ({(string.IsNullOrWhiteSpace(r.Values) ? "DEFAULT" : r.Values.Trim())})");
+        return $"SUBPARTITION BY {(sub.Method == PartitionMethod.List ? "LIST" : "RANGE")} ({keys}) SUBPARTITION TEMPLATE ({string.Join(", ", rows)})";
     }
 
     private static string Space(string? tablespace, Func<string, string> q) =>

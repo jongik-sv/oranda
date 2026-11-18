@@ -3,7 +3,7 @@
              xmlns:te="using:Oranda.App.Features.TableEdit"
              x:Class="Oranda.App.Features.TableEdit.TableEditPartitionsView"
              x:DataType="te:TableEditSession">
-  <!-- 파티션 페이지(설계 18.4, 시안 ⑥). 위: 방식 · 키 열 · 자동 추가(INTERVAL) · 하위 파티션(보기만). 도구줄: 더하기 · 지우기 · 나누기 · 합치기 · 비우기 · 되돌리기 · 경계 채우기.
+  <!-- 파티션 페이지(설계 18.4, 시안 ⑥). 위: 방식 · 키 열 · 자동 추가(INTERVAL) · 하위 파티션(보기만, 바꾸기 중이면 하위 칸 PA-11). 도구줄: 더하기 · 지우기 · 나누기 · 합치기 · 비우기 · 되돌리기 · 경계 채우기.
        표: 이름 · 상한값(LESS THAN)/값 목록 · 테이블스페이스 · 행 수(통계). 아래: 데이터가 사라지는 편집의 경고 줄과 문장으로 못 만드는 편집의 이유. -->
   <UserControl.Styles>
     <Style Selector="TextBox.cell">
@@ -120,8 +120,48 @@
                Text="{Binding PartitionIntervalText, UpdateSourceTrigger=LostFocus}" PlaceholderText="(끔)"
                ToolTip.Tip="자동 추가 간격 식(예: NUMTOYMINTERVAL(3, 'MONTH'), 수 키는 1000). 비우면 끕니다" AutomationProperties.Name="자동 추가(INTERVAL)" />
       <TextBlock Text="하위 파티션" />
-      <TextBlock x:Name="SubpartitionText" Text="{Binding SubpartitionText}" Opacity="0.7" ToolTip.Tip="하위 파티션은 보기만 합니다" />
+      <TextBlock x:Name="SubpartitionText" Text="{Binding SubpartitionText}" Opacity="0.7" ToolTip.Tip="하위 파티션은 보기만 합니다"
+                 IsVisible="{Binding !ShowsSubpartitionEditor}" />
+      <TextBlock Text="(아래 칸에서 정함)" Opacity="0.7" IsVisible="{Binding ShowsSubpartitionEditor}" />
     </WrapPanel>
+
+    <!-- 하위 파티션 칸(PA-11): 바꾸기 중일 때만. 방식(없음·LIST·HASH) · 키 열 · LIST 템플릿 줄(이름 · 값) 또는 HASH 개수. -->
+    <Border x:Name="SubpartitionPanel" DockPanel.Dock="Top" IsVisible="{Binding ShowsSubpartitionEditor}" Padding="4,2" Margin="0,0,0,4"
+            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+      <StackPanel Spacing="2">
+        <WrapPanel Classes="fields">
+          <TextBlock Text="하위 파티션" FontWeight="SemiBold" />
+          <ComboBox x:Name="SubpartitionMethodChoice" MinWidth="90" SelectedIndex="{Binding SubpartitionMethodIndex, Mode=TwoWay}"
+                    ToolTip.Tip="파티션마다 같은 하위 파티션을 만듭니다(템플릿)" AutomationProperties.Name="하위 파티션 방식">
+            <ComboBoxItem Content="없음" />
+            <ComboBoxItem Content="LIST" />
+            <ComboBoxItem Content="HASH" />
+          </ComboBox>
+          <TextBlock Text="키 열" IsVisible="{Binding HasSubpartition}" />
+          <TextBox x:Name="SubpartitionKeyBox" Classes="cell" MinWidth="140" IsVisible="{Binding HasSubpartition}"
+                   Text="{Binding SubpartitionKeyText, UpdateSourceTrigger=LostFocus}" PlaceholderText="열" AutomationProperties.Name="하위 파티션 키 열" />
+          <TextBlock Text="개수" IsVisible="{Binding IsHashSubpartition}" />
+          <TextBox x:Name="SubpartitionCountBox" Width="60" IsVisible="{Binding IsHashSubpartition}"
+                   Text="{Binding SubpartitionHashCountText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="하위 파티션 개수" />
+          <Button x:Name="AddSubpartitionRowButton" Classes="tool" Content="＋ 줄" IsVisible="{Binding IsListSubpartition}"
+                  ToolTip.Tip="하위 파티션 줄을 더합니다(나머지 전부 줄 앞에)" AutomationProperties.Name="하위 파티션 줄 더하기" />
+          <Button x:Name="RemoveSubpartitionRowButton" Classes="tool" Content="－ 줄" IsVisible="{Binding IsListSubpartition}"
+                  ToolTip.Tip="고른 하위 파티션 줄을 뺍니다" AutomationProperties.Name="하위 파티션 줄 빼기" />
+        </WrapPanel>
+        <ListBox x:Name="SubpartitionRowList" Classes="edit-rows" MaxHeight="160" IsVisible="{Binding IsListSubpartition}"
+                 ItemsSource="{Binding SubpartitionRows}" SelectedItem="{Binding SelectedSubpartitionRow, Mode=TwoWay}" AutomationProperties.Name="하위 파티션 템플릿 표">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="te:SubpartitionRowViewModel">
+              <Grid ColumnDefinitions="180,*">
+                <TextBox Grid.Column="0" Classes="cell" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="하위 파티션 이름" />
+                <TextBox Grid.Column="1" Classes="cell" Text="{Binding ValuesText, UpdateSourceTrigger=LostFocus}" PlaceholderText="값 목록(예: A, B — 비우면 나머지 전부)"
+                         AutomationProperties.Name="하위 파티션 값 목록" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </StackPanel>
+    </Border>
     <TextBlock DockPanel.Dock="Top" x:Name="PartitionHeaderErrorText" Classes="warn" Margin="8,0,8,4" Text="{Binding PartitionHeaderError}"
                IsVisible="{Binding PartitionHeaderError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
@@ -147,6 +187,9 @@
         <TextBlock Text="│" VerticalAlignment="Center" Opacity="0.5" Margin="4,0" />
         <Button x:Name="FillBoundsButton" Classes="tool" Content="경계 채우기…" IsEnabled="{Binding CanFillBounds}" ToolTip.ShowOnDisabled="True"
                 ToolTip.Tip="「2026-01 부터 매월 12개」처럼 범위 파티션 줄을 한꺼번에 만듭니다" AutomationProperties.Name="경계 채우기" />
+        <!-- 월 추가 스크립트(PA-5): 자동 추가를 못 쓰는 범위 키 + 마지막 MAXVALUE 일 때만. -->
+        <Button x:Name="MonthAddScriptButton" Classes="tool" Content="월 추가 스크립트 저장…" IsVisible="{Binding ShowsMonthAddScript}"
+                ToolTip.Tip="{Binding MonthAddScriptTip}" AutomationProperties.Name="월 추가 스크립트 저장" />
       </StackPanel>
     </Border>
 

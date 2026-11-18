@@ -338,6 +338,148 @@ public sealed class PartitionEditIntegrationTests : IAsyncLifetime
         Assert.Equal("x", await ScalarAsync("SELECT name FROM prb WHERE id = 4"));
     }
 
+    /// <summary>
+    /// 하위 파티션 템플릿(PA-11)·LOCAL 인덱스(PA-12) 한 문장 바꾸기: 날짜 범위 + 매월 INTERVAL + LIST 하위 템플릿, 고른 인덱스만 LOCAL·나머지 GLOBAL.
+    /// 두 번째 표는 HASH 하위 개수(<c>SUBPARTITIONS n</c>). 새 달 행이 들어오면 템플릿대로 하위 파티션이 생긴다.
+    /// </summary>
+    [Fact]
+    public async Task Online_conversion_with_a_subpartition_template_and_local_indexes()
+    {
+        if (Skip(needsPartitioning: true))
+        {
+            return;
+        }
+
+        await OwnerExecAsync(
+            "CREATE TABLE ort_pa_on (id NUMBER, d DATE NOT NULL, region VARCHAR2(2), CONSTRAINT ort_pa_on_pk PRIMARY KEY (id, d))",
+            "CREATE INDEX ort_pa_on_d ON ort_pa_on (d, region)",
+            "CREATE INDEX ort_pa_on_r ON ort_pa_on (region)",
+            "INSERT INTO ort_pa_on SELECT LEVEL, DATE '2026-09-01' + LEVEL, CASE MOD(LEVEL, 3) WHEN 0 THEN 'E' WHEN 1 THEN 'W' ELSE 'Z' END FROM dual CONNECT BY LEVEL <= 60",
+            "CREATE TABLE ort_pa_oh (id NUMBER, d DATE, c NUMBER)",
+            "INSERT INTO ort_pa_oh SELECT LEVEL, DATE '2026-10-01' + LEVEL, LEVEL FROM dual CONNECT BY LEVEL <= 20",
+            "COMMIT");
+        var s = await OpenAsync();
+        if (!OracleTableEditDialect.AtLeast(s.Server, 12, 2))
+        {
+            _output.WriteLine("건너뜀: 12.2 미만은 MODIFY PARTITION BY … ONLINE 이 없다");
+            return;
+        }
+
+        var info = await NewProvider().GetTableAsync(s, Ref("ORT_PA_ON"), default);
+        var edited = new PartitionTableDraft(
+            new PartitionScheme(PartitionMethod.Range, ["D"])
+            {
+                Interval = "NUMTOYMINTERVAL(1, 'MONTH')",
+                SubpartitionTemplate = new SubpartitionTemplate(PartitionMethod.List, ["REGION"])
+                {
+                    Rows = [new SubpartitionTemplateRow("SP_E", "'E'"), new SubpartitionTemplateRow("SP_W", "'W'"), new SubpartitionTemplateRow("SP_X", "DEFAULT")],
+                },
+            },
+            [new PartitionDraft("n1", "P_BEFORE_2026_10") { Bound = "DATE '2026-10-01'" }])
+        {
+            LocalIndexes = ["ORT_PA_ON_D"], // PK 는 하위 키(REGION)를 담지 않아 LOCAL 이면 ORA-14039 — GLOBAL 로 둔다
+        };
+        var script = Build(s, "ORT_PA_ON", PartitionTableDraft.FromTable(info)!, edited, info);
+        Log(script);
+        var one = Assert.Single(script);
+        Assert.Contains("ONLINE UPDATE INDEXES (ORT_PA_ON_D LOCAL, ", one, StringComparison.Ordinal);
+        Assert.Contains("ORT_PA_ON_PK GLOBAL", one, StringComparison.Ordinal);
+        Assert.Contains("ORT_PA_ON_R GLOBAL", one, StringComparison.Ordinal);
+        await OwnerExecAsync([.. script]);
+
+        Assert.Equal("RANGE/LIST", await ScalarAsync("SELECT partitioning_type || '/' || subpartitioning_type FROM user_part_tables WHERE table_name = 'ORT_PA_ON'"));
+        Assert.Equal("ORT_PA_ON_D:LOCAL",
+            await ScalarAsync("SELECT LISTAGG(index_name || ':' || locality, ',') WITHIN GROUP (ORDER BY index_name) FROM user_part_indexes WHERE table_name = 'ORT_PA_ON'"));
+        Assert.Equal("NO:VALID,NO:VALID", await ScalarAsync("SELECT LISTAGG(partitioned || ':' || status, ',') FROM user_indexes WHERE index_name IN ('ORT_PA_ON_R', 'ORT_PA_ON_PK')"));
+        Assert.Equal("60", await ScalarAsync("SELECT COUNT(*) FROM ort_pa_on"));
+        Assert.Equal("SP_E,SP_W,SP_X", await ScalarAsync("SELECT LISTAGG(subpartition_name, ',') WITHIN GROUP (ORDER BY subpartition_position) FROM user_subpartition_templates WHERE table_name = 'ORT_PA_ON'"));
+        Assert.Equal("3", await ScalarAsync("SELECT COUNT(*) FROM user_tab_subpartitions WHERE table_name = 'ORT_PA_ON' AND partition_name = 'P_BEFORE_2026_10'"));
+        Assert.Equal("10", await ScalarAsync("SELECT COUNT(*) FROM ort_pa_on SUBPARTITION (p_before_2026_10_sp_x)"));
+
+        var hinfo = await NewProvider().GetTableAsync(s, Ref("ORT_PA_OH"), default);
+        var hash = new PartitionTableDraft(
+            new PartitionScheme(PartitionMethod.Range, ["D"]) { SubpartitionTemplate = new SubpartitionTemplate(PartitionMethod.Hash, ["C"]) { HashCount = 4 } },
+            [new PartitionDraft("n1", "P1") { Bound = "DATE '2026-10-15'" }, new PartitionDraft("n2", "P_MAX") { Bound = "MAXVALUE" }]);
+        var hscript = Build(s, "ORT_PA_OH", PartitionTableDraft.FromTable(hinfo)!, hash, hinfo);
+        Log(hscript);
+        await OwnerExecAsync([.. hscript]);
+        Assert.Equal("RANGE/HASH:8", await ScalarAsync(
+            "SELECT p.partitioning_type || '/' || p.subpartitioning_type || ':' || (SELECT COUNT(*) FROM user_tab_subpartitions s WHERE s.table_name = p.table_name) FROM user_part_tables p WHERE p.table_name = 'ORT_PA_OH'"));
+        Assert.Equal("20", await ScalarAsync("SELECT COUNT(*) FROM ort_pa_oh"));
+    }
+
+    /// <summary>
+    /// 다시 만들기 스크립트(CTAS + RENAME)에 하위 템플릿·LOCAL 인덱스(PA-11·12): 종속 DDL 의 PK 인덱스·보통 인덱스 CREATE 에 LOCAL 이 붙고, 제약은 그 LOCAL 인덱스를 쓴다.
+    /// 12.2 미만 Oracle 이 쓰는 길을 파티션 기능이 있는 서버에서 돌린다(11g XE 는 파티션 기능이 없어 ORA-00439).
+    /// </summary>
+    [Fact]
+    public async Task Rebuild_script_with_a_subpartition_template_and_local_indexes()
+    {
+        if (Skip(needsPartitioning: true))
+        {
+            return;
+        }
+
+        await OwnerExecAsync(
+            "CREATE TABLE ort_pa_rb (id NUMBER, ym VARCHAR2(8) NOT NULL, c VARCHAR2(2), CONSTRAINT ort_pa_rb_pk PRIMARY KEY (id, ym))",
+            "CREATE INDEX ort_pa_rb_ix ON ort_pa_rb (ym, c)",
+            "CREATE INDEX ort_pa_rb_g ON ort_pa_rb (c)",
+            "INSERT INTO ort_pa_rb VALUES (1, '20260105', 'A')",
+            "INSERT INTO ort_pa_rb VALUES (2, '20260212', 'B')",
+            "INSERT INTO ort_pa_rb VALUES (3, '20260301', 'A')",
+            "COMMIT");
+        var s = await OpenAsync();
+        var provider = NewProvider();
+        var info = await provider.GetTableAsync(s, Ref("ORT_PA_RB"), default);
+        var tableDdl = await provider.GetDdlAsync(s, Ref("ORT_PA_RB"), new DdlOptions { SqlTerminator = true }, default);
+        var fullDdl = await provider.GetDdlAsync(s, Ref("ORT_PA_RB"), new DdlOptions { SqlTerminator = true, IncludeDependentObjects = true }, default);
+        var edited = new PartitionTableDraft(
+            new PartitionScheme(PartitionMethod.Range, ["YM"])
+            {
+                // 하위 키 = ID(PK 가 파티션 키 YM 과 하위 키 ID 를 다 담아 LOCAL 고유 인덱스가 된다 — 안 담으면 ORA-14188).
+                SubpartitionTemplate = new SubpartitionTemplate(PartitionMethod.Hash, ["ID"]) { HashCount = 2 },
+            },
+            [new PartitionDraft("n1", "P_202601") { Bound = "'20260201'" }, new PartitionDraft("n2", "P_202602") { Bound = "'20260301'" }, new PartitionDraft("n3", "P_MAX") { Bound = "MAXVALUE" }])
+        {
+            LocalIndexes = ["ORT_PA_RB_PK", "ORT_PA_RB_IX"],
+        };
+        var clause = PartitionScriptBuilder.ConversionClause(PartitionTableDraft.FromTable(info)!, edited, _dialect)!;
+        var dependent = Oranda.Core.Schema.ColumnReorderBuilder.WithLocalIndexes(Oranda.Core.Schema.ColumnReorderBuilder.DependentPart(tableDdl, fullDdl), edited.LocalIndexes);
+        var script = Oranda.Core.Schema.ColumnReorderBuilder.Rebuild(Ref("ORT_PA_RB"), ColumnOrdering.ByColumnId(info.Columns),
+            Oranda.Core.Schema.ColumnReorderBuilder.VisibleOrder(ColumnOrdering.ByColumnId(info.Columns)), enterprise: false, usePrimaryKey: true, dependent, partitionClause: clause);
+        _output.WriteLine(script.Replace(_owner, "<owner>", StringComparison.Ordinal));
+        await OwnerExecAsync(ScriptStatements(script));
+
+        Assert.Equal("RANGE/HASH", await ScalarAsync("SELECT partitioning_type || '/' || subpartitioning_type FROM user_part_tables WHERE table_name = 'ORT_PA_RB'"));
+        Assert.Equal("ORT_PA_RB_IX:LOCAL,ORT_PA_RB_PK:LOCAL",
+            await ScalarAsync("SELECT LISTAGG(index_name || ':' || locality, ',') WITHIN GROUP (ORDER BY index_name) FROM user_part_indexes WHERE table_name = 'ORT_PA_RB'"));
+        Assert.Equal("NO", await ScalarAsync("SELECT partitioned FROM user_indexes WHERE index_name = 'ORT_PA_RB_G'"));
+        Assert.Equal("ORT_PA_RB_PK", await ScalarAsync("SELECT index_name FROM user_constraints WHERE table_name = 'ORT_PA_RB' AND constraint_type = 'P'"));
+        Assert.Equal("1", await ScalarAsync("SELECT COUNT(*) FROM ort_pa_rb PARTITION (p_202602)"));
+        Assert.Equal("6", await ScalarAsync("SELECT COUNT(*) FROM user_tab_subpartitions WHERE table_name = 'ORT_PA_RB'"));
+        Assert.Equal("3", await ScalarAsync("SELECT COUNT(*) FROM ort_pa_rb"));
+
+        // 월 추가 스크립트(PA-5): 문자열 YYYYMMDD 키 + MAXVALUE → 다음 3달 SPLIT. MAXVALUE 의 '20260301' 행은 P_202603 으로 간다.
+        var (pinfo, now) = await ReadAsync(s, "ORT_PA_RB");
+        var plan = PartitionMonthScript.Plan(now, 3)!;
+        var month = PartitionMonthScript.Script(_owner, "ORT_PA_RB", plan, _dialect);
+        _output.WriteLine(month.Replace(_owner, "<owner>", StringComparison.Ordinal));
+        await OwnerExecAsync(ScriptStatements(month));
+        Assert.Equal("P_202601,P_202602,P_202603,P_202604,P_202605,P_MAX",
+            await ScalarAsync("SELECT LISTAGG(partition_name, ',') WITHIN GROUP (ORDER BY partition_position) FROM user_tab_partitions WHERE table_name = 'ORT_PA_RB'"));
+        Assert.Equal("1", await ScalarAsync("SELECT COUNT(*) FROM ort_pa_rb PARTITION (p_202603)"));
+        Assert.Equal("0", await ScalarAsync("SELECT COUNT(*) FROM user_indexes WHERE table_name = 'ORT_PA_RB' AND status NOT IN ('VALID', 'N/A')"));
+        Assert.Equal("0", await ScalarAsync("SELECT COUNT(*) FROM user_ind_subpartitions WHERE index_name LIKE 'ORT_PA_RB%' AND status <> 'USABLE'"));
+        Assert.NotNull(pinfo);
+    }
+
+    /// <summary>스크립트 글 → 실행할 문장(SQL*Plus 줄·주석만 있는 덩어리는 뺌).</summary>
+    private static string[] ScriptStatements(string script) =>
+        [.. Oranda.Language.Lexing.StatementSplitter.Split(script, Oranda.Core.Language.SplitOptions.Default)
+            .Where(x => x.Kind != Oranda.Core.Execution.StatementKind.SqlPlus
+                        && !x.Text.ReplaceLineEndings("\n").Split('\n').All(l => string.IsNullOrWhiteSpace(l) || l.TrimStart().StartsWith("--", StringComparison.Ordinal)))
+            .Select(x => x.Text)];
+
     /// <summary>파티션 기능이 없는 서버(11g XE·SE): 방언이 막고, 서버도 ORA-00439. 비파티션 테이블은 파티션 정보 없이 읽힌다(part 질의를 묻지 않음).</summary>
     [Fact]
     public async Task Without_the_partitioning_option_the_dialect_blocks_and_plain_tables_read()

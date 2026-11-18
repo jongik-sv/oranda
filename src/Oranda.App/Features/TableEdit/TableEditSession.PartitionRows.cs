@@ -247,7 +247,7 @@ public sealed partial class TableEditSession
         }
     }
 
-    /// <summary>하위 파티션(보기만, TE-42): 없음 또는 「HASH (CUSTOMER_ID)」.</summary>
+    /// <summary>하위 파티션(보기만, TE-42): 없음 또는 「HASH (CUSTOMER_ID)」. 바꾸기 중에는 하위 칸(<see cref="ShowsSubpartitionEditor"/>)이 대신 보인다.</summary>
     public string SubpartitionText => _partitionDraft?.Scheme is { SubpartitionMethod: { } method } scheme
         ? $"{method} ({string.Join(", ", scheme.SubpartitionKeyColumns.Select(TableEditCellText.Show))})"
         : TableEditText.T("없음", "None");
@@ -612,6 +612,7 @@ public sealed partial class TableEditSession
         RaiseEasyPartition();
         RaisePartitionRebuild();
         RaisePartitionActions();
+        SyncSubpartitionRows();
     }
 
     private void RaisePartitionActions()
