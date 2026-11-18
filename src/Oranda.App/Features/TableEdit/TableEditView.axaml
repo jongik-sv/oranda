@@ -6,54 +6,8 @@
   <!-- 객체 상세 편집 모드의 편집 표(테이블 편집기 설계 7.2~7.4, 시안 화면 0 A·③·④). 바뀐 칸 노랑 · 새 줄 초록 · 지울 줄 빨강 줄긋기.
        칸 글은 칸을 벗어날 때 모델에 들어가고(LostFocus), 그때 아래 DDL 이 다시 만들어진다. -->
   <UserControl.Styles>
-    <Style Selector="TextBox.cell">
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Padding" Value="4,1" />
-      <Setter Property="MinHeight" Value="22" />
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-    </Style>
-    <!-- 흐린 칸은 바탕 없이 글만 흐리게(테마의 비활성 바탕이 칸마다 회색 덩어리로 보이지 않게). -->
-    <Style Selector="TextBox.cell:disabled /template/ Border#PART_BorderElement">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderThickness" Value="0" />
-    </Style>
-    <Style Selector="AutoCompleteBox.cell:disabled TextBox /template/ Border#PART_BorderElement">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderThickness" Value="0" />
-    </Style>
-    <Style Selector="TextBox.cell.changed">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
-    </Style>
-    <Style Selector="AutoCompleteBox.cell">
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="MinHeight" Value="22" />
-      <Setter Property="Background" Value="Transparent" />
-    </Style>
-    <Style Selector="AutoCompleteBox.cell.changed">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
-    </Style>
-    <Style Selector="CheckBox.cell.changed">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
-    </Style>
-    <Style Selector="Border.row.added">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffAddedBrush}" />
-    </Style>
-    <Style Selector="Border.row.dropped">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffRemovedBrush}" />
-    </Style>
-    <Style Selector="Border.row.locked">
-      <Setter Property="Opacity" Value="0.55" />
-    </Style>
-    <Style Selector="Border.head TextBlock">
-      <Setter Property="Margin" Value="4,2" />
-      <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style Selector="ListBox.edit-rows ListBoxItem">
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="MinHeight" Value="0" />
-    </Style>
+    <!-- 표 모양 = 앱 격자 표 양식(Styles/GridC) + 편집 칸 공용 모양(TableEditGridStyles). -->
+    <StyleInclude Source="avares://Oranda.App/Features/TableEdit/TableEditGridStyles.axaml" />
   </UserControl.Styles>
   <DockPanel>
     <!-- 특수 테이블(임시·외부·IOT·클러스터): 열 주석·기본값만(설계 3장). -->
@@ -61,177 +15,235 @@
       <TextBlock x:Name="RestrictionText" Text="{Binding RestrictionText}" Margin="4,0" TextWrapping="Wrap" />
     </Border>
     <Panel>
-      <!-- 열 페이지(설계 7.2): # · 이름 · 형식 · 길이 · 소수 · NULL · 기본값 · 가상 식 · 주석 -->
-      <DockPanel IsVisible="{Binding IsColumnsPage}">
-        <Border DockPanel.Dock="Top" Classes="head" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
-          <Grid ColumnDefinitions="18,34,150,140,56,46,44,120,170,130,60,48,44,100,*">
-            <TextBlock Grid.Column="1" Text="#" />
-            <TextBlock Grid.Column="2" Text="이름" />
-            <TextBlock Grid.Column="3" Text="형식" />
-            <TextBlock Grid.Column="4" Text="길이" />
-            <TextBlock Grid.Column="5" Text="소수" />
-            <TextBlock Grid.Column="6" Text="NULL" />
-            <TextBlock Grid.Column="7" Text="기본값" />
-            <TextBlock Grid.Column="8" Text="가상 식" />
-            <TextBlock Grid.Column="9" Text="신원" />
-            <TextBlock Grid.Column="10" Text="시작" />
-            <TextBlock Grid.Column="11" Text="증가" />
-            <TextBlock Grid.Column="12" Text="숨김" />
-            <TextBlock Grid.Column="13" Text="도메인" />
-            <TextBlock Grid.Column="14" Text="주석" />
-          </Grid>
-        </Border>
-        <ListBox x:Name="ColumnRows" Classes="edit-rows" ItemsSource="{Binding Columns}" SelectedItem="{Binding SelectedColumn, Mode=TwoWay}"
-                 AutomationProperties.Name="열 편집 표">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="te:ColumnRowViewModel">
-              <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" ToolTip.Tip="{Binding Error}">
-                <Panel>
-                  <Grid ColumnDefinitions="18,34,150,140,56,46,44,120,170,130,60,48,44,100,*">
-                    <TextBlock Grid.Column="0" Text="{Binding StateMark}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding PositionText}" Margin="4,0" VerticalAlignment="Center" />
-                    <TextBox Grid.Column="2" Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditName}"
-                             Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
-                    <AutoCompleteBox Grid.Column="3" Classes="cell" Classes.changed="{Binding IsTypeChanged}" IsEnabled="{Binding CanEditType}"
-                                     ItemsSource="{Binding Session.TypeNames}" FilterMode="StartsWithOrdinal" MinimumPrefixLength="0"
-                                     Text="{Binding DataType, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="형식" />
-                    <TextBox Grid.Column="4" Classes="cell" Classes.changed="{Binding IsTypeChanged}" IsEnabled="{Binding CanEditLength}"
-                             Text="{Binding LengthText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="길이" />
-                    <TextBox Grid.Column="5" Classes="cell" Classes.changed="{Binding IsTypeChanged}" IsEnabled="{Binding CanEditScale}"
-                             Text="{Binding ScaleText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="소수" />
-                    <CheckBox Grid.Column="6" Classes="cell" Classes.changed="{Binding IsNullableChanged}" IsEnabled="{Binding CanEditNullable}"
-                              IsChecked="{Binding IsNullable}" HorizontalAlignment="Center" AutomationProperties.Name="NULL" />
-                    <TextBox Grid.Column="7" Classes="cell" Classes.changed="{Binding IsDefaultChanged}" IsEnabled="{Binding CanEditDefault}"
-                             Text="{Binding DefaultValue, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="기본값" />
-                    <TextBox Grid.Column="8" Classes="cell" Classes.changed="{Binding IsVirtualChanged}" IsEnabled="{Binding CanEditVirtual}"
-                             Text="{Binding VirtualExpression, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="가상 식" />
-                    <!-- 신원·숨김·도메인(설계 18.5). 방언이 못 하면 흐리고 이유를 툴팁으로(18.8). 속성을 못 읽은 신원 열은 「신원 없애기」만. -->
-                    <Panel Grid.Column="9" ToolTip.Tip="{Binding IdentityTip}" ToolTip.ShowOnDisabled="True">
-                      <ComboBox Classes="cell" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentity}" IsVisible="{Binding !IsIdentityUnknown}"
-                                SelectedIndex="{Binding IdentityIndex}" HorizontalAlignment="Stretch" AutomationProperties.Name="신원">
-                        <ComboBoxItem Content="없음" />
-                        <ComboBoxItem Content="ALWAYS" />
-                        <ComboBoxItem Content="BY DEFAULT" />
-                        <ComboBoxItem Content="ON NULL" />
-                      </ComboBox>
-                      <Button Classes="tool" Content="신원 없애기" IsVisible="{Binding IsIdentityUnknown}" IsEnabled="{Binding CanDropUnknownIdentity}"
-                              Click="OnDropIdentityClick" AutomationProperties.Name="신원 없애기" />
-                    </Panel>
-                    <TextBox Grid.Column="10" Classes="cell" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentityOptions}"
-                             Text="{Binding IdentityStartText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="신원 시작" />
-                    <TextBox Grid.Column="11" Classes="cell" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentityOptions}"
-                             Text="{Binding IdentityIncrementText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="신원 증가" />
-                    <CheckBox Grid.Column="12" Classes="cell" Classes.changed="{Binding IsInvisibleChanged}" IsEnabled="{Binding CanEditInvisible}"
-                              IsChecked="{Binding IsInvisible}" HorizontalAlignment="Center" ToolTip.Tip="{Binding InvisibleReason}" ToolTip.ShowOnDisabled="True"
-                              AutomationProperties.Name="숨김" />
-                    <TextBox Grid.Column="13" Classes="cell" Classes.changed="{Binding IsDomainChanged}" IsEnabled="{Binding CanEditDomain}"
-                             Text="{Binding Domain, UpdateSourceTrigger=LostFocus}" ToolTip.Tip="{Binding DomainReason}" ToolTip.ShowOnDisabled="True"
-                             AutomationProperties.Name="도메인" />
-                    <TextBox Grid.Column="14" Classes="cell" Classes.changed="{Binding IsCommentChanged}" IsEnabled="{Binding CanEditComment}"
-                             Text="{Binding Comment, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="주석" />
-                  </Grid>
-                  <Rectangle Height="1" Fill="{DynamicResource OrandaIconRedBrush}" VerticalAlignment="Center" IsVisible="{Binding IsDropped}" IsHitTestVisible="False" />
-                </Panel>
-              </Border>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
+      <!-- 열 페이지(설계 7.2): # · 이름 · 형식 · 길이 · 소수 · NULL · 기본값 · 가상 식 · 주석.
+           창이 표보다 좁으면 머리글과 줄이 함께 가로로 스크롤한다(목록 자체의 가로 스크롤은 끈다). -->
+      <ScrollViewer x:Name="ColumnScroll" IsVisible="{Binding IsColumnsPage}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Classes="grid-c-header">
+            <Grid ColumnDefinitions="24,36,150,140,60,52,48,130,170,110,72,64,48,110,*" MinHeight="24">
+              <Border Grid.Column="0" Classes="grid-c-cell mark" />
+              <Border Grid.Column="1" Classes="grid-c-cell num"><TextBlock Text="#" /></Border>
+              <Border Grid.Column="2" Classes="grid-c-cell"><TextBlock Text="이름" /></Border>
+              <Border Grid.Column="3" Classes="grid-c-cell"><TextBlock Text="형식" /></Border>
+              <Border Grid.Column="4" Classes="grid-c-cell num"><TextBlock Text="길이" /></Border>
+              <Border Grid.Column="5" Classes="grid-c-cell num"><TextBlock Text="소수" /></Border>
+              <Border Grid.Column="6" Classes="grid-c-cell mark"><TextBlock Text="NULL" /></Border>
+              <Border Grid.Column="7" Classes="grid-c-cell"><TextBlock Text="기본값" /></Border>
+              <Border Grid.Column="8" Classes="grid-c-cell"><TextBlock Text="가상 식" /></Border>
+              <Border Grid.Column="9" Classes="grid-c-cell"><TextBlock Text="신원" /></Border>
+              <Border Grid.Column="10" Classes="grid-c-cell num"><TextBlock Text="시작" /></Border>
+              <Border Grid.Column="11" Classes="grid-c-cell num"><TextBlock Text="증가" /></Border>
+              <Border Grid.Column="12" Classes="grid-c-cell mark"><TextBlock Text="숨김" /></Border>
+              <Border Grid.Column="13" Classes="grid-c-cell"><TextBlock Text="도메인" /></Border>
+              <Border Grid.Column="14" Classes="grid-c-cell"><TextBlock Text="주석" /></Border>
+            </Grid>
+          </Border>
+          <ListBox x:Name="ColumnRows" Classes="grid-c edit-rows" ItemsSource="{Binding Columns}" SelectedItem="{Binding SelectedColumn, Mode=TwoWay}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="열 편집 표">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="te:ColumnRowViewModel">
+                <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" ToolTip.Tip="{Binding Error}">
+                  <Panel>
+                    <Grid ColumnDefinitions="24,36,150,140,60,52,48,130,170,110,72,64,48,110,*">
+                      <Border Grid.Column="0" Classes="grid-c-cell row-head mark"><TextBlock Text="{Binding StateMark}" /></Border>
+                      <Border Grid.Column="1" Classes="grid-c-cell num"><TextBlock Text="{Binding PositionText}" Opacity="0.6" /></Border>
+                      <Border Grid.Column="2" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditName}"
+                                 Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
+                      </Border>
+                      <Border Grid.Column="3" Classes="grid-c-cell">
+                        <AutoCompleteBox Classes="cell" Classes.changed="{Binding IsTypeChanged}" IsEnabled="{Binding CanEditType}"
+                                         ItemsSource="{Binding Session.TypeNames}" FilterMode="StartsWithOrdinal" MinimumPrefixLength="0"
+                                         Text="{Binding DataType, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="형식" />
+                      </Border>
+                      <Border Grid.Column="4" Classes="grid-c-cell">
+                        <TextBox Classes="cell num" Classes.changed="{Binding IsTypeChanged}" IsEnabled="{Binding CanEditLength}"
+                                 Text="{Binding LengthText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="길이" />
+                      </Border>
+                      <Border Grid.Column="5" Classes="grid-c-cell">
+                        <TextBox Classes="cell num" Classes.changed="{Binding IsTypeChanged}" IsEnabled="{Binding CanEditScale}"
+                                 Text="{Binding ScaleText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="소수" />
+                      </Border>
+                      <Border Grid.Column="6" Classes="grid-c-cell" Classes.changed="{Binding IsNullableChanged}">
+                        <CheckBox Classes="cell" Classes.changed="{Binding IsNullableChanged}" IsEnabled="{Binding CanEditNullable}"
+                                  IsChecked="{Binding IsNullable}" AutomationProperties.Name="NULL" />
+                      </Border>
+                      <Border Grid.Column="7" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsDefaultChanged}" IsEnabled="{Binding CanEditDefault}"
+                                 Text="{Binding DefaultValue, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="기본값" />
+                      </Border>
+                      <Border Grid.Column="8" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsVirtualChanged}" IsEnabled="{Binding CanEditVirtual}"
+                                 Text="{Binding VirtualExpression, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="가상 식" />
+                      </Border>
+                      <!-- 신원·숨김·도메인(설계 18.5). 방언이 못 하면 흐리고 이유를 툴팁으로(18.8). 속성을 못 읽은 신원 열은 「신원 없애기」만. -->
+                      <Border Grid.Column="9" Classes="grid-c-cell" ToolTip.Tip="{Binding IdentityTip}" ToolTip.ShowOnDisabled="True">
+                        <Panel>
+                          <ComboBox Classes="cell" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentity}" IsVisible="{Binding !IsIdentityUnknown}"
+                                    SelectedIndex="{Binding IdentityIndex}" AutomationProperties.Name="신원">
+                            <ComboBoxItem Content="없음" />
+                            <ComboBoxItem Content="ALWAYS" />
+                            <ComboBoxItem Content="BY DEFAULT" />
+                            <ComboBoxItem Content="ON NULL" />
+                          </ComboBox>
+                          <Button Classes="tool" Content="신원 없애기" IsVisible="{Binding IsIdentityUnknown}" IsEnabled="{Binding CanDropUnknownIdentity}"
+                                  Click="OnDropIdentityClick" AutomationProperties.Name="신원 없애기" />
+                        </Panel>
+                      </Border>
+                      <Border Grid.Column="10" Classes="grid-c-cell">
+                        <TextBox Classes="cell num" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentityOptions}"
+                                 Text="{Binding IdentityStartText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="신원 시작" />
+                      </Border>
+                      <Border Grid.Column="11" Classes="grid-c-cell">
+                        <TextBox Classes="cell num" Classes.changed="{Binding IsIdentityChanged}" IsEnabled="{Binding CanEditIdentityOptions}"
+                                 Text="{Binding IdentityIncrementText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="신원 증가" />
+                      </Border>
+                      <Border Grid.Column="12" Classes="grid-c-cell" Classes.changed="{Binding IsInvisibleChanged}">
+                        <CheckBox Classes="cell" Classes.changed="{Binding IsInvisibleChanged}" IsEnabled="{Binding CanEditInvisible}"
+                                  IsChecked="{Binding IsInvisible}" ToolTip.Tip="{Binding InvisibleReason}" ToolTip.ShowOnDisabled="True"
+                                  AutomationProperties.Name="숨김" />
+                      </Border>
+                      <Border Grid.Column="13" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsDomainChanged}" IsEnabled="{Binding CanEditDomain}"
+                                 Text="{Binding Domain, UpdateSourceTrigger=LostFocus}" ToolTip.Tip="{Binding DomainReason}" ToolTip.ShowOnDisabled="True"
+                                 AutomationProperties.Name="도메인" />
+                      </Border>
+                      <Border Grid.Column="14" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsCommentChanged}" IsEnabled="{Binding CanEditComment}"
+                                 Text="{Binding Comment, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="주석" />
+                      </Border>
+                    </Grid>
+                    <Rectangle Classes="strike" IsVisible="{Binding IsDropped}" />
+                  </Panel>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </ScrollViewer>
 
       <!-- 제약 페이지(설계 7.3, 시안 ③): 이름 · 종류 · 열 · 참조 · 삭제 규칙 · 조건 · 사용 -->
-      <DockPanel IsVisible="{Binding IsConstraintsPage}">
-        <Border DockPanel.Dock="Top" Classes="head" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
-          <Grid ColumnDefinitions="18,190,56,170,220,110,*,44">
-            <TextBlock Grid.Column="1" Text="이름" />
-            <TextBlock Grid.Column="2" Text="종류" />
-            <TextBlock Grid.Column="3" Text="열" />
-            <TextBlock Grid.Column="4" Text="참조" />
-            <TextBlock Grid.Column="5" Text="삭제 규칙" />
-            <TextBlock Grid.Column="6" Text="조건" />
-            <TextBlock Grid.Column="7" Text="사용" />
-          </Grid>
-        </Border>
-        <ListBox x:Name="ConstraintRows" Classes="edit-rows" ItemsSource="{Binding Constraints}" SelectedItem="{Binding SelectedConstraint, Mode=TwoWay}"
-                 AutomationProperties.Name="제약 편집 표">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="te:ConstraintRowViewModel">
-              <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" ToolTip.Tip="{Binding Error}">
-                <Panel>
-                  <Grid ColumnDefinitions="18,190,56,170,220,110,*,44">
-                    <TextBlock Grid.Column="0" Text="{Binding StateMark}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <TextBox Grid.Column="1" Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditCells}"
-                             Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
-                    <TextBlock Grid.Column="2" Text="{Binding KindText}" Margin="4,0" VerticalAlignment="Center" />
-                    <TextBox Grid.Column="3" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditColumns}"
-                             Text="{Binding ColumnsText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="열" />
-                    <TextBox Grid.Column="4" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditReference}"
-                             Text="{Binding ReferenceText, UpdateSourceTrigger=LostFocus}" PlaceholderText="소유자.테이블 (열)" AutomationProperties.Name="참조" />
-                    <ComboBox Grid.Column="5" IsEnabled="{Binding CanEditReference}" IsVisible="{Binding IsForeignKey}" SelectedIndex="{Binding DeleteRuleIndex}"
-                              HorizontalAlignment="Stretch" AutomationProperties.Name="삭제 규칙">
-                      <ComboBoxItem Content="없음" />
-                      <ComboBoxItem Content="CASCADE" />
-                      <ComboBoxItem Content="SET NULL" />
-                    </ComboBox>
-                    <TextBox Grid.Column="6" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCondition}"
-                             Text="{Binding Condition, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="조건" />
-                    <CheckBox Grid.Column="7" Classes="cell" Classes.changed="{Binding IsEnabledChanged}" IsEnabled="{Binding CanEditCells}"
-                              IsChecked="{Binding IsEnabled}" HorizontalAlignment="Center" AutomationProperties.Name="사용" />
-                  </Grid>
-                  <Rectangle Height="1" Fill="{DynamicResource OrandaIconRedBrush}" VerticalAlignment="Center" IsVisible="{Binding IsDropped}" IsHitTestVisible="False" />
-                </Panel>
-              </Border>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
+      <ScrollViewer x:Name="ConstraintScroll" IsVisible="{Binding IsConstraintsPage}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Classes="grid-c-header">
+            <Grid ColumnDefinitions="24,190,64,170,220,110,*,48" MinHeight="24">
+              <Border Grid.Column="0" Classes="grid-c-cell mark" />
+              <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="이름" /></Border>
+              <Border Grid.Column="2" Classes="grid-c-cell"><TextBlock Text="종류" /></Border>
+              <Border Grid.Column="3" Classes="grid-c-cell"><TextBlock Text="열" /></Border>
+              <Border Grid.Column="4" Classes="grid-c-cell"><TextBlock Text="참조" /></Border>
+              <Border Grid.Column="5" Classes="grid-c-cell"><TextBlock Text="삭제 규칙" /></Border>
+              <Border Grid.Column="6" Classes="grid-c-cell"><TextBlock Text="조건" /></Border>
+              <Border Grid.Column="7" Classes="grid-c-cell mark"><TextBlock Text="사용" /></Border>
+            </Grid>
+          </Border>
+          <ListBox x:Name="ConstraintRows" Classes="grid-c edit-rows" ItemsSource="{Binding Constraints}" SelectedItem="{Binding SelectedConstraint, Mode=TwoWay}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="제약 편집 표">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="te:ConstraintRowViewModel">
+                <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" ToolTip.Tip="{Binding Error}">
+                  <Panel>
+                    <Grid ColumnDefinitions="24,190,64,170,220,110,*,48">
+                      <Border Grid.Column="0" Classes="grid-c-cell row-head mark"><TextBlock Text="{Binding StateMark}" /></Border>
+                      <Border Grid.Column="1" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditCells}"
+                                 Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
+                      </Border>
+                      <Border Grid.Column="2" Classes="grid-c-cell"><TextBlock Text="{Binding KindText}" /></Border>
+                      <Border Grid.Column="3" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditColumns}"
+                                 Text="{Binding ColumnsText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="열" />
+                      </Border>
+                      <Border Grid.Column="4" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditReference}"
+                                 Text="{Binding ReferenceText, UpdateSourceTrigger=LostFocus}" PlaceholderText="소유자.테이블 (열)" AutomationProperties.Name="참조" />
+                      </Border>
+                      <Border Grid.Column="5" Classes="grid-c-cell">
+                        <ComboBox Classes="cell" IsEnabled="{Binding CanEditReference}" IsVisible="{Binding IsForeignKey}" SelectedIndex="{Binding DeleteRuleIndex}"
+                                  AutomationProperties.Name="삭제 규칙">
+                          <ComboBoxItem Content="없음" />
+                          <ComboBoxItem Content="CASCADE" />
+                          <ComboBoxItem Content="SET NULL" />
+                        </ComboBox>
+                      </Border>
+                      <Border Grid.Column="6" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCondition}"
+                                 Text="{Binding Condition, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="조건" />
+                      </Border>
+                      <Border Grid.Column="7" Classes="grid-c-cell" Classes.changed="{Binding IsEnabledChanged}">
+                        <CheckBox Classes="cell" Classes.changed="{Binding IsEnabledChanged}" IsEnabled="{Binding CanEditCells}"
+                                  IsChecked="{Binding IsEnabled}" AutomationProperties.Name="사용" />
+                      </Border>
+                    </Grid>
+                    <Rectangle Classes="strike" IsVisible="{Binding IsDropped}" />
+                  </Panel>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </ScrollViewer>
 
       <!-- 인덱스 페이지(설계 7.4, 시안 ④): 이름 · 유일 · 종류 · 열(ASC/DESC) · 테이블스페이스. 제약 인덱스·NORMAL 이 아닌 인덱스는 흐림. -->
-      <DockPanel IsVisible="{Binding IsIndexesPage}">
-        <Border DockPanel.Dock="Top" Classes="head" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
-          <Grid ColumnDefinitions="18,200,44,120,*,150">
-            <TextBlock Grid.Column="1" Text="이름" />
-            <TextBlock Grid.Column="2" Text="유일" />
-            <TextBlock Grid.Column="3" Text="종류" />
-            <TextBlock Grid.Column="4" Text="열" />
-            <TextBlock Grid.Column="5" Text="테이블스페이스" />
-          </Grid>
-        </Border>
-        <ListBox x:Name="IndexRows" Classes="edit-rows" ItemsSource="{Binding Indexes}" SelectedItem="{Binding SelectedIndex, Mode=TwoWay}"
-                 AutomationProperties.Name="인덱스 편집 표">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="te:IndexRowViewModel">
-              <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" Classes.locked="{Binding !CanEditCells}"
-                      ToolTip.Tip="{Binding LockedReason}">
-                <Panel>
-                  <Grid ColumnDefinitions="18,200,44,120,*,150">
-                    <TextBlock Grid.Column="0" Text="{Binding StateMark}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <TextBox Grid.Column="1" Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditCells}"
-                             Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
-                    <CheckBox Grid.Column="2" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
-                              IsChecked="{Binding IsUnique}" HorizontalAlignment="Center" AutomationProperties.Name="유일" />
-                    <!-- 종류(설계 18.6): NORMAL·FUNCTION-BASED(열 칸에 식)·BITMAP. 그 밖의 종류는 글만(지우기만). -->
-                    <Panel Grid.Column="3" ToolTip.Tip="{Binding KindTip}" ToolTip.ShowOnDisabled="True">
-                      <ComboBox Classes="cell" IsVisible="{Binding !IsDropOnly}" IsEnabled="{Binding CanEditCells}" Classes.changed="{Binding IsDefinitionChanged}"
-                                SelectedIndex="{Binding KindIndex}" HorizontalAlignment="Stretch" AutomationProperties.Name="인덱스 종류">
-                        <ComboBoxItem Content="NORMAL" />
-                        <ComboBoxItem Content="FUNCTION-BASED" />
-                        <ComboBoxItem Content="BITMAP" />
-                      </ComboBox>
-                      <TextBlock Text="{Binding KindText}" IsVisible="{Binding IsDropOnly}" Margin="4,0" VerticalAlignment="Center" />
-                    </Panel>
-                    <TextBox Grid.Column="4" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
-                             Text="{Binding ColumnsText, UpdateSourceTrigger=LostFocus}" ToolTip.Tip="{Binding Error}"
-                             PlaceholderText="열 [DESC], … · 함수 기반은 식도" AutomationProperties.Name="열" />
-                    <TextBox Grid.Column="5" Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
-                             Text="{Binding Tablespace, UpdateSourceTrigger=LostFocus}" PlaceholderText="(기본)" AutomationProperties.Name="테이블스페이스" />
-                  </Grid>
-                  <Rectangle Height="1" Fill="{DynamicResource OrandaIconRedBrush}" VerticalAlignment="Center" IsVisible="{Binding IsDropped}" IsHitTestVisible="False" />
-                </Panel>
-              </Border>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
+      <ScrollViewer x:Name="IndexScroll" IsVisible="{Binding IsIndexesPage}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Classes="grid-c-header">
+            <Grid ColumnDefinitions="24,200,48,140,*,150" MinHeight="24">
+              <Border Grid.Column="0" Classes="grid-c-cell mark" />
+              <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="이름" /></Border>
+              <Border Grid.Column="2" Classes="grid-c-cell mark"><TextBlock Text="유일" /></Border>
+              <Border Grid.Column="3" Classes="grid-c-cell"><TextBlock Text="종류" /></Border>
+              <Border Grid.Column="4" Classes="grid-c-cell"><TextBlock Text="열" /></Border>
+              <Border Grid.Column="5" Classes="grid-c-cell"><TextBlock Text="테이블스페이스" /></Border>
+            </Grid>
+          </Border>
+          <ListBox x:Name="IndexRows" Classes="grid-c edit-rows" ItemsSource="{Binding Indexes}" SelectedItem="{Binding SelectedIndex, Mode=TwoWay}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="인덱스 편집 표">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="te:IndexRowViewModel">
+                <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" Classes.locked="{Binding !CanEditCells}"
+                        ToolTip.Tip="{Binding LockedReason}">
+                  <Panel>
+                    <Grid ColumnDefinitions="24,200,48,140,*,150">
+                      <Border Grid.Column="0" Classes="grid-c-cell row-head mark"><TextBlock Text="{Binding StateMark}" /></Border>
+                      <Border Grid.Column="1" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditCells}"
+                                 Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
+                      </Border>
+                      <Border Grid.Column="2" Classes="grid-c-cell" Classes.changed="{Binding IsDefinitionChanged}">
+                        <CheckBox Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
+                                  IsChecked="{Binding IsUnique}" AutomationProperties.Name="유일" />
+                      </Border>
+                      <!-- 종류(설계 18.6): NORMAL·FUNCTION-BASED(열 칸에 식)·BITMAP. 그 밖의 종류는 글만(지우기만). -->
+                      <Border Grid.Column="3" Classes="grid-c-cell" ToolTip.Tip="{Binding KindTip}" ToolTip.ShowOnDisabled="True">
+                        <Panel>
+                          <ComboBox Classes="cell" IsVisible="{Binding !IsDropOnly}" IsEnabled="{Binding CanEditCells}" Classes.changed="{Binding IsDefinitionChanged}"
+                                    SelectedIndex="{Binding KindIndex}" AutomationProperties.Name="인덱스 종류">
+                            <ComboBoxItem Content="NORMAL" />
+                            <ComboBoxItem Content="FUNCTION-BASED" />
+                            <ComboBoxItem Content="BITMAP" />
+                          </ComboBox>
+                          <TextBlock Text="{Binding KindText}" IsVisible="{Binding IsDropOnly}" Margin="6,0" VerticalAlignment="Center" />
+                        </Panel>
+                      </Border>
+                      <Border Grid.Column="4" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
+                                 Text="{Binding ColumnsText, UpdateSourceTrigger=LostFocus}" ToolTip.Tip="{Binding Error}"
+                                 PlaceholderText="열 [DESC], … · 함수 기반은 식도" AutomationProperties.Name="열" />
+                      </Border>
+                      <Border Grid.Column="5" Classes="grid-c-cell">
+                        <TextBox Classes="cell" Classes.changed="{Binding IsDefinitionChanged}" IsEnabled="{Binding CanEditCells}"
+                                 Text="{Binding Tablespace, UpdateSourceTrigger=LostFocus}" PlaceholderText="(기본)" AutomationProperties.Name="테이블스페이스" />
+                      </Border>
+                    </Grid>
+                    <Rectangle Classes="strike" IsVisible="{Binding IsDropped}" />
+                  </Panel>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </ScrollViewer>
 
       <!-- 파티션 페이지(설계 18.4, 시안 ⑥) -->
       <te:TableEditPartitionsView x:Name="PartitionsView" IsVisible="{Binding IsPartitionsPage}" />

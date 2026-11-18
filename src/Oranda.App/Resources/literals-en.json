@@ -2149,5 +2149,6 @@
   "분포 보기": "Evidence view",
   "AI 없이 통계·분포·조회 조건만 모아 봅니다": "Collects statistics, distributions and predicates without AI",
   "파티션 분포 보기": "Partition evidence view",
-  "어떤 열로 어떻게 나눌지 모르겠으면 AI 추천을 쓰세요.": "Not sure which column or how to split? Use AI advice."
+  "어떤 열로 어떻게 나눌지 모르겠으면 AI 추천을 쓰세요.": "Not sure which column or how to split? Use AI advice.",
+  "값 목록": "Values"
 }

@@ -6,34 +6,8 @@
   <!-- 파티션 페이지(설계 18.4, 시안 ⑥). 위: 방식 · 키 열 · 자동 추가(INTERVAL) · 하위 파티션(보기만, 바꾸기 중이면 하위 칸 PA-11). 도구줄: 더하기 · 지우기 · 나누기 · 합치기 · 비우기 · 되돌리기 · 경계 채우기.
        표: 이름 · 상한값(LESS THAN)/값 목록 · 테이블스페이스 · 행 수(통계). 아래: 데이터가 사라지는 편집의 경고 줄과 문장으로 못 만드는 편집의 이유. -->
   <UserControl.Styles>
-    <Style Selector="TextBox.cell">
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Padding" Value="4,1" />
-      <Setter Property="MinHeight" Value="22" />
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-    </Style>
-    <Style Selector="TextBox.cell.changed">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffChangedBrush}" />
-    </Style>
-    <Style Selector="Border.row.added">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffAddedBrush}" />
-    </Style>
-    <Style Selector="Border.row.dropped">
-      <Setter Property="Background" Value="{DynamicResource OrandaDiffRemovedBrush}" />
-    </Style>
-    <Style Selector="Border.row.merged">
-      <Setter Property="Opacity" Value="0.55" />
-    </Style>
-    <Style Selector="Border.head TextBlock">
-      <Setter Property="Margin" Value="4,2" />
-      <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style Selector="ListBox.edit-rows ListBoxItem">
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="MinHeight" Value="0" />
-    </Style>
+    <!-- 표 모양 = 앱 격자 표 양식(Styles/GridC) + 편집 칸 공용 모양(TableEditGridStyles). -->
+    <StyleInclude Source="avares://Oranda.App/Features/TableEdit/TableEditGridStyles.axaml" />
     <Style Selector="WrapPanel.fields > TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="Margin" Value="8,0,4,0" />
@@ -139,13 +113,13 @@
         <ComboBoxItem Content="HASH" />
       </ComboBox>
       <TextBlock Text="키 열" />
-      <TextBox x:Name="PartitionKeyBox" Classes="cell" MinWidth="160" IsEnabled="{Binding CanEditPartitionKeys}"
+      <TextBox x:Name="PartitionKeyBox" MinWidth="160" IsEnabled="{Binding CanEditPartitionKeys}"
                Text="{Binding PartitionKeyText, UpdateSourceTrigger=LostFocus}" PlaceholderText="열, …" AutomationProperties.Name="파티션 키 열" />
       <TextBlock Text="자동 추가" />
       <ComboBox x:Name="PartitionIntervalChoice" MinWidth="110" IsEnabled="{Binding CanEditPartitionInterval}"
                 ItemsSource="{Binding PartitionIntervalChoices}" SelectedItem="{Binding PartitionIntervalChoice, Mode=TwoWay}"
                 ToolTip.Tip="새 기간의 데이터가 들어오면 DB 가 파티션을 알아서 만듭니다(INTERVAL)" AutomationProperties.Name="자동 추가" />
-      <TextBox x:Name="PartitionIntervalBox" Classes="cell" MinWidth="220" IsEnabled="{Binding CanEditPartitionInterval}" IsVisible="{Binding ShowsIntervalText}"
+      <TextBox x:Name="PartitionIntervalBox" MinWidth="220" IsEnabled="{Binding CanEditPartitionInterval}" IsVisible="{Binding ShowsIntervalText}"
                Text="{Binding PartitionIntervalText, UpdateSourceTrigger=LostFocus}" PlaceholderText="(끔)"
                ToolTip.Tip="자동 추가 간격 식(예: NUMTOYMINTERVAL(3, 'MONTH'), 수 키는 1000). 비우면 끕니다" AutomationProperties.Name="자동 추가(INTERVAL)" />
       <TextBlock Text="하위 파티션" />
@@ -167,7 +141,7 @@
             <ComboBoxItem Content="HASH" />
           </ComboBox>
           <TextBlock Text="키 열" IsVisible="{Binding HasSubpartition}" />
-          <TextBox x:Name="SubpartitionKeyBox" Classes="cell" MinWidth="140" IsVisible="{Binding HasSubpartition}"
+          <TextBox x:Name="SubpartitionKeyBox" MinWidth="140" IsVisible="{Binding HasSubpartition}"
                    Text="{Binding SubpartitionKeyText, UpdateSourceTrigger=LostFocus}" PlaceholderText="열" AutomationProperties.Name="하위 파티션 키 열" />
           <TextBlock Text="개수" IsVisible="{Binding IsHashSubpartition}" />
           <TextBox x:Name="SubpartitionCountBox" Width="60" IsVisible="{Binding IsHashSubpartition}"
@@ -177,15 +151,29 @@
           <Button x:Name="RemoveSubpartitionRowButton" Classes="tool" Content="－ 줄" IsVisible="{Binding IsListSubpartition}"
                   ToolTip.Tip="고른 하위 파티션 줄을 뺍니다" AutomationProperties.Name="하위 파티션 줄 빼기" />
         </WrapPanel>
-        <ListBox x:Name="SubpartitionRowList" Classes="edit-rows" MaxHeight="160" IsVisible="{Binding IsListSubpartition}"
+        <Border Classes="grid-c-header" IsVisible="{Binding IsListSubpartition}">
+          <Grid ColumnDefinitions="24,180,*" MinHeight="24">
+            <Border Grid.Column="0" Classes="grid-c-cell mark" />
+            <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="이름" /></Border>
+            <Border Grid.Column="2" Classes="grid-c-cell"><TextBlock Text="값 목록" /></Border>
+          </Grid>
+        </Border>
+        <ListBox x:Name="SubpartitionRowList" Classes="grid-c edit-rows" MaxHeight="160" IsVisible="{Binding IsListSubpartition}"
                  ItemsSource="{Binding SubpartitionRows}" SelectedItem="{Binding SelectedSubpartitionRow, Mode=TwoWay}" AutomationProperties.Name="하위 파티션 템플릿 표">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="te:SubpartitionRowViewModel">
-              <Grid ColumnDefinitions="180,*">
-                <TextBox Grid.Column="0" Classes="cell" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="하위 파티션 이름" />
-                <TextBox Grid.Column="1" Classes="cell" Text="{Binding ValuesText, UpdateSourceTrigger=LostFocus}" PlaceholderText="값 목록(예: A, B — 비우면 나머지 전부)"
-                         AutomationProperties.Name="하위 파티션 값 목록" />
-              </Grid>
+              <Border Classes="row">
+                <Grid ColumnDefinitions="24,180,*">
+                  <Border Grid.Column="0" Classes="grid-c-cell row-head mark" />
+                  <Border Grid.Column="1" Classes="grid-c-cell">
+                    <TextBox Classes="cell" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="하위 파티션 이름" />
+                  </Border>
+                  <Border Grid.Column="2" Classes="grid-c-cell">
+                    <TextBox Classes="cell" Text="{Binding ValuesText, UpdateSourceTrigger=LostFocus}" PlaceholderText="값 목록(예: A, B — 비우면 나머지 전부)"
+                             AutomationProperties.Name="하위 파티션 값 목록" />
+                  </Border>
+                </Grid>
+              </Border>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
@@ -266,37 +254,48 @@
       </ItemsControl>
     </StackPanel>
 
-    <!-- 표 머리. -->
-    <Border DockPanel.Dock="Top" Classes="head" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
-      <Grid ColumnDefinitions="26,200,*,170,120">
-        <TextBlock Grid.Column="1" Text="이름" />
-        <TextBlock Grid.Column="2" x:Name="BoundHeaderText" Text="{Binding BoundHeaderText}" />
-        <TextBlock Grid.Column="3" Text="테이블스페이스" />
-        <TextBlock Grid.Column="4" Text="행 수(통계)" HorizontalAlignment="Right" />
+    <!-- 표: 머리글과 줄이 함께 가로로 스크롤한다(목록 자체의 가로 스크롤은 끈다). -->
+    <ScrollViewer x:Name="PartitionScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <DockPanel>
+    <Border DockPanel.Dock="Top" Classes="grid-c-header">
+      <Grid ColumnDefinitions="24,200,*,170,120" MinHeight="24">
+        <Border Grid.Column="0" Classes="grid-c-cell mark" />
+        <Border Grid.Column="1" Classes="grid-c-cell"><TextBlock Text="이름" /></Border>
+        <Border Grid.Column="2" Classes="grid-c-cell"><TextBlock x:Name="BoundHeaderText" Text="{Binding BoundHeaderText}" /></Border>
+        <Border Grid.Column="3" Classes="grid-c-cell"><TextBlock Text="테이블스페이스" /></Border>
+        <Border Grid.Column="4" Classes="grid-c-cell num"><TextBlock Text="행 수(통계)" /></Border>
       </Grid>
     </Border>
-    <ListBox x:Name="PartitionRows" Classes="edit-rows" ItemsSource="{Binding PartitionRows}" SelectedItem="{Binding SelectedPartition, Mode=TwoWay}"
-             AutomationProperties.Name="파티션 편집 표">
+    <ListBox x:Name="PartitionRows" Classes="grid-c edit-rows" ItemsSource="{Binding PartitionRows}" SelectedItem="{Binding SelectedPartition, Mode=TwoWay}"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="파티션 편집 표">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="te:PartitionRowViewModel">
           <Border Classes="row" Classes.added="{Binding IsAdded}" Classes.dropped="{Binding IsDropped}" Classes.merged="{Binding IsMergedAway}"
                   ToolTip.Tip="{Binding Tip}">
             <Panel>
-              <Grid ColumnDefinitions="26,200,*,170,120">
-                <TextBlock Grid.Column="0" Text="{Binding StateMark}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                <TextBox Grid.Column="1" Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditName}"
-                         Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
-                <TextBox Grid.Column="2" Classes="cell" IsEnabled="{Binding CanEditBound}" PlaceholderText="{Binding BoundPlaceholder}"
-                         Text="{Binding BoundText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="경계" />
-                <TextBox Grid.Column="3" Classes="cell" IsEnabled="{Binding CanEditTablespace}"
-                         Text="{Binding Tablespace, UpdateSourceTrigger=LostFocus}" PlaceholderText="(기본)" AutomationProperties.Name="테이블스페이스" />
-                <TextBlock Grid.Column="4" Text="{Binding RowCountText}" Margin="4,0" HorizontalAlignment="Right" VerticalAlignment="Center" />
+              <Grid ColumnDefinitions="24,200,*,170,120">
+                <Border Grid.Column="0" Classes="grid-c-cell row-head mark"><TextBlock Text="{Binding StateMark}" /></Border>
+                <Border Grid.Column="1" Classes="grid-c-cell">
+                  <TextBox Classes="cell" Classes.changed="{Binding IsNameChanged}" IsEnabled="{Binding CanEditName}"
+                           Text="{Binding Name, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="이름" />
+                </Border>
+                <Border Grid.Column="2" Classes="grid-c-cell">
+                  <TextBox Classes="cell" IsEnabled="{Binding CanEditBound}" PlaceholderText="{Binding BoundPlaceholder}"
+                           Text="{Binding BoundText, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="경계" />
+                </Border>
+                <Border Grid.Column="3" Classes="grid-c-cell">
+                  <TextBox Classes="cell" IsEnabled="{Binding CanEditTablespace}"
+                           Text="{Binding Tablespace, UpdateSourceTrigger=LostFocus}" PlaceholderText="(기본)" AutomationProperties.Name="테이블스페이스" />
+                </Border>
+                <Border Grid.Column="4" Classes="grid-c-cell num"><TextBlock Text="{Binding RowCountText}" /></Border>
               </Grid>
-              <Rectangle Height="1" Fill="{DynamicResource OrandaIconRedBrush}" VerticalAlignment="Center" IsVisible="{Binding IsDropped}" IsHitTestVisible="False" />
+              <Rectangle Classes="strike" IsVisible="{Binding IsDropped}" />
             </Panel>
           </Border>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
+    </DockPanel>
+    </ScrollViewer>
   </DockPanel>
 </UserControl>
