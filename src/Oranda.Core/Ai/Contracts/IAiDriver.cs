@@ -49,6 +49,10 @@ public sealed record AiImageAttachment(string MediaType, byte[] Data);
 /// 이 요청의 글이 가림 대상 접속(운영 표시 또는 가림 설정)의 것이라 값을 가려야 하는가. 기타 CLI 는 값을 가려 보낼 수단이 없으므로 <c>false</c> 로 확인된 요청만 받는다
 /// (null 은 「확인하지 못함」 이라 막는다). 채우는 일은 요청을 만드는 쪽(튜닝 흐름·대화)의 몫이다.
 /// </param>
+/// <param name="Tier">
+/// 요청 등급(<see cref="AiCommandTiers"/>). 기본은 주 모델. 가벼운 일(<see cref="AiTier.Light"/>)은 가벼운 일 모델이 정해져 있을 때만 그쪽으로 가고,
+/// 비어 있으면 주 모델로 간다(<c>AiActiveProfile.Find(settings, tier)</c>). 이어 묻기는 첫 요청과 같은 등급으로 보낸다.
+/// </param>
 public sealed record AiRequest(
     string Prompt,
     AiContext Context,
@@ -59,7 +63,8 @@ public sealed record AiRequest(
     string? Effort = null,
     IReadOnlyList<AiImageAttachment>? Images = null,
     AiProfileExpectation? Expected = null,
-    bool? MaskingRequired = null);
+    bool? MaskingRequired = null,
+    AiTier Tier = AiTier.Main);
 
 /// <summary>
 /// 호출한 쪽이 기대하는 활성 프로필. <paramref name="ProfileId"/> 가 null 이면 시스템 CLI 의 Claude Code 를 기대한다.

@@ -1,3 +1,4 @@
+using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Settings;
 
 namespace Oranda.Core.Ai.Profiles;
@@ -54,6 +55,19 @@ public sealed record AiActiveProfile(AiActiveKind Kind, AiLlmProfile? Profile = 
 
     /// <summary>설정의 <c>Driver</c>·<c>ActiveProfileId</c>·<c>Profiles</c> 로 실행 대상을 정한다. 설정을 바꾸지 않는다.</summary>
     public static AiActiveProfile Find(AiSettings settings) => Find(settings, AiProfilePresets.SystemClis);
+
+    /// <summary>
+    /// 등급별 실행 대상(설계 §1.2). <see cref="AiTier.Light"/> 이면서 가벼운 일 모델이 대상을 골랐을 때만 그 대상을 찾고(<see cref="AiSettings.ForTier"/>), 그 밖에는 <see cref="Find(AiSettings)"/> 와 같다.
+    /// 가벼운 일 모델을 쓸 수 없으면(지워진 프로필·없는 CLI) 그 상태 그대로 돌려준다: 주 모델로 넘기지 않는다.
+    /// </summary>
+    public static AiActiveProfile Find(AiSettings settings, AiTier tier) => Find(settings, tier, AiProfilePresets.SystemClis);
+
+    /// <summary><see cref="Find(AiSettings, AiTier)"/> 에 시스템 CLI 목록을 주입하는 형태.</summary>
+    public static AiActiveProfile Find(AiSettings settings, AiTier tier, IReadOnlyList<AiSystemCliInfo> systemClis)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return Find(settings.ForTier(tier), systemClis);
+    }
 
     /// <summary>
     /// <see cref="Find(AiSettings)"/> 에 시스템 CLI 목록을 주입하는 형태(사용 가능한 줄을 시험하고, 플랫폼별 목록을 넘길 때 쓴다).

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Execution;
 
 namespace Oranda.Core.Settings;
@@ -224,6 +225,29 @@ public sealed record AiCustomCli
     public string Command { get => _command; init => _command = value ?? ""; }
 }
 
+/// <summary>
+/// 「가벼운 일 모델」(설계 §1.2·§1.3). 칸의 뜻은 주 모델의 <see cref="AiSettings.ActiveProfileId"/>·<see cref="AiSettings.SystemCliId"/>·<see cref="AiSettings.Model"/>·<see cref="AiSettings.Effort"/> 와 같다
+/// (프로필 id 가 있으면 프로필, 없으면 시스템 CLI, 그것도 없으면 Claude Code). 대상을 하나도 고르지 않았으면(<see cref="HasTarget"/> 이 거짓) 주 모델과 같다.
+/// </summary>
+public sealed record AiLightSettings
+{
+    /// <summary>쓰는 프로필 id. 목록에 없거나 읽을 수 없으면 <c>profile_missing</c> 으로 닫는다(주 모델로 넘기지 않는다).</summary>
+    public Guid? ProfileId { get; init; }
+
+    /// <summary>쓰는 시스템 CLI id(<c>codex-cli</c>·<c>custom:&lt;id&gt;</c>). null 이면 Claude Code. 프로필 id 가 있으면 보지 않는다.</summary>
+    public string? SystemCliId { get; init; }
+
+    /// <summary>Claude Code 모델 이름(<c>haiku</c> 등). null = CLI 기본.</summary>
+    public string? Model { get; init; }
+
+    /// <summary>Claude Code 추론 노력. null = CLI 기본(라우터가 가벼운 일은 <c>low</c> 로 고정한다).</summary>
+    public string? Effort { get; init; }
+
+    /// <summary>대상(프로필·시스템 CLI·Claude Code 모델)을 하나라도 골랐다. 노력만 있는 값은 대상을 고르지 않은 것으로 본다.</summary>
+    [JsonIgnore]
+    public bool HasTarget => ProfileId is not null || SystemCliId is not null || !string.IsNullOrWhiteSpace(Model);
+}
+
 /// <summary>설정 <c>ai</c> 섹션.</summary>
 public sealed record AiSettings
 {
@@ -321,6 +345,22 @@ public sealed record AiSettings
     // "customClis": null 이나 null 원소가 든 손으로 고친 파일도 받는다(빈 목록, null 원소 제거).
     private readonly IReadOnlyList<AiCustomCli> _customClis = [];
 
+    /// <summary>
+    /// 가벼운 일 모델. null = 「주 모델과 같음」(옛 설정 그대로 동작). 새 섹션이라 스키마 버전은 그대로다.
+    /// 객체가 아닌 값은 null 로, 깨진 칸은 그 칸만 읽을 수 없는 값으로 읽어 설정 파일 전체가 손상으로 취급되지 않게 한다.
+    /// </summary>
+    [JsonConverter(typeof(TolerantLightSettingsConverter))]
+    public AiLightSettings? Light { get; init; }
+
+    /// <summary>
+    /// 등급에 맞는 실행 대상 설정. <see cref="AiTier.Light"/> 이고 <see cref="Light"/> 가 대상을 골랐을 때만 주 모델 칸(프로필 id·시스템 CLI id·모델·노력)을 가벼운 일 모델 값으로 바꾼 사본을 돌려준다.
+    /// 그 밖에는 이 객체 그대로다. 사본의 <see cref="Light"/> 는 null 이고, 나머지 칸(가림·프로필 목록·실행 파일 경로 등)은 그대로 둔다.
+    /// </summary>
+    public AiSettings ForTier(AiTier tier) =>
+        tier == AiTier.Light && Light is { HasTarget: true } light
+            ? this with { ActiveProfileId = light.ProfileId, SystemCliId = light.SystemCliId, Model = light.Model, Effort = light.Effort, Light = null }
+            : this;
+
     /// <summary>읽을 수 없는 <c>systemCliId</c> 를 가리키는 id. 어떤 시스템 CLI 와도 겹치지 않는다.</summary>
     public const string UnreadableSystemCliId = "(unreadable)";
 
@@ -340,9 +380,10 @@ public sealed record AiSettings
         && ActiveProfileId == other.ActiveProfileId
         && string.Equals(SystemCliId, other.SystemCliId, StringComparison.Ordinal)
         && Profiles.SequenceEqual(other.Profiles)
-        && CustomClis.SequenceEqual(other.CustomClis);
+        && CustomClis.SequenceEqual(other.CustomClis)
+        && Equals(Light, other.Light);
 
-    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds, JoinSyntax, CustomClis.Count));
+    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds, JoinSyntax, CustomClis.Count, Light));
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>

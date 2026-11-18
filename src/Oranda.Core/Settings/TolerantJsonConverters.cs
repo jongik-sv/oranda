@@ -206,6 +206,90 @@ internal sealed class TolerantCustomCliListConverter : JsonConverter<IReadOnlyLi
 }
 
 /// <summary>
+/// <c>ai.light</c> 판독기. 객체가 아닌 값(숫자·문자열·배열)은 null(= 주 모델과 같음)로 읽는다. <c>profileId</c> 는 <see cref="TolerantActiveProfileIdConverter"/>,
+/// <c>systemCliId</c> 는 <see cref="TolerantSystemCliIdConverter"/> 와 같은 규칙이라 깨진 값이 조용히 Claude Code 로 바뀌지 않는다. 문자열이 아닌 <c>model</c>·<c>effort</c> 는 null 이다.
+/// </summary>
+internal sealed class TolerantLightSettingsConverter : JsonConverter<AiLightSettings?>
+{
+    private static readonly TolerantActiveProfileIdConverter ProfileIds = new();
+
+    private static readonly TolerantSystemCliIdConverter CliIds = new();
+
+    public override bool HandleNull => true;
+
+    public override AiLightSettings? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return null;
+        }
+
+        Guid? profileId = null;
+        string? cliId = null, model = null, effort = null;
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            var property = reader.GetString();
+            reader.Read();
+            if (string.Equals(property, "profileId", StringComparison.OrdinalIgnoreCase))
+            {
+                profileId = ProfileIds.Read(ref reader, typeof(Guid?), options);
+            }
+            else if (string.Equals(property, "systemCliId", StringComparison.OrdinalIgnoreCase))
+            {
+                cliId = CliIds.Read(ref reader, typeof(string), options);
+            }
+            else if (reader.TokenType != JsonTokenType.String)
+            {
+                reader.Skip();
+            }
+            else if (string.Equals(property, "model", StringComparison.OrdinalIgnoreCase))
+            {
+                model = reader.GetString();
+            }
+            else if (string.Equals(property, "effort", StringComparison.OrdinalIgnoreCase))
+            {
+                effort = reader.GetString();
+            }
+        }
+
+        return new AiLightSettings { ProfileId = profileId, SystemCliId = cliId, Model = model, Effort = effort };
+    }
+
+    public override void Write(Utf8JsonWriter writer, AiLightSettings? value, JsonSerializerOptions options)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStartObject();
+        writer.WritePropertyName("profileId");
+        ProfileIds.Write(writer, value.ProfileId, options);
+        writer.WritePropertyName("systemCliId");
+        CliIds.Write(writer, value.SystemCliId, options);
+        writer.WritePropertyName("model");
+        WriteText(writer, value.Model);
+        writer.WritePropertyName("effort");
+        WriteText(writer, value.Effort);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteText(Utf8JsonWriter writer, string? text)
+    {
+        if (text is null)
+        {
+            writer.WriteNullValue();
+        }
+        else
+        {
+            writer.WriteStringValue(text);
+        }
+    }
+}
+
+/// <summary>
 /// <c>ai.benchmarkTimeoutSeconds</c> 판독기. 정수가 아닌 값(문자열·소수·객체·null)과 범위 밖 정수는 예외 대신 기본값 30 으로 읽는다.
 /// 설정 파일 전체가 손상으로 취급되어 초기화되지 않게 하고, 깨진 값이 조용히 제한 없음(0)이 되지도 않게 한다.
 /// </summary>

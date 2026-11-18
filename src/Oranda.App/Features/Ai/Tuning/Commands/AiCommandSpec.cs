@@ -50,6 +50,11 @@ public abstract class AiCommandSpec
     public abstract AiAccessLevel AccessCeiling { get; }
 
     /// <summary>
+    /// 이 명령의 요청 등급(<see cref="AiCommandTiers"/>, 설계 §1.4). 기본은 주 모델이다. 가벼운 일(<see cref="AiTier.Light"/>)로 바꾸는 명령은 도구 없이 한 번에 답할 수 있어야 한다.
+    /// </summary>
+    public virtual AiTier Tier => AiTier.Main;
+
+    /// <summary>
     /// 구조 결과의 스키마. null 이면 자유 글 답만 내고 제안 반영은 없다. 값이 있으면 <see cref="TuningResult"/> 모양(<c>summary</c>·<c>rewrites</c>)으로
     /// 받아 기존 비교 창 → 새 탭 경로로 반영하고, 인덱스 경로는 꺼진다.
     /// </summary>
