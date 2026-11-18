@@ -45,7 +45,7 @@ public abstract class AiFeatureConversation : IAiChatConversation
     protected virtual AiKitRoute? Route => null;
 
     /// <summary>가리는 대화의 글 확인 창(대화당 한 번). null 이면 가리는 대화의 이어 묻기를 보내지 않는다.</summary>
-    public Func<AiImageSendNotice, CancellationToken, Task<bool>>? ConfirmText { get; init; }
+    public Func<AiImageSendNotice, CancellationToken, Task<bool>>? ConfirmText { get; set; }
 
     public bool IsRunning => _cts is not null;
 
@@ -176,12 +176,14 @@ public abstract class AiFeatureConversation : IAiChatConversation
 /// <summary>
 /// 「채팅에서 이어 보기」 로 넘어온 대화(설계 §2.1): AI 띠가 보낸 문맥과 받은 답을 그대로 첫 턴으로 보이고(다시 보내지 않는다), 이어 묻기는 같은 받는 곳·같은 모델
 /// (같은 <see cref="AiOneShotRun"/>)으로 간다. 이어받기 id 가 없으면 앞 요청과 답을 데이터로 다시 싣는다.
+/// <see cref="ForRequest"/> 로 만들면 채팅창 기능(예: PL/SQL 코드 설명)의 첫 요청을 이 대화가 채팅창에서 보낸다(<see cref="AiFeatureConversation.StartAsync"/>).
 /// </summary>
 public sealed class AiCarriedConversation : AiFeatureConversation
 {
     private readonly AiOneShotRun _run;
     private readonly string _firstPrompt;
-    private readonly string _firstAnswer;
+    private readonly IAiContextBundle? _firstBundle;
+    private string _firstAnswer;
     private readonly List<(string Question, string Answer)> _turns = [];
     private string? _resumeId;
 
@@ -202,6 +204,21 @@ public sealed class AiCarriedConversation : AiFeatureConversation
         _firstPrompt = firstPrompt;
         _firstAnswer = answer ?? string.Empty;
         _resumeId = resumeId;
+    }
+
+    private AiCarriedConversation(AiChatViewModel chat, string title, AiOneShotRun run, string firstPrompt, IAiContextBundle bundle)
+        : this(chat, title, run, firstPrompt, string.Empty, resumeId: null)
+    {
+        _firstBundle = bundle;
+    }
+
+    /// <summary>
+    /// 채팅창에서 첫 요청부터 보내는 대화(채팅창 기능, 설계 §2.1). <see cref="AiFeatureConversation.Open"/> 뒤 <see cref="AiFeatureConversation.StartAsync"/> 가 <paramref name="prompt"/> 를 보낸다.
+    /// </summary>
+    public static AiCarriedConversation ForRequest(AiChatViewModel chat, string title, AiOneShotRun run, string prompt, IAiContextBundle bundle)
+    {
+        ArgumentNullException.ThrowIfNull(bundle);
+        return new AiCarriedConversation(chat, title, run, prompt, bundle);
     }
 
     public override string Title { get; }
@@ -253,7 +270,17 @@ public sealed class AiCarriedConversation : AiFeatureConversation
 
     protected override async Task RunTurnAsync(AiFeatureTurn turn, CancellationToken ct)
     {
-        var question = turn.Question ?? throw new InvalidOperationException("이어 보기 대화의 첫 턴은 보내지 않는다.");
+        if (turn.Question is null)
+        {
+            // 첫 요청(ForRequest): 꾸러미를 담은 첫 글을 보내고, 받은 답을 이어 묻기의 앞 답으로 기억한다.
+            var bundle = _firstBundle ?? throw new InvalidOperationException("이어 보기 대화의 첫 턴은 보내지 않는다.");
+            var first = await _run.AskAsync(_firstPrompt, null, bundle, turn.OnEvent, ct).ConfigureAwait(true);
+            _resumeId = first.ResumeId;
+            _firstAnswer = first.Succeeded ? first.Text : string.Empty;
+            return;
+        }
+
+        var question = turn.Question;
         var result = await _run.AskAsync(FollowUpPrompt(question, turn.ResumeId), turn.ResumeId, bundle: null, turn.OnEvent, ct).ConfigureAwait(true);
         _resumeId = result.ResumeId ?? _resumeId;
         if (result.Succeeded)

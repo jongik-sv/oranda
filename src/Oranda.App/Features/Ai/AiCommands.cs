@@ -19,9 +19,9 @@ namespace Oranda.App.Features.Ai;
     Enablement = AiCommands.TuneEnablement, Placements = ["toolbar:main/aiTune/tuneStatement@10"])]
 [OrandaCommand(AiCommands.ExplainPlan, CommandCategory.Sql, Title = "실행 계획 해설", When = "sqlDocFocus",
     Enablement = ExplainPlanCommand.Enablement, Placements = ["toolbar:main/aiTune/explainPlan@20"])]
-[OrandaCommand(AiCommands.ExplainSql, CommandCategory.Sql, Title = "SQL 설명", When = "sqlDocFocus",
+[OrandaCommand(AiCommands.ExplainSql, CommandCategory.Sql, Title = "SQL 설명", When = AiCommands.SqlOrPlsqlFocus,
     Enablement = ExplainSqlCommand.Enablement, Placements = ["toolbar:main/aiTune/explainSql@30"])]
-[OrandaCommand(AiCommands.FixError, CommandCategory.Sql, Title = "오류 고치기", When = "sqlDocFocus",
+[OrandaCommand(AiCommands.FixError, CommandCategory.Sql, Title = "오류 고치기", When = AiCommands.SqlOrPlsqlFocus,
     Enablement = FixErrorCommand.Enablement, Placements = ["toolbar:main/aiTune/fixError@40"])]
 public sealed class AiCommandHandler : ICommandHandler
 {
@@ -39,6 +39,17 @@ public sealed class AiCommandHandler : ICommandHandler
         if (_services is null)
         {
             return Task.CompletedTask;
+        }
+
+        // PL/SQL 편집기(설계 §3.3): 설명은 「코드 설명」 채팅창, 오류 고치기는 편집기 아래 제안 막대.
+        if (context.Keys.Evaluate(AiCommands.PlsqlDocKey) && PlsqlEditor.PlsqlEditorViewModel.Active is { } plsql)
+        {
+            return context.CommandId switch
+            {
+                AiCommands.ExplainSql => PlsqlEditor.Ai.PlsqlAiActions.ExplainAsync(_services, plsql, cancellationToken),
+                AiCommands.FixError => PlsqlEditor.Ai.PlsqlAiActions.FixErrorAsync(_services, plsql, cancellationToken),
+                _ => AiTuningLauncher.For(_services).RunAsync(cancellationToken),
+            };
         }
 
         var launcher = AiTuningLauncher.For(_services);
@@ -65,6 +76,12 @@ public static class AiCommands
     public const string ExplainSql = "oranda.ai.explainSql";
 
     public const string FixError = "oranda.ai.fixError";
+
+    /// <summary>SQL 탭 또는 PL/SQL 편집기에 포커스(설명·오류 고치기는 PL/SQL 문서까지 넓힌다, 설계 §3.3).</summary>
+    public const string SqlOrPlsqlFocus = "sqlDocFocus || plsqlEditorFocus";
+
+    /// <summary>활성 문서가 PL/SQL 편집기다(작업 공간 라우터가 맞춘다).</summary>
+    public const string PlsqlDocKey = "plsqlDocActive";
 
     /// <summary>튜닝을 시작할 수 있는 조건(실행 명령과 같은 세션 조건에 AI 설정·허용 수준을 더했다).</summary>
     public const string TuneEnablement = "aiConfigured && aiAccessOn && (hasSession || dedicatedSession) && !mybatisDocActive";

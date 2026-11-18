@@ -45,8 +45,8 @@ internal sealed record FixErrorState(int Number, int? Offset, int? Line, int? Co
 /// <param name="tabs">탭 글·문장 읽기(오류 때와 같은 문장인지 대조). 앱은 호스트를 따르는 구현, 시험은 가짜를 넣는다.</param>
 public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
 {
-    /// <summary>메뉴 활성 식: 튜닝 조건에 실행 오류가 있어야 한다.</summary>
-    public const string Enablement = AiCommands.TuneEnablement + " && hasExecError";
+    /// <summary>메뉴 활성 식: 튜닝 조건에 실행 오류가 있거나 PL/SQL 문서다(설계 §3.3).</summary>
+    public const string Enablement = AiCommands.TuneEnablement + " && (hasExecError || plsqlDocActive)"; // PL/SQL 문서는 컴파일 오류가 없으면 막대가 까닭을 보인다
 
     public static FixErrorCommand Instance { get; } = new(new HostEditorTabs());
 

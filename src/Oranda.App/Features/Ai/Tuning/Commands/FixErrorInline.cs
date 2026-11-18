@@ -255,7 +255,31 @@ public static class FixErrorInlineLauncher
             return AiStripPreparation.Refuse(AiTuningLauncher.CommandOtherDocumentText);
         }
 
-        var profile = await LatestProfileAsync(services, shown, ct).ConfigureAwait(true) ?? shown;
+        var (profile, settings) = await ReadStartAsync(services, shown, ct).ConfigureAwait(true);
+        var requested = tier ?? FixErrorCommand.Instance.Tier;
+        var main = AiKitRoute.For(profile, settings, requested);
+        var document = editor.GetActiveDocument();
+        AiOneShotRun RunFor(int tokens) => NewRun(services, driver, AiKitRoute.For(profile, settings, requested, tokens), FixErrorInline.Feature);
+
+        // 시작 환경의 가림 여부는 참고용이다(명령 계약): 실제 가림은 크기로 고른 대상의 경로가 정한다.
+        var env = new AiCommandStartEnv(services, editor, profile, main.Context, source, statement, document?.TabId, main.MaskRequired);
+        return await inline.PrepareAsync(env, RunFor, settings.JoinSyntax, ct).ConfigureAwait(true);
+    }
+
+    /// <summary>앱 서비스의 감사 기록·실행 범위 등록을 붙인 한 번짜리 요청 경로.</summary>
+    internal static AiOneShotRun NewRun(IServiceProvider services, IAiDriver driver, AiKitRoute route, string feature) => new(new AiOneShotSetup(driver, route, feature)
+    {
+        Audit = services.GetService(typeof(IAgentAuditStore)) as IAgentAuditStore,
+        TrackSession = services.GetService(typeof(IAgentSessionSource)) is AppAgentSessionSource sessions ? sessions.Track : null,
+    });
+
+    /// <summary>
+    /// 시작 때 읽는 접속·설정(튜닝 시작과 같은 규칙): 접속은 저장소의 최신 값(못 읽으면 알던 사본), AI 설정은 파일에서 다시 읽은 값.
+    /// 다른 바로 처리 기능(PL/SQL 오류 고치기·코드 설명)도 같이 쓴다.
+    /// </summary>
+    internal static async Task<(ConnectionProfile Profile, AiSettings Settings)> ReadStartAsync(IServiceProvider services, ConnectionProfile known, CancellationToken ct)
+    {
+        var profile = await LatestProfileAsync(services, known, ct).ConfigureAwait(true) ?? known;
         var settingsService = services.GetService(typeof(SettingsService)) as SettingsService;
         if (settingsService is not null)
         {
@@ -269,19 +293,7 @@ public static class FixErrorInlineLauncher
             }
         }
 
-        var settings = settingsService?.Current.Ai ?? new AiSettings();
-        var requested = tier ?? FixErrorCommand.Instance.Tier;
-        var main = AiKitRoute.For(profile, settings, requested);
-        var document = editor.GetActiveDocument();
-        AiOneShotRun RunFor(int tokens) => new(new AiOneShotSetup(driver, AiKitRoute.For(profile, settings, requested, tokens), FixErrorInline.Feature)
-        {
-            Audit = services.GetService(typeof(IAgentAuditStore)) as IAgentAuditStore,
-            TrackSession = services.GetService(typeof(IAgentSessionSource)) is AppAgentSessionSource sessions ? sessions.Track : null,
-        });
-
-        // 시작 환경의 가림 여부는 참고용이다(명령 계약): 실제 가림은 크기로 고른 대상의 경로가 정한다.
-        var env = new AiCommandStartEnv(services, editor, profile, main.Context, source, statement, document?.TabId, main.MaskRequired);
-        return await inline.PrepareAsync(env, RunFor, settings.JoinSyntax, ct).ConfigureAwait(true);
+        return (profile, settingsService?.Current.Ai ?? new AiSettings());
     }
 
     private static async Task<ConnectionProfile?> LatestProfileAsync(IServiceProvider services, ConnectionProfile known, CancellationToken ct)

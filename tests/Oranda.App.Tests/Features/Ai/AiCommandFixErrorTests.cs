@@ -716,7 +716,7 @@ public class AiCommandFixErrorTests
         Assert.Equal(" (수정)", command.TabSuffix);
         Assert.False(command.ProducesReport);
         Assert.Equal("오류 고치기", command.WorkName);
-        Assert.Equal(AiCommands.TuneEnablement + " && hasExecError", FixErrorCommand.Enablement);
+        Assert.Equal(AiCommands.TuneEnablement + " && (hasExecError || plsqlDocActive)", FixErrorCommand.Enablement); // PL/SQL 문서까지 넓힘(TSK-15-07)
         Assert.NotNull(FixErrorCommand.Instance);
     }
 
