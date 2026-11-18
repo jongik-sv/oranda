@@ -178,24 +178,6 @@ public sealed class EvidenceProviderRulesTests
         Assert.Equal(100, d.SampledRows);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData(0L)]
-    [InlineData(200_000L)]
-    public void Small_or_unknown_tables_are_read_in_full(long? rows)
-    {
-        Assert.Null(EvidenceProviderRules.SamplePercentFor(rows));
-    }
-
-    [Theory]
-    [InlineData(1_000_000L, 5.0)]
-    [InlineData(200_001L, 10.0)]     // 25% 가 나오지만 10 으로 자른다
-    [InlineData(1_000_000_000L, 0.01)] // 0.005% 가 나오지만 0.01 로 올린다
-    public void Large_tables_are_sampled_to_about_fifty_thousand_rows(long rows, double expected)
-    {
-        Assert.Equal(expected, EvidenceProviderRules.SamplePercentFor(rows)!.Value, 6);
-    }
-
     [Fact]
     public void Sample_clause_uses_a_dot_and_is_empty_without_a_sample()
     {

@@ -60,7 +60,7 @@ public abstract class CatalogPartitionEvidenceProvider : IPartitionEvidenceProvi
         ArgumentException.ThrowIfNullOrWhiteSpace(column);
 
         var rowCount = await QueryAsync(s, "advisor.table_rows", NoReplacements, TableBinds(owner, table), ct).ConfigureAwait(false);
-        var percent = EvidenceProviderRules.SamplePercentFor(rowCount.Count > 0 ? Number(rowCount[0][0]) : null);
+        var percent = EvidenceSampling.PercentFor(rowCount.Count > 0 ? Number(rowCount[0][0]) : null);
         var rows = await QueryAsync(s, "advisor.date_sample", Source(owner, table, column, percent), NoBinds, ct).ConfigureAwait(false);
         return EvidenceProviderRules.DetectDateLike(rows.Select(r => Text(r[0])));
     }

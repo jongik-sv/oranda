@@ -119,10 +119,13 @@ public class PartitionEvidenceCollectorTests
 
     [Theory]
     [InlineData(null, null)]
+    [InlineData(0L, null)]
     [InlineData(200_000L, null)]
+    [InlineData(200_001L, 10.0)]
     [InlineData(1_000_000L, 5.0)]
     [InlineData(100_000_000L, 0.05)]
     [InlineData(10_000_000_000L, 0.01)]
+    [InlineData(1_000_000_000L, 0.01)]
     [InlineData(300_000L, 10.0)]
     public void Sample_percent_follows_pa_1(long? numRows, double? expected)
     {

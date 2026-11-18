@@ -24,12 +24,6 @@ public static partial class EvidenceProviderRules
     /// <summary>월별 분포가 담는 앞날 개월 수. 그보다 먼 앞날(9999-12 같은 끝 날짜)은 「나머지」로 간다.</summary>
     public const int MonthsAhead = 12;
 
-    /// <summary>표본 없이 전체를 읽는 행 수 상한(PA-1).</summary>
-    public const long FullScanRows = 200_000;
-
-    /// <summary>표본으로 읽을 목표 행 수(PA-1).</summary>
-    public const long TargetSampleRows = 50_000;
-
     /// <summary>조건을 읽을 문장 수(실행 수 순).</summary>
     public const int MaxStatements = 200;
 
@@ -310,20 +304,6 @@ public static partial class EvidenceProviderRules
             .ToList();
         var rest = Math.Max(0, totalRows - nullCount - buckets.Sum(b => b.Count));
         return new ColumnDistribution(column, DistributionKind.TopValues, buckets, totalRows, samplePercent, rest, nullCount);
-    }
-
-    /// <summary>
-    /// 표본 비율(%, PA-1): 행 수를 모르거나 <see cref="FullScanRows"/> 이하 = null(표본 없이 전체),
-    /// 그 밖 = 목표 행 수 / 행 수 × 100 을 0.01~10 사이로.
-    /// </summary>
-    public static double? SamplePercentFor(long? numRows)
-    {
-        if (numRows is not { } rows || rows <= FullScanRows)
-        {
-            return null;
-        }
-
-        return Math.Clamp((double)TargetSampleRows / rows * 100, 0.01, 10);
     }
 
     /// <summary><c>SAMPLE (p)</c> 절(앞에 공백 하나). 표본이 없으면 빈 글. 소수점은 늘 점.</summary>
