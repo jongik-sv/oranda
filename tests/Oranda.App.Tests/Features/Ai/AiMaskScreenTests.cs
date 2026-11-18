@@ -62,7 +62,8 @@ public class AiMaskScreenTests
     [Fact]
     public Task Settings_view_keeps_the_mask_checkbox_inside_the_window() => HeadlessHost.Run(() =>
     {
-        var window = new Window { Width = 640, Height = 420, Content = new AiModelSettingsView { DataContext = new AiModelSettingsPage(new AiSettings { Driver = AiDriverKind.ClaudeCode, Model = "sonnet" }) } };
+        // 가벼운 일 모델 줄이 늘어 창을 키웠다(확인란이 창 안에 들어오는지가 시험 대상).
+        var window = new Window { Width = 640, Height = 540, Content = new AiModelSettingsView { DataContext = new AiModelSettingsPage(new AiSettings { Driver = AiDriverKind.ClaudeCode, Model = "sonnet" }) } };
         window.Show();
 
         var check = ((AiModelSettingsView)window.Content!).FindControl<CheckBox>("MaskLiteralsCheck")!;

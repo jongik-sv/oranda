@@ -389,7 +389,8 @@ public class BenchmarkTimeoutScreenTests
     {
         var page = new AiModelSettingsPage(new AiSettings { Driver = AiDriverKind.ClaudeCode, Model = "sonnet", BenchmarkTimeoutSeconds = 45 });
         var view = new AiModelSettingsView { DataContext = page };
-        var window = new Window { Width = 640, Height = 560, Content = view };
+        // 가벼운 일 모델 줄이 늘어 창을 키웠다(줄이 창 안에 들어오는지가 시험 대상).
+        var window = new Window { Width = 640, Height = 680, Content = view };
         window.Show();
 
         var box = view.FindControl<TextBox>("BenchmarkTimeoutBox")!;

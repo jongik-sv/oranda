@@ -141,4 +141,12 @@ public partial class AiModelSettingsView : UserControl
             _page.Choose(choice);
         }
     }
+
+    private void OnLightChoiceClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: AiProfileChoice choice } && _page is not null)
+        {
+            _page.ChooseLight(choice);
+        }
+    }
 }

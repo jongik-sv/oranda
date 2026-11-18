@@ -40,13 +40,20 @@ public enum AiChoiceKind
 
     /// <summary>설정이 가리키는 기타 CLI 가 목록에 없다(지워졌다). 이유를 보이는 현재 선택 줄이다(고를 수 없음).</summary>
     MissingCustomCli,
+
+    /// <summary>가벼운 일 모델 칸 전용: 「주 모델과 같음」. 고르면 <c>AiSettings.Light</c> 를 null 로 둔다.</summary>
+    SameAsMain,
+
+    /// <summary>가벼운 일 모델 칸 전용: Claude Code 의 모델 이름 줄(<see cref="AiProfileChoice.Model"/>).</summary>
+    ClaudeModel,
 }
 
 /// <summary>프로필 드롭다운 한 줄.</summary>
 /// <param name="Detail">오른쪽에 흐리게 보이는 글(모델명 · 「준비 중」).</param>
 /// <param name="Reason">고를 수 없는 이유(잘못된·지워진 프로필).</param>
 /// <param name="CliId">시스템 CLI 줄의 id(<see cref="AiChoiceKind.SystemCli"/> · <see cref="AiChoiceKind.MissingCli"/>).</param>
-public sealed record AiProfileChoice(AiChoiceKind Kind, string Title, string? Detail = null, Guid? ProfileId = null, bool IsCurrent = false, string? Reason = null, string? CliId = null)
+/// <param name="Model">Claude Code 모델 줄의 모델 이름(<see cref="AiChoiceKind.ClaudeModel"/>).</param>
+public sealed record AiProfileChoice(AiChoiceKind Kind, string Title, string? Detail = null, Guid? ProfileId = null, bool IsCurrent = false, string? Reason = null, string? CliId = null, string? Model = null)
 {
     public bool IsHeader => Kind == AiChoiceKind.Header;
 
@@ -56,7 +63,7 @@ public sealed record AiProfileChoice(AiChoiceKind Kind, string Title, string? De
     public bool IsRow => Kind is not (AiChoiceKind.Header or AiChoiceKind.NewProfile);
 
     /// <summary>고를 수 있는 줄.</summary>
-    public bool Selectable => Kind is AiChoiceKind.ClaudeCode or AiChoiceKind.SystemCli or AiChoiceKind.NewProfile || (Kind is AiChoiceKind.Profile or AiChoiceKind.CustomCli && Reason is null);
+    public bool Selectable => Kind is AiChoiceKind.ClaudeCode or AiChoiceKind.SystemCli or AiChoiceKind.NewProfile or AiChoiceKind.SameAsMain or AiChoiceKind.ClaudeModel || (Kind is AiChoiceKind.Profile or AiChoiceKind.CustomCli && Reason is null);
 
     /// <summary>들여쓰기 없이 체크 표시만 보이는 줄(현재 선택).</summary>
     public bool HasDetail => !string.IsNullOrEmpty(Detail ?? Reason);
@@ -211,6 +218,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
         _maskLiterals = _source.MaskLiterals;
         _benchmarkTimeoutText = _source.BenchmarkTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         _joinSyntax = _source.JoinSyntax;
+        _light = _source.Light;
         _model = string.IsNullOrWhiteSpace(_source.Model) ? KnownModels[0] : _source.Model;
         var effort = _source.Effort?.Trim().ToLowerInvariant();
         _effort = effort is not null && AiSettings.EffortLevels.Contains(effort) ? effort : DefaultEffortText;
@@ -434,6 +442,7 @@ public sealed partial class AiModelSettingsPage : ObservableObject
             MaskLiterals = MaskLiterals,
             BenchmarkTimeoutSeconds = ParsedBenchmarkTimeout ?? current.BenchmarkTimeoutSeconds, // 올바르지 않은 글은 저장하지 않는다
             JoinSyntax = JoinSyntax,
+            Light = _light,
         };
     }
 
