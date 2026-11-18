@@ -114,7 +114,7 @@
                                 IsEnabled="{Binding CanSaveTableEditScript}" ToolTip.Tip="이 편집의 DDL 을 .sql 파일로 저장합니다(의뢰용 형식)" AutomationProperties.Name="스크립트 저장" />
                         <!-- 개발·테스트는 「실행」이 기본(강조), 운영은 「스크립트 저장…」을 강조하고 「실행」은 보통 단추(설계 7.7). -->
                         <Button x:Name="RunTableEditButton" Classes="tool" Classes.accent="{Binding RunIsDefault}" Content="실행" MinWidth="64"
-                                IsEnabled="{Binding CanRunTableEdit}" ToolTip.Tip="실행 전 검사를 한 뒤 위 DDL 을 차례로 실행합니다" AutomationProperties.Name="편집 실행" />
+                                IsEnabled="{Binding CanRunTableEdit}" ToolTip.Tip="{Binding RunTableEditTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="편집 실행" />
                       </StackPanel>
                       <Panel />
                     </DockPanel>

@@ -26,8 +26,8 @@ public sealed partial class ObjectDetailViewModel
     /// <summary>「묶음에 넣기 ▾」가 보인다(편집 중이고 반영 묶음 기능이 있다).</summary>
     public bool CanAddToBundle => TableEdit is not null && ResolveBundles() is not null;
 
-    /// <summary>「묶음에 넣기 ▾」를 누를 수 있다(문장이 있고 실행 중이 아님).</summary>
-    public bool CanAddToBundleNow => CanAddToBundle && CanSaveTableEditScript && !IsTableEditRunning;
+    /// <summary>「묶음에 넣기 ▾」를 누를 수 있다(문장이 있고 실행 중이 아님). 파티션 바꾸기를 다시 만들기 스크립트로만 하는 상태면 막는다(검토 뒤 직접 실행할 글이라).</summary>
+    public bool CanAddToBundleNow => CanAddToBundle && HasTableEditStatements && !NeedsTableEditRebuild && !IsTableEditRunning;
 
     /// <summary>
     /// 지금 편집의 문장을 묶음에 넣는다. <paramref name="newBundle"/> 이면 이름을 물어 새 묶음을 만들고 「지금 묶음」으로 둔 뒤 넣는다.

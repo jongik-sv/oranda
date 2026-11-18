@@ -94,8 +94,61 @@ public sealed partial class TableEditSession
     public bool ShowsPartitionRebuild => NeedsPartitionRebuild && (_openPartitionRebuild is not null || _savePartitionRebuild is not null);
 
     /// <summary>스크립트를 만들 수 있다(키 열·첫 파티션까지 정함).</summary>
-    public bool CanUsePartitionRebuild => ShowsPartitionRebuild && PartitionRebuildClause is not null
+    public bool CanUsePartitionRebuild => ShowsPartitionRebuild && IsPartitionRebuildReady;
+
+    /// <summary>
+    /// 파티션 바꾸기를 다시 만들기 스크립트로 진행하는 상태(바꾸기 중·한 문장 없음·키 열과 첫 파티션까지 정함). 아래 줄 요약·DDL 미리보기·「스크립트 저장…」이
+    /// 이 글을 쓰고 「실행」은 막는다. 객체 상세가 단추를 넣었는지와 상관없다.
+    /// </summary>
+    public bool IsPartitionRebuildReady => NeedsPartitionRebuild && PartitionRebuildClause is not null
         && (CurrentPartitionMethod == PartitionMethod.Hash || _partitionDraft!.Partitions.Any(p => !p.IsDropped && p.MergedInto is null && !string.IsNullOrWhiteSpace(p.Bound)));
+
+    /// <summary>아래 줄 안내: 파티션 바꾸기는 다시 만들기 스크립트로(실행 단추로는 하지 않음).</summary>
+    public static string PartitionRebuildNote => TableEditText.T(
+        "파티션 바꾸기는 다시 만들기 스크립트로 진행합니다(검토 뒤 직접 실행)", "The partition conversion goes through the rebuild script (review it, then run it yourself)");
+
+    /// <summary>「실행」이 막힌 이유(다시 만들기 상태).</summary>
+    public static string PartitionRebuildRunTip => TableEditText.T(
+        "이 서버는 한 문장으로 파티션 테이블로 바꾸지 못해 실행 단추로는 하지 않습니다 — 다시 만들기 스크립트를 검토한 뒤 직접 실행하세요",
+        "This server cannot convert to a partitioned table in one statement, so Run does not do it — review the rebuild script and run it yourself");
+
+    private (string Key, string Script)? _partitionRebuildPreview;
+
+    /// <summary>미리보기 스크립트가 맞는 편집 상태(절 + LOCAL 인덱스). 다시 만들기 상태가 아니면 null. 객체 상세가 이 값이 바뀔 때 스크립트를 새로 만든다.</summary>
+    public string? PartitionRebuildPreviewKey => IsPartitionRebuildReady
+        ? PartitionRebuildClause + "|" + string.Join(",", _partitionDraft?.LocalIndexes ?? [])
+        : null;
+
+    /// <summary>객체 상세가 만든 다시 만들기 스크립트(미리보기용). <paramref name="key"/> 가 지금 <see cref="PartitionRebuildPreviewKey"/> 와 같을 때만 보인다.</summary>
+    public void SetPartitionRebuildPreview(string key, string script)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(script);
+        _partitionRebuildPreview = (key, script);
+        OnPropertyChanged(nameof(PreviewText));
+    }
+
+    /// <summary>지금 상태에 맞는 미리보기 다시 만들기 스크립트. 아직 없으면 null.</summary>
+    public string? PartitionRebuildPreview =>
+        _partitionRebuildPreview is { } p && PartitionRebuildPreviewKey is { } key && p.Key == key ? p.Script : null;
+
+    /// <summary>
+    /// 다시 만들기 스크립트 뒤에 다른 변경 문장(있으면)을 붙인 글. 다시 만들기가 먼저: 스크립트는 지금 서버의 열로 만든 것이라, 다른 변경(열 더하기 등)은
+    /// 다시 만든 테이블에 이어서 한다.
+    /// </summary>
+    public static string WithPartitionRebuild(string rebuildScript, string? otherChanges)
+    {
+        ArgumentNullException.ThrowIfNull(rebuildScript);
+        if (string.IsNullOrWhiteSpace(otherChanges))
+        {
+            return rebuildScript;
+        }
+
+        var nl = Environment.NewLine;
+        return rebuildScript.TrimEnd() + nl + nl
+            + "-- " + TableEditText.T("다른 변경(다시 만들기 스크립트 뒤에 실행)", "Other changes (run after the rebuild script)") + nl
+            + otherChanges;
+    }
 
     /// <summary>객체 상세가 넣는 「편집기로 열기」(다시 만들기 스크립트를 새 SQL 탭에). null = 그 길이 없음.</summary>
     public Func<Task>? OpenPartitionRebuild
@@ -128,6 +181,8 @@ public sealed partial class TableEditSession
         OnPropertyChanged(nameof(NeedsPartitionRebuild));
         OnPropertyChanged(nameof(ShowsPartitionRebuild));
         OnPropertyChanged(nameof(CanUsePartitionRebuild));
+        OnPropertyChanged(nameof(IsPartitionRebuildReady));
+        OnPropertyChanged(nameof(PartitionRebuildPreviewKey));
         OnPropertyChanged(nameof(PartitionRebuildClause));
         OnPropertyChanged(nameof(ShowsPartitionMethodReason));
     }

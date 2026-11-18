@@ -76,8 +76,15 @@ public sealed partial class ObjectDetailViewModel
     /// <summary>편집 표·도구줄을 쓸 수 있다(실행 중이 아님).</summary>
     public bool CanEditTable => !IsTableEditRunning;
 
-    /// <summary>「실행」을 누를 수 있다(문장이 있고 읽기 전용 접속이 아니고 실행 중이 아니고 다시 읽기를 기다리지 않음).</summary>
-    public bool CanRunTableEdit => CanSaveTableEditScript && !IsTableEditRunning && !TableEditNeedsRefresh && _session is { Profile.ReadOnly: false };
+    /// <summary>
+    /// 「실행」을 누를 수 있다(문장이 있고 읽기 전용 접속이 아니고 실행 중이 아니고 다시 읽기를 기다리지 않음). 파티션 바꾸기를 다시 만들기 스크립트로만 하는 서버면
+    /// 막는다(<see cref="RunTableEditTip"/> 에 이유).
+    /// </summary>
+    public bool CanRunTableEdit => HasTableEditStatements && !NeedsTableEditRebuild && !IsTableEditRunning && !TableEditNeedsRefresh && _session is { Profile.ReadOnly: false };
+
+    /// <summary>「실행」 단추 도움말(막힌 이유가 다시 만들기면 그 이유, 흐린 단추에도 보인다).</summary>
+    public string RunTableEditTip => NeedsTableEditRebuild ? TableEditSession.PartitionRebuildRunTip
+        : TableEditText.T("실행 전 검사를 한 뒤 위 DDL 을 차례로 실행합니다", "Checks first, then runs the DDL above in order");
 
     /// <summary>개발·테스트는 「실행」이 기본 단추, 운영은 「스크립트 저장…」을 강조한다(설계 7.7).</summary>
     public bool RunIsDefault => !IsProductionConnection;
@@ -369,6 +376,7 @@ public sealed partial class ObjectDetailViewModel
     partial void OnTableEditStateChanged()
     {
         OnPropertyChanged(nameof(CanRunTableEdit));
+        OnPropertyChanged(nameof(RunTableEditTip));
         OnPropertyChanged(nameof(RunIsDefault));
         TableEditFindings = []; // 편집이 바뀌면 지난 검사 줄은 맞지 않는다
         if (TableEdit is null)

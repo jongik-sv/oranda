@@ -115,8 +115,16 @@ public sealed partial class ObjectDetailViewModel
         _ => TableEditText.T("개발", "Development"),
     };
 
-    /// <summary>「스크립트 저장…」·복사·편집기로 열기: 문장이 있다(✖ 가 있어도 저장은 된다, TE-19).</summary>
-    public bool CanSaveTableEditScript => TableEdit is { ScriptError: null, Script.IsEmpty: false };
+    /// <summary>
+    /// 「스크립트 저장…」·복사·편집기로 열기: 문장이 있다(✖ 가 있어도 저장은 된다, TE-19). 파티션 바꾸기를 다시 만들기 스크립트로 하는 상태도 된다(그 스크립트를 저장).
+    /// </summary>
+    public bool CanSaveTableEditScript => HasTableEditStatements || TableEdit is { ScriptError: null, IsPartitionRebuildReady: true };
+
+    /// <summary>실행·묶음에 넣을 문장이 있다(빌더가 만든 문장).</summary>
+    private bool HasTableEditStatements => TableEdit is { ScriptError: null, Script.IsEmpty: false };
+
+    /// <summary>파티션 바꾸기가 다시 만들기 스크립트로만 된다: 「실행」·「묶음에 넣기」는 막는다(한 문장으로 못 바꾸는 서버, TE-41).</summary>
+    private bool NeedsTableEditRebuild => TableEdit is { NeedsPartitionRebuild: true };
 
     /// <summary>시험용: 저장 파일 고르기(기본 = 편집기 대화상자의 저장 창). null = 취소.</summary>
     internal Func<string, CancellationToken, Task<string?>>? PickScriptFile { get; set; }
@@ -140,11 +148,29 @@ public sealed partial class ObjectDetailViewModel
         }
 
         var name = edit.Draft.Name.Length > 0 ? edit.Draft.Name : "NEW_TABLE";
-        var text = RequestScriptWriter.Write(
+        var text = edit.Script.IsEmpty ? null : RequestScriptWriter.Write(
             new RequestScriptHeader($"{edit.Draft.Owner}.{name}", Today?.Invoke() ?? DateOnly.FromDateTime(DateTime.Now), session.Profile.Dbms),
             edit.Script.SqlStatements, Environment.NewLine);
+        var suggestedName = name + ".sql";
+        if (edit.IsPartitionRebuildReady)
+        {
+            // 파티션 바꾸기는 다시 만들기 스크립트로(TE-41): 그 스크립트를 앞에, 다른 변경은 뒤에(위 줄의 「스크립트 저장…」과 같은 파일 이름).
+            if (await BuildPartitionRebuildScriptAsync(ct) is not { } rebuild)
+            {
+                return null;
+            }
+
+            text = TableEditSession.WithPartitionRebuild(rebuild, text);
+            suggestedName = edit.Original.Name + "_partition.sql";
+        }
+
+        if (text is null)
+        {
+            return null;
+        }
+
         var pick = PickScriptFile ?? ((suggested, token) => SqlEditor.SqlEditorHost.Current.Dialogs.PickSaveFileAsync(suggested, token));
-        var path = await pick(name + ".sql", ct);
+        var path = await pick(suggestedName, ct);
         if (string.IsNullOrEmpty(path))
         {
             return null;
@@ -362,6 +388,7 @@ public sealed partial class ObjectDetailViewModel
 
     private void OnTableEditRecomputed(object? sender, EventArgs e)
     {
+        RefreshPartitionRebuildPreview();
         UpdateSectionEditCounts();
         OnPropertyChanged(nameof(CanSaveTableEditScript));
         OnPropertyChanged(nameof(CanAddRow));

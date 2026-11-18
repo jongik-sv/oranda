@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Oranda.App.Features.ObjectDetail;
 using Oranda.App.Features.TableEdit;
 using Oranda.Core.Connection;
@@ -5,6 +6,7 @@ using Oranda.Core.Execution;
 using Oranda.Core.Metadata;
 using Oranda.Core.Schema;
 using Oranda.Core.Schema.TableEdit;
+using Oranda.App.Tests.Shell.Headless;
 using static Oranda.App.Tests.Features.TableEdit.TableEditPartitionSessionTests;
 using static Oranda.App.Tests.Features.TableEdit.TableEditTestSupport;
 
@@ -145,6 +147,128 @@ public class TableEditPartitionRebuildTests
         Assert.Equal("-- rebuild", await File.ReadAllTextAsync(path));
     }
 
+    [Fact]
+    public void Bottom_bar_says_the_conversion_goes_through_the_rebuild_script_instead_of_no_changes()
+    {
+        var s = Old();
+        Assert.Equal("바뀐 것 없음", s.SummaryText);
+
+        Assert.True(s.ApplyEasyPartitioning());
+
+        Assert.True(s.IsPartitionRebuildReady);
+        Assert.Equal("파티션 바꾸기는 다시 만들기 스크립트로 진행합니다(검토 뒤 직접 실행)", s.SummaryText);
+
+        s.TableComment = "주문 머리"; // 다른 변경이 있으면 건수를 두고 안내를 붙인다
+        Assert.Equal("변경 1건 · 파티션 바꾸기는 다시 만들기 스크립트로 진행합니다(검토 뒤 직접 실행)", s.SummaryText);
+
+        s.PartitionMethodIndex = 0; // 되돌림
+        Assert.False(s.IsPartitionRebuildReady);
+        Assert.Equal("변경 1건", s.SummaryText);
+    }
+
+    [Fact]
+    public void Preview_shows_the_rebuild_script_first_and_only_for_the_state_it_was_made_for()
+    {
+        var s = Old();
+        Assert.True(s.ApplyEasyPartitioning());
+        Assert.StartsWith("-- 다시 만들기 스크립트를 만드는 중", s.PreviewText);
+
+        var key = s.PartitionRebuildPreviewKey!;
+        s.SetPartitionRebuildPreview(key, "-- rebuild");
+        Assert.Equal("-- rebuild", s.PreviewText);
+
+        s.TableComment = "주문 머리";
+        Assert.StartsWith("-- rebuild" + Environment.NewLine + Environment.NewLine + "-- 다른 변경(다시 만들기 스크립트 뒤에 실행)", s.PreviewText);
+        Assert.Contains("COMMENT ON TABLE", s.PreviewText);
+
+        s.SetPartitionRebuildPreview("다른 절", "-- stale"); // 맞지 않는 상태의 글은 보이지 않는다
+        Assert.Null(s.PartitionRebuildPreview);
+        Assert.DoesNotContain("-- stale", s.PreviewText);
+    }
+
+    [Fact]
+    public async Task Object_detail_fills_the_preview_saves_the_rebuild_script_and_blocks_run_and_bundle()
+    {
+        var (vm, meta, _) = CreateDetail();
+        meta.Table = WithOrderDate(OrdersTable());
+        vm.TableEditDialect = new NoOnlineConversionDialect();
+        vm.RebuildScripts = new CapturingScripts();
+        using var dir = new Oranda.Testing.TempDirectory("oranda-te-rebuild-bar-");
+        Directory.CreateDirectory(dir.Path);
+        var path = Path.Combine(dir.Path, "orders_partition.sql");
+        string? suggested = null;
+        vm.PickScriptFile = (name, _) =>
+        {
+            suggested = name;
+            return Task.FromResult<string?>(path);
+        };
+        await vm.OpenAsync(new FakeSession(), Orders, showDdl: false);
+        Assert.True(await vm.SetTableEditingAsync(true));
+        var edit = vm.TableEdit!;
+        edit.Today = () => Today;
+        Assert.False(vm.CanSaveTableEditScript);
+
+        Assert.True(edit.ApplyEasyPartitioning());
+        await vm.PartitionRebuildPreviewTask;
+
+        Assert.Equal("-- rebuild", edit.PreviewText);
+        Assert.True(vm.CanSaveTableEditScript); // 저장·복사·편집기로 열기
+        Assert.False(vm.CanRunTableEdit);
+        Assert.False(vm.CanAddToBundleNow);
+        Assert.Contains("한 문장으로 파티션 테이블로 바꾸지 못해", vm.RunTableEditTip);
+        Assert.Null(await vm.RunTableEditAsync());
+
+        Assert.Equal(path, await vm.SaveTableEditScriptAsync());
+        Assert.Equal("ORDERS_partition.sql", suggested);
+        Assert.Equal("-- rebuild", await File.ReadAllTextAsync(path));
+
+        edit.TableComment = "주문 머리"; // 다른 변경도 있으면 다시 만들기 뒤에 붙는다
+        Assert.False(vm.CanRunTableEdit);
+        Assert.Equal(path, await vm.SaveTableEditScriptAsync());
+        var text = await File.ReadAllTextAsync(path);
+        Assert.StartsWith("-- rebuild", text);
+        Assert.True(text.IndexOf("COMMENT ON TABLE", StringComparison.Ordinal) > text.IndexOf("-- 다른 변경", StringComparison.Ordinal));
+
+        edit.PartitionMethodIndex = 0; // 되돌리면 실행이 다시 된다
+        Assert.True(vm.CanRunTableEdit);
+        Assert.DoesNotContain("다시 만들기", vm.RunTableEditTip);
+    }
+
+    [Fact]
+    public Task Bottom_bar_shows_the_note_the_rebuild_preview_and_a_disabled_run_with_its_reason() => HeadlessHost.Run(async () =>
+    {
+        var (vm, meta, _) = CreateDetail();
+        meta.Table = WithOrderDate(OrdersTable());
+        vm.TableEditDialect = new NoOnlineConversionDialect();
+        vm.RebuildScripts = new CapturingScripts();
+        await vm.OpenAsync(new FakeSession(), Orders, showDdl: false);
+        Assert.True(await vm.SetTableEditingAsync(true));
+        var view = new ObjectDetailView { DataContext = vm };
+        var w = new Window { Content = view, Width = 1200, Height = 760 };
+        w.Show();
+        try
+        {
+            vm.TableEdit!.Today = () => Today;
+            Assert.True(vm.TableEdit.ApplyEasyPartitioning());
+            await vm.PartitionRebuildPreviewTask;
+            HeadlessHost.Settle(w);
+
+            Assert.Equal("파티션 바꾸기는 다시 만들기 스크립트로 진행합니다(검토 뒤 직접 실행)", view.FindControl<TextBlock>("TableEditSummaryText")!.Text);
+            Assert.True(view.FindControl<Button>("SaveScriptButton")!.IsEnabled);
+            Assert.True(view.FindControl<Button>("CopyEditDdlButton")!.IsEnabled);
+            Assert.True(view.FindControl<Button>("OpenEditDdlButton")!.IsEnabled);
+            var run = view.FindControl<Button>("RunTableEditButton")!;
+            Assert.False(run.IsEnabled);
+            Assert.True(ToolTip.GetShowOnDisabled(run));
+            Assert.Contains("다시 만들기 스크립트를 검토한 뒤 직접 실행", ToolTip.GetTip(run) as string);
+            Assert.Equal("-- rebuild", view.FindControl<Oranda.App.Features.SqlEditor.SqlCodeView>("TableEditDdlView")!.Text);
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
     /// <summary>가짜 방언 + 한 문장 바꾸기 없음(Tibero 꼴).</summary>
     private sealed class NoOnlineConversionDialect : ITableEditDialect
     {
@@ -194,6 +318,7 @@ public class TableEditPartitionRebuildTests
             DbObjectRef table, IReadOnlyList<ColumnInfo> columns, bool enterprise, bool usePrimaryKey, string? dependentDdl, string partitionClause)
         {
             Clause = partitionClause;
+            Columns.Clear(); // 마지막 부름(미리보기도 부른다)
             Columns.AddRange(columns.Select(c => c.Name));
             UsePrimaryKey = usePrimaryKey;
             DependentDdl = dependentDdl;

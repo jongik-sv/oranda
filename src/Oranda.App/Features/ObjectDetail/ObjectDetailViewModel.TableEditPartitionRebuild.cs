@@ -90,6 +90,15 @@ public sealed partial class ObjectDetailViewModel
         }
     }
 
+    /// <summary>다시 만들기 스크립트에 넣는 서버 값(열·종속 DDL·에디션). 미리보기는 편집 세션마다 한 번 읽어 둔다.</summary>
+    private sealed record RebuildInputs(TableEditSession Edit, IColumnReorderScripts Scripts, DbObjectRef Target, TableInfo Table, string? DependentDdl, bool Enterprise);
+
+    private RebuildInputs? _rebuildPreviewInputs;
+    private string? _rebuildPreviewPending;
+
+    /// <summary>시험용: 마지막으로 시작한 미리보기 스크립트 만들기.</summary>
+    internal Task PartitionRebuildPreviewTask { get; private set; } = Task.CompletedTask;
+
     /// <summary>
     /// 서버에서 열과 종속 객체 DDL(제약·인덱스·트리거·권한·주석)을 새로 읽어 스크립트를 만든다. 종속 DDL 을 못 읽으면 null 로 넘긴다
     /// (Tibero 는 그때 원본을 지우지 않는 스크립트를 낸다). 만들지 못하면 null 과 상태 줄 이유.
@@ -97,8 +106,61 @@ public sealed partial class ObjectDetailViewModel
     internal async Task<string?> BuildPartitionRebuildScriptAsync(CancellationToken ct = default)
     {
         TableEdit?.FlushPendingInput?.Invoke();
-        if (TableEdit is not { CanUsePartitionRebuild: true, PartitionRebuildClause: { } clause } edit || _session is not { } basis || Target is not { } target
-            || ResolveMeta() is not { } meta)
+        return await ReadRebuildInputsAsync(ct) is { } inputs ? ComposeRebuildScript(inputs) : null;
+    }
+
+    /// <summary>
+    /// 편집이 다시 만들기 상태로 바뀌었거나 그 절이 바뀌면 DDL 미리보기에 보일 스크립트를 만든다(<see cref="OnTableEditRecomputed"/> 에서).
+    /// 서버 값은 편집 세션마다 한 번 읽고, 절·LOCAL 인덱스만 바뀌면 다시 읽지 않는다. 입력 칸을 비우지 않는다(편집 중 다시 계산이 돌지 않게).
+    /// </summary>
+    private void RefreshPartitionRebuildPreview()
+    {
+        if (TableEdit is not { } edit || edit.PartitionRebuildPreviewKey is not { } key || edit.PartitionRebuildPreview is not null
+            || key == _rebuildPreviewPending)
+        {
+            return;
+        }
+
+        if (_rebuildPreviewInputs is { } cached && ReferenceEquals(cached.Edit, edit))
+        {
+            if (ComposeRebuildScript(cached) is { } script)
+            {
+                edit.SetPartitionRebuildPreview(key, script);
+            }
+
+            return;
+        }
+
+        _rebuildPreviewPending = key;
+        PartitionRebuildPreviewTask = BuildPreviewAsync(edit, key);
+    }
+
+    private async Task BuildPreviewAsync(TableEditSession edit, string key)
+    {
+        try
+        {
+            if (await ReadRebuildInputsAsync(CancellationToken.None) is { } inputs && ReferenceEquals(TableEdit, edit))
+            {
+                _rebuildPreviewInputs = inputs;
+                if (edit.PartitionRebuildPreviewKey is { } now && ComposeRebuildScript(inputs) is { } script)
+                {
+                    edit.SetPartitionRebuildPreview(now, script);
+                }
+            }
+        }
+        finally
+        {
+            if (_rebuildPreviewPending == key)
+            {
+                _rebuildPreviewPending = null;
+            }
+        }
+    }
+
+    /// <summary>서버 값을 읽는다. 못 읽으면 null 과 상태 줄 이유.</summary>
+    private async Task<RebuildInputs?> ReadRebuildInputsAsync(CancellationToken ct)
+    {
+        if (TableEdit is not { IsPartitionRebuildReady: true } edit || _session is not { } basis || Target is not { } target || ResolveMeta() is not { } meta)
         {
             return null;
         }
@@ -133,19 +195,32 @@ public sealed partial class ObjectDetailViewModel
             dependentDdl = null; // 읽지 못함(빈 글 = 읽었는데 없음과 다르다)
         }
 
+        var enterprise = session.Server?.Edition?.Contains("Enterprise", StringComparison.OrdinalIgnoreCase) == true;
+        return new RebuildInputs(edit, scripts, target, table, dependentDdl, enterprise);
+    }
+
+    /// <summary>지금 편집의 절·LOCAL 인덱스로 스크립트 글을 만든다. 다시 만들기 상태가 아니거나 만들지 못하면 null(못 만든 이유는 상태 줄).</summary>
+    private string? ComposeRebuildScript(RebuildInputs inputs)
+    {
+        if (inputs.Edit is not { IsPartitionRebuildReady: true, PartitionRebuildClause: { } clause } edit)
+        {
+            return null;
+        }
+
         // LOCAL 인덱스(PA-12): 종속 DDL 의 그 인덱스 CREATE·제약에 LOCAL 을 붙인다. 온라인 재정의(DBMS_REDEFINITION)는 인덱스를 원본 모양 그대로
         // 복사하므로(COPY_TABLE_DEPENDENTS) LOCAL 을 고르면 CTAS + RENAME 으로 만든다.
+        var dependentDdl = inputs.DependentDdl;
         var local = edit.PartitionDraft?.LocalIndexes ?? [];
         if (local.Count > 0 && dependentDdl is not null)
         {
             dependentDdl = ColumnReorderBuilder.WithLocalIndexes(dependentDdl, local);
         }
 
-        var enterprise = local.Count == 0 && session.Server?.Edition?.Contains("Enterprise", StringComparison.OrdinalIgnoreCase) == true;
-        var usePrimaryKey = table.Constraints.Any(c => c.Kind == ConstraintKind.PrimaryKey && c.IsEnabled);
+        var enterprise = local.Count == 0 && inputs.Enterprise;
+        var usePrimaryKey = inputs.Table.Constraints.Any(c => c.Kind == ConstraintKind.PrimaryKey && c.IsEnabled);
         try
         {
-            return scripts.RebuildPartitioned(target, ColumnOrdering.ByColumnId(table.Columns), enterprise, usePrimaryKey, dependentDdl, clause);
+            return inputs.Scripts.RebuildPartitioned(inputs.Target, ColumnOrdering.ByColumnId(inputs.Table.Columns), enterprise, usePrimaryKey, dependentDdl, clause);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException)
         {

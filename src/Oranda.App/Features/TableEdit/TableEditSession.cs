@@ -60,7 +60,13 @@ public sealed partial class TableEditSession : ObservableObject
     public string? ScriptError { get; private set; }
 
     /// <summary>DDL 미리보기 글(문장마다 <c>;</c>).</summary>
-    public string PreviewText => ScriptError is { } e ? "-- " + e : Script.PreviewText(Environment.NewLine);
+    /// <remarks>다시 만들기 상태(<see cref="IsPartitionRebuildReady"/>)면 다시 만들기 스크립트를 앞에 둔다(아직 못 만들었으면 만드는 중 줄).</remarks>
+    public string PreviewText => ScriptError is { } e ? "-- " + e
+        : IsPartitionRebuildReady
+            ? WithPartitionRebuild(
+                PartitionRebuildPreview ?? "-- " + TableEditText.T("다시 만들기 스크립트를 만드는 중…", "Building the rebuild script…"),
+                Script.IsEmpty ? null : Script.PreviewText(Environment.NewLine))
+        : Script.PreviewText(Environment.NewLine);
 
     /// <summary>고친 것이 있다(버리기 확인 대상).</summary>
     public bool IsDirty => (ScriptError is null ? !Changes.IsEmpty : Draft != Original) || IsPartitionDirty;
@@ -135,8 +141,10 @@ public sealed partial class TableEditSession : ObservableObject
         }
     }
 
-    /// <summary>아래 줄 요약(「변경 3건」).</summary>
+    /// <summary>아래 줄 요약(「변경 3건」). 다시 만들기 상태면 그 안내를 보인다(다른 변경이 있으면 건수 뒤에).</summary>
     public string SummaryText => ScriptError is not null ? TableEditText.T("문장을 만들지 못했습니다", "Could not build the statements")
+        : IsPartitionRebuildReady
+            ? Script.IsEmpty ? PartitionRebuildNote : TableEditText.T($"변경 {Script.Statements.Count}건", $"{Script.Statements.Count} change(s)") + " · " + PartitionRebuildNote
         : Script.IsEmpty ? TableEditText.T("바뀐 것 없음", "No changes")
         : TableEditText.T($"변경 {Script.Statements.Count}건", $"{Script.Statements.Count} change(s)");
 
