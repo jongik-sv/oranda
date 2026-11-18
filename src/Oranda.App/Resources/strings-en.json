@@ -313,6 +313,8 @@
   "Menu.disabled.aiConfigured": "Choose an AI model in Settings first",
   "Menu.disabled.aiAccessOn": "AI access is Off for this connection. Change it in the connection editor",
   "Menu.disabled.aiAccessPlan": "AI access for this connection must be Plan or higher. Change it in the connection editor",
+  "Menu.disabled.mybatisExpandedTab": "Open a MyBatis statement tab first (the target is the SQL expanded with the current values)",
+  "Menu.disabled.mybatisExpandedReady": "The SQL could not be expanded with the current values. Check the error in the expanded SQL pane",
   "Menu.disabled.monitorSessionOpen": "Open the session monitor first",
   "Menu.disabled.monitorSessionSelected": "Select a row in the session list",
   "Menu.disabled.monitorSqlOpen": "Open the SQL monitor first",

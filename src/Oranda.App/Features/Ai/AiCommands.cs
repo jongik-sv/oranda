@@ -14,13 +14,13 @@ namespace Oranda.App.Features.Ai;
 /// 이 형은 <c>Features.Ai</c> 네임스페이스라 aiTuning 기능이 꺼져 있으면 명령 자체가 보이지 않는다.
 /// </summary>
 [OrandaCommand(AiCommands.Tune, CommandCategory.Sql, Title = "AI 튜닝", Icon = "aiTune", When = "sqlDocFocus",
-    Enablement = AiCommands.TuneEnablement, Placements = ["toolbar:main/aiTune@420", "menu:tuning/aiTune@900"])]
+    Enablement = AiCommands.ExpandedSqlEnablement, Placements = ["toolbar:main/aiTune@420", "menu:tuning/aiTune@900"])]
 [OrandaCommand(AiCommands.TuneStatement, CommandCategory.Sql, Title = "이 문장 튜닝", When = "sqlDocFocus",
-    Enablement = AiCommands.TuneEnablement, Placements = ["toolbar:main/aiTune/tuneStatement@10"])]
+    Enablement = AiCommands.ExpandedSqlEnablement, Placements = ["toolbar:main/aiTune/tuneStatement@10"])]
 [OrandaCommand(AiCommands.ExplainPlan, CommandCategory.Sql, Title = "실행 계획 해설", When = "sqlDocFocus",
     Enablement = ExplainPlanCommand.Enablement, Placements = ["toolbar:main/aiTune/explainPlan@20"])]
 [OrandaCommand(AiCommands.ExplainSql, CommandCategory.Sql, Title = "SQL 설명", When = AiCommands.SqlOrPlsqlFocus,
-    Enablement = ExplainSqlCommand.Enablement, Placements = ["toolbar:main/aiTune/explainSql@30"])]
+    Enablement = AiCommands.ExpandedSqlEnablement, Placements = ["toolbar:main/aiTune/explainSql@30"])]
 [OrandaCommand(AiCommands.FixError, CommandCategory.Sql, Title = "오류 고치기", When = AiCommands.SqlOrPlsqlFocus,
     Enablement = FixErrorCommand.Enablement, Placements = ["toolbar:main/aiTune/fixError@40"])]
 public sealed class AiCommandHandler : ICommandHandler
@@ -85,4 +85,10 @@ public static class AiCommands
 
     /// <summary>튜닝을 시작할 수 있는 조건(실행 명령과 같은 세션 조건에 AI 설정·허용 수준을 더했다).</summary>
     public const string TuneEnablement = "aiConfigured && aiAccessOn && (hasSession || dedicatedSession) && !mybatisDocActive";
+
+    /// <summary>
+    /// 이 문장 튜닝·SQL 설명의 조건: SQL 탭이거나, MyBatis 문서면 활성 문장 탭을 지금 값으로 펼친 SQL 이 있어야 한다(설계 §3.4).
+    /// 펼친 SQL 이 없으면(문장 탭이 아님·펼치기 실패) 꺼지고 까닭은 <c>Menu.disabled.mybatisExpandedTab</c>·<c>mybatisExpandedReady</c> 문구로 보인다.
+    /// </summary>
+    public const string ExpandedSqlEnablement = "aiConfigured && aiAccessOn && (hasSession || dedicatedSession) && (!mybatisDocActive || mybatisExpandedTab && mybatisExpandedReady)";
 }

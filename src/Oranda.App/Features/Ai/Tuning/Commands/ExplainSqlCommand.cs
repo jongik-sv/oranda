@@ -13,7 +13,7 @@ namespace Oranda.App.Features.Ai.Tuning.Commands;
 public sealed class ExplainSqlCommand : AiCommandSpec
 {
     /// <summary>메뉴 활성 식. 이 명령을 켜는 항목이 이 상수만 바꾼다(<c>AiCommands.cs</c> 는 고치지 않는다).</summary>
-    public const string Enablement = AiCommands.TuneEnablement;
+    public const string Enablement = AiCommands.ExpandedSqlEnablement;
 
     /// <summary>이 명령이 한 대화에서 부를 도구의 상한(프롬프트 글).</summary>
     internal const int ToolBudget = 5;

@@ -148,13 +148,16 @@ public sealed class AiTuningLauncher(IServiceProvider services)
     /// </summary>
     private async Task<StartScope?> ResolveStartAsync(string otherDocumentText, CancellationToken ct)
     {
-        if (services.GetService(typeof(IEditorContext)) is not IEditorContext editor
+        if (services.GetService(typeof(IEditorContext)) is not IEditorContext raw
             || services.GetService(typeof(IAiDriver)) is not IAiDriver driver
             || services.GetService(typeof(IEventBus)) is not IEventBus bus
             || ExecutionState.For(bus).ShownProfile is not { } shown)
         {
             return null;
         }
+
+        // MyBatis 문장 탭처럼 글이 그대로 SQL 이 아닌 탭은 맡는 곳(IAiSqlSource)이 낸 SQL(펼친 SQL)로 본다(설계 §3.4). 그 밖의 탭은 그대로다.
+        var editor = AiSqlSourceEditor.Wrap(services, raw);
 
         if (_flow is { IsRunning: true } || AiChatViewModel.Current?.Owner is { IsRunning: true })
         {
@@ -270,7 +273,9 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         _profile = profile;
         var active = SqlEditorHost.Current.Active;
         var previousTimeout = CaptureBenchmarkTimeout(choice.BenchmarkTimeoutSeconds);
-        var previousBinds = _binds.Capture(statement, document is not null && active?.TabId == document.TabId ? active.Binds : null);
+        var previousBinds = document is not null && (editor as AiSqlSourceEditor)?.BindsOf(document.TabId) is { } sourceBinds
+            ? _binds.Use(sourceBinds) // 맡는 곳의 값(MyBatis 면 지금 값으로 펼친 바인드): 매퍼 탭의 바인드 목록은 펼친 SQL 의 이름과 다를 수 있다
+            : _binds.Capture(statement, document is not null && active?.TabId == document.TabId ? active.Binds : null);
         try
         {
             await flow.StartAsync(choice, context, ct).ConfigureAwait(true);
@@ -680,9 +685,10 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         var source = services.GetService(typeof(IAgentSessionSource)) as AppAgentSessionSource;
         _flowChat = chat;
         EnsureChat(chat);
+        var aiEditor = AiSqlSourceEditor.Wrap(services, editor); // 맡는 곳이 있는 탭(MyBatis)은 펼친 SQL 로 읽고, 그 탭의 글은 바꾸지 않는다
 
         _flow = new AiTuningFlow(
-            editor,
+            aiEditor,
             driver,
             chat,
             (title, text, profile) => SqlEditorHost.Current.OpenTextTab(text, title, profile),
@@ -691,7 +697,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             services.GetService(typeof(ISqlLiteralMasker)) as ISqlLiteralMasker,
             context => _profile is not { } profile
                 || AiAccessPolicy.MaskLiterals(context.Environment == ConnectionEnvironment.Production || profile.Environment == ConnectionEnvironment.Production, MaskLiteralsSetting(), context.LocalAi),
-            new HostEditorTabs(),
+            aiEditor,
             (title, before, after) => SqlEditorHost.Current.Dialogs.ShowComparisonAsync(title, before, after, CancellationToken.None),
             ReadIndexesAsync,
             (edit, before, token) => SqlEditorHost.Current.Dialogs.PreviewEditTextAsync(edit.Description ?? "제안된 편집", before, edit.NewText, token),
@@ -826,6 +832,18 @@ internal sealed class TuningStartBinds
     {
         var previous = Current;
         Current = AiTuningLauncher.StartBinds(statement, list);
+        return previous;
+    }
+
+    /// <summary>
+    /// 맡는 곳이 준 값(MyBatis 펼친 SQL 의 바인드)을 사본으로 담고 앞 값을 돌려준다. 비밀로 보이는 이름은 <see cref="Capture"/> 와 같이 뺀다.
+    /// </summary>
+    public IReadOnlyDictionary<string, BindValue> Use(IReadOnlyDictionary<string, BindValue> binds)
+    {
+        ArgumentNullException.ThrowIfNull(binds);
+        var previous = Current;
+        Current = binds.Where(pair => !SensitiveBindNames.IsSensitive(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
         return previous;
     }
 

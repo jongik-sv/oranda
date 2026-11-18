@@ -872,7 +872,8 @@ public sealed partial class AiTuningFlow(
                 : () => showComparison((command?.ProposalLabel ?? ProposalLabelTune) + rewrite.Label + " (적용함)", target.Text, applied ?? MatchTerminator(target.Text, proposal.Sql));
             if (await Propose(ct).ConfigureAwait(true) is { } accepted)
             {
-                chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => Propose(CancellationToken.None), ChangeText(rewrite.Benchmark), view);
+                chat.AddProposal(rewrite.Label, OneLine(rewrite.Rationale), accepted, () => Propose(CancellationToken.None), ChangeText(rewrite.Benchmark), view,
+                    startTab is { } origin ? tabs?.ProposalNote(origin) : null); // 시작 탭이 정한 기준 한 줄(MyBatis 펼친 SQL)
                 carded = true;
             }
         }

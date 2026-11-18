@@ -101,7 +101,8 @@ public class AiCommandRenderTests
         disabledWindow.Close();
 
         // 같은 메뉴의 아직 꺼진 두 줄(SQL 설명·실행 계획 해설)은 이 항목에서 켜지 않는다.
-        Assert.Equal(ExplainSqlCommand.Enablement, AiChildren().Single(n => n.CommandId == AiCommands.ExplainSql).Enablement);
+        // SQL 설명은 MyBatis 펼친 SQL 에서도 켜지는 식을 쓴다(TSK-15-08).
+        Assert.Equal(AiCommands.ExpandedSqlEnablement, AiChildren().Single(n => n.CommandId == AiCommands.ExplainSql).Enablement);
     });
 
     [Fact]

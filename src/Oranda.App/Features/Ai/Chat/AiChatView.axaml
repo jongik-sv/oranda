@@ -355,6 +355,9 @@
                 </Grid>
                 <TextBlock Text="{Binding Summary}" Opacity="0.75" TextTrimming="CharacterEllipsis" MaxLines="1" ToolTip.Tip="{Binding Summary}"
                            FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                <!-- 제안의 기준(MyBatis 펼친 SQL 이면 「XML 은 바뀌지 않습니다」). 없으면 숨는다. -->
+                <TextBlock x:Name="ProposalNote" Text="{Binding Note}" IsVisible="{Binding HasNote}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource OrandaIconBlueBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
                 <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding Applied}">
                   <TextBlock x:Name="AppliedMark" Text="적용함" VerticalAlignment="Center"
                              Foreground="{DynamicResource OrandaSuccessForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Oranda.App.Features.MyBatisWorkspace.Parameters;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.App.Shell.Docking;
@@ -31,6 +32,7 @@ public sealed class MyBatisWorkspaceWiring : IStartupTask
     private readonly ContextKeyService _keys;
     private readonly DockWorkspace _docking;
     private SqlEditorHost? _attached;
+    private Ai.MyBatisAiKeys? _aiKeys;
 
     public MyBatisWorkspaceWiring(IServiceProvider services, ContextKeyService keys, DockWorkspace docking)
     {
@@ -47,6 +49,13 @@ public sealed class MyBatisWorkspaceWiring : IStartupTask
         if (!ReferenceEquals(_attached, SqlEditorHost.Current))
         {
             Attach(SqlEditorHost.Current); // 그사이 호스트가 바뀌었으면 새 호스트에 꽂는다(같으면 아무것도 안 한다)
+        }
+
+        // AI 튜닝·SQL 설명의 MyBatis 키(펼친 SQL 이 있는지). 허브는 첫 화면 뒤에 찾는다(시작 때 계산기를 깨우지 않는다).
+        if (_aiKeys is null && _services.GetService(typeof(MyBatisEvalHub)) is MyBatisEvalHub hub)
+        {
+            _aiKeys = new Ai.MyBatisAiKeys(_keys);
+            _aiKeys.Attach(hub);
         }
 
         return Task.CompletedTask;

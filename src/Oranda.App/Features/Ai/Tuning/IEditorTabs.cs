@@ -47,6 +47,9 @@ public interface IEditorTabs
     void CopyBinds(Guid fromTab, Guid toTab)
     {
     }
+
+    /// <summary>이 탭에서 시작한 재작성 제안 카드에 붙일 한 줄(MyBatis 펼친 SQL 이면 「XML 은 바뀌지 않습니다」). 구현하지 않으면 없음.</summary>
+    string? ProposalNote(Guid tabId) => null;
 }
 
 /// <summary><see cref="SqlEditorHost"/> 로 <see cref="IEditorTabs"/> 를 구현한다. 호스트는 부를 때마다 <see cref="SqlEditorHost.Current"/> 를 읽는다.</summary>

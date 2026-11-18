@@ -493,9 +493,12 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     public void AddAssistantText(string text) => Entries.Add(new ChatAssistantEntry(text));
 
-    /// <summary>제안 카드를 남긴다. <paramref name="reopen"/> 은 같은 제안의 비교 창을 다시 여는 호출 쪽 동작, <paramref name="change"/> 는 벤치마크 변화율(없으면 null).</summary>
-    public void AddProposal(string label, string summary, bool applied, Func<Task<bool?>> reopen, string? change = null, Func<Task>? view = null)
-        => Entries.Add(new ChatProposalEntry(label, summary, applied) { Reopen = reopen, Change = change, View = view });
+    /// <summary>
+    /// 제안 카드를 남긴다. <paramref name="reopen"/> 은 같은 제안의 비교 창을 다시 여는 호출 쪽 동작, <paramref name="change"/> 는 벤치마크 변화율(없으면 null),
+    /// <paramref name="note"/> 는 카드에 붙일 기준 한 줄(없으면 null).
+    /// </summary>
+    public void AddProposal(string label, string summary, bool applied, Func<Task<bool?>> reopen, string? change = null, Func<Task>? view = null, string? note = null)
+        => Entries.Add(new ChatProposalEntry(label, summary, applied) { Reopen = reopen, Change = change, View = view, Note = note });
 
     /// <summary>앞 대화를 잇는 id(<see cref="AiStarted"/>·<see cref="AiFinal"/> 이 알려 준다). 이어 말하기를 보낼 때 호출 쪽이 읽어 요청에 싣는다.</summary>
     public string? ResumeId { get; private set; }

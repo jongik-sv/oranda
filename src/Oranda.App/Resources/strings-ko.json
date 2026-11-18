@@ -313,6 +313,8 @@
   "Menu.disabled.aiConfigured": "설정에서 AI 모델을 먼저 고르세요",
   "Menu.disabled.aiAccessOn": "이 접속은 AI 허용 수준이 「끔」 입니다. 접속 편집에서 바꿀 수 있습니다",
   "Menu.disabled.aiAccessPlan": "이 접속의 AI 허용 수준이 「계획」 이상이어야 쓸 수 있습니다. 접속 편집에서 바꿀 수 있습니다",
+  "Menu.disabled.mybatisExpandedTab": "MyBatis 문장 탭을 열어야 쓸 수 있습니다(지금 값으로 펼친 SQL 이 대상입니다)",
+  "Menu.disabled.mybatisExpandedReady": "지금 값으로 펼친 SQL 을 만들지 못했습니다. 펼친 SQL 영역의 오류를 확인하세요",
   "Menu.disabled.monitorSessionOpen": "세션 모니터 탭을 열어야 쓸 수 있습니다",
   "Menu.disabled.monitorSessionSelected": "세션 목록에서 행을 고르세요",
   "Menu.disabled.monitorSqlOpen": "SQL 모니터 탭을 열어야 쓸 수 있습니다",

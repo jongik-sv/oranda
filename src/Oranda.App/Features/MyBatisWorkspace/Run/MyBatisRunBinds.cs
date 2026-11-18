@@ -2,6 +2,7 @@ using System.Globalization;
 using Oranda.App.Features.Binds;
 using Oranda.App.Features.MyBatisWorkspace.Parameters;
 using Oranda.Core.Execution;
+using Oranda.Core.Workspaces;
 using Oranda.Language.MyBatis;
 
 namespace Oranda.App.Features.MyBatisWorkspace.Run;
@@ -76,6 +77,32 @@ public static class MyBatisRunBinds
             "BOOLEAN" or "BIT" => BindDataType.Boolean,
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// 펼친 바인드를 일반 SQL 탭의 「바인드 변수」 줄 값으로 바꾼다(AI 제안을 넣은 새 탭이 같은 값으로 바로 실행되게). 이름으로 합치고(값은 마지막 것),
+    /// 목록 값·바인드로 못 바꾸는 값은 뺀다. 참거짓은 실행과 같게 숫자 1/0 이다.
+    /// </summary>
+    public static IReadOnlyList<WorkspaceBind> ToWorkspaceBinds(IReadOnlyList<MyBatisBind> binds, Func<string, BindDataType?>? rowType = null)
+    {
+        ArgumentNullException.ThrowIfNull(binds);
+        var rows = new Dictionary<string, WorkspaceBind>(StringComparer.OrdinalIgnoreCase);
+        foreach (var bind in binds)
+        {
+            if (!TextOf(bind.Value, out var text, out var isNull) || ToBindValue(bind, out _, rowType) is not { } value)
+            {
+                continue;
+            }
+
+            if (value.Type == BindDataType.Number && value.Value is decimal number)
+            {
+                text = number.ToString(CultureInfo.InvariantCulture); // 참거짓(true → 1)도 실행과 같은 숫자 글자로
+            }
+
+            rows[bind.Name] = new WorkspaceBind { Name = bind.Name, Type = value.Type, Value = isNull ? string.Empty : text, IsNull = isNull };
+        }
+
+        return [.. rows.Values];
     }
 
     // 값을 값 칸 글자로(일반 탭 바인드 값 칸과 같은 모양). 목록이면 false.

@@ -246,6 +246,11 @@ public sealed record ChatProposalEntry(string Label, string Summary, bool Applie
 
     public bool HasChange => !string.IsNullOrEmpty(Change);
 
+    /// <summary>제안의 기준을 알리는 한 줄(MyBatis 펼친 SQL 이면 「펼친 SQL 기준입니다. XML 은 바뀌지 않습니다.」). 없으면 null 이고 카드에 안 보인다.</summary>
+    public string? Note { get; init; }
+
+    public bool HasNote => !string.IsNullOrEmpty(Note);
+
     /// <summary>비교 창을 다시 연다. 받아들이면 true, 거절하면 false, 열지 못했으면(탭이 닫힘·문장이 바뀜) null.</summary>
     internal Func<Task<bool?>>? Reopen { get; init; }
 
