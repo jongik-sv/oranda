@@ -250,7 +250,8 @@ public sealed class AiTuningLauncher(IServiceProvider services)
 
         var localAi = AiConversationTarget.From(settings).LocalAi;
         var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text, LocalAi: localAi);
-        var info = BuildStartInfo(statement, context, settings, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals, localAi));
+        var expandedSql = document is not null && editor is AiSqlSourceEditor sources && sources.Owns(document.TabId); // MyBatis 문장 탭: 펼친 SQL 을 튜닝한다
+        var info = BuildStartInfo(statement, context, settings, AiAccessPolicy.MaskLiterals(profile, settings.MaskLiterals, localAi), expandedSql);
 
         var owner = (services.GetService(typeof(ShellController)) as ShellController)?.MainWindow;
         var choice = owner is null ? null : await TuningStartDialog.ShowAsync(owner, new TuningStartViewModel(info)).ConfigureAwait(true);
@@ -601,8 +602,11 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>시작 확인 창에 보일 사실을 만든다(시안 9). 문장을 못 찾으면 요약만 비운다.</summary>
-    public static TuningStartInfo BuildStartInfo(SqlStatement? statement, AiContext context, AiSettings settings, bool maskLiterals = false)
+    /// <summary>
+    /// 시작 확인 창에 보일 사실을 만든다(시안 9). 문장을 못 찾으면 요약만 비운다.
+    /// <paramref name="expandedSql"/> 가 참이면(MyBatis 문장 탭, 설계 §3.4) 대상이 커서 위치 문장이 아니라 지금 값으로 펼친 SQL 이라 제목이 그렇게 말한다.
+    /// </summary>
+    public static TuningStartInfo BuildStartInfo(SqlStatement? statement, AiContext context, AiSettings settings, bool maskLiterals = false, bool expandedSql = false)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(settings);
@@ -616,7 +620,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         var models = systemCli ? [new TuningModelOption(TuningStartInfo.DefaultModelId, active.SystemCli?.DisplayName ?? CustomCliLabel(active) ?? "기본 모델")]
             : profile is null ? BuildModelOptions(configured) : BuildProfileModelOptions(profile);
         return new TuningStartInfo(
-            "AI 튜닝 — 커서 위치 문장",
+            expandedSql ? ExpandedSqlTitle : CursorStatementTitle,
             Summarize(statement),
             SharedPoolLine: null,
             SendFirst: "문장 글 · 접속 별칭 · 환경 라벨 · AI 허용 수준",
@@ -635,6 +639,12 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             ShowEffort: !apiProfile,
             BenchmarkTimeoutSeconds: settings.BenchmarkTimeoutSeconds);
     }
+
+    /// <summary>시작 확인 창 제목: SQL 탭.</summary>
+    public const string CursorStatementTitle = "AI 튜닝 — 커서 위치 문장";
+
+    /// <summary>시작 확인 창 제목: MyBatis 문장 탭(펼친 SQL).</summary>
+    public const string ExpandedSqlTitle = "AI 튜닝 — 펼친 SQL";
 
     /// <summary>기타 CLI 가 활성이면 그 이름(이름이 비면 id). 아니면 null.</summary>
     private static string? CustomCliLabel(AiActiveProfile active) =>

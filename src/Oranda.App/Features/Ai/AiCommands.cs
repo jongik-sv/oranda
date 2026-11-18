@@ -13,7 +13,7 @@ namespace Oranda.App.Features.Ai;
 /// 설정에서 AI 모델을 고르지 않았거나(<c>aiConfigured</c>) 접속의 AI 허용 수준이 「끔」 이면(<c>aiAccessOn</c>) 비활성이고, 이유는 메뉴에 나온다.
 /// 이 형은 <c>Features.Ai</c> 네임스페이스라 aiTuning 기능이 꺼져 있으면 명령 자체가 보이지 않는다.
 /// </summary>
-[OrandaCommand(AiCommands.Tune, CommandCategory.Sql, Title = "AI 튜닝", Icon = "aiTune", When = "sqlDocFocus",
+[OrandaCommand(AiCommands.Tune, CommandCategory.Sql, Title = "AI 튜닝", Icon = "aiTune", When = AiCommands.SqlOrMyBatisFocus,
     Enablement = AiCommands.ExpandedSqlEnablement, Placements = ["toolbar:main/aiTune@420", "menu:tuning/aiTune@900"])]
 [OrandaCommand(AiCommands.TuneStatement, CommandCategory.Sql, Title = "이 문장 튜닝", When = "sqlDocFocus",
     Enablement = AiCommands.ExpandedSqlEnablement, Placements = ["toolbar:main/aiTune/tuneStatement@10"])]
@@ -79,6 +79,12 @@ public static class AiCommands
 
     /// <summary>SQL 탭 또는 PL/SQL 편집기에 포커스(설명·오류 고치기는 PL/SQL 문서까지 넓힌다, 설계 §3.3).</summary>
     public const string SqlOrPlsqlFocus = "sqlDocFocus || plsqlEditorFocus";
+
+    /// <summary>
+    /// SQL 탭 또는 MyBatis 문서(주 메뉴 「튜닝 > AI 튜닝」 이 MyBatis 문서에서도 보이게 한다, 설계 §3.4). MyBatis 에서 켜지는지는
+    /// <see cref="ExpandedSqlEnablement"/> 가 정한다(문장 탭을 펼친 SQL 이 있어야 한다).
+    /// </summary>
+    public const string SqlOrMyBatisFocus = "sqlDocFocus || mybatisDocFocus";
 
     /// <summary>활성 문서가 PL/SQL 편집기다(작업 공간 라우터가 맞춘다).</summary>
     public const string PlsqlDocKey = "plsqlDocActive";

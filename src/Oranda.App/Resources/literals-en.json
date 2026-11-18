@@ -2198,5 +2198,7 @@
   "위험도 높음": "Risk high",
   "실행 전 검토": "Pre-run review",
   "실행하기 전에 잠금·공간·시간·무효화·되돌리기를 AI 로 점검합니다(실행을 막지 않습니다)": "Checks locks, space, time, invalidation and undo with AI before running (does not block running)",
-  "검토할 문장이 없습니다.": "There are no statements to review."
+  "검토할 문장이 없습니다.": "There are no statements to review.",
+  "AI 튜닝 — 커서 위치 문장": "AI Tuning — Statement at Cursor",
+  "AI 튜닝 — 펼친 SQL": "AI Tuning — Expanded SQL"
 }

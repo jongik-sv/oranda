@@ -180,6 +180,7 @@ public class PlsqlAiActionsTests
 
         var bar = Assert.IsType<AiInlineStripViewModel>(vm.Editor.AiBar);
         Assert.Equal(PlsqlFixPrompt.Title, bar.Title);
+        Assert.NotNull(bar.Confirm); // SQL 오류 고치기·다른 AI 띠와 같은 보내기 경고 창
         Assert.Equal(AiStripState.Refused, bar.State);
         Assert.Equal(PlsqlAiActions.NoSessionText, bar.StatusText);
     }

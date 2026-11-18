@@ -17,6 +17,7 @@ using Oranda.Core.Connection;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
 using Oranda.Core.MyBatis;
+using Oranda.Core.Settings;
 using Oranda.Core.Text;
 using Oranda.Language.MyBatis;
 
@@ -262,6 +263,36 @@ public sealed class MyBatisAiTests
         Assert.Equal(AiCommands.ExpandedSqlEnablement, commands[AiCommands.ExplainSql].Enablement);
         Assert.Equal(ExplainPlanCommand.Enablement, commands[AiCommands.ExplainPlan].Enablement);
         Assert.Equal(FixErrorCommand.Enablement, commands[AiCommands.FixError].Enablement);
+    }
+
+    [Fact]
+    public void Tuning_menu_ai_tune_shows_in_a_mybatis_document_and_stays_in_sql_tabs()
+    {
+        // 주 메뉴 「튜닝 > AI 튜닝」: 펼친 SQL 튜닝이 켜지는 MyBatis 문서에서도 보인다(켜지는지는 ExpandedSqlEnablement 가 정한다).
+        var tune = ShellContributions.Scan(typeof(ShellContributions).Assembly).Commands.Select(c => c.Definition).Single(c => c.Id == AiCommands.Tune);
+        Assert.Equal(AiCommands.SqlOrMyBatisFocus, tune.When);
+
+        var keys = new ContextKeyService();
+        keys.Set("sqlDocActive", true);
+        keys.Set("mybatisDocActive", true);
+        Assert.True(Oranda.App.Shell.Menus.MenuVisibility.InScope(tune.When, keys)); // MyBatis 문서
+
+        keys.Set("mybatisDocActive", false);
+        Assert.True(Oranda.App.Shell.Menus.MenuVisibility.InScope(tune.When, keys)); // SQL 탭
+
+        keys.Set("sqlDocActive", false);
+        Assert.False(Oranda.App.Shell.Menus.MenuVisibility.InScope(tune.When, keys)); // SQL·MyBatis 문서가 없으면 숨는다
+    }
+
+    [Fact]
+    public void Start_window_title_says_expanded_sql_for_a_mybatis_statement_tab()
+    {
+        var context = new AiContext("DEV-ERP", ConnectionEnvironment.Development, AiAccessLevel.Plan, null, null);
+
+        Assert.Equal("AI 튜닝 — 커서 위치 문장", AiTuningLauncher.BuildStartInfo(null, context, new AiSettings()).Title);
+        Assert.Equal("AI 튜닝 — 펼친 SQL", AiTuningLauncher.BuildStartInfo(null, context, new AiSettings(), expandedSql: true).Title);
+        Assert.Equal("AI Tuning — Expanded SQL", Oranda.App.Features.Localization.LiteralTranslator.Table[AiTuningLauncher.ExpandedSqlTitle]);
+        Assert.Equal("AI Tuning — Statement at Cursor", Oranda.App.Features.Localization.LiteralTranslator.Table[AiTuningLauncher.CursorStatementTitle]);
     }
 
     // ---- 튜닝 흐름 끝까지 --------------------------------------------------------------------

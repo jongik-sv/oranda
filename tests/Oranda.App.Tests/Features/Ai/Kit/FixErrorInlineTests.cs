@@ -121,11 +121,11 @@ public class FixErrorInlineTests
             return Inline.PrepareAsync(env, tokens => Run(settings, tokens), AiJoinSyntax.Oracle, CancellationToken.None);
         }
 
-        public AiInlineStripViewModel Strip() => AiSuggestionBar.Create(FixErrorInline.Title, async (_, _) => await PrepareAsync(), (accept, ct) => Inline.AcceptAsync(accept, (edit, _) =>
+        public AiInlineStripViewModel Strip(Func<AiStripRequest, CancellationToken, Task<bool>>? confirm = null) => AiSuggestionBar.Create(FixErrorInline.Title, async (_, _) => await PrepareAsync(), (accept, ct) => Inline.AcceptAsync(accept, (edit, _) =>
         {
             Proposed.Add(edit);
             return Task.FromResult(AcceptPreview);
-        }, ct));
+        }, ct), confirm: confirm);
     }
 
     private static string Answer(string sql) => "## 원인\n**ORA-00904 · 열 이름 오타**\n\n## 고친 SQL\n```sql\n" + sql + "\n```";
@@ -302,6 +302,29 @@ public class FixErrorInlineTests
     }
 
     [Fact]
+    public async Task Fix_error_asks_the_same_send_warning_as_the_other_strips_and_cancel_sends_nothing()
+    {
+        // 다른 AI 띠와 같은 보내기 경고 창(받는 곳·가림·보낼 정보)을 거친다(설계 §2.1 「바로 처리한다고 확인을 건너뛰지 않는다」).
+        var f = new Fixture(ConnectionEnvironment.Production);
+        List<string> asked = [];
+        var strip = f.Strip((request, _) =>
+        {
+            asked.Add(Oranda.App.Features.Ai.InPlace.AiInPlaceHost.ConfirmText(request));
+            return Task.FromResult(false);
+        });
+
+        await strip.RunAsync(CancellationToken.None);
+
+        var text = Assert.Single(asked);
+        Assert.Contains("받는 곳: ", text, StringComparison.Ordinal);
+        Assert.Contains("SQL 리터럴 값은 가려서 보냅니다.", text, StringComparison.Ordinal); // 운영 접속은 가린다
+        Assert.DoesNotContain("'SECRET'", text, StringComparison.Ordinal);
+        Assert.Empty(f.Driver.Requests);
+        Assert.Equal(AiStripState.Refused, strip.State);
+        Assert.Equal(AiInlineStripViewModel.CancelledText, strip.StatusText);
+    }
+
+    [Fact]
     public Task The_command_opens_the_bar_under_the_sql_editor_not_the_chat() => HeadlessHost.Run(async () =>
     {
         var vm = new SqlEditorViewModel(Guid.NewGuid(), Script);
@@ -315,6 +338,7 @@ public class FixErrorInlineTests
 
         var bar = Assert.IsType<AiInlineStripViewModel>(vm.AiBar);
         Assert.Equal(FixErrorInline.Title, bar.Title);
+        Assert.NotNull(bar.Confirm); // 앱 막대는 보내기 전 경고 창을 거친다
         Assert.Equal(AiStripState.Refused, bar.State);
         Assert.Equal(FixErrorInline.UnavailableText, bar.StatusText);
         Dispatcher.UIThread.RunJobs();

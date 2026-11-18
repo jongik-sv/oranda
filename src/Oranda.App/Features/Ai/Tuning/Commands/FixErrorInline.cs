@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Ai.Agent;
 using Oranda.App.Features.Ai.Chat;
+using Oranda.App.Features.Ai.InPlace;
 using Oranda.App.Features.Ai.Kit;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.Execution;
@@ -207,7 +208,8 @@ public sealed partial class FixErrorInline(FixErrorCommand command, IEditorTabs 
 
 /// <summary>
 /// 앱 연결: 「오류 고치기」 명령이 부른다. 활성 SQL 탭 아래 제안 막대(<see cref="AiSuggestionBar"/>, <see cref="SqlEditorViewModel.AiBar"/>)를 만들고 바로 요청한다.
-/// 누를 때마다 접속·설정·오류를 새로 읽는다(「다시」·「주 모델로 다시 보내기」 도 같다).
+/// 누를 때마다 접속·설정·오류를 새로 읽는다(「다시」·「주 모델로 다시 보내기」 도 같다). 보내기 직전에는 다른 AI 띠와 같은 경고 창(<see cref="AiInPlaceHost.Confirm"/>,
+/// 받는 곳·가림·보낼 정보)을 거친다.
 /// </summary>
 public static class FixErrorInlineLauncher
 {
@@ -231,9 +233,10 @@ public static class FixErrorInlineLauncher
         var masker = services.GetService(typeof(ISqlLiteralMasker)) as ISqlLiteralMasker;
         var withMasker = new FixErrorInline(FixErrorCommand.Instance, new HostEditorTabs(), masker);
         Func<AiTier?, CancellationToken, Task<AiStripPreparation>> prepare = (tier, token) => PrepareAsync(services, withMasker, tier, token);
+        var confirm = new AiInPlaceHost(services).Confirm;
         var strip = editor is null
-            ? new AiInlineStripViewModel(FixErrorInline.Title, prepare, AiChatHost.For(services))
-            : AiSuggestionBar.Create(FixErrorInline.Title, prepare, (accept, token) => withMasker.AcceptAsync(accept, editor.ProposeEditAsync, token), AiChatHost.For(services));
+            ? new AiInlineStripViewModel(FixErrorInline.Title, prepare, AiChatHost.For(services)) { Confirm = confirm }
+            : AiSuggestionBar.Create(FixErrorInline.Title, prepare, (accept, token) => withMasker.AcceptAsync(accept, editor.ProposeEditAsync, token), AiChatHost.For(services), confirm);
         tab.AiBar = strip;
         await strip.RunAsync(ct).ConfigureAwait(true);
     }

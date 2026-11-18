@@ -144,7 +144,7 @@ public static class PlsqlAiActions
         return editor.Apply(new TextOpResult(0, length, applied, 0, applied.Length)) ? null : ChangedText;
     }
 
-    /// <summary>앱 연결: 보이는 쪽 편집기 아래 제안 막대를 띄우고 요청한다.</summary>
+    /// <summary>앱 연결: 보이는 쪽 편집기 아래 제안 막대를 띄우고 요청한다(보내기 전 경고 창은 다른 AI 띠와 같다).</summary>
     public static async Task FixErrorAsync(IServiceProvider services, PlsqlEditorViewModel? vm, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -179,7 +179,8 @@ public static class PlsqlAiActions
             (accept, token) => sent is null
                 ? Task.FromResult<string?>(PlsqlFixPrompt.NoFixText)
                 : AcceptAsync(accept, sent, editor, version, (title, before, after, t) => SqlEditorHost.Current.Dialogs.PreviewEditTextAsync(title, before, after, t), masker, token),
-            AiChatHost.For(services));
+            AiChatHost.For(services),
+            new Oranda.App.Features.Ai.InPlace.AiInPlaceHost(services).Confirm); // 다른 AI 띠와 같은 보내기 경고 창(받는 곳·가림)
         editor.AiBar = bar;
         await bar.RunAsync(ct).ConfigureAwait(true);
     }

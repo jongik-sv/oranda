@@ -63,6 +63,9 @@ public sealed class AiSqlSourceEditor : IEditorContext, IEditorTabs
         return new AiSqlSourceEditor(editor, tabs ?? (editor as AiSqlSourceEditor)?._tabs ?? new HostEditorTabs(), sources);
     }
 
+    /// <summary>이 탭을 맡는 곳이 있다(MyBatis 문장 탭처럼 AI 가 펼친 SQL 을 본다).</summary>
+    public bool Owns(Guid tabId) => SourceOf(tabId) is not null;
+
     /// <summary>맡은 탭이면 그 탭의 바인드 값(벤치마크용). 맡지 않은 탭이면 null(호출한 쪽이 탭의 바인드 목록을 쓴다).</summary>
     public IReadOnlyDictionary<string, BindValue>? BindsOf(Guid tabId) => SourceOf(tabId)?.BindsOf(tabId);
 

@@ -14,13 +14,18 @@ public static class AiSuggestionBar
     /// <param name="prepare">요청을 모은다(등급 인자: null = 기능 등급, Main = 「주 모델로 다시 보내기」).</param>
     /// <param name="accept">편집기에 제안으로 넣는다(넣었으면 null, 아니면 까닭).</param>
     /// <param name="chatHost">채팅창 동작(null 이면 「채팅에서 이어 보기」 를 숨긴다).</param>
+    /// <param name="confirm">
+    /// 보내기 직전 경고 창(받는 곳·가림·보낼 정보, 앱은 <c>AiInPlaceHost.Confirm</c>). 다른 AI 띠와 같이 바로 처리해도 확인을 건너뛰지 않는다(설계 §2.1).
+    /// null 이면 묻지 않는다(시험).
+    /// </param>
     public static AiInlineStripViewModel Create(
         string title,
         Func<AiTier?, CancellationToken, Task<AiStripPreparation>> prepare,
         Func<AiStripAccept, CancellationToken, Task<string?>> accept,
-        AiChatHost? chatHost = null)
+        AiChatHost? chatHost = null,
+        Func<AiStripRequest, CancellationToken, Task<bool>>? confirm = null)
     {
         ArgumentNullException.ThrowIfNull(accept);
-        return new AiInlineStripViewModel(title, prepare, chatHost) { Accept = accept };
+        return new AiInlineStripViewModel(title, prepare, chatHost) { Accept = accept, Confirm = confirm };
     }
 }
