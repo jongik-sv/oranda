@@ -369,6 +369,9 @@ public sealed class Oracle11gTests : IAsyncLifetime
         ];
         string[] expectedTemplate =
         [
+            // AI 파티션 추천 근거 공급자(partition-advisor). 실제 질의는 Schema/PartitionEvidenceIntegrationTests 가 11g·26ai 에서 돌린다.
+            "advisor/date_sample.sql [@COL@ @SAMPLE@ @TABLE@]", "advisor/monthly.sql [@LABEL@ @SAMPLE@ @TABLE@]",
+            "advisor/predicate_plans.sql [@MAX@]", "advisor/top_values.sql [@COL@ @SAMPLE@ @TABLE@ @TOP@]",
             "app/fk_index_check.sql [@OWNER_FILTER@ @TABLE@]", "app/locked_row_select.sql [@ROWID@ @TABLE@]",
             "dbinfo/flashback_versions.sql [@COLUMNS@ @CONDITIONS@ @RANGE@ @TABLE@]", "meta/object_users.sql [@NAME@ @OWNER@]",
             // 테이블 편집기 검사 읽기(계획 Task 3). 실제 질의는 Schema/TableEditIntegrationTests 가 11g·26ai 에서 돌린다.
