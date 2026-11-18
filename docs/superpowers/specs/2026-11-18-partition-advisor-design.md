@@ -34,7 +34,7 @@
 1. ① 진입: 파티션 페이지 「쉬운 설정」 줄 끝에 `✨ AI 추천…`·`분포 보기`
 2. ② 확인 창(모달): 받는 곳, 목적(조회 성능 + 오래된 데이터 정리 / 조회 성능 / 정리), 보낼 정보 체크 5개(열·키·통계·조회 조건·분포)와 실제 값 보내기, 건너뛸 항목과 이유, 「보낼 내용 보기」(실제 프롬프트 펼침·복사). 단추 = 취소 / 모아서 보내기
 3. 진행: 같은 창이 단계 표시(열·키 → 통계 → 조회 조건 → 분포 → AI 응답 대기)와 취소
-4. ③ 결과 창(비모달, 탭 하나에 하나): 왼쪽 근거 패널(앱이 모은 숫자), 오른쪽 후보 카드(AI 이유 + 앱 확인 ✔/⚠/✖), 「편집기에 채우기」, 「다시 받기」, 「AI 원문 보기」, 「보고서로 저장」(HTML), 「왜 그 열은 안 했나」(not_chosen)
+4. ③ (PA-22 로 대체됨: 결과는 AI 대화 창에 표시, 별도 결과 창 없음) 결과 창(비모달, 탭 하나에 하나): 왼쪽 근거 패널(앱이 모은 숫자), 오른쪽 후보 카드(AI 이유 + 앱 확인 ✔/⚠/✖), 「편집기에 채우기」, 「다시 받기」, 「AI 원문 보기」, 「보고서로 저장」(HTML), 「왜 그 열은 안 했나」(not_chosen)
 5. ④ 채운 뒤: 파티션 페이지 위 띠 「AI 추천 N안을 채웠습니다 … 」 + `추천 다시 보기`·`되돌리기`(채우기 직전 모델로). 사용자가 고치면 띠 문구가 「AI N안에서 직접 고침」
 6. ⑤ verdict = `no_partition` 이면 이유만 보이고 「후보 3개 받기」(같은 근거로 다시 요청, 후보를 꼭 내라고 덧붙임)
 
@@ -157,7 +157,7 @@ public static class PartitionAdviceApplier { AdviceDraft Apply(PartitionCandidat
 | pa-core | opus | Core `Partitions/Advisor/*` 와 시험 | — (첫 항목 = 계약 체크포인트) |
 | pa-script | opus | Core `Partitions/*`(Advisor 제외)·`TableEditScriptBuilder`·재구성 스크립트, App `TableEditSession.Partition*.cs`·쉬운 설정·하위 파티션 편집 UI | — |
 | pa-db | sonnet | Oracle·Tibero 공급자 구현·카탈로그 SQL·IT | pa-core 계약 |
-| pa-ui | opus | App `Features/TableEdit/Advisor/*`, ObjectDetail 배선, 확인·결과 창, 띠·되돌리기, 보고서 | pa-core 계약 (pa-script 의 하위 파티션 모델은 머지 뒤 이어 붙임) |
+| pa-ui | opus | App `Features/TableEdit/Advisor/*`, ObjectDetail 배선, 확인 창(결과 창은 PA-22 로 AI 대화 창으로 대체), 띠·되돌리기, 보고서 | pa-core 계약 (pa-script 의 하위 파티션 모델은 머지 뒤 이어 붙임) |
 
 `TableEditPartitionsView.axaml` 은 pa-script·pa-ui 둘 다 고침 — 덧붙이기만, 뒤에 머지하는 레인이 rebase 로 합침.
 
@@ -183,4 +183,5 @@ public static class PartitionAdviceApplier { AdviceDraft Apply(PartitionCandidat
 | PA-18 | 월별 분포 버킷 = 지금 달 기준 앞 36개월 ~ 뒤 12개월, 그 밖·달 모양 아닌 값(9999-12 등)은 `RestCount`. 문자·숫자 날짜형 월 식은 NULL 을 CASE 로 감쌈. 표본 질의에는 `/* oranda-advisor */` 를 붙이고 조건 수집에서 뺌. Oracle·Tibero 같은 SQL(`.11.sql` 변형 없음) |
 | PA-19 | 하위 파티션: Tibero 는 `SUBPARTITIONS n` 을 받지 않아(TBR-7001) HASH 하위를 이름 템플릿(SP1…SPn)으로 냄(`HashSubpartitionsAsTemplate`). RANGE 하위는 만들지 않음. LOCAL 인덱스를 고르면 재구성 스크립트는 DBMS_REDEFINITION 대신 CTAS + RENAME. `LocalIndexes` 가 비어 있지 않으면 목록 밖 인덱스는 명시적 GLOBAL |
 | PA-20 | 월 추가 스크립트 기본 12개월, 개수 칸 없음. 11g XE 에는 파티션 기능이 없어(ORA-00439) 「11g 재구성」 경로는 같은 문법을 26ai 에서 실행해 확인 |
-| PA-21 | 남은 일: 결과 창(비모달)이 객체 상세 탭을 닫아도 남을 수 있음(채우기는 그 세션에만 됨), 「분포 보기」 모으기 중 멈추기 단추 없음, 확인 창의 「읽을 행 수」는 모은 뒤에 실제 값, LOCAL 인덱스를 직접 고르는 화면 없음(AI 채우기로만), 파티션 기능이 있는 옛 Oracle(11g EE 등) 실서버 미확인 |
+| PA-21 | 남은 일: 결과 창(비모달, PA-22 로 없어짐)이 객체 상세 탭을 닫아도 남을 수 있음(채우기는 그 세션에만 됨), 「분포 보기」 모으기 중 멈추기 단추 없음, 확인 창의 「읽을 행 수」는 모은 뒤에 실제 값, LOCAL 인덱스를 직접 고르는 화면 없음(AI 채우기로만), 파티션 기능이 있는 옛 Oracle(11g EE 등) 실서버 미확인 |
+| PA-22 | 결과 표시 = AI 대화 창(튜닝과 같은 흐름, AiChatViewModel 확장 지점 IAiChatConversation), 결과 창 없앰(위 ③·pa-ui·PA-21 의 결과 창 서술을 대체), 이어 묻기 = ResumeId·차례마다 새 AgentSession 등록·폐기, 「후보 3개 받기」 = 같은 대화 이어 묻기, 분포 보기 = PartitionEvidenceWindow |
