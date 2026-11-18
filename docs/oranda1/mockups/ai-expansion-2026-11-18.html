@@ -1,0 +1,914 @@
+<title>Oranda AI 확대 시안</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 앱 화면 모형(창 틀)을 본문 사이에 끼운 한 줄 문서. 위쪽 고정 목차, 섹션마다 「시안 설명 + 화면 모형」 두 칸 */
+:root {
+  --bg: #f6f8f8;
+  --surface: #ffffff;
+  --sunk: #eef3f3;
+  --line: #d6e0e0;
+  --fg: #12292c;
+  --muted: #56706f;
+  --accent: #e8643a;      /* 금붕어 코랄 */
+  --accent-soft: #fde6dc;
+  --teal: #0e3a3f;
+  --teal-soft: #d7ebea;
+  --ok: #1f7a4d;
+  --ok-soft: #dcf1e5;
+  --warn: #9a6200;
+  --warn-soft: #fbedcf;
+  --bad: #b3261e;
+  --bad-soft: #f9dedc;
+  --win-title: #0e3a3f;
+  --win-title-fg: #e6f2f1;
+  --code-bg: #0f2a2d;
+  --code-fg: #d7ebea;
+  --f-display: 'Black Han Sans', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  --f-body: 'IBM Plex Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  --f-mono: 'IBM Plex Mono', Consolas, 'D2Coding', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1a1c; --surface: #12262a; --sunk: #0f2124; --line: #24403f; --fg: #e3eeed; --muted: #93aead;
+    --accent: #ff8a5e; --accent-soft: #3c2219; --teal: #8fd0cc; --teal-soft: #173638;
+    --ok: #6fd39d; --ok-soft: #14342a; --warn: #f0be5a; --warn-soft: #3a2e12; --bad: #ff8f86; --bad-soft: #3e1d1b;
+    --win-title: #071315; --win-title-fg: #cfe5e3; --code-bg: #071315; --code-fg: #cfe5e3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1a1c; --surface: #12262a; --sunk: #0f2124; --line: #24403f; --fg: #e3eeed; --muted: #93aead;
+  --accent: #ff8a5e; --accent-soft: #3c2219; --teal: #8fd0cc; --teal-soft: #173638;
+  --ok: #6fd39d; --ok-soft: #14342a; --warn: #f0be5a; --warn-soft: #3a2e12; --bad: #ff8f86; --bad-soft: #3e1d1b;
+  --win-title: #071315; --win-title-fg: #cfe5e3; --code-bg: #071315; --code-fg: #cfe5e3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.65; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
+h1 { font-family: var(--f-display); font-weight: 400; font-size: clamp(28px, 4.4vw, 42px); letter-spacing: .01em; }
+h2 { font-size: 24px; font-weight: 700; }
+h3 { font-size: 17px; font-weight: 700; }
+p { margin: 0; }
+code, .mono { font-family: var(--f-mono); font-size: .9em; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 머리 */
+header.top { background: var(--surface); border-bottom: 1px solid var(--line); }
+header.top .wrap { padding-block: 28px 22px; display: grid; gap: 10px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.lede { color: var(--muted); max-width: 68ch; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--sunk); color: var(--muted); border: 1px solid var(--line); }
+.chip.build { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.chip.later { background: var(--teal-soft); color: var(--teal); border-color: transparent; }
+.chip.main { background: var(--teal-soft); color: var(--teal); border-color: transparent; }
+.chip.light { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.chip.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+
+nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+nav.toc .wrap { display: flex; gap: 4px; overflow-x: auto; padding-block: 6px; scrollbar-width: thin; }
+nav.toc a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 600; padding: 6px 12px; border-radius: 6px; }
+nav.toc a:hover { background: var(--sunk); color: var(--fg); }
+
+main section { padding-block: 44px 8px; scroll-margin-top: 56px; }
+.sec-head { display: grid; gap: 8px; margin-bottom: 22px; }
+.sec-head .lede { font-size: 15px; }
+
+/* 결론 */
+.points { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.point { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 6px; align-content: start; }
+.point b { font-size: 15.5px; }
+.point p { color: var(--muted); font-size: 14px; }
+
+/* 두 칸 */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 22px; align-items: start; }
+@media (max-width: 880px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.spec { display: grid; gap: 12px; min-width: 0; }
+.spec dl { margin: 0; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 6px 12px; font-size: 14px; }
+.spec dt { color: var(--muted); font-weight: 600; }
+.spec dd { margin: 0; min-width: 0; }
+.spec ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
+.note { font-size: 13.5px; color: var(--muted); background: var(--sunk); border-radius: 8px; padding: 10px 12px; }
+.feature { border-top: 1px solid var(--line); padding-block: 28px; }
+.feature:first-of-type { border-top: 0; padding-top: 0; }
+.feature-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.feature-title .num { font-family: var(--f-mono); font-size: 13px; color: var(--accent); font-weight: 500; }
+
+/* 앱 창 모형 */
+.win { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px -18px rgba(8, 40, 44, .45); min-width: 0; font-size: 13.5px; }
+.win-bar { background: var(--win-title); color: var(--win-title-fg); display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12.5px; }
+.win-bar .dots { display: flex; gap: 5px; }
+.win-bar .dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.25); display: block; }
+.win-bar .t { opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win-body { padding: 14px; display: grid; gap: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; background: var(--sunk); border: 1px solid var(--line); border-radius: 7px; }
+.tb { font-size: 12.5px; padding: 3px 9px; border-radius: 5px; color: var(--muted); border: 1px solid transparent; }
+.tb.ai { background: var(--accent); color: #fff; font-weight: 700; border-color: var(--accent); }
+.tb.ai.new { box-shadow: 0 0 0 3px var(--accent-soft); }
+.tb.sep { width: 1px; padding: 0; height: 16px; background: var(--line); }
+.grid-mock { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.grid-mock th, .grid-mock td { border-bottom: 1px solid var(--line); padding: 5px 8px; text-align: left; white-space: nowrap; }
+.grid-mock th { color: var(--muted); font-weight: 600; background: var(--sunk); }
+.grid-mock tr.sel td { background: var(--accent-soft); }
+.scroll-x { overflow-x: auto; }
+.chatpane { border: 1px solid var(--line); border-radius: 10px; background: var(--sunk); overflow: hidden; display: grid; }
+.chat-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 11px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--line); background: var(--bg); }
+.chat-bar .who { font-family: var(--f-mono); font-weight: 400; color: var(--muted); }
+.chat-flow { display: grid; gap: 8px; padding: 10px; }
+.chat-me { justify-self: end; max-width: 85%; padding: 6px 10px; border-radius: 10px 10px 2px 10px; background: var(--coral-soft, rgba(250,122,78,.14)); font-size: 12.5px; }
+.chat-input { margin: 0 10px 10px; padding: 6px 10px; border: 1px dashed var(--line); border-radius: 8px; font-size: 12.5px; color: var(--muted); background: var(--bg); }
+.strip { border: 1px solid var(--line); border-left: 4px solid var(--oranda-coral, #fa7a4e); border-radius: 8px; overflow: hidden; display: grid; }
+.strip-bar { display: flex; justify-content: space-between; gap: 8px; padding: 5px 11px; font-size: 12px; font-weight: 600; background: var(--sunk); border-bottom: 1px solid var(--line); }
+.strip-bar .who { font-family: var(--f-mono); font-weight: 400; color: var(--muted); }
+.strip .card { border: 0; border-radius: 0; }
+.strip .card-head { display: none; }
+.how { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.how.chat { background: var(--sunk); border: 1px solid var(--line); }
+.how.now { background: rgba(250,122,78,.16); color: inherit; border: 1px solid rgba(250,122,78,.5); }
+.card { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); overflow: hidden; }
+.card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 11px; border-bottom: 1px solid var(--line); background: var(--sunk); font-size: 12.5px; }
+.card-head .who { font-family: var(--f-mono); color: var(--muted); }
+.card-body { padding: 11px 13px; display: grid; gap: 8px; font-size: 13.5px; }
+.card-body ol, .card-body ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.card-foot { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 11px; border-top: 1px solid var(--line); }
+.btn { font: inherit; font-size: 12.5px; padding: 4px 11px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn.primary { background: var(--teal); color: var(--surface); border-color: var(--teal); }
+.btn.accent { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+pre.code { margin: 0; background: var(--code-bg); color: var(--code-fg); font-family: var(--f-mono); font-size: 12.5px; line-height: 1.55; padding: 10px 12px; border-radius: 7px; overflow-x: auto; }
+.diff-add { color: #8fe3b0; }
+.diff-del { color: #ff9c92; text-decoration: line-through; }
+.label-ex { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--warn); background: var(--warn-soft); padding: 1px 7px; border-radius: 4px; }
+
+/* 설정 모형 + 시뮬레이터 */
+.settings-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; align-items: center; }
+.settings-row label { font-weight: 600; font-size: 13.5px; }
+select, input[type="range"] { font: inherit; font-size: 13.5px; width: 100%; }
+select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.sim { display: grid; gap: 12px; }
+.sim-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 14px; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button { font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--teal); color: var(--surface); border-color: var(--teal); }
+.result { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.result-head { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); }
+.result-head .dest { font-weight: 700; font-size: 16px; }
+.result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.result-grid > div { padding: 10px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+.result-grid .k { font-size: 12px; color: var(--muted); font-weight: 600; }
+.result-grid .v { font-weight: 600; font-size: 14px; }
+.result-notes { padding: 10px 14px; display: grid; gap: 4px; font-size: 13.5px; }
+.result-notes p::before { content: "· "; color: var(--accent); font-weight: 700; }
+.size-val { font-family: var(--f-mono); font-size: 12.5px; color: var(--fg); }
+
+/* 표 */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.t th, table.t td { padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+table.t th { font-size: 12.5px; color: var(--muted); font-weight: 600; background: var(--sunk); white-space: nowrap; }
+table.t tr:last-child td { border-bottom: 0; }
+table.t td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 일정 막대 */
+.plan { display: grid; gap: 6px; }
+.plan-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 46px; gap: 10px; align-items: center; font-size: 13.5px; }
+.plan-track { position: relative; height: 18px; background: var(--sunk); border-radius: 4px; }
+.plan-bar { position: absolute; top: 3px; bottom: 3px; border-radius: 3px; background: var(--teal); }
+.plan-bar.p0 { background: var(--muted); }
+.plan-bar.p2 { background: var(--accent); }
+.plan-row .w { font-family: var(--f-mono); font-size: 12px; color: var(--muted); text-align: right; }
+@media (max-width: 560px) { .plan-row { grid-template-columns: 110px minmax(0, 1fr) 40px; font-size: 12.5px; } }
+
+/* 결정 */
+.decisions { display: grid; gap: 14px; }
+.decision { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; }
+.decision fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+.decision legend { font-weight: 700; padding: 0; margin-bottom: 4px; }
+.opt { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+.opt input { margin-top: 5px; accent-color: var(--accent); }
+.opt .rec { font-size: 11.5px; font-weight: 700; color: var(--accent); margin-left: 4px; }
+.decision textarea { font: inherit; font-size: 13.5px; width: 100%; min-height: 40px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); resize: vertical; }
+.copy-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px; }
+#copyOut { width: 100%; min-height: 120px; font-family: var(--f-mono); font-size: 12.5px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); color: var(--fg); }
+.toast { font-size: 13px; color: var(--ok); font-weight: 600; }
+
+footer { padding-block: 40px 60px; color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { .result { transition: border-color .2s; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="eyebrow">Oranda · 2026-11-18 · 시안</div>
+    <h1>AI 적용 확대와 모델 나눠 쓰기</h1>
+    <p class="lede">튜닝에만 쓰던 AI 를 모니터·PL/SQL·MyBatis·변경 작업까지 넓히고, 간단한 일은 무료 로컬이나 가벼운 모델(haiku 등)로, 복잡한 일은 상위 유료 모델로 보내는 안입니다. 파티션 설계 추천은 따로 분석 중이라 뺐습니다.</p>
+    <div class="chips">
+      <span class="chip build">P0 공통 기반 · 구현</span>
+      <span class="chip build">1순위 4건 · 구현</span>
+      <span class="chip build">2순위 2건 · 구현</span>
+      <span class="chip later">3순위 4건 · 나중에 다시 정리</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="목차">
+  <div class="wrap">
+    <a href="#summary">결론</a>
+    <a href="#routing">모델 나눠 쓰기</a>
+    <a href="#p1">1순위</a>
+    <a href="#p2">2순위</a>
+    <a href="#p3">3순위</a>
+    <a href="#plan">작업 나눔</a>
+    <a href="#decide">정할 것</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<section id="summary">
+  <div class="sec-head">
+    <h2>결론</h2>
+  </div>
+  <div class="points">
+    <div class="point"><b>모델 칸은 두 개만 둡니다</b><p>「주 모델」과 「가벼운 일 모델」. 명령마다 모델을 고르지 않고, 어느 쪽으로 갈지는 앱이 정합니다. 가벼운 일 모델을 비우면 지금과 똑같습니다.</p></div>
+    <div class="point"><b>가벼운 일은 한 번에 보냅니다</b><p>앱이 필요한 정보를 모아 한 번에 보내고 모델은 글만 씁니다. 작은 로컬 모델은 도구 호출이 불안정해서, 도구를 쓰는 일은 주 모델만 합니다.</p></div>
+    <div class="point"><b>크면 저절로 주 모델로</b><p>가벼운 일이라도 입력이 가벼운 일 모델 한도의 70% 를 넘으면 주 모델로 보냅니다. 한도도 사용자가 정하지 않습니다. Claude CLI·Codex 는 앱이 알고, 로컬 AI 는 「연결 확인」 때 서버에서 읽습니다(모르면 8,192).</p></div>
+    <div class="point"><b>몰래 넘기지 않습니다</b><p>가벼운 일 모델이 실패하면 오류 카드에 「주 모델로 다시 보내기」 단추만 둡니다. 보내는 곳이 바뀌면 값 가리기와 경고 창도 바뀌기 때문입니다.</p></div>
+    <div class="point"><b>대화가 필요할 때만 채팅창으로</b><p>도구로 조사하거나 이어 물을 일이 많으면 AI 채팅창에서 합니다. 답이 짧고 그 자리에서 바로 쓰이는 일은 화면 안의 작은 AI 띠나 편집기 제안 막대로 바로 처리합니다. 띠의 「채팅에서 이어 보기」를 누를 때만 채팅창으로 넘어갑니다. 새 결과 창은 어느 쪽도 만들지 않습니다.</p></div>
+    <div class="point"><b>AI 는 실행하지 않습니다</b><p>KILL·DDL·DML·컴파일은 사람 몫입니다. AI 는 설명, 의견, 편집기 제안, 스크립트 초안만 만듭니다.</p></div>
+  </div>
+  <h3 style="margin-top:28px">채팅창으로 갈지, 바로 처리할지</h3>
+  <p class="lede">기준: 그 화면에서 답을 바로 쓰고 이어 물을 일이 드물면 바로 처리합니다. 바로 처리해도 보내는 곳·가림 확인은 똑같이 거칩니다.</p>
+  <div class="scroll-x">
+    <table class="t">
+      <thead><tr><th>기능</th><th>처리</th><th>보이는 곳</th><th>까닭</th></tr></thead>
+      <tbody>
+        <tr><td>AWR 계획이 바뀐 원인</td><td><span class="how chat">채팅창</span></td><td>채팅창 기능 카드</td><td>도구로 여러 번 조사하고 원인을 두고 이어 묻습니다</td></tr>
+        <tr><td>락·세션 상황 풀이</td><td><span class="how now">바로</span></td><td>모니터 아래 AI 띠</td><td>두세 줄 풀이와 다음 조치면 됩니다. 급할 때 창을 옮기면 느립니다</td></tr>
+        <tr><td>KILL 확인 창의 의견</td><td><span class="how now">바로</span></td><td>확인 창 안 한 줄</td><td>모달이라 채팅창을 쓸 수 없습니다. 앞서 받은 풀이의 결론만 다시 보입니다(새 요청 없음)</td></tr>
+        <tr><td>PL/SQL 오류 고치기</td><td><span class="how now">바로</span></td><td>편집기 제안 막대</td><td>결과가 고친 소스 그 자체입니다</td></tr>
+        <tr><td>PL/SQL 코드 설명</td><td><span class="how chat">채팅창</span></td><td>채팅창</td><td>설명이 길고 이어 묻게 됩니다</td></tr>
+        <tr><td>MyBatis 펼친 SQL 튜닝·설명</td><td><span class="how chat">채팅창</span></td><td>채팅창</td><td>지금 튜닝과 같은 흐름입니다</td></tr>
+        <tr><td>DDL·변경 묶음 실행 전 검토</td><td><span class="how now">바로</span></td><td>실행 창 안 검토 띠</td><td>실행하려는 순간에 보는 점검표입니다</td></tr>
+        <tr><td>변경 일지 요약·플래시백 차이 요약</td><td><span class="how now">바로</span></td><td>화면 위 요약 띠</td><td>한 단락이면 됩니다</td></tr>
+        <tr><td>원복 스크립트 점검</td><td><span class="how now">바로</span></td><td>원복 창 안 점검 띠</td><td>빠진 것 목록과 「고친 스크립트를 편집기에」면 됩니다</td></tr>
+        <tr><td>(기존) SQL 오류 고치기</td><td><span class="how now">바로</span> 로 바꿈</td><td>편집기 제안 막대</td><td>PL/SQL 오류 고치기와 같은 까닭입니다. 지금은 채팅창으로 갑니다</td></tr>
+        <tr><td>(기존) SQL 설명·실행 계획 해설·튜닝</td><td><span class="how chat">채팅창</span> 그대로</td><td>채팅창</td><td>길고 이어 묻습니다</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="routing">
+  <div class="sec-head">
+    <div class="eyebrow">P0 · 공통 기반</div>
+    <h2>모델 나눠 쓰기</h2>
+    <p class="lede">왼쪽은 AI 모델 설정 화면에 더할 줄입니다. 오른쪽에서 명령·입력 크기·접속을 바꿔 보면 요청이 어디로 가는지, 값을 가리는지 바로 보입니다.</p>
+  </div>
+
+  <div class="split">
+    <div class="win" aria-label="AI 모델 설정 화면 모형">
+      <div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="t">설정 › AI 모델</span></div>
+      <div class="win-body">
+        <div class="settings-row">
+          <label for="mainModel">주 모델</label>
+          <select id="mainModel">
+            <option value="opus">Claude Code · opus</option>
+            <option value="sonnet">Claude Code · sonnet</option>
+            <option value="gpt">프로필 · 사내 게이트웨이 gpt-5 (유료)</option>
+            <option value="codex">Codex CLI</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <label for="lightModel">가벼운 일 모델 <span class="chip build" style="padding:0 6px;font-size:10.5px">새 줄</span></label>
+          <select id="lightModel">
+            <option value="same">주 모델과 같음 (기본)</option>
+            <option value="haiku" selected>Claude Code · haiku — 유료만 쓸 때 추천</option>
+            <option value="sonnet-l">Claude Code · sonnet</option>
+            <option value="ollama">Ollama · qwen3:8b (로컬) — 무료</option>
+            <option value="lmstudio">LM Studio · gemma-3-4b (로컬) — 무료</option>
+          </select>
+        </div>
+        <div class="note">
+          명령별로 고르는 칸은 두지 않습니다. 가벼운 일 모델이 Claude Code 이면 노력은 <code>low</code> 로 고정합니다.
+          Codex 같은 시스템 CLI 는 모델 이름을 넘길 수 없어서 대상만 고릅니다.
+        </div>
+        <div class="field">
+          <label>입력 한도 (설정에 이미 있는 프로필 값)</label>
+          <div class="mono" id="limitText" style="font-size:12.5px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sim">
+      <div class="sim-inputs">
+        <div class="field" style="grid-column: 1 / -1">
+          <label for="cmd">명령</label>
+          <select id="cmd"></select>
+        </div>
+        <div class="field">
+          <label for="size">보낼 내용 크기 <span class="size-val" id="sizeVal"></span></label>
+          <input type="range" id="size" min="1" max="120" value="6" step="1">
+        </div>
+        <div class="field">
+          <label>접속</label>
+          <div class="seg" id="conn" role="group" aria-label="접속 종류">
+            <button type="button" data-v="dev" aria-pressed="true">개발</button>
+            <button type="button" data-v="prod" aria-pressed="false">운영</button>
+          </div>
+        </div>
+        <div class="field" style="grid-column: 1 / -1">
+          <label>이 접속의 AI 허용 수준</label>
+          <div class="seg" id="access" role="group" aria-label="AI 허용 수준">
+            <button type="button" data-v="0" aria-pressed="false">끔</button>
+            <button type="button" data-v="1" aria-pressed="false">메타</button>
+            <button type="button" data-v="2" aria-pressed="true">계획</button>
+            <button type="button" data-v="3" aria-pressed="false">조회</button>
+            <button type="button" data-v="4" aria-pressed="false">조회+행 값</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>그 밖의 조건</label>
+          <div class="seg" id="mask" role="group" aria-label="리터럴 가림 설정">
+            <button type="button" data-v="off" aria-pressed="true">리터럴 가림 끔</button>
+            <button type="button" data-v="on" aria-pressed="false">리터럴 가림 켬</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>가벼운 일 모델이</label>
+          <div class="seg" id="fail" role="group" aria-label="가벼운 일 모델 상태">
+            <button type="button" data-v="ok" aria-pressed="true">응답함</button>
+            <button type="button" data-v="down" aria-pressed="false">꺼져 있음</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="result" id="result" aria-live="polite">
+        <div class="result-head">
+          <span class="chip" id="rTier"></span>
+          <span class="dest" id="rDest"></span>
+        </div>
+        <div class="result-grid">
+          <div><span class="k">도구</span><span class="v" id="rTools"></span></div>
+          <div><span class="k">리터럴 값</span><span class="v" id="rMask"></span></div>
+          <div><span class="k">경고 창에 적는 곳</span><span class="v" id="rWarn"></span></div>
+          <div><span class="k">채팅창 답 머리</span><span class="v mono" id="rHead"></span></div>
+        </div>
+        <div class="result-notes" id="rNotes"></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:28px; display:grid; gap:12px">
+    <h3>명령별 등급</h3>
+    <div class="table-wrap">
+      <table class="t" id="tierTable">
+        <thead><tr><th>명령</th><th>자리</th><th>등급</th><th>도구</th><th>필요 허용 수준</th><th>이유</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="note">바뀌는 코드: 설정에 <code>AiSettings.Light</code>, 요청에 <code>AiRequest.Tier</code>, 대상 고르기에 <code>AiActiveProfile.Find(settings, tier)</code>. 보내기 전 확인(<code>AiProfileExpectation</code>)과 가림 여부는 <b>실제로 고른 대상</b>으로 계산합니다. 감사 기록에는 등급과 모델 이름을 남깁니다.</p>
+  </div>
+</section>
+
+<section id="p1">
+  <div class="sec-head">
+    <div class="eyebrow">1순위 · 구현</div>
+    <h2>지금 화면에 AI 입구 붙이기</h2>
+    <p class="lede">새 도구가 거의 필요 없고, 기존 명령의 활성 조건을 풀거나 화면에 단추 하나를 붙이는 일이 중심입니다. 화면 모형의 내용은 모두 예시입니다. 각 화면의 AI 단추(코랄색)를 누르면, 대화가 필요한 일은 AI 채팅창에 새 대화로, 나머지는 화면 안의 AI 띠에 바로 답이 보입니다.</p>
+  </div>
+
+  <!-- 1.1 AWR -->
+  <div class="feature">
+    <div class="feature-title"><span class="num">1-1</span><h3>SQL 모니터 · AWR: 계획이 바뀐 원인 보기</h3><span class="chip main">주 모델 · 도구 씀</span></div>
+    <div class="split">
+      <div class="spec">
+        <dl>
+          <dt>자리</dt><dd><code>Features/SqlMonitor</code> AWR 이력, 「튜닝 추천」 탭 옆</dd>
+          <dt>입구</dt><dd>같은 sql_id 에 계획(plan_hash_value)이 2개 이상일 때만 「AI로 원인 보기」가 켜집니다</dd>
+          <dt>새 도구</dt><dd><code>get_awr_plan_history</code>: 계획별 사용 기간, 스냅숏마다 실행당 시간·버퍼·행 수<br><code>get_awr_plan</code>: 계획 한 개의 줄</dd>
+          <dt>허용 수준</dt><dd>계획 이상. 바인드 캡처 값은 조회+행 값일 때만</dd>
+          <dt>결과</dt><dd>원인 후보와 조치. 계획 고정이 맞으면 SQL Plan Baseline 스크립트를 편집기 제안으로</dd>
+        </dl>
+        <p class="note">AWR 을 쓸 수 없는 서버(라이선스 없음·Tibero)는 기존 AWR 화면이 지원하는 범위를 따르고 입구를 끕니다.</p>
+      </div>
+      <div class="win">
+        <div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="t">SQL 모니터 — 7b2kq9x1m3f0d · AWR 이력</span></div>
+        <div class="win-body">
+          <div class="toolbar"><span class="tb">새로 고침</span><span class="tb">계획 비교</span><span class="tb sep"></span><span class="tb ai new">AI로 원인 보기</span><span class="label-ex">예시</span></div>
+          <div class="scroll-x">
+            <table class="grid-mock">
+              <thead><tr><th>스냅숏</th><th>계획</th><th>실행</th><th>실행당 시간</th><th>실행당 버퍼</th></tr></thead>
+              <tbody>
+                <tr><td>11-11 23:00</td><td>1288391044</td><td>412</td><td>0.81 s</td><td>3,204</td></tr>
+                <tr><td>11-12 01:00</td><td>1288391044</td><td>398</td><td>0.79 s</td><td>3,180</td></tr>
+                <tr class="sel"><td>11-12 03:00</td><td>3940012871</td><td>405</td><td>14.20 s</td><td>918,442</td></tr>
+                <tr><td>11-12 05:00</td><td>3940012871</td><td>389</td><td>13.96 s</td><td>902,117</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="chatpane">
+            <div class="chat-bar"><span>AI 채팅창 · 새 대화</span><span class="who">계획이 바뀐 원인</span></div>
+            <div class="chat-flow">
+              <div class="chat-me">「계획이 바뀐 원인」 — 화면에서 모은 정보를 보냈습니다</div>
+              <div class="card">
+                <div class="card-head"><b>계획이 바뀐 원인</b><span class="who">opus · 도구 4번</span></div>
+                <div class="card-body">
+                  <p><b>11-12 02:10</b> 에 <code>ORD_ITEM</code> 통계가 다시 수집된 뒤 계획이 바뀌었습니다.</p>
+                  <ol>
+                    <li><code>STATUS</code> 열에 히스토그램이 새로 생겨 <code>'N'</code> 의 선택도를 0.4 로 봅니다(실제 0.002).</li>
+                    <li>그래서 <code>IX_ORD_ITEM_02</code> 범위 검색 대신 전체 검색을 고릅니다.</li>
+                  </ol>
+                  <p>권하는 조치: 이전 계획(1288391044)을 Baseline 으로 고정하고, <code>STATUS</code> 히스토그램 수집 방식을 다시 정합니다.</p>
+                </div>
+                <div class="card-foot"><button class="btn primary" type="button">Baseline 스크립트를 편집기에</button></div>
+              </div>
+            </div>
+            <div class="chat-input">이어 묻기… (같은 모델로 이어집니다)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1.2 Lock -->
+  <div class="feature">
+    <div class="feature-title"><span class="num">1-2</span><h3>세션 · 락 모니터: 상황 풀이</h3><span class="chip light">가벼운 일 · 도구 안 씀</span></div>
+    <div class="split">
+      <div class="spec">
+        <dl>
+          <dt>자리</dt><dd><code>LockMonitor</code> 차단 사슬, <code>SessionMonitor</code> 고른 세션, <code>BlockerAlert</code> 알림</dd>
+          <dt>입구</dt><dd>사슬 줄의 「AI 풀이」, 세션 줄의 「대기 풀이」. 모니터 아래 AI 띠에 바로 보입니다. KILL 확인 창에는 앞서 받은 풀이의 결론 한 줄만 다시 보입니다(새 요청 없음)</dd>
+          <dt>보내는 것</dt><dd>세션별 SID·대기 이벤트·대기 시간·잠긴 객체·잠금 모드·모듈·프로그램, 막는 쪽의 현재·직전 SQL(리터럴 가림 규칙 그대로)</dd>
+          <dt>허용 수준</dt><dd>계획 이상. 사용자명·머신 이름은 「정할 것 3」</dd>
+          <dt>결과</dt><dd>상황 한 줄 / 원인 추정 / 권하는 행동. KILL 은 하지 않습니다</dd>
+        </dl>
+      </div>
+      <div class="win">
+        <div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="t">락 모니터 — PRD-ERP</span></div>
+        <div class="win-body">
+          <div class="toolbar"><span class="tb">자동 새로 고침 5초</span><span class="tb">KILL…</span><span class="tb sep"></span><span class="tb ai new">AI 풀이</span><span class="label-ex">예시</span></div>
+          <div class="scroll-x">
+            <table class="grid-mock">
+              <thead><tr><th>사슬</th><th>SID</th><th>모듈</th><th>대기</th><th>시간</th><th>객체</th></tr></thead>
+              <tbody>
+                <tr class="sel"><td>막음</td><td>812</td><td>APP_BATCH</td><td>— (유휴)</td><td>6:12</td><td>ORDERS</td></tr>
+                <tr><td>└ 대기</td><td>1043</td><td>ORD_WEB</td><td>enq: TX - row lock</td><td>5:48</td><td>ORDERS</td></tr>
+                <tr><td>└ 대기</td><td>1077</td><td>ORD_WEB</td><td>enq: TX - row lock</td><td>3:10</td><td>ORDERS</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="strip">
+            <div class="strip-bar"><span>✨ AI · 상황 풀이 </span><span class="who">Ollama qwen3:8b · 로컬</span></div>
+          <div class="card">
+            <div class="card-head"><b>상황 풀이</b><span class="who">Ollama qwen3:8b · 로컬</span></div>
+            <div class="card-body">
+              <p><b>상황</b> 배치 세션 812 가 <code>ORDERS</code> 행을 고친 뒤 6분째 커밋하지 않아 웹 세션 2개가 기다립니다.</p>
+              <p><b>원인 추정</b> 812 의 직전 문장이 <code>UPDATE ORDERS SET STATUS = :v1 …</code> 이고 지금 유휴입니다. 배치가 커밋 전에 멈췄거나 다른 일을 기다립니다.</p>
+              <p><b>권하는 행동</b> 배치 담당에게 먼저 연락합니다. 10분이 넘고 담당이 확인하면 812 를 끊는 것을 고려합니다. 끊으면 그 UPDATE 는 되돌려집니다.</p>
+            </div>
+            <div class="card-foot"><button class="btn" type="button">더 깊게 (주 모델)</button><button class="btn" type="button">채팅에서 이어 보기</button></div>
+          </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1.3 PL/SQL -->
+  <div class="feature">
+    <div class="feature-title"><span class="num">1-3</span><h3>PL/SQL 편집기: 오류 고치기 · 코드 설명</h3><span class="chip light">가벼운 일 · 크면 주 모델</span></div>
+    <div class="split">
+      <div class="spec">
+        <dl>
+          <dt>자리</dt><dd><code>PlsqlEditor</code>, <code>PlsqlRun</code></dd>
+          <dt>입구</dt><dd>SQL 탭에만 있던 「오류 고치기」·「SQL 설명」을 PL/SQL 문서로 넓힙니다. 설명은 「코드 설명」으로 보입니다</dd>
+          <dt>보내는 것</dt><dd>컴파일 오류 목록(<code>ALL_ERRORS</code>), 오류 줄 앞뒤 40줄, 패키지면 spec 전체, 부르는 객체의 정의(메타데이터)</dd>
+          <dt>결과</dt><dd>고친 소스를 편집기 제안 막대로 넣습니다. 컴파일은 사람이 합니다</dd>
+        </dl>
+      </div>
+      <div class="win">
+        <div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="t">PL/SQL — APP.PKG_ORDER (body)</span></div>
+        <div class="win-body">
+          <div class="toolbar"><span class="tb">컴파일</span><span class="tb">실행…</span><span class="tb sep"></span><span class="tb ai">AI 튜닝 ▾</span><span class="tb ai new">오류 고치기</span><span class="label-ex">예시</span></div>
+          <pre class="code">140  BEGIN
+141    v_cnt := 0;
+<span class="diff-del">142    v_cd  := PKG_UTIL.GET_CD(p_type);</span>
+<span class="diff-add">142    v_cd  := PKG_UTIL.GET_CODE(p_type);</span>
+143    IF v_cd IS NULL THEN</pre>
+          <div class="strip">
+            <div class="strip-bar"><span>✨ AI · 오류 고치기 </span><span class="who">haiku</span></div>
+          <div class="card">
+            <div class="card-head"><b>오류 고치기</b><span class="who">haiku</span></div>
+            <div class="card-body">
+              <p><code>PLS-00201</code> 142줄: <code>PKG_UTIL</code> spec 에 <code>GET_CD</code> 가 없고 같은 인자의 <code>GET_CODE</code> 가 있습니다.</p>
+            </div>
+            <div class="card-foot"><button class="btn primary" type="button">받아들이기</button><button class="btn" type="button">버리기</button><button class="btn" type="button">채팅에서 이어 보기</button></div>
+          </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1.4 MyBatis -->
+  <div class="feature">
+    <div class="feature-title"><span class="num">1-4</span><h3>MyBatis 작업 공간: 펼친 SQL 튜닝 · 설명</h3><span class="chip main">튜닝 = 주 모델</span><span class="chip light">설명·오류 = 가벼운 일</span></div>
+    <div class="split">
+      <div class="spec">
+        <dl>
+          <dt>자리</dt><dd><code>MyBatisWorkspace</code></dd>
+          <dt>입구</dt><dd>지금 <code>!mybatisDocActive</code> 로 막힌 AI 명령을 엽니다. 대상은 <b>지금 고른 조합으로 펼친 SQL</b> 입니다</dd>
+          <dt>바인드</dt><dd>파라미터 값은 기존 리터럴 가림 규칙대로</dd>
+          <dt>결과</dt><dd>재작성 제안은 펼친 SQL 기준으로 보이고 XML 에 자동으로 넣지 않습니다(「정할 것 5」). 인덱스 제안은 그대로 쓸 수 있습니다</dd>
+        </dl>
+      </div>
+      <div class="win">
+        <div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="t">MyBatis — CrGalExeRstMapper.xml › selectExeRstList</span></div>
+        <div class="win-body">
+          <div class="toolbar"><span class="tb">조합: status 있음 · fromDt 있음 ▾</span><span class="tb">시험 실행</span><span class="tb sep"></span><span class="tb ai new">AI 튜닝 ▾</span><span class="label-ex">예시</span></div>
+          <pre class="code">SELECT R.EXE_ID, R.RST_CD, R.REG_DT
+  FROM CR_GAL_EXE_RST R
+ WHERE R.RST_STAT = :v1
+   AND R.REG_DT &gt;= TO_DATE(:v2, 'YYYYMMDD')
+ ORDER BY R.REG_DT DESC</pre>
+          <div class="chatpane">
+            <div class="chat-bar"><span>AI 채팅창 · 새 대화</span><span class="who">튜닝 결과 (펼친 SQL 기준)</span></div>
+            <div class="chat-flow">
+              <div class="chat-me">「튜닝 결과 (펼친 SQL 기준)」 — 화면에서 모은 정보를 보냈습니다</div>
+              <div class="card">
+                <div class="card-head"><b>튜닝 결과 (펼친 SQL 기준)</b><span class="who">opus · 벤치마크 3회</span></div>
+                <div class="card-body">
+                  <p>전체 검색 1.9 s → 인덱스 <code>(RST_STAT, REG_DT DESC)</code> 를 쓰면 0.04 s 입니다.</p>
+                  <p>이 조합에서만 잰 값입니다. <code>status</code> 가 빠진 조합은 따로 재야 합니다.</p>
+                </div>
+                <div class="card-foot"><button class="btn primary" type="button">인덱스 DDL 을 편집기에</button><button class="btn" type="button">다른 조합으로 다시</button></div>
+              </div>
+            </div>
+            <div class="chat-input">이어 묻기… (같은 모델로 이어집니다)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="p2">
+  <div class="sec-head">
+    <div class="eyebrow">2순위 · 구현</div>
+    <h2>변경을 실행하기 전과 후의 점검</h2>
+    <p class="lede">파티션 전환처럼 무거운 DDL 이 늘어나서, 실행 전 검토의 가치가 큽니다. 검토는 조언이고 실행 단추를 막지 않습니다. 두 기능 모두 화면 안 AI 띠로 바로 처리합니다.</p>
+  </div>
+
+  <div class="feature">
+    <div class="feature-title"><span class="num">2-1</span><h3>DDL · 변경 묶음 실행 전 검토</h3><span class="chip main">주 모델 · 도구 씀</span></div>
+    <div class="split">
+      <div class="spec">
+        <dl>
+          <dt>자리</dt><dd><code>ChangeBundle</code> 실행 창, <code>TableEdit</code> DDL 미리 보기(파티션 전환 스크립트 포함)</dd>
+          <dt>입구</dt><dd>「AI 검토」</dd>
+          <dt>새 도구</dt><dd><code>get_dependents(object)</code>: 무효화될 객체, 참조 FK, 트리거, 동의어 수. 크기는 기존 <code>get_table_stats</code></dd>
+          <dt>허용 수준</dt><dd>메타 이상(크기·통계는 계획 이상일 때 더함)</dd>
+          <dt>결과</dt><dd>위험도 + 항목 표 + 권하는 실행 순서·시간대</dd>
+        </dl>
+        <p class="note">앱이 정해진 규칙으로 내는 경고(예: Tibero 지운 열 데이터 경고)는 그대로 두고, AI 는 그 위에 덧붙입니다.</p>
+      </div>
+      <div class="win">
+        <div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="t">테이블 편집 — APP.ORD_ITEM › DDL 미리 보기</span></div>
+        <div class="win-body">
+          <div class="toolbar"><span class="tb">스크립트 복사</span><span class="tb">실행…</span><span class="tb sep"></span><span class="tb ai new">AI 검토</span><span class="label-ex">예시</span></div>
+          <pre class="code">ALTER TABLE APP.ORD_ITEM MODIFY
+  PARTITION BY RANGE (REG_DT) INTERVAL (NUMTOYMINTERVAL(1,'MONTH'))
+  (PARTITION P0 VALUES LESS THAN (DATE '2024-01-01'))
+  ONLINE UPDATE INDEXES;</pre>
+          <div class="strip">
+            <div class="strip-bar"><span>✨ AI · 실행 전 검토 <span class="chip warn">위험도 보통</span></span><span class="who">opus · 도구 3번</span></div>
+          <div class="card">
+            <div class="card-head"><b>실행 전 검토</b> <span class="chip warn">위험도 보통</span><span class="who">opus · 도구 3번</span></div>
+            <div class="card-body">
+              <div class="scroll-x">
+                <table class="grid-mock">
+                  <thead><tr><th>항목</th><th>판단</th><th>근거</th></tr></thead>
+                  <tbody>
+                    <tr><td>잠금</td><td>짧음</td><td>ONLINE 이라 시작·끝에만 잠깐</td></tr>
+                    <tr><td>공간</td><td>주의</td><td>18.4 GB 를 한 번 더 씀</td></tr>
+                    <tr><td>시간</td><td>40~70분</td><td>1.2억 행, 인덱스 3개</td></tr>
+                    <tr><td>무효화</td><td>뷰 2 · 패키지 1</td><td>V_ORD_SUM, PKG_ORDER …</td></tr>
+                    <tr><td>되돌리기</td><td>어려움</td><td>되돌리려면 같은 크기로 다시 만듦</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>권하는 순서: 표 공간 여유 확인 → 업무 외 시간 실행 → 끝나면 무효 객체 일괄 컴파일.</p>
+            </div>
+            <div class="card-foot"><button class="btn" type="button">채팅에서 이어 보기</button></div>
+          </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="feature">
+    <div class="feature-title"><span class="num">2-2</span><h3>변경 일지 · 플래시백 · 원복: 요약과 점검</h3><span class="chip light">요약 = 가벼운 일</span><span class="chip main">원복 점검 = 주 모델</span></div>
+    <div class="split">
+      <div class="spec">
+        <dl>
+          <dt>자리</dt><dd><code>ChangeJournal</code>, <code>Flashback</code>, <code>Rollback</code></dd>
+          <dt>입구</dt><dd>일지의 「이 기간 요약」, 플래시백 버전 차이의 「차이 요약」, 원복 스크립트 창의 「AI 점검」</dd>
+          <dt>허용 수준</dt><dd>행 값은 조회+행 값일 때만. 그보다 낮으면 테이블·열 이름과 건수만 보내고 카드에 「값 없이 요약했습니다」를 적습니다</dd>
+          <dt>원복 점검</dt><dd>일지의 변경과 원복 스크립트를 맞대어 빠진 행, FK 순서, 시퀀스·트리거 부작용을 짚습니다. 고친 스크립트는 제안으로만</dd>
+        </dl>
+      </div>
+      <div class="win">
+        <div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="t">변경 일지 — 11-17 09:00 ~ 12:00</span></div>
+        <div class="win-body">
+          <div class="toolbar"><span class="tb">기간 ▾</span><span class="tb">원복 스크립트…</span><span class="tb sep"></span><span class="tb ai new">이 기간 요약</span><span class="label-ex">예시</span></div>
+          <div class="strip">
+            <div class="strip-bar"><span>✨ AI · 이 기간 요약 </span><span class="who">haiku · 값 없이 요약</span></div>
+          <div class="card">
+            <div class="card-head"><b>이 기간 요약</b><span class="who">haiku · 값 없이 요약</span></div>
+            <div class="card-body">
+              <ul>
+                <li><code>ORDERS</code> 37행 갱신(<code>STATUS</code>·<code>UPD_DT</code>), 10:12 에 몰려 있음</li>
+                <li><code>ORD_ITEM</code> 2행 삭제, 11:40</li>
+                <li><code>CODE_MST</code> 1행 추가</li>
+              </ul>
+              <p>허용 수준이 「계획」이라 값은 보내지 않았습니다.</p>
+            </div>
+            <div class="card-foot"><button class="btn" type="button">채팅에서 이어 보기</button></div>
+          </div>
+          </div>
+          <div class="strip">
+            <div class="strip-bar"><span>✨ AI · 원복 스크립트 점검 <span class="chip bad">빠진 것 1</span></span><span class="who">opus</span></div>
+          <div class="card">
+            <div class="card-head"><b>원복 스크립트 점검</b> <span class="chip bad">빠진 것 1</span><span class="who">opus</span></div>
+            <div class="card-body">
+              <p><code>ORD_ITEM</code> 2행을 되살리기 전에 <code>ORDERS</code> 를 먼저 되돌려야 FK 오류가 나지 않습니다. 순서를 바꾼 스크립트를 제안합니다.</p>
+            </div>
+            <div class="card-foot"><button class="btn primary" type="button">고친 스크립트 보기</button><button class="btn" type="button">채팅에서 이어 보기</button></div>
+          </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="p3">
+  <div class="sec-head">
+    <div class="eyebrow">3순위 · 나중에 다시 정리</div>
+    <h2>문서화와 편의</h2>
+    <p class="lede">모두 가벼운 일이라 무료 로컬 모델의 효과가 가장 큽니다. P0 이 들어간 뒤 실제 사용 빈도를 보고 순서를 정합니다.</p>
+  </div>
+  <div class="table-wrap">
+    <table class="t">
+      <thead><tr><th>#</th><th>자리</th><th>할 일</th><th>등급</th><th>메모</th></tr></thead>
+      <tbody>
+        <tr><td class="n">3-1</td><td>테이블 명세 · 객체 상세</td><td>빈 컬럼 주석의 <code>COMMENT ON</code> 초안, 영문 약어 컬럼 이름(<code>EXE_RST_CD</code>)의 한글 풀이</td><td><span class="chip light">가벼운 일</span></td><td>메타데이터 수준만. 같은 스키마의 다른 주석을 사전처럼 씀</td></tr>
+        <tr><td class="n">3-2</td><td>일반 대화 → 편집기</td><td>말로 한 요청을 SELECT 로 만들어 제안 막대로 넣기</td><td><span class="chip main">주 모델</span></td><td>지금 대화로도 반쯤 됨. 빠진 것은 편집기로 넣는 입구</td></tr>
+        <tr><td class="n">3-3</td><td>데이터 복사 · 가져오기</td><td>원본·대상 열 대응표 추천, 엑셀 머리글과 한글 주석 맞추기</td><td><span class="chip light">가벼운 일</span></td><td>정해진 이름 맞추기를 먼저 하고, 남은 열만 AI 에 물음</td></tr>
+        <tr><td class="n">3-4</td><td>시점 비교</td><td>두 시점의 차이를 한 문단으로 요약</td><td><span class="chip light">가벼운 일</span></td><td>행 값 규칙은 2-2 와 같음</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="plan">
+  <div class="sec-head">
+    <h2>작업 나눔 (안)</h2>
+    <p class="lede">A·C 가 들어가면 1·2순위 여섯 건은 서로 의존하지 않아 레인을 나눠 같이 진행할 수 있습니다(소유 폴더가 다릅니다). 막대는 상대 크기(주)입니다.</p>
+  </div>
+  <div class="plan" id="planBars"></div>
+  <div class="table-wrap" style="margin-top:18px">
+    <table class="t" id="planTable">
+      <thead><tr><th>묶음</th><th>내용</th><th>먼저 끝나야 할 것</th><th>크기</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section id="decide">
+  <div class="sec-head">
+    <h2>정할 것</h2>
+    <p class="lede">시안이 추천하는 쪽을 미리 골라 두었습니다. 바꿀 것만 바꾼 뒤 「선택 내용 복사」를 눌러 대화에 붙여 주세요.</p>
+  </div>
+  <div class="decisions" id="decisions"></div>
+  <div class="copy-bar">
+    <button class="btn accent" type="button" id="copyBtn">선택 내용 복사</button>
+    <span class="toast" id="toast" hidden>복사했습니다. 대화에 붙여 주세요.</span>
+  </div>
+  <textarea id="copyOut" readonly aria-label="복사할 선택 내용" style="margin-top:10px"></textarea>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">원본 시안: <code>docs/oranda1/research/ai-expansion-draft-2026-11-18.md</code> · 화면 모형의 숫자와 객체 이름은 모두 예시입니다.</div>
+</footer>
+
+<script>
+(function () {
+  var MODELS = {
+    opus:     { name: 'Claude Code · opus',   head: 'opus',             local: false, limit: 200000, tools: true },
+    sonnet:   { name: 'Claude Code · sonnet', head: 'sonnet',           local: false, limit: 200000, tools: true },
+    gpt:      { name: '사내 게이트웨이 gpt-5', head: 'gpt-5',            local: false, limit: 128000, tools: true },
+    codex:    { name: 'Codex CLI',            head: 'codex',            local: false, limit: 200000, tools: true },
+    haiku:    { name: 'Claude Code · haiku',  head: 'haiku',            local: false, limit: 200000, src: '앱이 앎' },
+    'sonnet-l': { name: 'Claude Code · sonnet', head: 'sonnet',         local: false, limit: 200000, src: '앱이 앎' },
+    ollama:   { name: 'Ollama · qwen3:8b',    head: 'Ollama qwen3:8b · 로컬', local: true, limit: 32000, src: '연결 확인 때 서버에서 읽음' },
+    lmstudio: { name: 'LM Studio · gemma-3-4b', head: 'LM Studio gemma-3-4b · 로컬', local: true, limit: 8192, src: '서버가 알려 주지 않아 기본 8,192' }
+  };
+  var LEVELS = ['끔', '메타', '계획', '조회', '조회+행 값'];
+  var CMDS = [
+    { id: 'tune', name: '이 문장 튜닝', where: 'SQL 편집기 (지금)', tier: 'main', min: 2, why: '벤치마크·통계를 여러 번 오가는 루프' },
+    { id: 'plan', name: '실행 계획 해설', where: 'SQL 편집기 (지금)', tier: 'main', min: 2, why: 'A-Rows·자식 커서를 엮어 읽어야 함' },
+    { id: 'explain', name: 'SQL 설명', where: 'SQL 편집기 (지금)', tier: 'light', min: 1, why: '문장과 객체 정의만 있으면 됨' },
+    { id: 'fix', name: '오류 고치기 (SQL)', where: 'SQL 편집기 (지금)', tier: 'light', min: 1, why: '오류문·위치·문장. 크면 주 모델로' },
+    { id: 'chat', name: '일반 대화', where: 'AI 창 (지금)', tier: 'main', min: 1, why: '무엇을 물을지 모름' },
+    { id: 'awr', name: 'AWR 원인 보기', where: '1-1 SQL 모니터', tier: 'main', min: 2, why: '계획 여러 개와 통계 시점을 맞춰 봐야 함' },
+    { id: 'lock', name: '락·세션 풀이', where: '1-2 락·세션 모니터', tier: 'light', min: 2, why: '앱이 사슬을 모아 주면 풀이만 하면 됨' },
+    { id: 'plsqlfix', name: 'PL/SQL 오류 고치기', where: '1-3 PL/SQL 편집기', tier: 'light', min: 1, why: '오류 줄 주변만 보면 됨. 크면 주 모델로' },
+    { id: 'plsqlexp', name: 'PL/SQL 코드 설명', where: '1-3 PL/SQL 편집기', tier: 'light', min: 1, why: '큰 패키지는 크기 규칙으로 주 모델로' },
+    { id: 'mbtune', name: 'MyBatis 펼친 SQL 튜닝', where: '1-4 MyBatis', tier: 'main', min: 2, why: '튜닝과 같은 루프' },
+    { id: 'ddl', name: 'DDL 실행 전 검토', where: '2-1 테이블 편집·변경 묶음', tier: 'main', min: 1, why: '잘못 짚으면 비용이 큼' },
+    { id: 'journal', name: '변경 일지 요약', where: '2-2 변경 일지·플래시백', tier: 'light', min: 1, rows: true, why: '정리해서 말하기만 하면 됨' },
+    { id: 'rollback', name: '원복 스크립트 점검', where: '2-2 원복', tier: 'main', min: 3, rows: true, why: '빠진 행·FK 순서를 따져야 함' }
+  ];
+
+  var state = { cmd: 'lock', size: 6, conn: 'dev', access: 2, mask: 'off', fail: 'ok' };
+  var $ = function (id) { return document.getElementById(id); };
+
+  var cmdSel = $('cmd');
+  CMDS.forEach(function (c) {
+    var o = document.createElement('option');
+    o.value = c.id; o.textContent = c.name + ' — ' + c.where;
+    if (c.id === state.cmd) o.selected = true;
+    cmdSel.appendChild(o);
+  });
+
+  var tbody = document.querySelector('#tierTable tbody');
+  CMDS.forEach(function (c) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + c.name + '</td><td>' + c.where + '</td><td>' +
+      (c.tier === 'main' ? '<span class="chip main">주 모델</span>' : '<span class="chip light">가벼운 일</span>') +
+      '</td><td>' + (c.tier === 'main' ? '씀' : '안 씀') + '</td><td>' + LEVELS[c.min] + ' 이상' + (c.rows ? '<br><span style="color:var(--muted);font-size:12.5px">행 값은 조회+행 값</span>' : '') +
+      '</td><td>' + c.why + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  function segs(id, key, num) {
+    var root = $(id);
+    root.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      root.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      state[key] = num ? Number(b.dataset.v) : b.dataset.v;
+      render();
+    });
+  }
+  segs('conn', 'conn'); segs('access', 'access', true); segs('mask', 'mask'); segs('fail', 'fail');
+  cmdSel.addEventListener('change', function () { state.cmd = cmdSel.value; render(); });
+  $('size').addEventListener('input', function (e) { state.size = Number(e.target.value); render(); });
+  $('mainModel').addEventListener('change', render);
+  $('lightModel').addEventListener('change', render);
+
+  function fmtK(n) { return n >= 1000 ? Math.round(n / 1000) + 'k' : String(n); }
+
+  function render() {
+    var c = CMDS.filter(function (x) { return x.id === state.cmd; })[0];
+    var mainKey = $('mainModel').value, lightKey = $('lightModel').value;
+    var main = MODELS[mainKey];
+    var light = lightKey === 'same' ? null : MODELS[lightKey];
+    var tokens = state.size * 1000;
+    $('sizeVal').textContent = '약 ' + fmtK(tokens) + ' 토큰';
+    $('limitText').textContent = '주 ' + fmtK(main.limit) + (light ? ' · 가벼운 일 ' + fmtK(light.limit) + ' (70% = ' + fmtK(light.limit * 0.7) + ', 한도: ' + (light.src || '프로필 값') + ')' : ' · 가벼운 일 = 주 모델');
+
+    var notes = [];
+    var rTier = $('rTier'), result = $('result');
+
+    if (state.access === 0 || state.access < c.min) {
+      rTier.className = 'chip bad'; rTier.textContent = '입구 꺼짐';
+      $('rDest').textContent = '보내지 않음';
+      $('rTools').textContent = '—'; $('rMask').textContent = '—'; $('rWarn').textContent = '—'; $('rHead').textContent = '—';
+      notes.push(state.access === 0 ? '이 접속은 AI 허용 수준이 「끔」 이라 단추가 꺼지고, 툴팁에 이유를 씁니다.' :
+        '「' + c.name + '」 는 허용 수준 「' + LEVELS[c.min] + '」 이상이 필요합니다. 단추가 꺼지고 툴팁에 이유를 씁니다.');
+      $('rNotes').innerHTML = notes.map(function (n) { return '<p>' + n + '</p>'; }).join('');
+      return;
+    }
+
+    var target = main, isLight = false, promoted = false;
+    if (c.tier === 'light' && light) {
+      if (tokens > light.limit * 0.7) { promoted = true; }
+      else { target = light; isLight = true; }
+    }
+    var down = isLight && state.fail === 'down';
+
+    rTier.className = 'chip ' + (isLight ? 'light' : 'main');
+    rTier.textContent = c.tier === 'light' ? (isLight ? '가벼운 일' : (promoted ? '가벼운 일 → 주 모델로 올림' : '가벼운 일 (주 모델과 같음)')) : '주 모델';
+    $('rDest').textContent = target.name;
+
+    var tools = c.tier === 'main' ? '씀 (DB 조회 도구)' : '안 씀 (한 번에 보냄)';
+    if (c.tier === 'main' && mainKey === 'codex') tools = '씀 (게이트 거침)';
+    $('rTools').textContent = tools;
+
+    var masked;
+    if (target.local) { masked = '가리지 않음 (로컬 AI)'; }
+    else if (state.conn === 'prod') { masked = '가림 (운영 접속)'; }
+    else if (state.mask === 'on') { masked = '가림 (설정)'; }
+    else { masked = '가리지 않음'; }
+    $('rMask').textContent = masked;
+    $('rWarn').textContent = target.name;
+    $('rHead').textContent = down ? '오류: 연결 안 됨' : target.head + (c.rows && state.access < 4 ? ' · 값 없이' : '');
+
+    if (c.tier === 'light' && !light) notes.push('가벼운 일 모델을 「주 모델과 같음」 으로 두어 지금처럼 주 모델로 갑니다. 이때도 도구는 쓰지 않고 한 번에 보냅니다.');
+    if (promoted) notes.push('보낼 내용(' + fmtK(tokens) + ')이 가벼운 일 모델 한도의 70%(' + fmtK(light.limit * 0.7) + ')를 넘어 주 모델로 보냅니다. 채팅창 답에 「입력이 커서 주 모델로 보냈습니다」 를 적습니다.');
+    if (isLight && !down) notes.push('카드의 「더 깊게」 는 ' + main.name + ' 로 채팅창에 새 대화를 엽니다. 앞 대화는 넘기지 않습니다.');
+    if (down) notes.push(light.name + ' 에 연결하지 못했습니다. 다른 모델로 몰래 넘기지 않고, 오류 카드에 「주 모델로 다시 보내기」 단추를 둡니다. 누르면 ' + main.name + ' 기준으로 가림 여부와 경고 창을 다시 계산합니다' + (target.local && (state.conn === 'prod' || state.mask === 'on') ? ' (이 경우 가리지 않던 리터럴을 가리게 됩니다).' : '.'));
+    if (target.local) notes.push('로컬 AI 프로필로 확인된 주소(D-045)라서, 운영 접속이어도 값을 가리지 않습니다.');
+    if (c.rows) notes.push(state.access >= 4 ? '허용 수준이 「조회+행 값」 이라 행 값을 함께 보냅니다.' : '허용 수준이 「조회+행 값」 보다 낮아 테이블·열 이름과 건수만 보냅니다.');
+    if (c.id === 'lock') notes.push('사용자명·머신 이름: ' + (state.access >= 3 ? '「조회」 이상이라 그대로 보냄 (시안)' : '「계획」 이라 USER1·HOST1 처럼 바꿔 보냄 (시안)') + '.');
+    if (c.tier === 'main' && mainKey === 'codex') notes.push('Codex 는 모델 이름을 넘기지 않습니다. 대상만 고릅니다.');
+    $('rNotes').innerHTML = notes.map(function (n) { return '<p>' + n + '</p>'; }).join('');
+  }
+  render();
+
+  // 작업 나눔
+  var PLAN = [
+    { k: 'A', name: '등급 라우팅', what: '설정 Light, AiRequest.Tier, Find(tier), 크기 올림, 고른 대상 기준 확인·가림, 채팅창 답 머리 모델 이름, 감사 기록', dep: '—', w: 1.5, s: 0, cls: 'p0' },
+    { k: 'B', name: '설정 화면', what: '「가벼운 일 모델」 줄, 추천 짝(haiku·로컬), 로컬 기본 한도 8,192, 연결 확인 때 문맥 크기 읽기', dep: 'A', w: 0.7, s: 1.5, cls: 'p0' },
+    { k: 'C', name: '공통 부품', what: '문맥 꾸러미, 입구 단추, 대화 주인·기능 카드(채팅창), AI 띠·채팅에서 이어 보기(바로 처리), 답 틀', dep: 'A', w: 1.3, s: 1.5, cls: 'p0' },
+    { k: 'D', name: '기존 명령 등급', what: 'SQL 설명·오류 고치기 = 가벼운 일, SQL 오류 고치기를 제안 막대로 바로', dep: 'A, C', w: 0.4, s: 2.8, cls: 'p0' },
+    { k: 'E1', name: 'AWR 원인 보기', what: '1-1 + 도구 2개', dep: 'C', w: 1.5, s: 2.8, cls: '' },
+    { k: 'E2', name: '락·세션 풀이', what: '1-2', dep: 'C', w: 1, s: 2.8, cls: '' },
+    { k: 'E3', name: 'PL/SQL 오류·설명', what: '1-3', dep: 'C, D', w: 1, s: 2.8, cls: '' },
+    { k: 'E4', name: 'MyBatis 펼친 SQL', what: '1-4', dep: 'C, D', w: 1, s: 2.8, cls: '' },
+    { k: 'F1', name: 'DDL 실행 전 검토', what: '2-1 + 도구 1개', dep: 'C', w: 1.5, s: 2.8, cls: 'p2' },
+    { k: 'F2', name: '일지·플래시백·원복', what: '2-2', dep: 'C', w: 1.5, s: 2.8, cls: 'p2' },
+    { k: 'G', name: '통합 확인', what: '유료만 · 로컬+유료 · 주 모델만 세 구성으로 실제 서버 확인', dep: '전부', w: 1, s: 4.3, cls: 'p0' }
+  ];
+  var total = 5;
+  var bars = $('planBars'), pt = document.querySelector('#planTable tbody');
+  PLAN.forEach(function (p) {
+    var row = document.createElement('div'); row.className = 'plan-row';
+    row.innerHTML = '<span><b class="mono" style="color:var(--accent)">' + p.k + '</b> ' + p.name + '</span>' +
+      '<span class="plan-track"><span class="plan-bar ' + p.cls + '" style="left:' + (p.s / total * 100) + '%;width:' + (p.w / total * 100) + '%"></span></span>' +
+      '<span class="w">' + p.w + ' w</span>';
+    bars.appendChild(row);
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="n"><b>' + p.k + '</b> ' + p.name + '</td><td>' + p.what + '</td><td>' + p.dep + '</td><td class="n">' + p.w + ' w</td>';
+    pt.appendChild(tr);
+  });
+
+  // 결정
+  var DEC = [
+    { q: '가벼운 일 모델이 실패하면', opts: ['자동으로 넘기지 않고 「주 모델로 다시 보내기」 단추 하나', '가림 규칙이 같을 때만 주 모델로 자동으로 넘김', '항상 주 모델로 자동으로 넘김'], rec: 0 },
+    { q: '주 모델로 올리는 크기 기준', opts: ['가벼운 일 모델 입력 한도의 70% (한도는 앱이 정함)', '한도의 90%', '올리지 않고 잘라서 보냄'], rec: 0 },
+    { q: '락·세션 풀이에 사용자명·머신 이름', opts: ['「계획」 이면 USER1·HOST1 로 바꾸고, 「조회」 이상이면 그대로', '항상 바꿔 보냄', '항상 그대로 보냄'], rec: 0 },
+    { q: 'AWR 원인 보기의 라이선스 안내', opts: ['기존 AWR 화면의 안내를 그대로 씀', '처음 누를 때 Diagnostics Pack 확인 창을 한 번 띄움'], rec: 0 },
+    { q: 'MyBatis 재작성 결과의 XML 반영', opts: ['이번에는 하지 않음 (펼친 SQL 기준으로만 보임)', '단순한 경우(동적 태그 밖 수정)만 XML 에 반영'], rec: 0 }
+  ];
+  var dRoot = $('decisions');
+  DEC.forEach(function (d, i) {
+    var div = document.createElement('div'); div.className = 'decision';
+    var html = '<fieldset><legend>' + (i + 1) + '. ' + d.q + '</legend>';
+    d.opts.forEach(function (o, j) {
+      html += '<label class="opt"><input type="radio" name="d' + i + '" id="d' + i + '_' + j + '" value="' + j + '"' + (j === d.rec ? ' checked' : '') + '><span>' + o + (j === d.rec ? '<span class="rec">시안</span>' : '') + '</span></label>';
+    });
+    html += '</fieldset><textarea id="memo' + i + '" placeholder="덧붙일 말 (선택)"></textarea>';
+    div.innerHTML = html;
+    dRoot.appendChild(div);
+  });
+  var extra = document.createElement('div'); extra.className = 'decision';
+  extra.innerHTML = '<fieldset><legend>6. 그 밖에 고칠 곳</legend></fieldset><textarea id="memoX" placeholder="예: 1-2 는 세션 모니터만 먼저, 3-1 을 2순위로 올리기 …"></textarea>';
+  dRoot.appendChild(extra);
+
+  function buildText() {
+    var lines = ['[AI 확대 시안 결정]'];
+    DEC.forEach(function (d, i) {
+      var sel = document.querySelector('input[name="d' + i + '"]:checked');
+      var j = sel ? Number(sel.value) : d.rec;
+      var memo = $('memo' + i).value.trim();
+      lines.push((i + 1) + '. ' + d.q + ': ' + d.opts[j] + (j === d.rec ? ' (시안대로)' : ' (시안과 다름)') + (memo ? ' / ' + memo : ''));
+    });
+    var x = $('memoX').value.trim();
+    if (x) lines.push('6. 그 밖에: ' + x);
+    return lines.join('\n');
+  }
+  function refreshOut() { $('copyOut').value = buildText(); }
+  dRoot.addEventListener('input', refreshOut); dRoot.addEventListener('change', refreshOut);
+  refreshOut();
+  $('copyBtn').addEventListener('click', function () {
+    var text = buildText(); $('copyOut').value = text;
+    var done = function () { var t = $('toast'); t.hidden = false; setTimeout(function () { t.hidden = true; }, 2500); };
+    try {
+      navigator.clipboard.writeText(text).then(done, function () { $('copyOut').select(); });
+    } catch (e) { $('copyOut').select(); }
+  });
+})();
+</script>

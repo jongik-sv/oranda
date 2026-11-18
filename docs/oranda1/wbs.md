@@ -1249,12 +1249,153 @@ levels:
   - acceptance: MapperFileWriterTests +2(잠깐 잡힌 대상 = 재시도 알림에서 놓으면 한 번 다시 해 바꿈·임시 파일 없음, 끝까지 잡힘 = IOException·원본 유지·임시 파일 없음, 재시도 순간은 알림으로 정해 시간에 기대지 않음) / SessionsViewModelTests 13 ×10·StatementsOpenChangedTests 4 ×10 통과 / 재현 조건(행 사전 비운 뒤 지연 주입, 폴더 시험 병렬 16클래스)에서 고친 뒤 통과 / `dotnet build Oranda.sln -warnaserror`
   - note: 결과: SessionsViewModelTests 13×10·StatementsOpenChangedTests 4×10·MapperFileWriterTests 14×10 통과, 폴더 시험 병렬 16클래스 재현 조건 고친 뒤 1024회 0 실패, MyBatisWorkspace 시험 505 통과. 바꾼 곳 = SessionsViewModel 시험용 생성자(PostToUi 덮어쓰기 뺌), Platform MapperFileWriter(바꾸기 재시도), 시험 단정 메시지. 남긴 것: 세션 창 QueueRefresh 는 UI 스레드에서 부르면 바로 다시 만들어 RaiseAll 한 번에 여러 번 돈다(주석의 「한 번에 모아」 와 다름, 동작 문제는 아님) (win144)
 
+## WP-15: AI 적용 확대와 모델 나눠 쓰기 (1·2순위)
+<!-- 2026-11-18 사용자 「진행해」. 설계 = docs/oranda1/research/ai-expansion-draft-2026-11-18.md(결정 AE-1~5 시안대로), 시안 docs/oranda1/mockups/ai-expansion-2026-11-18.html(https://claude.ai/artifact/1iyHLCBX2oaCruwhw9bZ6D). 3순위는 나중에. PC 나눔: win144·win30·맥북(linux 는 사용자가 알릴 때까지 쓰지 않음) -->
+
+- [ ] TSK-15-01: AI 등급 라우팅 — 주 모델·가벼운 일 모델(AiSettings.Light·AiRequest.Tier·Find(tier)·크기 올림·고른 대상 기준 확인과 가림·답한 모델 이름·감사 기록) [win144] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: backend
+  - model: opus
+  - priority: high
+  - tags: ai, ai-expand, routing, tier, win144
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §1.1~1.2·§1.4
+  - requirements: 첫 항목 = 계약 체크포인트(AiSettings.Light, AiRequest.Tier, AiActiveProfile.Find(settings, tier), 답한 모델 이름을 이벤트로 알리는 자리)를 먼저 머지해 다른 레인이 쓰게 한다; Light 가 비면 지금과 똑같다; Claude CLI·Codex 모델별 입력 한도 표(앱이 앎); 한도 70% 넘으면 Main 으로 올리고 알림 글; 실패해도 몰래 넘기지 않음(「주 모델로 다시 보내기」 신호); 가벼운 일 노력 low 고정; 비고: 담당 PC: win144 회차 ai-expand
+  - acceptance: Light 비었을 때 기존 시험 전부 그대로 통과 / Light 지정·크기 올림·로컬 가벼운 일+유료 주 모델의 가림 차이·CLI 와 API 섞임을 시험 / 감사 기록에 등급·모델
+
+- [ ] TSK-15-02: AI 설정 화면 — 「가벼운 일 모델」 줄·추천 짝·로컬 프리셋 기본 한도 8,192·「연결 확인」 때 문맥 크기 읽기 [macbook] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: medium
+  - tags: ai, ai-expand, settings, macbook
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §1.3·§1.2 한도 정하기
+  - depends: TSK-15-01
+  - requirements: AI 모델 설정 페이지에 줄 하나(주 모델과 같음 / Claude Code haiku·sonnet / 저장된 프로필); 명령별 고르기 칸 없음; Ollama·LM Studio 프리셋 MaxInputTokens 기본 8,192; 연결 확인 때 서버가 알려 주는 문맥 크기로 채움(모르면 그대로); 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 회차 ai-expand
+  - acceptance: Headless 시험: 저장·다시 열기·비우기 / 프리셋 기본값 / 연결 확인 응답(가짜 서버)에 문맥 크기 있음·없음·오류
+
+- [ ] TSK-15-03: AI 공통 부품 — 문맥 꾸러미·입구 단추·대화 주인 기반·채팅 기능 카드·AI 띠(AiInlineStrip)·「채팅에서 이어 보기」·답 틀 [win30] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: ai, ai-expand, chat, inline-strip, win30
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §2·§2.1·§2.2
+  - depends: TSK-15-01
+  - requirements: 채팅창 쪽 = 파티션 추천의 IAiChatConversation·ChatCardEntry 본보기; 바로 처리 쪽 = 화면에 붙는 AiInlineStrip(요청·멈춤·다시·복사·채팅에서 이어 보기, 답한 모델 이름); 이어 보기는 보낸 문맥과 받은 답을 새 대화 첫 턴으로 옮김(다시 보내지 않음); 경고 창·가림은 채팅 쪽과 같은 경로; AI 는 실행하지 않음; 비고: 담당 PC: win30 — win144 세션은 이 Task 를 하지 않는다. 회차 ai-expand
+  - acceptance: Headless 시험: 띠 요청·멈춤·다시·이어 보기(같은 모델) / 채팅창 다른 대화 중일 때 새 대화로 / 허용 수준보다 높은 칸은 꾸러미에 없음
+
+- [ ] TSK-15-04: 기존 AI 명령 등급 지정 — SQL 설명·오류 고치기 = 가벼운 일, SQL 오류 고치기를 편집기 제안 막대로 바로 처리 [win30] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: frontend
+  - model: sonnet
+  - priority: medium
+  - tags: ai, ai-expand, existing-commands, win30
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §1.4·§2.1
+  - depends: TSK-15-01, TSK-15-03
+  - requirements: SQL 설명·실행 계획 해설은 채팅창 그대로; 오류 고치기 결과 = 제안 막대(까닭 한 줄); 비고: 담당 PC: win30 — win144 세션은 이 Task 를 하지 않는다. 회차 ai-expand
+  - acceptance: 오류 고치기가 채팅창을 열지 않고 제안 막대로 / 등급 Light 로 대상 고름 / 기존 시험 갱신
+
+- [ ] TSK-15-05: AWR 계획이 바뀐 원인 보기(채팅창) + 도구 get_awr_plan_history·get_awr_plan [win144] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: ai, ai-expand, awr, sql-monitor, win144
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §3.1
+  - depends: TSK-15-03
+  - requirements: 같은 sql_id 에 계획 2개 이상일 때 입구; Main·도구; 바인드 값은 조회+행 값에서만; AWR 못 쓰는 서버는 입구 끔; Baseline 스크립트는 편집기 제안; 비고: 담당 PC: win144 회차 ai-expand
+  - acceptance: 도구 단위 시험·Oracle IT(26ai·11g) / 입구 활성 조건 / 카드
+
+- [ ] TSK-15-06: 락·세션 상황 풀이(바로 처리 AI 띠) + KILL 확인 창 결론 한 줄 [win30] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: fullstack
+  - model: sonnet
+  - priority: high
+  - tags: ai, ai-expand, lock-monitor, sessions, win30
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §3.2·§2.1
+  - depends: TSK-15-03
+  - requirements: 모니터 아래 AI 띠; Light 한 번짜리; 사용자명·머신 이름은 계획 수준이면 자리표시(AE-3); KILL 창은 앞서 받은 결론만(새 요청 없음); 비고: 담당 PC: win30 — win144 세션은 이 Task 를 하지 않는다. 회차 ai-expand
+  - acceptance: Headless 시험: 띠·가림·KILL 창 줄 숨김/보임 / 더 깊게 = 주 모델 새 대화
+
+- [ ] TSK-15-07: PL/SQL 오류 고치기(바로 처리 제안 막대)·코드 설명(채팅창) [macbook] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: fullstack
+  - model: sonnet
+  - priority: medium
+  - tags: ai, ai-expand, plsql, macbook
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §3.3
+  - depends: TSK-15-03, TSK-15-04
+  - requirements: 활성 조건을 PL/SQL 문서까지; Light, 크면 Main; 컴파일은 사람; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 회차 ai-expand
+  - acceptance: Headless 시험: PL/SQL 문서에서 명령 보임·제안 막대·설명 채팅창
+
+- [ ] TSK-15-08: MyBatis 펼친 SQL 튜닝·설명(채팅창) [win30] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: fullstack
+  - model: sonnet
+  - priority: medium
+  - tags: ai, ai-expand, mybatis, win30
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §3.4
+  - depends: TSK-15-03, TSK-15-04
+  - requirements: !mybatisDocActive 막힘 풀기; 대상 = 지금 조합으로 펼친 SQL; XML 자동 반영 안 함(AE-5); 비고: 담당 PC: win30 — win144 세션은 이 Task 를 하지 않는다. 회차 ai-expand
+  - acceptance: Headless 시험: 펼친 SQL 이 보내짐·XML 안 바뀜
+
+- [ ] TSK-15-09: DDL·변경 묶음 실행 전 검토(바로 처리 검토 띠) + 도구 get_dependents [win144] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: fullstack
+  - model: opus
+  - priority: high
+  - tags: ai, ai-expand, ddl-review, change-bundle, win144
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §4.1
+  - depends: TSK-15-03
+  - requirements: 실행 창·DDL 미리 보기 안 검토 띠; Main·도구; 실행 단추를 막지 않음; 앱 규칙 경고 유지; 비고: 담당 PC: win144 회차 ai-expand
+  - acceptance: 도구 Oracle IT·Tibero / Headless 시험: 띠·채팅에서 이어 보기
+
+- [ ] TSK-15-10: 변경 일지 요약·플래시백 차이 요약·원복 스크립트 점검(바로 처리 띠) [macbook] w:1 2026-11-18~2026-11-25
+  - category: dev
+  - domain: fullstack
+  - model: sonnet
+  - priority: medium
+  - tags: ai, ai-expand, journal, flashback, rollback, macbook
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §4.2
+  - depends: TSK-15-03
+  - requirements: 요약 Light·원복 점검 Main; 행 값은 조회+행 값에서만, 아니면 「값 없이 요약」; 고친 스크립트는 제안만; 비고: 담당 PC: 맥북 — win144 세션은 이 Task 를 하지 않는다. 회차 ai-expand
+  - acceptance: Headless 시험: 허용 수준별 보내는 칸 / 띠 / 편집기로 넣기
+
+- [ ] TSK-15-11: AI 확대 통합 확인 — 유료만·로컬+유료·주 모델만 세 구성 [win144] w:1 2026-11-18~2026-11-25
+  - category: itest
+  - domain: test
+  - model: opus
+  - priority: high
+  - tags: ai, ai-expand, itest, win144
+  - prd-ref: docs/oranda1/research/ai-expansion-draft-2026-11-18.md §6 G
+  - depends: TSK-15-01, TSK-15-02, TSK-15-05, TSK-15-06, TSK-15-07, TSK-15-08, TSK-15-09, TSK-15-10
+  - requirements: 전체 빌드·시험 1번, Oracle 26ai·11g·Tibero IT, 사용자 확인 목록 작성(실앱은 사람 몫); 비고: 담당 PC: win144 회차 ai-expand
+  - acceptance: 빌드 경고 0·시험 통과 / 사용자 확인 목록
+
 ## 의존 그래프
 
 ### 그래프 (Mermaid)
 
 ```mermaid
 graph LR
+  TSK-15-01 --> TSK-15-02
+  TSK-15-01 --> TSK-15-03
+  TSK-15-03 --> TSK-15-04
+  TSK-15-03 --> TSK-15-05
+  TSK-15-03 --> TSK-15-06
+  TSK-15-03 --> TSK-15-07
+  TSK-15-03 --> TSK-15-08
+  TSK-15-03 --> TSK-15-09
+  TSK-15-03 --> TSK-15-10
+  TSK-15-04 --> TSK-15-07
+  TSK-15-04 --> TSK-15-08
+  TSK-15-02 --> TSK-15-11
+  TSK-15-05 --> TSK-15-11
+  TSK-15-06 --> TSK-15-11
+  TSK-15-07 --> TSK-15-11
+  TSK-15-08 --> TSK-15-11
+  TSK-15-09 --> TSK-15-11
+  TSK-15-10 --> TSK-15-11
   TSK-01-01 --> TSK-01-02
   TSK-01-02 --> TSK-02-01
   TSK-01-02 --> TSK-02-02
