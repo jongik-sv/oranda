@@ -72,6 +72,7 @@ public sealed partial class ChangeBundleViewModel : ToolPanelViewModelBase, IDis
             run.Interaction = services.GetService(typeof(IExecutionInteraction)) as IExecutionInteraction;
             run.ConfirmPendingCommit = token => Dialogs.ConfirmAsync("묶음 실행",
                 "이 세션에 커밋하지 않은 변경이 있다. DDL 을 실행하면 그 변경도 커밋된다. 계속할까?", "계속", token);
+            run.AttachReview(r => Ai.DdlReviewShell.Create(services, r.ReviewInput)); // 「AI 검토」(TSK-15-09)
         };
         _ = ReloadAsync();
     }

@@ -357,12 +357,12 @@ public partial class AgentGateTests
         var fx = new GateFixture();
         string[] Names(AgentSession s) => [.. fx.Gate.ListTools(s).Select(t => t.Name)];
 
-        Assert.Equal([AgentToolNames.DescribeObject], Names(Session(Dev(AiAccessLevel.Metadata))));
+        Assert.Equal([AgentToolNames.DescribeObject, AgentToolNames.GetDependents], Names(Session(Dev(AiAccessLevel.Metadata)))); // TSK-15-09: get_dependents 는 메타데이터 수준
         Assert.Empty(Names(Session(Dev(AiAccessLevel.Off))));
-        Assert.Equal(11, Names(Session(Dev(AiAccessLevel.QueryRows))).Length); // AWR 도구 2개 더함(AI 확대 §3.1)
+        Assert.Equal(12, Names(Session(Dev(AiAccessLevel.QueryRows))).Length); // AWR 도구 2개(AI 확대 §3.1) + get_dependents(TSK-15-09)
 
         var plan = Names(Session(Dev(AiAccessLevel.Plan)));
-        Assert.Equal(10, plan.Length);
+        Assert.Equal(11, plan.Length);
         Assert.Contains(AgentToolNames.GetAwrPlanHistory, plan);
         Assert.DoesNotContain(AgentToolNames.BenchmarkQueries, plan);
 

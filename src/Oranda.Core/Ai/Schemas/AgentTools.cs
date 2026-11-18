@@ -2,7 +2,7 @@ using Oranda.Core.Ai.Access;
 
 namespace Oranda.Core.Ai.Schemas;
 
-/// <summary>도구 이름 11개(설계 §5.2 9개 + AWR 계획 이력 2개, AI 확대 §3.1). MCP 도구 이름과 파이프 <c>tools/call</c> 의 <c>name</c> 이 같은 값이다.</summary>
+/// <summary>도구 이름 12개(설계 §5.2 9개 + AWR 계획 이력 2개(AI 확대 §3.1) + 의존 객체 1개(§4.1)). MCP 도구 이름과 파이프 <c>tools/call</c> 의 <c>name</c> 이 같은 값이다.</summary>
 public static class AgentToolNames
 {
     public const string DescribeObject = "describe_object";
@@ -20,6 +20,9 @@ public static class AgentToolNames
 
     /// <summary>AWR 에 남은 한 계획의 줄(DBMS_XPLAN.DISPLAY_AWR 과 같은 내용).</summary>
     public const string GetAwrPlan = "get_awr_plan";
+
+    /// <summary>객체에 기대는 것들(TSK-15-09 실행 전 검토).</summary>
+    public const string GetDependents = "get_dependents";
 }
 
 /// <summary>
@@ -234,6 +237,15 @@ public static class AgentTools
               {{Conn}},
               "sql_id": { "type": "string" },
               "plan_hash_value": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+            } }
+            """),
+        new(AgentToolNames.GetDependents,
+            "What depends on an object before it is changed: objects that may become invalid (views, PL/SQL, triggers) with their status, foreign keys of other tables that reference this table, triggers on this table and the number of synonyms (public and private) pointing at it. Lists are capped at 25 items each; the counts are complete.",
+            AiAccessLevel.Metadata,
+            $$"""
+            { "type": "object", "additionalProperties": false, "required": ["object"], "properties": {
+              {{Conn}},
+              "object": { "type": "string", "description": "OWNER.NAME or NAME." }
             } }
             """),
     ];

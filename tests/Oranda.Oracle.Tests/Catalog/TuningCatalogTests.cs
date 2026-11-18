@@ -16,6 +16,7 @@ public partial class TuningCatalogTests
         "tuning.table_stats", "tuning.column_stats", "tuning.histogram", "tuning.index_stats", "tuning.index_columns",
         "tuning.child_cursors", "tuning.shared_cursor", "tuning.wait_sample", "tuning.trace_file", "tuning.prev_cursor",
         "tuning.plan_controls", "tuning.recommend_candidates", "tuning.recommend_literals", "tuning.recommend_plan",
+        "tuning.object_dependents",
     };
 
     /// <summary>Diagnostics Pack 이 필요한 id(AWR·ASH).</summary>
@@ -62,7 +63,7 @@ public partial class TuningCatalogTests
     public void Every_tuning_query_is_a_select_and_writes_nothing()
     {
         var headers = Catalog.Entries.Where(h => h.Id.StartsWith("tuning.", StringComparison.Ordinal)).ToList();
-        Assert.Equal(21, headers.Select(h => h.Id).Distinct(StringComparer.Ordinal).Count()); // TSK-06-04: trace_file_self, TSK-06-07: sql_stats·report_env, TSK-14-17: recommend_*
+        Assert.Equal(22, headers.Select(h => h.Id).Distinct(StringComparer.Ordinal).Count()); // TSK-06-04: trace_file_self, TSK-06-07: sql_stats·report_env, TSK-14-17: recommend_*, TSK-15-09: object_dependents
         foreach (var header in headers)
         {
             var sql = Catalog.Get(header.Id, Math.Max(header.MinVersion, 11)).Sql.TrimStart();

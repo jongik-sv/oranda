@@ -95,4 +95,11 @@ public interface ITuningService
     /// <summary>튜닝 추천: 커서 하나의 계획에서 눈여겨볼 줄(전체 스캔·INDEX FULL SCAN·CARTESIAN)만. 계획이 밀려났으면 빈 목록.</summary>
     Task<IReadOnlyList<PlanFindingLine>> GetPlanFindingsAsync(ISession s, int? instanceId, string sqlId, long planHashValue, CancellationToken ct) =>
         throw new NotSupportedException();
+
+    /// <summary>
+    /// 객체에 기대는 것들(TSK-15-09, AI 도구 <c>get_dependents</c>): 바꾸면 무효화될 객체·이 표를 참조하는 FK·이 표의 트리거·이 객체를 가리키는 동의어.
+    /// 카탈로그 <c>tuning.object_dependents</c>(메타데이터 수준, 팩 없음). 소유자·이름은 딕셔너리 표기(보통 대문자).
+    /// </summary>
+    Task<IReadOnlyList<ObjectDependentRow>> GetObjectDependentsAsync(ISession s, string owner, string name, CancellationToken ct) =>
+        throw new NotSupportedException();
 }

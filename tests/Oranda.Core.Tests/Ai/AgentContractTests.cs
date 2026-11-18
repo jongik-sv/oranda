@@ -15,7 +15,7 @@ public class AgentContractTests
     [Fact]
     public void Eleven_tools_with_valid_schemas_and_expected_minimum_levels()
     {
-        Assert.Equal(11, AgentTools.All.Count); // 설계 §5.2 9개 + AWR 계획 이력 2개(AI 확대 §3.1)
+        Assert.Equal(12, AgentTools.All.Count); // 설계 §5.2 9개 + AWR 계획 이력 2개(AI 확대 §3.1) + get_dependents(TSK-15-09)
         Assert.Equal(AgentTools.All.Count, AgentTools.All.Select(t => t.Name).Distinct().Count());
 
         foreach (var tool in AgentTools.All)

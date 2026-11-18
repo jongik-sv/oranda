@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:cbai="using:Oranda.App.Features.ChangeBundle.Ai"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.ObjectDetail"
              xmlns:icons="using:Oranda.App.Shell.Icons"
@@ -125,8 +126,13 @@
                       <Button x:Name="CopyEditDdlButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding CanSaveTableEditScript}" />
                       <Button x:Name="OpenEditDdlButton" Classes="tool" Content="편집기로 열기" icons:ButtonIcon.Key="newSql" IsEnabled="{Binding CanSaveTableEditScript}"
                               ToolTip.Tip="새 SQL 탭에 넣습니다(실행하지 않음)" />
+                      <!-- 실행 전 AI 검토(TSK-15-09): 조언이라 실행을 막지 않는다. -->
+                      <Button x:Name="ReviewEditDdlButton" Classes="tool" Content="{Binding DdlReview.Entry.Label}" Command="{Binding DdlReview.Entry.RunCommand}"
+                              IsVisible="{Binding HasDdlReview}" ToolTip.Tip="{Binding DdlReview.Entry.ToolTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="AI 검토" />
                     </StackPanel>
                   </Border>
+                  <!-- 실행 전 AI 검토 띠: 앱 검사 줄 위에 덧붙인다. -->
+                  <cbai:DdlReviewPanel x:Name="TableEditReviewPanel" DockPanel.Dock="Bottom" Margin="6,3" DataContext="{Binding DdlReview}" />
                   <!-- 가상 식 미리보기(설계 7.6, 시안 ⑤) · 실행 전 검사 줄(✖ 막음 · ⚠ 알림 · ✔, 설계 10장). -->
                   <Border DockPanel.Dock="Bottom" Padding="6,3" IsVisible="{Binding HasTableEditFindings}">
                     <ScrollViewer MaxHeight="120">

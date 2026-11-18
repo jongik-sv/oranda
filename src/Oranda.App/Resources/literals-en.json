@@ -2191,5 +2191,12 @@
   "AI 풀이": "AI explain",
   "✨ 대기 풀이": "✨ Explain wait",
   "대기 풀이": "Explain wait",
-  "주 모델로 AI 채팅창에 새 대화를 열어 자세히 풀이합니다(앞 풀이는 넘기지 않습니다)": "Opens a new conversation in the AI chat on the main model for a detailed explanation (the earlier explanation is not carried over)"
+  "주 모델로 AI 채팅창에 새 대화를 열어 자세히 풀이합니다(앞 풀이는 넘기지 않습니다)": "Opens a new conversation in the AI chat on the main model for a detailed explanation (the earlier explanation is not carried over)",
+  "AI 검토": "AI review",
+  "위험도 낮음": "Risk low",
+  "위험도 보통": "Risk medium",
+  "위험도 높음": "Risk high",
+  "실행 전 검토": "Pre-run review",
+  "실행하기 전에 잠금·공간·시간·무효화·되돌리기를 AI 로 점검합니다(실행을 막지 않습니다)": "Checks locks, space, time, invalidation and undo with AI before running (does not block running)",
+  "검토할 문장이 없습니다.": "There are no statements to review."
 }

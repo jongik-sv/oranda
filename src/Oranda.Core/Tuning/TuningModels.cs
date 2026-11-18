@@ -287,3 +287,27 @@ public enum TuningScriptKind
 
 /// <summary>만든 스크립트(TN-16). 새 편집기 탭에 넣기만 하고 DB 로 보내지 않는다.</summary>
 public sealed record TuningScript(TuningScriptKind Kind, string Body);
+
+/// <summary>객체에 기대는 것 하나의 갈래(<see cref="ObjectDependentRow.Kind"/>).</summary>
+public enum ObjectDependentKind
+{
+    /// <summary>이 객체를 쓰는 객체(뷰·PL/SQL·트리거 등, 바꾸면 무효화될 수 있다). 출처: @PFX@_dependencies.</summary>
+    Dependent,
+
+    /// <summary>이 표의 PK·UK 를 참조하는 자식 표의 FK. 출처: @PFX@_constraints(constraint_type = 'R').</summary>
+    ForeignKey,
+
+    /// <summary>이 표에 걸린 트리거. 출처: @PFX@_triggers.</summary>
+    Trigger,
+
+    /// <summary>이 객체를 가리키는 동의어(PUBLIC 포함). 출처: @PFX@_synonyms.</summary>
+    Synonym,
+}
+
+/// <summary>객체에 기대는 것 한 줄(TSK-15-09, 카탈로그 <c>tuning.object_dependents</c>).</summary>
+/// <param name="Kind">갈래.</param>
+/// <param name="Owner">그 객체의 소유자(FK 면 자식 표의 소유자).</param>
+/// <param name="Name">그 객체 이름(FK 면 자식 표 이름).</param>
+/// <param name="Detail">갈래별 덧붙임: 의존 객체 = 객체 형식, FK = 제약 이름, 트리거 = 걸리는 사건(INSERT OR UPDATE …), 동의어 = null.</param>
+/// <param name="Status">VALID·INVALID(의존 객체), ENABLED·DISABLED(FK·트리거). 모르면 null.</param>
+public sealed record ObjectDependentRow(ObjectDependentKind Kind, string Owner, string Name, string? Detail, string? Status);

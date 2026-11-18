@@ -41,6 +41,7 @@ public static partial class ToolCardText
             AgentToolNames.BenchmarkQueries => new("변형 성능 비교", BenchmarkDetail(args)),
             AgentToolNames.GetAwrPlanHistory => new("AWR 계획 이력", args.Text(AgentFields.SqlId)),
             AgentToolNames.GetAwrPlan => new("AWR 저장 계획", Join(args.Text(AgentFields.SqlId), args.Long(AgentFields.PlanHashValue)?.ToString(CultureInfo.InvariantCulture), " · plan ")),
+            AgentToolNames.GetDependents => new("의존 객체 조회", args.Text(AgentFields.ObjectName)),
             _ => new(toolName, null),
         };
     }

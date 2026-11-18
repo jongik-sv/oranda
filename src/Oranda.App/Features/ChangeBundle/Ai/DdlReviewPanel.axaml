@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ai="using:Oranda.App.Features.ChangeBundle.Ai"
+             xmlns:kit="using:Oranda.App.Features.Ai.Kit"
+             x:Class="Oranda.App.Features.ChangeBundle.Ai.DdlReviewPanel"
+             x:DataType="ai:DdlReviewViewModel"
+             IsVisible="{Binding Strip.IsVisible, FallbackValue=False}">
+  <!-- 실행 전 검토 띠(설계 §4.1): 위험도 표 + Kit AI 띠(점검 항목 표 · 권하는 순서 · 멈춤/다시/복사/채팅에서 이어 보기). 실행 단추를 막지 않는다. -->
+  <StackPanel Spacing="4">
+    <Border x:Name="RiskChip" IsVisible="{Binding HasRisk, FallbackValue=False}" Classes.high="{Binding IsHighRisk}" HorizontalAlignment="Left"
+            BorderThickness="1" CornerRadius="10" Padding="8,1" BorderBrush="{DynamicResource OrandaButtonAccentBrush}">
+      <TextBlock x:Name="RiskLabel" Text="{Binding RiskText}" FontWeight="SemiBold" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+    </Border>
+    <kit:AiInlineStrip x:Name="ReviewStrip" DataContext="{Binding Strip}" />
+  </StackPanel>
+  <UserControl.Styles>
+    <Style Selector="Border#RiskChip.high">
+      <Setter Property="BorderBrush" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+    <Style Selector="Border#RiskChip.high > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
+  </UserControl.Styles>
+</UserControl>

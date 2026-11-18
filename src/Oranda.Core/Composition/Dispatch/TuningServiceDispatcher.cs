@@ -79,4 +79,7 @@ public sealed class TuningServiceDispatcher : ITuningService
 
     public Task<IReadOnlyList<PlanFindingLine>> GetPlanFindingsAsync(ISession s, int? instanceId, string sqlId, long planHashValue, CancellationToken ct) =>
         _selector.For<ITuningService>(s).GetPlanFindingsAsync(s, instanceId, sqlId, planHashValue, ct);
+
+    public Task<IReadOnlyList<ObjectDependentRow>> GetObjectDependentsAsync(ISession s, string owner, string name, CancellationToken ct) =>
+        _selector.For<ITuningService>(s).GetObjectDependentsAsync(s, owner, name, ct);
 }

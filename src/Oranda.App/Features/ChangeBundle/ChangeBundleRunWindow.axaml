@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Oranda.App.Features.ChangeBundle"
+        xmlns:ai="using:Oranda.App.Features.ChangeBundle.Ai"
         x:Class="Oranda.App.Features.ChangeBundle.ChangeBundleRunWindow"
         x:DataType="vm:ChangeBundleRunViewModel"
         Title="묶음 실행"
@@ -63,10 +64,16 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </ScrollViewer>
+    <!-- 실행 전 AI 검토 띠(TSK-15-09, 설계 §4.1): 앱 검사 줄은 그대로 두고 AI 가 덧붙인다. 실행 단추를 막지 않는다. -->
+    <ai:DdlReviewPanel x:Name="ReviewPanel" DataContext="{Binding Review}" />
     <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" />
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button x:Name="RunButton" Content="{Binding RunText}" IsEnabled="{Binding CanRun}" />
-      <Button x:Name="CloseButton" Content="{Binding CloseText}" IsCancel="True" />
-    </StackPanel>
+    <Grid ColumnDefinitions="Auto,*,Auto">
+      <Button x:Name="ReviewButton" Classes="tool" Content="{Binding Review.Entry.Label}" Command="{Binding Review.Entry.RunCommand}"
+              IsVisible="{Binding HasReview}" ToolTip.Tip="{Binding Review.Entry.ToolTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="AI 검토" />
+      <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="RunButton" Content="{Binding RunText}" IsEnabled="{Binding CanRun}" />
+        <Button x:Name="CloseButton" Content="{Binding CloseText}" IsCancel="True" />
+      </StackPanel>
+    </Grid>
   </StackPanel>
 </Window>
