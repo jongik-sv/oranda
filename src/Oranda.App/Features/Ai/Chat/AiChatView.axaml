@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.Ai.Chat"
              xmlns:ad="using:Oranda.App.Features.TableEdit.Advisor"
+             xmlns:kit="using:Oranda.App.Features.Ai.Kit"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              x:Class="Oranda.App.Features.Ai.Chat.AiChatView"
@@ -148,6 +149,38 @@
           </ItemsControl>
           <TextBox x:Name="AdviceRawBox" Text="{Binding RawText}" IsVisible="{Binding IsRawOpen}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
                    MaxHeight="320" FontFamily="{DynamicResource OrandaCodeFontFamily}" AutomationProperties.Name="AI 원문" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+    <DataTemplate x:DataType="kit:AiFeatureCard">
+      <!-- AI 공통 기능 카드(설계 §2): 제목 · 답한 모델 · 틀대로 읽은 칸(못 읽었으면 받은 글 그대로) · 「편집기에 넣기」·「복사」·「더 깊게」. -->
+      <Border Padding="12,10" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBlock x:Name="FeatureCardTitle" Text="{Binding Title}" FontWeight="Bold" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <TextBlock x:Name="FeatureCardModel" Grid.Column="1" Text="{Binding ModelLabel}" Opacity="0.7" VerticalAlignment="Center"
+                       FontFamily="{DynamicResource OrandaCodeFontFamily}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </Grid>
+          <ItemsControl x:Name="FeatureCardParts" ItemsSource="{Binding Parts}" IsVisible="{Binding HasParts}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="kit:AiAnswerPart">
+                <StackPanel Spacing="2" Margin="0,0,0,4">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                  <vm:MarkdownView Markdown="{Binding Body}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <vm:MarkdownView x:Name="FeatureCardText" Markdown="{Binding Text}" IsVisible="{Binding ShowsRawText}" />
+          <WrapPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <TextBlock Text="✔ 넣음" IsVisible="{Binding IsInserted}" VerticalAlignment="Center" Margin="0,0,8,0"
+                       Foreground="{DynamicResource OrandaSuccessForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+            <Button x:Name="FeatureCardInsert" Classes="accent" Content="편집기에 넣기" Command="{Binding InsertEditorCommand}" IsVisible="{Binding CanInsertVisible}" Margin="0,0,6,0"
+                    ToolTip.Tip="편집기 제안 막대로 넣습니다(실행하지 않습니다)" AutomationProperties.Name="편집기에 넣기" />
+            <Button x:Name="FeatureCardCopy" Classes="tool" Content="복사" Command="{Binding CopyCommand}" Margin="0,0,6,0" AutomationProperties.Name="복사" />
+            <Button x:Name="FeatureCardDeeper" Classes="tool" Content="더 깊게 (주 모델)" Command="{Binding GoDeeperCommand}" IsVisible="{Binding HasDeeper}"
+                    ToolTip.Tip="주 모델로 채팅창에 새 대화를 엽니다" AutomationProperties.Name="더 깊게" />
+          </WrapPanel>
         </StackPanel>
       </Border>
     </DataTemplate>

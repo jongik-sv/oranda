@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:kit="using:Oranda.App.Features.Ai.Kit"
+             xmlns:chat="using:Oranda.App.Features.Ai.Chat"
+             x:Class="Oranda.App.Features.Ai.Kit.AiInlineStrip"
+             x:DataType="kit:AiInlineStripViewModel"
+             IsVisible="{Binding IsVisible}">
+  <!-- AI 띠(바로 처리, 설계 §2.1): 머리 줄「✨ AI · 이름」+ 답한 모델 · 답(틀대로 읽은 칸 또는 받은 글 그대로) · 상태 줄 · 멈춤/다시/복사/채팅에서 이어 보기. -->
+  <Border x:Name="StripBorder" BorderThickness="4,1,1,1" CornerRadius="8" BorderBrush="{DynamicResource OrandaButtonAccentBrush}" ClipToBounds="True">
+    <DockPanel>
+      <Border DockPanel.Dock="Top" Padding="10,5" Background="{DynamicResource OrandaToolbarBackgroundBrush}">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <TextBlock x:Name="StripTitle" Text="{Binding Title, StringFormat='✨ AI · {0}'}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          <TextBlock x:Name="StripModel" Grid.Column="1" Text="{Binding ModelLabel}" Opacity="0.7" VerticalAlignment="Center"
+                     FontFamily="{DynamicResource OrandaCodeFontFamily}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        </Grid>
+      </Border>
+      <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="10,4,10,6">
+        <TextBlock x:Name="StripStatus" Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" Opacity="0.8"
+                   Classes.failed="{Binding IsFailed}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <Button x:Name="StripStop" Classes="tool" Content="멈춤" Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}" AutomationProperties.Name="멈춤" />
+          <Button x:Name="StripRetryMain" Classes="tool" Content="주 모델로 다시 보내기" Command="{Binding RetryOnMainCommand}" IsVisible="{Binding ShowsRetryOnMain}"
+                  ToolTip.Tip="가벼운 일 모델이 실패했습니다. 주 모델로 다시 보냅니다(보내는 곳을 다시 확인합니다)" AutomationProperties.Name="주 모델로 다시 보내기" />
+          <Button x:Name="StripRetry" Classes="tool" Content="다시" Command="{Binding RetryCommand}" IsVisible="{Binding !IsRunning}" AutomationProperties.Name="다시" />
+          <Button x:Name="StripCopy" Classes="tool" Content="복사" Command="{Binding CopyCommand}" IsVisible="{Binding HasAnswer}" AutomationProperties.Name="복사" />
+          <Button x:Name="StripContinue" Classes="tool" Content="채팅에서 이어 보기" Command="{Binding ContinueInChatCommand}" IsVisible="{Binding CanContinueVisible}"
+                  ToolTip.Tip="보낸 정보와 받은 답을 AI 채팅창의 새 대화로 옮깁니다(다시 보내지 않습니다)" AutomationProperties.Name="채팅에서 이어 보기" />
+        </StackPanel>
+      </Grid>
+      <ScrollViewer MaxHeight="260" HorizontalScrollBarVisibility="Disabled" Padding="10,6,10,0">
+        <StackPanel Spacing="6">
+          <ItemsControl x:Name="StripParts" ItemsSource="{Binding Parts}" IsVisible="{Binding HasParts}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="kit:AiAnswerPart">
+                <Grid ColumnDefinitions="96,*" ColumnSpacing="10" Margin="0,0,0,4">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <chat:MarkdownView Grid.Column="1" Markdown="{Binding Body}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <chat:MarkdownView x:Name="StripRaw" Markdown="{Binding AnswerText}" IsVisible="{Binding ShowsRawText}" />
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Border>
+  <UserControl.Styles>
+    <Style Selector="TextBlock#StripStatus.failed">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+  </UserControl.Styles>
+</UserControl>
