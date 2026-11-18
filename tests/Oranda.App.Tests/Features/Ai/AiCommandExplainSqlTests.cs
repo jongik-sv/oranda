@@ -95,7 +95,7 @@ public class AiCommandExplainSqlTests
 
         Assert.DoesNotContain("LEAK", plain, StringComparison.Ordinal);
         Assert.DoesNotContain("abc123", plain, StringComparison.Ordinal);
-        Assert.Equal(AiCommands.TuneEnablement, ExplainSqlCommand.Enablement);
+        Assert.Equal(AiCommands.ExpandedSqlEnablement, ExplainSqlCommand.Enablement); // MyBatis 펼친 SQL 에서도 켜진다(설계 §3.4)
         Assert.Equal(AiAccessLevel.Metadata, Command.AccessCeiling);
         Assert.False(Command.ProducesReport);
         Assert.Null(Command.OutputSchema);
