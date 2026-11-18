@@ -33,13 +33,14 @@ public class PartitionAdviceCheckerTests
     [Fact]
     public void Unknown_method_layout_interval_or_mismatched_layout_stops()
     {
-        Assert.Equal(["weird", "method"], One(Run(MonthlyRange() with { Method = "weird" }), AdviceCheckCodes.MethodUnknown).Args);
-        Assert.Equal(["weekly", "layout"], One(Run(MonthlyRange() with { Layout = new PartitionLayout("weekly") }), AdviceCheckCodes.MethodUnknown).Args);
-        Assert.Equal(["quarter", "interval"], One(Run(MonthlyRange() with { Interval = "quarter" }), AdviceCheckCodes.MethodUnknown).Args);
-        Assert.Equal(["number:abc", "interval"], One(Run(MonthlyRange() with { Interval = "number:abc" }), AdviceCheckCodes.MethodUnknown).Args);
-        Assert.Equal(["values", "layout"], One(Run(MonthlyRange() with { Layout = new PartitionLayout(AdviceLayoutKind.Values) }), AdviceCheckCodes.MethodUnknown).Args);
+        static (string?, string) Of(AdviceCheck c) => (c.Subject, c.Args![0]);
+        Assert.Equal(("weird", "method"), Of(One(Run(MonthlyRange() with { Method = "weird" }), AdviceCheckCodes.MethodUnknown)));
+        Assert.Equal(("weekly", "layout"), Of(One(Run(MonthlyRange() with { Layout = new PartitionLayout("weekly") }), AdviceCheckCodes.MethodUnknown)));
+        Assert.Equal(("quarter", "interval"), Of(One(Run(MonthlyRange() with { Interval = "quarter" }), AdviceCheckCodes.MethodUnknown)));
+        Assert.Equal(("number:abc", "interval"), Of(One(Run(MonthlyRange() with { Interval = "number:abc" }), AdviceCheckCodes.MethodUnknown)));
+        Assert.Equal(("values", "layout"), Of(One(Run(MonthlyRange() with { Layout = new PartitionLayout(AdviceLayoutKind.Values) }), AdviceCheckCodes.MethodUnknown)));
         var sub = MonthlyRange() with { Subpartition = new SubpartitionAdvice("range", ["STATUS"]) };
-        Assert.Equal(["range", "subpartition"], One(Run(sub), AdviceCheckCodes.MethodUnknown).Args);
+        Assert.Equal(("range", "subpartition"), Of(One(Run(sub), AdviceCheckCodes.MethodUnknown)));
 
         Assert.Null(Find(Run(MonthlyRange() with { Method = " RANGE ", Interval = " Month " }), AdviceCheckCodes.MethodUnknown)); // 대소문자·공백은 봐줌
     }
@@ -64,7 +65,8 @@ public class PartitionAdviceCheckerTests
         Assert.NotNull(Find(Run(MonthlyRange() with { Interval = "number:1000" }), AdviceCheckCodes.KeyType)); // DATE + 숫자 간격
         Assert.NotNull(Find(Run(MonthlyRange() with { KeyColumns = ["ORDER_DT", "ORDER_ID"] }), AdviceCheckCodes.KeyType)); // INTERVAL 은 열 하나
         var daily = MonthlyRange() with { KeyColumns = ["ORDER_YM"], Interval = AdviceInterval.None, Layout = new PartitionLayout(AdviceLayoutKind.Daily) };
-        Assert.Equal(["YYYYMM"], One(Run(daily), AdviceCheckCodes.KeyType).Args); // YYYYMM 으로 날마다는 못 나눔
+        var monthly = One(Run(daily), AdviceCheckCodes.KeyType); // YYYYMM 으로 날마다는 못 나눔 → 채우기가 월로
+        Assert.Equal((AdviceCheckLevel.Warn, "YYYYMM"), (monthly.Level, monthly.Args![0]));
 
         Assert.Null(Find(Run(NumberRanges("100") with { Interval = "number:1000" }), AdviceCheckCodes.KeyType)); // NUMBER + 숫자 간격
         Assert.Null(Find(Run(Hash(8)), AdviceCheckCodes.KeyType));
@@ -156,10 +158,10 @@ public class PartitionAdviceCheckerTests
     }
 
     [Fact]
-    public void Hash_count_not_a_power_of_two_warns_and_missing_count_stops()
+    public void Hash_count_not_a_power_of_two_or_missing_warns_and_below_one_stops()
     {
         Assert.Equal(["6"], One(Run(Hash(6)), AdviceCheckCodes.HashPow2).Args);
-        Assert.Equal(AdviceCheckLevel.Stop, One(Run(Hash(null)), AdviceCheckCodes.HashPow2).Level);
+        Assert.Equal((AdviceCheckLevel.Warn, ""), (One(Run(Hash(null)), AdviceCheckCodes.HashPow2).Level, One(Run(Hash(null)), AdviceCheckCodes.HashPow2).Args![0])); // 채우기가 4개로
         Assert.Equal(AdviceCheckLevel.Stop, One(Run(Hash(0)), AdviceCheckCodes.HashPow2).Level);
         Assert.Null(Find(Run(Hash(1)), AdviceCheckCodes.HashPow2));
         Assert.Null(Find(Run(Hash(16)), AdviceCheckCodes.HashPow2));
@@ -180,7 +182,7 @@ public class PartitionAdviceCheckerTests
     }
 
     [Fact]
-    public void List_placeholders_are_unmasked_for_cover_and_unknown_ones_stop()
+    public void List_placeholders_are_unmasked_for_cover_and_unknown_ones_stop_like_the_applier()
     {
         var (_, vault) = PartitionAdvicePrompt.Build(Orders(), new AdvicePromptOptions(AdviceGoal.Query, false, "en"));
         var all = StatusList(new ListGroup("P_ALL", ["V1", "V2", "V3"], false));
@@ -188,10 +190,24 @@ public class PartitionAdviceCheckerTests
         Assert.Null(Find(Run(all, vault: vault), AdviceCheckCodes.ListCover));
         Assert.Null(Find(Run(all, vault: vault), AdviceCheckCodes.ValueUnknown));
 
-        var bad = StatusList(new ListGroup("P_ALL", ["V1", "V2", "V3", "V4", "V9"], true)); // V4 = REGION 값, V9 = 없음
+        var bad = StatusList(new ListGroup("P_ALL", ["V1", "V2", "V3", "V4", "V9"], false), new ListGroup("P_REST", [], true)); // V4 = REGION 값, V9 = 없음
         var checks = Run(bad, vault: vault);
-        Assert.Equal(["V4", "V9"], checks.Where(c => c.Code == AdviceCheckCodes.ValueUnknown).Select(c => c.Args![0]));
-        Assert.All(checks.Where(c => c.Code == AdviceCheckCodes.ValueUnknown), c => Assert.Equal(AdviceCheckLevel.Stop, c.Level));
+        var unknown = One(checks, AdviceCheckCodes.ValueUnknown); // 열마다 하나, 채우기와 같은 꼴
+        Assert.Equal((AdviceCheckLevel.Stop, "STATUS"), (unknown.Level, unknown.Subject));
+        Assert.Equal(["V4", "V9"], unknown.Args);
+    }
+
+    [Fact]
+    public void Checker_and_applier_report_value_unknown_the_same_way()
+    {
+        var (_, vault) = PartitionAdvicePrompt.Build(Orders(), new AdvicePromptOptions(AdviceGoal.Query, false, "en"));
+        var bad = StatusList(new ListGroup("P_A", ["v1", "V9"], false), new ListGroup("P_REST", [], true)) with { KeyColumns = ["status"] };
+
+        var fromChecker = One(Run(bad, vault: vault), AdviceCheckCodes.ValueUnknown);
+        var fromApplier = One(PartitionAdviceApplier.Apply(bad, Orders(), vault, new DateOnly(2026, 11, 18)).Problems, AdviceCheckCodes.ValueUnknown);
+
+        Assert.Equal((fromApplier.Level, fromApplier.Subject), (fromChecker.Level, fromChecker.Subject));
+        Assert.Equal(fromApplier.Args, fromChecker.Args);
     }
 
     [Fact]

@@ -36,8 +36,8 @@ public static class AdviceCheckCodes
     public const string KeyMissing = "key-missing";
 
     /// <summary>
-    /// ✖ 방식과 키 형식이 안 맞음. Subject = 열 이름. Args[0] = 형식 이름(<c>CLOB</c>) 또는 날짜형 형식(<c>YYYYMM</c>, 날마다를 못 나눌 때),
-    /// INTERVAL 인데 키 열이 둘 이상이면 Subject = null, Args[0] = 키 열 수.
+    /// ✖ 방식과 키 형식이 안 맞음. Subject = 열 이름. Args[0] = 형식 이름(<c>CLOB</c>), INTERVAL 인데 키 열이 둘 이상이면 Subject = null, Args[0] = 키 열 수.
+    /// ⚠ YYYYMM 날짜형 키에 날마다 배치 → 월 단위로 채움: Args[0] = <c>YYYYMM</c>. 채우기가 낼 때는 Args 없음.
     /// </summary>
     public const string KeyType = "key-type";
 
@@ -63,8 +63,8 @@ public static class AdviceCheckCodes
     public const string LocalUnique = "local-unique";
 
     /// <summary>
-    /// ⚠ HASH 개수가 2의 거듭제곱이 아님 / ✖ 개수가 없거나 1 미만. Subject = 그 HASH 의 키 열(쉼표 목록, 하위 파티션이면 하위 키).
-    /// Args[0] = 개수(없으면 빈 글).
+    /// ⚠ HASH 개수가 2의 거듭제곱이 아님, 또는 개수가 없음(채우기가 <see cref="PartitionAdviceApplier.DefaultHashCount"/> 개로 채움, Args[0] = 빈 글) / ✖ 개수가 1 미만.
+    /// Subject = 그 HASH 의 키 열(쉼표 목록, 하위 파티션이면 하위 키). Args[0] = 개수.
     /// </summary>
     public const string HashPow2 = "hash-pow2";
 
@@ -89,10 +89,13 @@ public static class AdviceCheckCodes
     /// <summary>⚠ 통계 마지막 수집이 모은 때보다 30일 넘게 전. Args[0] = 지난 날 수. 통계를 한 번도 모으지 않았으면 Args = 빈 목록.</summary>
     public const string StatsOld = "stats-old";
 
-    /// <summary>✖ 모르는 방식·간격·배치·하위 방식 글(스키마 밖 값), 또는 방식과 맞지 않는 배치. Args[0] = 받은 글, Args[1] = <c>method</c>|<c>interval</c>|<c>layout</c>|<c>subpartition</c>.</summary>
+    /// <summary>
+    /// ✖ 모르는 방식·간격·배치·하위 방식 글(스키마 밖 값), 또는 방식과 맞지 않는 배치. Subject = 받은 글.
+    /// Args[0] = <c>method</c>|<c>interval</c>|<c>layout</c>|<c>subpartition</c>(채우기 <see cref="PartitionAdviceApplier"/> 가 낼 때는 Args 없음 = method).
+    /// </summary>
     public const string MethodUnknown = "method-unknown";
 
-    /// <summary>✖ 금고로 되돌릴 수 없는 자리표시자(설계 4.2 LIST). Subject = 열 이름. Args[0] = 자리표시자(<c>V9</c>).</summary>
+    /// <summary>✖ 금고로 되돌릴 수 없는 자리표시자(설계 4.2 LIST). 열마다 하나. Subject = 열 이름(근거 표기). Args = 못 되돌린 자리표시자들(<c>V9</c>…, 채우기와 같은 꼴).</summary>
     public const string ValueUnknown = "value-unknown";
 
     /// <summary>✖ LOCAL 로 하라는 인덱스가 표에 없음. Subject = 인덱스 이름. Args 없음.</summary>
@@ -143,7 +146,7 @@ public static class PartitionAdviceChecker
         // 스키마 밖 값
         if (method is null)
         {
-            checks.Add(Stop(AdviceCheckCodes.MethodUnknown, null, candidate.Method ?? string.Empty, "method"));
+            checks.Add(Stop(AdviceCheckCodes.MethodUnknown, candidate.Method ?? string.Empty, "method"));
         }
 
         var temporalInterval = interval is AdviceInterval.Month or AdviceInterval.Day or AdviceInterval.Year;
@@ -151,17 +154,17 @@ public static class PartitionAdviceChecker
         var noInterval = interval is null or "" or AdviceInterval.None;
         if (method == PartitionMethod.Range && !temporalInterval && !numberInterval && !noInterval)
         {
-            checks.Add(Stop(AdviceCheckCodes.MethodUnknown, null, candidate.Interval!, "interval"));
+            checks.Add(Stop(AdviceCheckCodes.MethodUnknown, candidate.Interval!, "interval"));
         }
 
         if (method is { } m && !LayoutFits(m, layoutKind))
         {
-            checks.Add(Stop(AdviceCheckCodes.MethodUnknown, null, candidate.Layout?.Kind ?? string.Empty, "layout"));
+            checks.Add(Stop(AdviceCheckCodes.MethodUnknown, candidate.Layout?.Kind ?? string.Empty, "layout"));
         }
 
         if (sub is not null && subMethod is not (PartitionMethod.List or PartitionMethod.Hash))
         {
-            checks.Add(Stop(AdviceCheckCodes.MethodUnknown, null, sub.Method ?? string.Empty, "subpartition"));
+            checks.Add(Stop(AdviceCheckCodes.MethodUnknown, sub.Method ?? string.Empty, "subpartition"));
         }
 
         // key-missing
@@ -219,7 +222,7 @@ public static class PartitionAdviceChecker
                 {
                     if (layoutKind == AdviceLayoutKind.Daily && dateLike.Format == DateLikeFormat.Yyyymm)
                     {
-                        checks.Add(Stop(AdviceCheckCodes.KeyType, c.Name, FormatName(dateLike.Format)));
+                        checks.Add(Warn(AdviceCheckCodes.KeyType, c.Name, FormatName(dateLike.Format))); // 채우기가 월 단위로 채움
                     }
 
                     // interval-string
@@ -359,9 +362,13 @@ public static class PartitionAdviceChecker
     private static void HashCount(List<AdviceCheck> checks, int? count, IReadOnlyList<string> keys)
     {
         var subject = keys.Count == 0 ? null : string.Join(", ", keys);
-        if (count is not > 0)
+        if (count is null)
         {
-            checks.Add(Stop(AdviceCheckCodes.HashPow2, subject, count is { } n ? Inv($"{n}") : string.Empty));
+            checks.Add(Warn(AdviceCheckCodes.HashPow2, subject, string.Empty)); // 채우기가 기본 개수로 채움
+        }
+        else if (count < 1)
+        {
+            checks.Add(Stop(AdviceCheckCodes.HashPow2, subject, Inv($"{count.Value}")));
         }
         else if ((count.Value & (count.Value - 1)) != 0)
         {
@@ -372,8 +379,10 @@ public static class PartitionAdviceChecker
     // 묶음이 분포 상위 값을 덮나(list-cover), 자리표시자를 되돌릴 수 있나(value-unknown).
     private static void ListValues(List<AdviceCheck> checks, string column, IReadOnlyList<ListGroup> groups, PartitionEvidence evidence, EvidenceValueVault? vault)
     {
+        column = evidence.Column(column)?.Name ?? column;
         var covered = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var value in groups.SelectMany(g => g.Values ?? []))
+        var unknown = new List<string>();
+        foreach (var value in groups.Where(g => !g.IsDefault).SelectMany(g => g.Values ?? []))
         {
             if (Unmask(column, value, vault) is { } real)
             {
@@ -381,8 +390,13 @@ public static class PartitionAdviceChecker
             }
             else
             {
-                checks.Add(Stop(AdviceCheckCodes.ValueUnknown, column, value));
+                unknown.Add(value.Trim());
             }
+        }
+
+        if (unknown.Count > 0)
+        {
+            checks.Add(new AdviceCheck(AdviceCheckLevel.Stop, AdviceCheckCodes.ValueUnknown, column, unknown));
         }
 
         if (groups.Any(g => g.IsDefault))
