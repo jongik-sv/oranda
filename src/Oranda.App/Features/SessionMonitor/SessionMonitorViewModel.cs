@@ -106,6 +106,8 @@ public sealed partial class SessionMonitorViewModel : ToolPanelViewModelBase, ID
         {
             SessionMonitorCommands.AttachPrivilegeKeys(bus, Keys);
         }
+
+        UseAi(new Oranda.App.Features.Ai.InPlace.AiInPlaceHost(services)); // 「대기 풀이」 띠(설계 §3.2)
     }
 
     /// <summary>시험용: 모니터 서비스와 세션 여는 방법을 직접 준다.</summary>

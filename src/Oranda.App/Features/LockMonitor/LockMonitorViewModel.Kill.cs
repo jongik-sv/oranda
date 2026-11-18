@@ -107,6 +107,7 @@ public sealed partial class LockMonitorViewModel
                 ? "연결을 끊으면 열린 트랜잭션은 롤백됩니다. undo 가 크면 롤백에 시간이 걸리고 그동안 잠금이 남을 수 있습니다."
                 : "종료하면 열린 트랜잭션은 롤백됩니다. undo 가 크면 롤백에 시간이 걸리고 그동안 잠금이 남을 수 있습니다.",
             Statement = statement,
+            AiLine = AiKillLine(key), // 앞서 받은 풀이의 결론 한 줄(새 요청 없음, 없으면 숨김)
         };
     }
 

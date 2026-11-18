@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:kit="using:Oranda.App.Features.Ai.Kit"
+             xmlns:vm="using:Oranda.App.Features.LockMonitor.Ai"
+             x:Class="Oranda.App.Features.LockMonitor.Ai.LockExplainPanelView"
+             x:DataType="vm:LockExplainPanelViewModel">
+  <!-- 락·대기 풀이(설계 §3.2): 모니터 아래 AI 띠 + 「더 깊게」(주 모델로 채팅창 새 대화) + 안내 한 줄 -->
+  <StackPanel Margin="6,2,6,4" Spacing="2">
+    <kit:AiInlineStrip x:Name="ExplainStrip" DataContext="{Binding Strip}" />
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <Button x:Name="DeeperButton" Classes="tool" Content="더 깊게" Command="{Binding DeeperCommand}" IsVisible="{Binding CanDeeperVisible}"
+              ToolTip.Tip="주 모델로 AI 채팅창에 새 대화를 열어 자세히 풀이합니다(앞 풀이는 넘기지 않습니다)" AutomationProperties.Name="더 깊게" />
+      <TextBlock x:Name="ExplainNote" Classes="dim" VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Note}"
+                 IsVisible="{Binding Note, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

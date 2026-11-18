@@ -2186,5 +2186,10 @@
   "계획 고정 스크립트를 새 편집기 탭에 넣었습니다(실행하지 않음).": "Put the plan pinning script in a new editor tab (not run).",
   "AI 채팅창을 열지 못했습니다.": "Could not open the AI chat.",
   "받아들이기": "Accept",
-  "편집기에 제안으로 넣습니다(바뀌는 곳을 보고 적용합니다. 실행하지 않습니다)": "Puts it in the editor as a suggestion (review the change and apply; nothing is run)"
+  "편집기에 제안으로 넣습니다(바뀌는 곳을 보고 적용합니다. 실행하지 않습니다)": "Puts it in the editor as a suggestion (review the change and apply; nothing is run)",
+  "✨ AI 풀이": "✨ AI explain",
+  "AI 풀이": "AI explain",
+  "✨ 대기 풀이": "✨ Explain wait",
+  "대기 풀이": "Explain wait",
+  "주 모델로 AI 채팅창에 새 대화를 열어 자세히 풀이합니다(앞 풀이는 넘기지 않습니다)": "Opens a new conversation in the AI chat on the main model for a detailed explanation (the earlier explanation is not carried over)"
 }

@@ -30,6 +30,8 @@
                 ToolTip.Tip="ALTER SYSTEM KILL SESSION … IMMEDIATE" />
         <Button x:Name="DisconnectButton" Classes="tool" Content="연결 끊기" IsEnabled="{Binding CanKill}" icons:ButtonIcon.Key="disconnect"
                 ToolTip.Tip="ALTER SYSTEM DISCONNECT SESSION … IMMEDIATE" />
+        <Button x:Name="AiExplainButton" Classes="tool" Content="✨ 대기 풀이" IsVisible="{Binding AiExplain, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Command="{Binding AiExplain.Entry.RunCommand}" ToolTip.Tip="{Binding AiExplain.Entry.ToolTip}" AutomationProperties.Name="대기 풀이" />
         <Separator Classes="toolbar" />
         <Button x:Name="TraceOnButton" Classes="tool" Content="트레이스 켜기" IsEnabled="{Binding CanTrace}" icons:ButtonIcon.Key="bug" />
         <Button x:Name="TraceOffButton" Classes="tool" Content="끄기" IsEnabled="{Binding CanTrace}" icons:ButtonIcon.Key="clear" />
@@ -55,6 +57,8 @@
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock x:Name="StatusLine" TextTrimming="CharacterEllipsis" />
     </Border>
+    <!-- 대기 풀이 띠(설계 §3.2): 모니터 아래. 화면은 ViewLocator 가 그린다 -->
+    <ContentControl x:Name="AiExplainHost" DockPanel.Dock="Bottom" Content="{Binding AiExplain}" />
     <Grid ColumnDefinitions="3*,4,2*">
       <!-- 조회 결과와 같은 그리드(MonitorGrid): 머리글 정렬·열 끌기·너비·열 필터·현재 행 ▶. 행은 코드(MonitorGridBinder)가 Sessions 에서 채운다. -->
       <vm:MonitorGrid x:Name="SessionList" Grid.Column="0" />

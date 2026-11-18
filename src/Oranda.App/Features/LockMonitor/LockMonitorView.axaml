@@ -194,6 +194,8 @@
                 ToolTip.Tip="ALTER SYSTEM DISCONNECT SESSION … IMMEDIATE — DB 에 씁니다(확인 창)" />
         <Button x:Name="GoToSessionButton" Classes="tool" Content="세션 모니터로" IsEnabled="{Binding HasSelection}" icons:ButtonIcon.Key="sessions"
                 ToolTip.Tip="이 세션을 세션 모니터에서 고르기 (SID·INST_ID)" />
+        <Button x:Name="AiExplainButton" Classes="tool" Content="✨ AI 풀이" IsVisible="{Binding AiExplain, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Command="{Binding AiExplain.Entry.RunCommand}" ToolTip.Tip="{Binding AiExplain.Entry.ToolTip}" AutomationProperties.Name="AI 풀이" />
         <Separator Classes="toolbar" />
         <Button x:Name="CopyButton" Classes="tool" Content="복사" IsEnabled="{Binding ShowData}" icons:ButtonIcon.Key="copy"
                 ToolTip.Tip="트리·목록 복사 (TSV)" />
@@ -325,6 +327,8 @@
         <TextBlock x:Name="StatusLine" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" />
       </DockPanel>
     </Border>
+    <!-- 락 풀이 띠(설계 §3.2): 모니터 아래. 화면은 ViewLocator 가 그린다 -->
+    <ContentControl x:Name="AiExplainHost" DockPanel.Dock="Bottom" Content="{Binding AiExplain}" />
 
     <Panel>
       <!-- 접속 없음 -->

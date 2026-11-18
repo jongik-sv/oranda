@@ -92,6 +92,43 @@ public sealed class AiInPlaceHost
         return new AiInlineStripViewModel(title, ct => PrepareAsync(feature, tier, source, prepare, ct), ChatHost) { Confirm = Confirm };
     }
 
+    /// <summary>「더 깊게」 에서 채팅창을 열지 못했을 때.</summary>
+    public const string DeeperUnavailableText = "AI 채팅창을 열 수 없어 「더 깊게」 를 보내지 않았습니다.";
+
+    /// <summary>
+    /// 「더 깊게」: 주 모델 경로로 지금 문맥을 다시 모으고, 경고 창을 거친 뒤 채팅창에 새 대화를 열어 보낸다(띠의 대화는 넘기지 않는다).
+    /// 보내지 않았으면 까닭을, 보냈으면 null 을 돌려준다.
+    /// </summary>
+    public async Task<string?> OpenDeeperAsync(string title, string feature, Func<AiInPlaceSource> source, Func<AiOneShotRun, CancellationToken, Task<AiStripPreparation>> prepare, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(prepare);
+        if (ChatHost is not { } chatHost)
+        {
+            return DeeperUnavailableText;
+        }
+
+        var preparation = await PrepareAsync(feature, AiTier.Main, source, prepare, ct).ConfigureAwait(true);
+        if (preparation.Request is not { } request)
+        {
+            return preparation.RefusalText;
+        }
+
+        if (!await Confirm(request, ct).ConfigureAwait(true))
+        {
+            return AiInlineStripViewModel.CancelledText;
+        }
+
+        var conversation = await AiChatOpener.OpenAsync(chatHost, chat => new AiDeeperConversation(chat, title + " · 더 깊게", request) { ConfirmText = chatHost.ConfirmText }).ConfigureAwait(true);
+        if (conversation is null)
+        {
+            return DeeperUnavailableText;
+        }
+
+        await conversation.StartAsync("「" + title + "」 더 깊게 — 화면에서 모은 정보를 주 모델로 보냈습니다", ct).ConfigureAwait(true);
+        return null;
+    }
+
     /// <summary>받는 곳을 골라 한 번짜리 실행을 만든다. 쓸 수 없으면 null 과 까닭.</summary>
     public AiOneShotRun? Run(ConnectionProfile? profile, AiTier tier, int estimatedTokens, string feature, out string? refusal)
     {

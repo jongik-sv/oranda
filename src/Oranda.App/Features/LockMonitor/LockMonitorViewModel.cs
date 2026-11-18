@@ -322,6 +322,7 @@ public sealed partial class LockMonitorViewModel : ToolPanelViewModelBase, IDisp
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
         Keys = services.GetService(typeof(ContextKeyService)) as ContextKeyService;
+        UseAi(new Oranda.App.Features.Ai.InPlace.AiInPlaceHost(services)); // 「AI 풀이」 띠(설계 §3.2)
     }
 
     /// <summary>시험용: 모니터 서비스와 세션 여는 방법을 직접 준다.</summary>

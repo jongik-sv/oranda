@@ -76,6 +76,14 @@ internal static class LockKillDialog
 
         body.Children.Add(facts);
 
+        if (r.AiLine is { Length: > 0 } aiLine)
+        {
+            // 앞서 받은 AI 풀이의 결론 한 줄(설계 §3.2). 모달이라 새로 묻지 않는다.
+            var ai = new TextBlock { Name = "AiLine", Text = aiLine, TextWrapping = TextWrapping.Wrap, FontStyle = FontStyle.Italic, MaxWidth = 560, HorizontalAlignment = HorizontalAlignment.Left };
+            DialogShell.AutomationName(ai, aiLine);
+            body.Children.Add(ai);
+        }
+
         if (r.WaiterHeadline is { } headline)
         {
             var callout = new Border { Padding = new Thickness(10, 8), CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1) };

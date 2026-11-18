@@ -507,6 +507,9 @@ public sealed record LockKillRequest(SessionKey Target, bool Disconnect)
 
     public string Note { get; init; } = string.Empty;
 
+    /// <summary>앞서 받은 AI 풀이의 결론 한 줄(「AI 풀이: …」). 받은 풀이가 없으면 null — 확인 창에서 줄을 숨긴다.</summary>
+    public string? AiLine { get; init; }
+
     public string Statement { get; init; } = string.Empty;
 
     /// <summary>실행 단추 글(「세션 종료」·「연결 끊기」).</summary>
