@@ -59,6 +59,7 @@ public static class PartitionAdvicePrompt
             _ => L("조회 성능 + 오래된 데이터 정리.", "query performance and purging old data."),
         }).Append('\n');
         sb.Append(L("아래 근거는 앱이 모은 숫자다. 근거에 없는 사실은 지어내지 마라.", "The evidence below was collected by the app. Do not invent facts that are not in it.")).Append('\n');
+        sb.Append(L("도구를 부르지 말고 아래에 주어진 근거만 써라.", "Do not call any tools; use only the evidence given below.")).Append('\n'); // 실행 범위가 실려도 도구는 쓰지 않는다(PA-7)
 
         // 근거
         sb.Append('\n').Append(L("# 근거", "# Evidence")).Append('\n');

@@ -98,9 +98,27 @@ public class PartitionAdvisorTests
 
         public TaskCompletionSource? Gate { get; set; }
 
+        /// <summary>요청을 받은 때 실행 범위가 이미 폐기돼 있었는가(요청마다 한 칸).</summary>
+        public List<bool> RevokedAtStart { get; } = [];
+
         public async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, [EnumeratorCancellation] CancellationToken ct)
         {
             Requests.Add(request);
+            RevokedAtStart.Add(request.Session?.IsRevoked ?? false);
+
+            // 실제 드라이버(SystemCliRunner·OpenAiApiDriver·OpencodeDriver)와 같은 전제 조건: 실행 범위가 없거나 폐기됐으면 막는다.
+            if (request.Session is null)
+            {
+                yield return new AiError("AI 요청에 실행 범위(Session)가 없습니다.", "session_required");
+                yield break;
+            }
+
+            if (request.Session.IsRevoked)
+            {
+                yield return new AiError("이 AI 요청의 실행 범위가 이미 폐기되었습니다. 새 요청으로 다시 시작하세요.", "session_revoked");
+                yield break;
+            }
+
             if (Gate is { } gate)
             {
                 await gate.Task.WaitAsync(ct);
@@ -193,7 +211,14 @@ public class PartitionAdvisorTests
         Assert.Equal(PartitionAdvice.Schema().GetRawText(), request.OutputSchema!.Value.GetRawText());
         Assert.Equal(route.Target.ToExpectation(), request.Expected);
         Assert.True(request.MaskingRequired);
-        Assert.Null(request.Session); // 도구 호출 없음(PA-7)
+        var session = Assert.IsType<AgentSession>(request.Session); // 실제 드라이버는 실행 범위가 없으면 session_required 로 막는다
+        Assert.Equal(route.Context, session.Context);
+        Assert.Equal(route.ConnectionId, session.Profile.Id);
+        Assert.True(session.Run.MaskLiteralsRequired); // 라우트의 가림 판정과 같게(운영 접속)
+        Assert.Null(session.Run.Literals); // SQL 리터럴 사전은 쓰지 않는다
+        Assert.False(Assert.Single(driver.RevokedAtStart));
+        Assert.True(session.IsRevoked); // 끝나면 폐기
+        Assert.Null(outcome.Error);
         Assert.Contains("values=False", request.Prompt, StringComparison.Ordinal); // 잠긴 값 보내기는 꺼서 보낸다
         Assert.DoesNotContain(" A", request.Prompt, StringComparison.Ordinal);
         Assert.Equal([1, 2], outcome.Candidates.Select(c => c.Candidate.Rank));
@@ -205,6 +230,40 @@ public class PartitionAdvisorTests
         Assert.Contains("table=SAMPLE.ORDERS", entry.Arguments, StringComparison.Ordinal);
         Assert.Contains("values=masked", entry.Arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("PROMPT", entry.Arguments, StringComparison.Ordinal); // 본문은 남기지 않는다
+    }
+
+    [Fact]
+    public async Task Ask_sends_a_tracked_unmasked_scope_on_a_dev_route_and_revokes_it_after_an_error()
+    {
+        var tracked = new List<AgentSession>();
+        var driver = new FakeDriver { Answer = _ => [new AiError("profile_changed")] };
+        var run = new PartitionAdvisorRun(Run(driver).Setup with { TrackSession = s => { tracked.Add(s); return s; } });
+
+        var outcome = await run.AskAsync(Evidence(), new AdvicePromptOptions(AdviceGoal.Query, false, "ko"), CancellationToken.None);
+
+        var session = Assert.Single(tracked); // 도구 연결(MCP)이 실행 id 로 찾을 수 있게 등록한다(AI 튜닝과 같다)
+        Assert.Same(session, Assert.Single(driver.Requests).Session);
+        Assert.False(session.Run.MaskLiteralsRequired);
+        Assert.Equal("profile_changed", outcome.Error);
+        Assert.True(session.IsRevoked);
+    }
+
+    [Fact]
+    public async Task Ask_revokes_the_scope_when_cancelled_or_when_the_driver_throws()
+    {
+        var driver = new FakeDriver { Gate = new TaskCompletionSource() };
+        using var cts = new CancellationTokenSource();
+        var pending = Run(driver).AskAsync(Evidence(), new AdvicePromptOptions(AdviceGoal.Query, false, "ko"), cts.Token);
+        await Task.Yield();
+        var session = Assert.Single(driver.Requests).Session!;
+        Assert.False(session.IsRevoked); // 도는 동안은 살아 있다
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.True(session.IsRevoked);
+
+        var throwing = new FakeDriver { Answer = _ => throw new InvalidOperationException("boom") };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Run(throwing).AskAsync(Evidence(), new AdvicePromptOptions(AdviceGoal.Query, false, "ko"), CancellationToken.None));
+        Assert.True(Assert.Single(throwing.Requests).Session!.IsRevoked);
     }
 
     [Fact]

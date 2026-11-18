@@ -49,8 +49,10 @@
         <CheckBox x:Name="ColumnsCheck" IsChecked="True" IsEnabled="False" Content="열 이름·형식·NULL 여부 (사전, 비용 없음)" />
         <CheckBox x:Name="KeysCheck" IsChecked="True" IsEnabled="False" Content="PK·UK·FK, 인덱스 열 순서 (사전)" />
         <CheckBox x:Name="StatsCheck" IsChecked="True" IsEnabled="False" Content="통계: 행 수, 열별 고유값 수·NULL 비율·히스토그램 종류, 마지막 수집일 (사전)" />
-        <CheckBox x:Name="PredicatesCheck" IsChecked="{Binding IncludePredicates}" IsEnabled="{Binding CanStart}"
-                  Content="이 테이블을 쓰는 SQL 의 조건 열과 횟수 (V$SQL_PLAN·V$SQL — SQL 본문은 안 보냄)" />
+        <!-- 글자를 TextBlock 으로 넣는다: 문자열 Content 는 '_' 를 단축키 표시로 먹어 V$SQL_PLAN 이 V$SQLPLAN 으로 보인다(literals-en.json 열쇠는 그대로) -->
+        <CheckBox x:Name="PredicatesCheck" IsChecked="{Binding IncludePredicates}" IsEnabled="{Binding CanStart}">
+          <TextBlock x:Name="PredicatesCheckText" Text="이 테이블을 쓰는 SQL 의 조건 열과 횟수 (V$SQL_PLAN·V$SQL — SQL 본문은 안 보냄)" TextWrapping="Wrap" />
+        </CheckBox>
         <StackPanel Spacing="0">
           <CheckBox x:Name="DistributionsCheck" IsChecked="{Binding IncludeDistributions}" IsEnabled="{Binding CanStart}"
                     Content="분포 조회: 날짜 열 월별 건수, 코드 열 상위 20개 건수" />

@@ -80,6 +80,18 @@ public class PartitionAdvicePromptTests
     }
 
     [Fact]
+    public void Prompt_says_not_to_call_tools_and_to_use_only_the_given_evidence()
+    {
+        // 실행 범위가 실리면 Claude Code 가 Oranda 도구를 쓸 수 있다. 근거는 이미 글에 있으므로 도구를 부르지 말라고 적는다(PA-7).
+        var en = PartitionAdvicePrompt.Build(AdvisorSamples.Orders(), new AdvicePromptOptions(AdviceGoal.Query, false, "en")).Prompt;
+        var ko = PartitionAdvicePrompt.Build(AdvisorSamples.Orders(), new AdvicePromptOptions(AdviceGoal.Query, false, "ko")).Prompt;
+
+        Assert.Contains("Do not call any tools; use only the evidence given below.", en, StringComparison.Ordinal);
+        Assert.Contains("도구를 부르지 말고 아래에 주어진 근거만 써라.", ko, StringComparison.Ordinal);
+        Assert.True(en.IndexOf("Do not call any tools", StringComparison.Ordinal) < en.IndexOf("# Evidence", StringComparison.Ordinal)); // 근거 앞(목적 끝)에 둔다
+    }
+
+    [Fact]
     public void Empty_evidence_still_builds_with_none_markers()
     {
         var empty = PartitionEvidence.Empty("SAMPLE", "ORDERS", Core.Connection.Dbms.Tibero, AdvisorSamples.CollectedAt);

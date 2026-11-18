@@ -22,7 +22,8 @@ namespace Oranda.App.Features.TableEdit.Advisor;
 /// </summary>
 /// <param name="MaskRequired">이 접속의 글을 가려 보내야 한다(<see cref="AiRequest.MaskingRequired"/>, 운영 표시 또는 가림 설정이고 로컬 AI 가 아님)</param>
 /// <param name="ValuesLockedReason">실제 값 보내기(PA-3)를 켤 수 없는 까닭. null = 켤 수 있음</param>
-public sealed record AdvisorRoute(AiConversationTarget Target, AiContext Context, Guid? ConnectionId, bool MaskRequired, string? ValuesLockedReason)
+/// <param name="Profile">이 접속(요청의 실행 범위 <see cref="AgentRunScope.Profile"/> 에 싣는다)</param>
+public sealed record AdvisorRoute(AiConversationTarget Target, AiContext Context, Guid? ConnectionId, bool MaskRequired, string? ValuesLockedReason, ConnectionProfile Profile)
 {
     /// <summary>실제 값 보내기를 켤 수 있다.</summary>
     public bool ValuesAllowed => ValuesLockedReason is null;
@@ -54,7 +55,7 @@ public sealed record AdvisorRoute(AiConversationTarget Target, AiContext Context
             locked = TableEditText.T("이 접속의 AI 허용 수준이 「행 값까지」가 아니라 실제 값을 보낼 수 없습니다", "This connection's AI access level does not allow row values");
         }
 
-        return new AdvisorRoute(target, context, profile.Id, mask, locked);
+        return new AdvisorRoute(target, context, profile.Id, mask, locked, profile);
     }
 }
 
@@ -114,11 +115,17 @@ public sealed record AdvisorSetup(
 
     /// <summary>감사 기록 저장소(없으면 남기지 않음).</summary>
     public IAgentAuditStore? Audit { get; init; }
+
+    /// <summary>
+    /// 새 실행 범위를 등록한다(앱 = <see cref="Oranda.App.Features.Ai.Agent.AppAgentSessionSource.Track"/>, 도구 연결이 실행 id 로 찾는다). null = 등록하지 않음.
+    /// </summary>
+    public Func<AgentSession, AgentSession>? TrackSession { get; init; }
 }
 
 /// <summary>
 /// 근거 모으기 → 프롬프트 → <see cref="IAiDriver"/> → 파서 → 앱 확인·채울 모델(설계 3장 ②~③). 실행은 SELECT(모으기)와 AI 호출뿐이다 — DB 에 아무것도 바꾸지 않는다.
-/// 도구 호출 없이(PA-7) 글만 보내므로 <see cref="AiRequest.Session"/> 은 비운다.
+/// 드라이버가 실행 범위를 꼭 요구하므로 AI 튜닝과 같게 <see cref="AiRequest.Session"/> 을 만들어 싣고, 요청이 끝나면(성공·실패·취소) 폐기한다.
+/// 근거는 이미 글에 있으므로 프롬프트가 도구를 부르지 말라고 적는다(PA-7). 게이트·허용 수준은 튜닝과 같다.
 /// </summary>
 public sealed class PartitionAdvisorRun
 {
@@ -164,31 +171,40 @@ public sealed class PartitionAdvisorRun
         var (prompt, vault) = Setup.Engine.BuildPrompt(evidence, options);
         await AuditAsync(prompt, vault, options, ct).ConfigureAwait(true);
 
+        var session = NewSession();
         var request = new AiRequest(
             prompt,
             Route.Context,
             OutputSchema: PartitionAdvice.Schema(),
+            Session: session,
             Expected: Route.Target.ToExpectation(), // 확인 창에 적은 곳과 실제 전송처가 같게(profile_changed)
             MaskingRequired: Route.MaskRequired); // 값을 가려 보낼 수 없는 기타 CLI 의 라우터만 읽는다
         var text = new StringBuilder();
         string? finalText = null;
         JsonElement? result = null;
         string? error = null;
-        await foreach (var e in Setup.Driver.RunAsync(request, ct).WithCancellation(ct).ConfigureAwait(true))
+        try
         {
-            switch (e)
+            await foreach (var e in Setup.Driver.RunAsync(request, ct).WithCancellation(ct).ConfigureAwait(true))
             {
-                case AiTextDelta delta:
-                    text.Append(delta.Text);
-                    break;
-                case AiFinal final:
-                    finalText = final.Text;
-                    result = final.Result;
-                    break;
-                case AiError fail:
-                    error = AiErrorText.Redact(fail.Message);
-                    break;
+                switch (e)
+                {
+                    case AiTextDelta delta:
+                        text.Append(delta.Text);
+                        break;
+                    case AiFinal final:
+                        finalText = final.Text;
+                        result = final.Result;
+                        break;
+                    case AiError fail:
+                        error = AiErrorText.Redact(fail.Message);
+                        break;
+                }
             }
+        }
+        finally
+        {
+            session.Revoke(); // 성공·실패·취소 모두: 실행 범위를 남기지 않는다(튜닝과 같은 수명)
         }
 
         ct.ThrowIfCancellationRequested();
@@ -202,6 +218,19 @@ public sealed class PartitionAdvisorRun
                 SafeCheck(c, evidence, vault),
                 SafeApply(c, evidence, vault, today)))];
         return new AdvisorOutcome(evidence, options, prompt, vault, advice, candidates, raw, error, Setup.Now());
+    }
+
+    /// <summary>
+    /// 이 요청 한 번의 실행 범위(AI 튜닝의 <c>NewSession</c> 과 같은 모양). SQL 리터럴 사전은 없고, 가림 필요는 라우트의 판정과 같다 —
+    /// 가려야 하는데 사전이 없으므로 게이트가 SQL 을 다루는 도구를 막는다.
+    /// </summary>
+    private AgentSession NewSession()
+    {
+        var session = new AgentSession(new AgentRunScope(Guid.NewGuid().ToString("N"), Route.Profile, Route.Context)
+        {
+            MaskLiteralsRequired = Route.MaskRequired,
+        });
+        return Setup.TrackSession?.Invoke(session) ?? session;
     }
 
     private IReadOnlyList<AdviceCheck> SafeCheck(PartitionCandidate c, PartitionEvidence evidence, EvidenceValueVault vault)

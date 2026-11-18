@@ -125,6 +125,7 @@ public sealed partial class ObjectDetailViewModel
             Engine = AdvisorEngineOverride ?? AdvisorEngine.Default,
             Now = () => Today is { } today ? today().ToDateTime(TimeOnly.FromDateTime(DateTime.Now)) : DateTime.Now, // 시험이 「오늘」을 바꾼다
             Audit = _services?.GetService(typeof(IAgentAuditStore)) as IAgentAuditStore,
+            TrackSession = _services?.GetService(typeof(IAgentSessionSource)) is Oranda.App.Features.Ai.Agent.AppAgentSessionSource source ? source.Track : null, // 도구 연결이 실행 id 로 찾게(AI 튜닝과 같다)
         });
         var start = new PartitionAdvisorStartViewModel(run);
         await (ShowAdvisorStart ?? ShowAdvisorStartWindowAsync)(start);

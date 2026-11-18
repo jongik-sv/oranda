@@ -37,6 +37,13 @@ public class PartitionAdvisorViewTests
             HeadlessHost.Settle(w);
             Assert.Equal("Claude Code", Find<TextBlock>(w, "RecipientText").Text);
             Assert.True(Find<CheckBox>(w, "PredicatesCheck").IsChecked);
+
+            // 화면 글이 V$SQL_PLAN 그대로: 문자열 Content 는 단추 틀이 AccessText 로 그려 '_' 를 단축키 표시로 먹는다(V$SQLPLAN).
+            var predicateTexts = Find<CheckBox>(w, "PredicatesCheck").GetVisualDescendants().OfType<TextBlock>()
+                .Where(t => t.Text?.Contains("V$SQL", StringComparison.Ordinal) == true).ToList();
+            Assert.NotEmpty(predicateTexts);
+            Assert.All(predicateTexts, t => Assert.IsNotType<AccessText>(t));
+            Assert.Contains(predicateTexts, t => t.Text!.Contains("V$SQL_PLAN", StringComparison.Ordinal));
             Assert.True(Find<CheckBox>(w, "DistributionsCheck").IsChecked);
             Assert.True(Find<CheckBox>(w, "ColumnsCheck").IsChecked);
             Assert.False(Find<CheckBox>(w, "ColumnsCheck").IsEnabled); // 열·키·통계는 늘 보낸다
