@@ -30,4 +30,19 @@ public static class AiCommandTiers
 
     /// <summary>일반 대화: 무엇을 물을지 모른다.</summary>
     public const AiTier General = AiTier.Main;
+
+    /// <summary>락·세션 상황 풀이(§3.2): 앱이 사슬을 모아 한 번에 보낸다.</summary>
+    public const AiTier LockExplain = AiTier.Light;
+
+    /// <summary>PL/SQL 오류 고치기(§3.3): 오류 목록과 오류 주변 소스. 크면 라우터가 주 모델로 올린다.</summary>
+    public const AiTier PlsqlFixError = AiTier.Light;
+
+    /// <summary>변경 일지 기간 요약(§4.2).</summary>
+    public const AiTier JournalSummary = AiTier.Light;
+
+    /// <summary>플래시백 두 버전 차이 요약(§4.2).</summary>
+    public const AiTier FlashbackDiffSummary = AiTier.Light;
+
+    /// <summary>원복 스크립트 점검(§4.2): 잘못 짚으면 비용이 크다.</summary>
+    public const AiTier RollbackCheck = AiTier.Main;
 }
