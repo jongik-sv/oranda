@@ -282,8 +282,13 @@ public static class TableEditCellText
     }
 }
 
-/// <summary>편집기 화면 문구(한국어 / 영어). 화면이 글을 고를 때 한 곳에서.</summary>
+/// <summary>
+/// 편집기 화면 문구(한국어 / 영어). 화면이 글을 고를 때 한 곳에서.
+/// 언어는 키 글자(<see cref="UiText"/>)와 같은 입구에서 읽는다. 셸은 둘을 같은 글자 조회로 묶지만, 한 문장 안에서
+/// 키 글자와 이 문구가 서로 다른 전역을 읽으면 시험처럼 둘이 어긋날 때 한 줄에 두 언어가 섞인다.
+/// 입구가 아직 비었으면 화면 글자 번역기의 언어를 쓴다.
+/// </summary>
 internal static class TableEditText
 {
-    public static string T(string ko, string en) => LiteralTranslator.IsEnglish ? en : ko;
+    public static string T(string ko, string en) => (UiText.Current?.Language ?? LiteralTranslator.Language) == "en" ? en : ko;
 }

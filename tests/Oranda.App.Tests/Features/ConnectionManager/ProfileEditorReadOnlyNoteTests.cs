@@ -71,9 +71,17 @@ public sealed class ProfileEditorReadOnlyNoteTests : IDisposable
 
         Assert.Equal("Tibero 는 서버가 읽기 전용 트랜잭션에서 쓰기를 막지 않습니다. 앱이 쓰기 문장을 막지만, 확실히 막으려면 SELECT 권한만 있는 계정을 쓰세요.", vm.ReadOnlyServerNoteText);
 
+        var previous = UiText.Current;
         UiText.Current = new ShellText(language: "en");
-        Assert.Contains("does not block writes", vm.ReadOnlyServerNoteText, StringComparison.Ordinal);
-        Assert.Contains("only SELECT privileges", vm.ReadOnlyServerNoteText, StringComparison.Ordinal);
+        try
+        {
+            Assert.Contains("does not block writes", vm.ReadOnlyServerNoteText, StringComparison.Ordinal);
+            Assert.Contains("only SELECT privileges", vm.ReadOnlyServerNoteText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            UiText.Current = previous; // 같은 묶음의 다음 시험(편집기 문구 등)이 영어 입구를 이어받지 않게
+        }
     }
 
     [Fact]

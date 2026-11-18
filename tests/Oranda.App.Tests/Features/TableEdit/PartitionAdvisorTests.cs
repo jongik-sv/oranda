@@ -703,4 +703,20 @@ public sealed class PartitionAdvisorTextTests : IDisposable
         Assert.Equal("조회 조건 · STATUS — 건너뜀(권한 없음) (ORA-01031)",
             PartitionAdvisorText.Skip(new EvidenceSkip(EvidenceItem.Predicates, EvidenceSkipReason.NoPrivilege, "STATUS", "ORA-01031")));
     }
+
+    [Fact]
+    public void Check_text_reads_one_language_even_when_the_literal_translator_is_english()
+    {
+        // 다른 시험(셸)이 화면 글자 번역기를 영어로 남겨도 괄호 속 인수 문구가 키 글자와 같은 언어를 따른다(CI 흔들림 원인).
+        Oranda.App.Features.Localization.LiteralTranslator.Install(new Oranda.App.Shell.ShellText(language: "en"));
+        try
+        {
+            Assert.Equal("행 수가 100만 미만이거나 블록이 1만 미만이라 파티션 이득이 작습니다 (행 1,240 · 블록 8)",
+                PartitionAdvisorText.Check(new AdviceCheck(AdviceCheckLevel.Warn, AdviceCheckCodes.SmallTable, Args: ["1240", "8"])));
+        }
+        finally
+        {
+            Oranda.App.Features.Localization.LiteralTranslator.Install(new Oranda.App.Shell.ShellText(language: "ko"));
+        }
+    }
 }

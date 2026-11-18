@@ -5,7 +5,8 @@ using Oranda.Core.Security;
 namespace Oranda.Platform.Credentials;
 
 /// <summary>
-/// OS 비밀 저장소가 없는 플랫폼(Linux 등, 정식 지원 밖 — PRD 2)의 대체: 앱이 도는 동안 메모리에만 둔다.
+/// OS 비밀 저장소가 없는 플랫폼(Windows·macOS·Linux 밖의 OS, 정식 지원 밖 — PRD 2)의 대체: 앱이 도는 동안 메모리에만 둔다.
+/// Linux 는 <see cref="Keyring.KeyringPasswordStore"/> 가 데스크톱 키링에 두고, 키링이 없을 때(헤드리스·CI)만 안에서 이 저장소로 내려간다.
 /// 디스크에 평문을 쓰지 않으므로 「비밀번호 저장」 은 재시작하면 사라지고 다시 묻는다. 이 저장소가 없으면 접속 명령이 서비스 없음으로 죽는다.
 /// </summary>
 [OrandaService(typeof(ICredentialStore), Platform = ServicePlatform.Other)]
