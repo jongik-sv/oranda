@@ -17,8 +17,8 @@ using static Oranda.App.Tests.Features.TableEdit.TableEditTestSupport;
 namespace Oranda.App.Tests.Features.TableEdit;
 
 /// <summary>
-/// AI 파티션 추천 화면(Headless, 시안 ②~⑤): 확인 창의 체크 상태와 실제 값 잠금(PA-3)·보낼 내용 보기, 결과 카드 ✖ 면 채우기 끔,
-/// 「파티션 안 함」 화면과 「후보 3개 받기」, 파티션 페이지의 단추 줄 → 채우기 → 띠 → 되돌리기.
+/// AI 파티션 추천 화면(Headless, 시안 ②·④): 확인 창의 체크 상태와 실제 값 잠금(PA-3)·보낼 내용 보기·모아서 넘기기,
+/// 파티션 페이지의 단추 줄 → 채우기 → 띠 → 되돌리기. 대화 창 카드는 <see cref="PartitionAdvisorChatTests"/>.
 /// </summary>
 public class PartitionAdvisorViewTests
 {
@@ -91,126 +91,28 @@ public class PartitionAdvisorViewTests
         HeadlessHost.Settle(w);
 
         Assert.True(closed);
-        Assert.Single(collector.Calls); // 보기에서 모은 근거를 그대로 보낸다
+        Assert.Single(collector.Calls); // 보기에서 모은 근거를 그대로 넘긴다
         Assert.False(collector.Calls[0].Predicates);
-        Assert.Contains("values=True", Assert.Single(driver.Requests).Prompt, StringComparison.Ordinal);
-        Assert.NotNull(vm.Outcome);
+        Assert.Empty(driver.Requests); // 보내기는 AI 대화 창이 한다(PA-22)
+        var request = Assert.IsType<AdvisorSendRequest>(vm.Request);
+        Assert.Same(collector.Evidence, request.Evidence);
+        Assert.True(request.Options.SendValues);
+        Assert.All(vm.Steps, step => Assert.Equal(AdvisorStepState.Done, step.State));
     });
 
     [Fact]
-    public Task Start_window_stays_open_with_the_error_when_the_ai_fails() => HeadlessHost.Run(async () =>
+    public Task Start_window_cancel_closes_without_a_request() => HeadlessHost.Run(() =>
     {
-        var driver = new FakeDriver { Answer = _ => [new AiError("profile_changed")] };
-        var vm = new PartitionAdvisorStartViewModel(Run(driver));
+        var vm = new PartitionAdvisorStartViewModel(Run(new FakeDriver()));
+        var closed = false;
+        vm.CloseRequested += (_, _) => closed = true;
 
-        Assert.False(await vm.SendAsync());
+        vm.Cancel();
 
-        Assert.Null(vm.Outcome);
-        Assert.Contains("profile_changed", vm.ErrorText, StringComparison.Ordinal);
-        Assert.False(vm.IsBusy);
-    });
-
-    [Fact]
-    public Task Result_window_disables_fill_on_a_stop_card_and_fills_an_ok_card() => HeadlessHost.Run(async () =>
-    {
-        var engine = Engine(c => c.Rank == 2 ? [new AdviceCheck(AdviceCheckLevel.Stop, AdviceCheckCodes.IntervalNull, "ORDER_DATE")] : []);
-        var outcome = await Run(new FakeDriver(), engine: engine).AskAsync(Evidence(), new AdvicePromptOptions(AdviceGoal.Query, false, "ko"), CancellationToken.None);
-        var filled = new List<int>();
-        var vm = new PartitionAdvisorResultViewModel(outcome, new AdvisorResultHost
-        {
-            Fill = c =>
-            {
-                filled.Add(c.Candidate.Rank);
-                return true;
-            },
-        }, "Claude Code");
-        var w = new PartitionAdvisorResultWindow { DataContext = vm };
-        w.Show();
-        try
-        {
-            HeadlessHost.Settle(w);
-            Assert.Contains("받은 곳 Claude Code", vm.Title, StringComparison.Ordinal);
-            var fills = w.GetVisualDescendants().OfType<Button>().Where(b => b.Content as string == "편집기에 채우기").ToList();
-            Assert.Equal(2, fills.Count);
-            Assert.True(fills[0].IsEnabled);
-            Assert.False(fills[1].IsEnabled);
-            Assert.Contains(w.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "✖" && t.Classes.Contains("stop"));
-            Assert.False(Find<Border>(w, "NoPartitionPanel").IsVisible);
-
-            Assert.False(vm.Fill(vm.Cards[1])); // ✖ 카드는 모델에서도 막는다
-            fills[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            HeadlessHost.Settle(w);
-            Assert.Equal([1], filled);
-            Assert.True(vm.Cards[0].IsFilled);
-
-            vm.IsNotChosenOpen = true;
-            HeadlessHost.Settle(w);
-            Assert.Contains(Find<ItemsControl>(w, "NotChosenList").GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "STATUS — 값이 6개뿐");
-        }
-        finally
-        {
-            w.Close();
-        }
-    });
-
-    [Fact]
-    public Task No_partition_shows_the_reason_and_asks_again_requiring_candidates() => HeadlessHost.Run(async () =>
-    {
-        var driver = new FakeDriver
-        {
-            Answer = r => [new AiFinal(null, JsonDocument.Parse(r.Prompt.Contains("require=True", StringComparison.Ordinal)
-                ? AdviceJson(AdviceVerdict.Partition, Candidate(1), Candidate(2), Candidate(3))
-                : AdviceJson(AdviceVerdict.NoPartition)).RootElement.Clone(), null)],
-        };
-        var run = Run(driver);
-        var outcome = await run.AskAsync(Evidence(), new AdvicePromptOptions(AdviceGoal.Query, false, "ko"), CancellationToken.None);
-        var vm = new PartitionAdvisorResultViewModel(outcome, new AdvisorResultHost { Ask = (o, ct) => run.AskAsync(outcome.Evidence, o, ct) }, "Claude Code");
-        var w = new PartitionAdvisorResultWindow { DataContext = vm };
-        w.Show();
-        try
-        {
-            HeadlessHost.Settle(w);
-            Assert.True(Find<Border>(w, "NoPartitionPanel").IsEffectivelyVisible);
-            Assert.True(Find<Button>(w, "RequestCandidatesButton").IsEffectivelyVisible);
-            Assert.Equal("행이 적어 얻을 것이 없습니다", Find<TextBlock>(w, "SummaryText").Text);
-            Assert.Empty(vm.Cards);
-
-            await vm.RequestCandidatesAsync();
-            HeadlessHost.Settle(w);
-
-            Assert.Contains("require=True", driver.Requests[^1].Prompt, StringComparison.Ordinal);
-            Assert.Equal(3, vm.Cards.Count);
-            Assert.False(vm.IsNoPartition);
-            Assert.False(Find<Border>(w, "NoPartitionPanel").IsVisible);
-        }
-        finally
-        {
-            w.Close();
-        }
-    });
-
-    [Fact]
-    public Task Unreadable_answer_shows_only_the_raw_text() => HeadlessHost.Run(async () =>
-    {
-        var outcome = await Run(new FakeDriver { Answer = _ => [new AiFinal("모양 없는 글", null, null)] })
-            .AskAsync(Evidence(), new AdvicePromptOptions(AdviceGoal.Query, false, "ko"), CancellationToken.None);
-        var vm = new PartitionAdvisorResultViewModel(outcome, new AdvisorResultHost(), "Claude Code");
-        var w = new PartitionAdvisorResultWindow { DataContext = vm };
-        w.Show();
-        try
-        {
-            HeadlessHost.Settle(w);
-            Assert.True(Find<TextBlock>(w, "UnreadableText").IsEffectivelyVisible);
-            Assert.True(Find<ToggleButton>(w, "RawToggle").IsEffectivelyVisible);
-            vm.IsRawOpen = true;
-            HeadlessHost.Settle(w);
-            Assert.Equal("모양 없는 글", Find<TextBox>(w, "RawBox").Text);
-            Assert.Empty(vm.Cards);
-        }
-        finally
-        {
-            w.Close();
-        }
+        Assert.True(closed);
+        Assert.Null(vm.Request);
+        Assert.Equal(4, vm.Steps.Count); // 열·키 → 통계 → 조회 조건 → 분포 (AI 응답은 대화 창에서 기다린다)
+        return Task.CompletedTask;
     });
 
     [Fact]

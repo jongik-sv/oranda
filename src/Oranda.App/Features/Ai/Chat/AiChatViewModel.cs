@@ -345,6 +345,27 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     }
 
     /// <summary>
+    /// 튜닝 밖의 흐름이 새 대화를 연다(앞의 줄은 지운다). 이 대화의 이어 말하기·멈춤은 <paramref name="owner"/> 로 간다(튜닝·일반 대화 규칙을 타지 않는다).
+    /// </summary>
+    public void StartConversation(string title, IAiChatConversation owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ResetConversation(title);
+        IsTuning = false;
+        Owner = owner;
+    }
+
+    /// <summary>지금 대화를 가진 흐름(튜닝·일반 대화면 null). 새 대화가 열리면 놓는다.</summary>
+    public IAiChatConversation? Owner { get; private set; }
+
+    /// <summary>기능 카드를 대화 끝에 넣는다(<see cref="ChatCardEntry"/>).</summary>
+    public void AddCard(object card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        Entries.Add(new ChatCardEntry(card));
+    }
+
+    /// <summary>
     /// 새 일반 대화로 되돌린다(앞의 줄·세션 이어받기 id·레포트 재료를 지운다). 일반 대화든 튜닝 대화든 쓸 수 있고, 실행 중이거나 레포트를 저장하는 중에는 쓰지 않는다.
     /// 입력칸에 쓰던 글과 붙인 이미지는 그대로 둔다.
     /// </summary>
@@ -417,6 +438,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     private void ResetConversation(string title)
     {
         ConversationGeneration++;
+        Owner = null; // 앞 대화를 가진 흐름은 새 대화의 이어 말하기를 받지 않는다
         Entries.Clear();
         SetReportSource(null); // 앞 대화의 결과로 새 대화의 레포트를 저장하지 않게
         ResumeId = null; // 앞 대화의 claude 세션을 새 대화가 이어 받지 않게
@@ -695,6 +717,16 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
     {
+        if (Owner is { } owner)
+        {
+            var mine = new ChatFollowUp(Draft.Trim(), [.. Attachments]);
+            Draft = string.Empty; // 취소되면 흐름이 RestoreFollowUp 으로 되돌린다
+            Attachments.Clear();
+            AttachNotice = null;
+            _ = SendToOwnerAsync(owner, mine);
+            return;
+        }
+
         if (FollowUpRequested is null)
         {
             AddAssistantText("AI 연결이 아직 준비되지 않아 보내지 못했습니다. 잠시 뒤 다시 보내세요."); // 입력을 비우지 않는다: 받는 쪽이 없으면 글이 사라진다
@@ -708,12 +740,29 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         FollowUpRequested?.Invoke(this, followUp);
     }
 
+    /// <summary>대화를 가진 흐름에 이어 말하기를 넘긴다. 예외는 밖으로 내지 않고 대화 창에 고정 글로 알린다(이벤트 처리기와 같은 규칙).</summary>
+    private async Task SendToOwnerAsync(IAiChatConversation owner, ChatFollowUp followUp)
+    {
+        try
+        {
+            await owner.FollowUpAsync(followUp, CancellationToken.None).ConfigureAwait(true);
+        }
+#pragma warning disable CA1031 // 보내기 단추 처리라 예외를 밖으로 내면 앱 전역 미처리 예외가 된다: 대화 창에 알린다.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            System.Diagnostics.Trace.TraceError("이어 말하기 중 예외: {0}", AiErrorText.Redact(ex.GetType().Name + ": " + ex.Message));
+            AddAssistantText("이어 말하는 중 오류가 났습니다. 자세한 원인은 로그에 남겼습니다.");
+        }
+    }
+
     private bool CanStop() => IsRunning || IsPreparing;
 
     [RelayCommand(CanExecute = nameof(CanStop))]
     private void Stop()
     {
         _turnStopped = true;
+        Owner?.CancelRun();
         StopRequested?.Invoke(this, EventArgs.Empty);
     }
 

@@ -19,7 +19,7 @@ namespace Oranda.App.Tests.Features.TableEdit;
 
 /// <summary>
 /// AI 파티션 추천(설계 2026-11-18): 받는 곳·가림 판단, 요청 모양(구조 결과·기대값·가림 필요), 결과 읽기·앱 확인·채울 모델,
-/// 세션의 채우기 → 띠 → 직접 고침 → 되돌리기, 객체 상세 배선(설정 없음 안내 · 확인 창 → 결과 창 → 채우기 · 분포 보기). 가짜 <see cref="IAiDriver"/>·모으기로.
+/// 세션의 채우기 → 띠 → 직접 고침 → 되돌리기, 객체 상세 배선(설정 없음 안내 · 확인 창 → AI 대화 창 → 카드로 채우기 · 분포 보기). 가짜 <see cref="IAiDriver"/>·모으기로.
 /// </summary>
 public class PartitionAdvisorTests
 {
@@ -308,10 +308,14 @@ public class PartitionAdvisorTests
             Evidence(new ColumnDistribution("STATUS", DistributionKind.TopValues, [new DistributionBucket("A", 30), new DistributionBucket("B", 10)], 40, null)),
             new AdvicePromptOptions(AdviceGoal.Query, false, "ko"), CancellationToken.None);
         var path = Path.Combine(Path.GetTempPath(), "ort_pa_" + Guid.NewGuid().ToString("N") + ".html");
-        var vm = new PartitionAdvisorResultViewModel(outcome, new AdvisorResultHost { PickReportFile = (_, _) => Task.FromResult<string?>(path) }, "Claude Code");
+        var cards = outcome.Candidates.Select(c => new AdviceCandidateCard(c)).ToList();
         try
         {
-            Assert.Equal(path, await vm.SaveReportAsync());
+            var (saved, error) = await PartitionAdviceReport.SaveAsync((_, _) => Task.FromResult<string?>(path), "ORDERS",
+                () => PartitionAdviceReport.Render("AI 파티션 추천 — ORDERS", new PartitionEvidenceViewModel(outcome.Evidence, outcome.Vault, false), outcome, cards, Now),
+                CancellationToken.None);
+            Assert.Null(error);
+            Assert.Equal(path, saved);
             var html = await File.ReadAllTextAsync(path);
             Assert.StartsWith("<!doctype html>", html, StringComparison.Ordinal);
             Assert.Contains("default-src 'none'", html, StringComparison.Ordinal);
@@ -322,11 +326,15 @@ public class PartitionAdvisorTests
             Assert.Contains("A (V1)", html, StringComparison.Ordinal); // 프롬프트와 같은 자리표시
             Assert.Contains("ORDER_DATE", html, StringComparison.Ordinal);
             Assert.Contains("1안 RANGE(ORDER_DATE) 월", html, StringComparison.Ordinal);
+            Assert.Contains("STATUS — 값이 6개뿐", html, StringComparison.Ordinal); // not_chosen
         }
         finally
         {
             File.Delete(path);
         }
+
+        // 고르지 않으면 쓰지 않는다
+        Assert.Equal((null, null), await PartitionAdviceReport.SaveAsync((_, _) => Task.FromResult<string?>(null), "ORDERS", () => "x", CancellationToken.None));
     }
 
     // ---- 문구 -------------------------------------------------------------------
@@ -478,27 +486,39 @@ public class PartitionAdvisorTests
 
     // ---- 객체 상세 배선 --------------------------------------------------------
 
-    private static async Task<(Oranda.App.Features.ObjectDetail.ObjectDetailViewModel Vm, FakeDriver Driver, List<PartitionAdvisorResultViewModel> Shown)> DetailAsync(AiSettings? settings = null)
+    internal sealed record Detail(Oranda.App.Features.ObjectDetail.ObjectDetailViewModel Vm, FakeDriver Driver, Oranda.App.Features.Ai.Chat.AiChatViewModel Chat, List<PartitionEvidenceViewModel> Evidence)
+    {
+        public int ChatShown { get; set; }
+    }
+
+    private static async Task<Detail> DetailAsync(AiSettings? settings = null)
     {
         var (vm, meta, _) = CreateDetail();
         meta.Table = WithOrderDate(OrdersTable());
         var driver = new FakeDriver();
-        var shown = new List<PartitionAdvisorResultViewModel>();
+        var chat = new Oranda.App.Features.Ai.Chat.AiChatViewModel();
+        var detail = new Detail(vm, driver, chat, []);
         vm.AdvisorDriver = driver;
         vm.EvidenceCollector = new FakeCollector();
         vm.AdvisorSettings = () => settings ?? new AiSettings();
         vm.AdvisorEngineOverride = Engine();
         vm.ShowAdvisorStart = async start => await start.SendAsync();
-        vm.ShowAdvisorResult = shown.Add;
+        vm.ShowAdvisorEvidence = detail.Evidence.Add;
+        vm.AdvisorChat = () =>
+        {
+            detail.ChatShown++;
+            return Task.FromResult<Oranda.App.Features.Ai.Chat.AiChatViewModel?>(chat);
+        };
         await vm.OpenAsync(new FakeSession(), Orders, showDdl: false);
         Assert.True(await vm.SetTableEditingAsync(true));
-        return (vm, driver, shown);
+        return detail;
     }
 
     [Fact]
     public async Task Without_ai_settings_the_advisor_explains_and_offers_settings_instead_of_the_dialog()
     {
-        var (vm, driver, shown) = await DetailAsync(new AiSettings { Driver = AiDriverKind.None });
+        var d = await DetailAsync(new AiSettings { Driver = AiDriverKind.None });
+        var vm = d.Vm;
         var started = false;
         vm.ShowAdvisorStart = _ =>
         {
@@ -517,34 +537,53 @@ public class PartitionAdvisorTests
 
         Assert.False(started);
         Assert.Contains("선택 안 함", told, StringComparison.Ordinal);
-        Assert.Empty(driver.Requests);
-        Assert.Empty(shown);
+        Assert.Empty(d.Driver.Requests);
+        Assert.Equal(0, d.ChatShown);
     }
 
     [Fact]
-    public async Task Advisor_flow_opens_the_result_and_fills_the_editor_then_reopens_from_the_banner()
+    public async Task Advisor_flow_streams_into_the_chat_and_fills_the_editor_from_a_card_then_reopens_the_chat_from_the_banner()
     {
-        var (vm, driver, shown) = await DetailAsync();
-        var edit = vm.TableEdit!;
+        var d = await DetailAsync();
+        var edit = d.Vm.TableEdit!;
 
         await edit.OpenAiAdvisorAsync();
 
-        Assert.Single(driver.Requests);
-        var result = Assert.Single(shown);
-        Assert.Equal(2, result.Cards.Count);
-        Assert.True(result.Fill(result.Cards[0]));
-        Assert.True(result.Cards[0].IsFilled);
+        Assert.Single(d.Driver.Requests);
+        Assert.Equal(1, d.ChatShown);
+        var conversation = d.Vm.AdviceConversation!;
+        Assert.Same(conversation, d.Chat.Owner);
+        Assert.Contains("AI 파티션 추천", d.Chat.Title, StringComparison.Ordinal);
+        var cards = d.Chat.Entries.OfType<Oranda.App.Features.Ai.Chat.ChatCardEntry>().Select(e => e.Card).OfType<AdviceCandidateCard>().ToList();
+        Assert.Equal(2, cards.Count);
+        Assert.Single(d.Chat.Entries.OfType<Oranda.App.Features.Ai.Chat.ChatCardEntry>(), e => e.Card is AdviceResultCard);
+        Assert.False(d.Chat.IsRunning);
+
+        Assert.True(cards[0].Fill());
+        Assert.True(cards[0].IsFilled);
         Assert.True(edit.IsPartitionConversion);
         Assert.True(edit.ShowsAdviceBanner);
-        Assert.Same(result, vm.AdviceResult);
+        Assert.Contains(d.Chat.Entries.OfType<Oranda.App.Features.Ai.Chat.ChatAssistantEntry>(), e => e.Text.Contains("1안을 파티션 편집기에 채웠습니다", StringComparison.Ordinal));
 
         await edit.ReopenAiAdviceAsync();
-        Assert.Equal(2, shown.Count);
-        Assert.Same(result, shown[1]);
+        Assert.Equal(2, d.ChatShown); // 「추천 다시 보기」 = 대화 창을 보인다
 
-        Assert.False(await vm.SetTableEditingAsync(false)); // 편집을 끄면(버리기 확인 = 예) 결과는 잊는다
-        Assert.Null(vm.AdviceResult);
-        Assert.False(result.Fill(result.Cards[1])); // 끈 편집에는 채우지 않는다
+        Assert.False(await d.Vm.SetTableEditingAsync(false)); // 편집을 끄면(버리기 확인 = 예) 대화는 잊는다
+        Assert.Null(d.Vm.AdviceConversation);
+        Assert.False(cards[1].Fill()); // 끈 편집에는 채우지 않는다
+    }
+
+    [Fact]
+    public async Task Advisor_does_not_start_while_another_ai_task_runs_in_the_chat()
+    {
+        var d = await DetailAsync();
+        d.Chat.BeginTurn("다른 일"); // 튜닝 등이 도는 중
+
+        await d.Vm.TableEdit!.OpenAiAdvisorAsync();
+
+        Assert.Empty(d.Driver.Requests);
+        Assert.Null(d.Vm.AdviceConversation);
+        Assert.Contains(d.Chat.Entries.OfType<Oranda.App.Features.Ai.Chat.ChatAssistantEntry>(), e => e.Text.Contains("다른 작업이 진행 중", StringComparison.Ordinal));
     }
 
     private sealed class FakeDateLikeProvider : IPartitionEvidenceProvider
@@ -619,17 +658,18 @@ public class PartitionAdvisorTests
     [Fact]
     public async Task Evidence_view_collects_without_ai_and_opens_an_evidence_only_window()
     {
-        var (vm, driver, shown) = await DetailAsync();
+        var d = await DetailAsync();
 
-        await vm.TableEdit!.OpenPartitionEvidenceAsync();
+        await d.Vm.TableEdit!.OpenPartitionEvidenceAsync();
 
-        Assert.Empty(driver.Requests);
-        var result = Assert.Single(shown);
-        Assert.True(result.IsEvidenceOnly);
-        Assert.Equal(3, result.Columns.Count);
-        Assert.Contains("PK", result.Columns[0].Usage, StringComparison.Ordinal);
-        Assert.Contains("63%", result.Columns[2].Usage, StringComparison.Ordinal);
-        Assert.Null(vm.AdviceResult); // 근거만 창은 「추천 다시 보기」 대상이 아니다
+        Assert.Empty(d.Driver.Requests);
+        Assert.Equal(0, d.ChatShown); // 근거만: AI 대화 창을 열지 않는다
+        var evidence = Assert.Single(d.Evidence);
+        Assert.Equal(3, evidence.Columns.Count);
+        Assert.Contains("PK", evidence.Columns[0].Usage, StringComparison.Ordinal);
+        Assert.Contains("63%", evidence.Columns[2].Usage, StringComparison.Ordinal);
+        Assert.True(evidence.CanSaveReport);
+        Assert.Null(d.Vm.AdviceConversation);
     }
 }
 

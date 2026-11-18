@@ -92,9 +92,6 @@ public static class PartitionAdvisorText
     /// <summary>진행 단계 이름.</summary>
     public static string Step(EvidenceStep step) => UiText.Get(StepKeyPrefix + step, step.ToString());
 
-    /// <summary>AI 응답을 기다리는 단계 이름.</summary>
-    public static string WaitingStep => UiText.Get(StepKeyPrefix + "Waiting", TableEditText.T("AI 응답 대기", "Waiting for the AI"));
-
     /// <summary>근거 항목 이름.</summary>
     public static string Item(EvidenceItem item) => UiText.Get(ItemKeyPrefix + item, item.ToString());
 

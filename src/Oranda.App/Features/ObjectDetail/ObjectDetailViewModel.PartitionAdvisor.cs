@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Oranda.App.Features.Ai.Chat;
+using Oranda.App.Features.Ai.Tuning;
 using Oranda.App.Features.TableEdit;
 using Oranda.App.Features.TableEdit.Advisor;
 using Oranda.App.Shell;
@@ -19,14 +21,15 @@ using Oranda.Core.Settings;
 namespace Oranda.App.Features.ObjectDetail;
 
 /// <summary>
-/// AI 파티션 추천 배선(설계 2026-11-18 3장): 파티션 페이지의 「✨ AI 추천…」 → 확인 창(모달) → 결과 창(비모달, 탭 하나에 하나),
-/// 「분포 보기」 → AI 없이 근거만 결과 창에, 띠의 「추천 다시 보기」 → 마지막 결과 창. 받는 곳·가림·감사는 AI 튜닝과 같은 규칙(<see cref="AdvisorRoute"/>).
+/// AI 파티션 추천 배선(설계 2026-11-18 3장, PA-22): 파티션 페이지의 「✨ AI 추천…」 → 확인 창(모달, 근거 모으기) → AI 대화 창(응답·후보 카드·이어 묻기,
+/// <see cref="PartitionAdviceConversation"/>), 「분포 보기」 → AI 없이 근거 창(비모달, 탭 하나에 하나), 띠의 「추천 다시 보기」 → AI 대화 창을 보인다.
+/// 받는 곳·가림·감사는 AI 튜닝과 같은 규칙(<see cref="AdvisorRoute"/>).
 /// AI 를 쓸 수 없으면(설정 없음 등) 까닭과 「설정 열기」를 묻는다.
 /// </summary>
 public sealed partial class ObjectDetailViewModel
 {
-    private PartitionAdvisorResultViewModel? _adviceResult;
-    private Window? _adviceWindow;
+    private PartitionAdviceConversation? _adviceConversation;
+    private Window? _evidenceWindow;
 
     /// <summary>시험용: AI 경로(기본 = DI 의 <see cref="IAiDriver"/> 라우터).</summary>
     internal IAiDriver? AdvisorDriver { get; set; }
@@ -43,8 +46,11 @@ public sealed partial class ObjectDetailViewModel
     /// <summary>시험용: 확인 창 띄우기(기본 = 주 창 위 모달).</summary>
     internal Func<PartitionAdvisorStartViewModel, Task>? ShowAdvisorStart { get; set; }
 
-    /// <summary>시험용: 결과 창 띄우기(기본 = 비모달 창 하나를 이 탭이 쥔다).</summary>
-    internal Action<PartitionAdvisorResultViewModel>? ShowAdvisorResult { get; set; }
+    /// <summary>시험용: 근거 창 띄우기(기본 = 비모달 창 하나를 이 탭이 쥔다).</summary>
+    internal Action<PartitionEvidenceViewModel>? ShowAdvisorEvidence { get; set; }
+
+    /// <summary>시험용: AI 대화 창을 보이고 그 모델을 돌려준다(기본 = AI 튜닝과 같은 도구 창).</summary>
+    internal Func<Task<AiChatViewModel?>>? AdvisorChat { get; set; }
 
     /// <summary>시험용: AI 를 쓸 수 없을 때 안내(까닭 → 「설정 열기」를 골랐나).</summary>
     internal Func<string, Task<bool>>? AdvisorUnavailableNotice { get; set; }
@@ -60,10 +66,10 @@ public sealed partial class ObjectDetailViewModel
     /// <summary>날짜형 판정을 할 열 수 상한(편집을 켤 때마다 표본 SELECT 를 열마다 하나 돌린다).</summary>
     internal const int MaxDateLikeColumns = 16;
 
-    /// <summary>마지막 결과(띠의 「추천 다시 보기」가 다시 연다).</summary>
-    internal PartitionAdvisorResultViewModel? AdviceResult => _adviceResult;
+    /// <summary>마지막 추천 대화(편집을 끄면 잊는다).</summary>
+    internal PartitionAdviceConversation? AdviceConversation => _adviceConversation;
 
-    // CommunityToolkit 이 만든 한 인자 훅(두 인자 훅은 TableEdit.cs 가 쓴다): 편집 세션이 생기면 단추 동작을 넣고, 끝나면 결과 창을 닫는다.
+    // CommunityToolkit 이 만든 한 인자 훅(두 인자 훅은 TableEdit.cs 가 쓴다): 편집 세션이 생기면 단추 동작을 넣고, 끝나면 대화를 멈추고 근거 창을 닫는다.
     partial void OnTableEditChanged(TableEditSession? value)
     {
         if (value is not null)
@@ -76,12 +82,13 @@ public sealed partial class ObjectDetailViewModel
         }
 
         _dateLikeCts?.Cancel();
-        _adviceResult = null;
-        _adviceWindow?.Close();
-        _adviceWindow = null;
+        _adviceConversation?.Stop(); // 대화 창의 줄은 남지만 끈 편집에는 채우지 않는다(AdviceHost)
+        _adviceConversation = null;
+        _evidenceWindow?.Close();
+        _evidenceWindow = null;
     }
 
-    /// <summary>「✨ AI 추천…」: AI 를 쓸 수 있는지 보고, 확인 창을 띄우고, 받았으면 결과 창을 연다.</summary>
+    /// <summary>「✨ AI 추천…」: AI 를 쓸 수 있는지 보고, 확인 창을 띄우고, 모았으면 AI 대화 창에서 보낸다.</summary>
     public async Task OpenPartitionAdvisorAsync(CancellationToken ct = default)
     {
         if (TableEdit is not { ShowsAiAdvisor: true } edit || _session is not { } basis || Target is not { } target)
@@ -129,16 +136,32 @@ public sealed partial class ObjectDetailViewModel
         });
         var start = new PartitionAdvisorStartViewModel(run);
         await (ShowAdvisorStart ?? ShowAdvisorStartWindowAsync)(start);
-        if (start.Outcome is not { } outcome || !ReferenceEquals(TableEdit, edit))
+        if (start.Request is not { } request || !ReferenceEquals(TableEdit, edit))
         {
             return;
         }
 
-        var result = new PartitionAdvisorResultViewModel(outcome, AdviceHost(edit, run, outcome.Evidence), route.Target.Label);
-        Present(result);
+        if (await (AdvisorChat ?? ShowChatAsync)() is not { } chat)
+        {
+            StatusText = TableEditText.T("AI 대화 창을 열지 못했습니다", "Could not open the AI chat");
+            return;
+        }
+
+        if (chat.IsRunning || chat.IsBusy || chat.Owner is { IsRunning: true })
+        {
+            var busy = TableEditText.T("AI 대화 창에서 다른 작업이 진행 중입니다. 끝나거나 멈춘 뒤 다시 보내세요.", "Another AI task is running in the chat. Send again after it ends or is stopped.");
+            chat.AddAssistantText(busy);
+            StatusText = busy;
+            return;
+        }
+
+        StatusText = string.Empty;
+        var conversation = new PartitionAdviceConversation(chat, run, request.Evidence, request.Options, AdviceHost(edit));
+        _adviceConversation = conversation;
+        await conversation.StartAsync(ct);
     }
 
-    /// <summary>「분포 보기」(PA-9): AI 없이 근거만 모아 결과 창(근거 패널)에.</summary>
+    /// <summary>「분포 보기」(PA-9): AI 없이 근거만 모아 근거 창에.</summary>
     public async Task OpenPartitionEvidenceAsync(CancellationToken ct = default)
     {
         if (TableEdit is not { ShowsAiAdvisor: true } edit || _session is not { } basis || Target is not { } target)
@@ -164,7 +187,7 @@ public sealed partial class ObjectDetailViewModel
             }
 
             StatusText = string.Empty;
-            Present(new PartitionAdvisorResultViewModel(evidence, new AdvisorResultHost { PickReportFile = ReportPicker() }));
+            PresentEvidence(new PartitionEvidenceViewModel(evidence) { PickReportFile = ReportPicker() });
         }
         catch (OperationCanceledException)
         {
@@ -180,15 +203,14 @@ public sealed partial class ObjectDetailViewModel
         }
     }
 
-    /// <summary>띠의 「추천 다시 보기」: 마지막 결과 창을 다시 연다.</summary>
-    public Task ReopenPartitionAdviceAsync()
+    /// <summary>띠의 「추천 다시 보기」: AI 대화 창을 보인다(후보 카드가 그 대화에 있다).</summary>
+    public async Task ReopenPartitionAdviceAsync()
     {
-        if (_adviceResult is { } result)
+        if (await (AdvisorChat ?? ShowChatAsync)() is not null && _adviceConversation is { IsCurrent: false })
         {
-            Present(result);
+            StatusText = TableEditText.T("AI 대화 창이 새 대화로 바뀌어 앞 추천 카드가 없습니다. 「✨ AI 추천…」으로 다시 받으세요.",
+                "The AI chat has moved to a new conversation, so the earlier cards are gone. Use AI advice again.");
         }
-
-        return Task.CompletedTask;
     }
 
     private void StartDateLikeDetection(TableEditSession edit)
@@ -274,46 +296,44 @@ public sealed partial class ObjectDetailViewModel
             .Take(MaxDateLikeColumns),
     ];
 
-    private AdvisorResultHost AdviceHost(TableEditSession edit, PartitionAdvisorRun run, PartitionEvidence evidence) => new()
+    private AdviceConversationHost AdviceHost(TableEditSession edit) => new()
     {
-        // 결과 창은 비모달이라 그사이 편집을 껐다 켰을 수 있다: 이 결과를 받은 편집 세션에만 채운다.
+        // 대화 창은 비모달이라 그사이 편집을 껐다 켰을 수 있다: 이 추천을 받은 편집 세션에만 채운다.
         Fill = c => ReferenceEquals(TableEdit, edit) && edit.ApplyAdvice(c.Candidate, c.Draft, c.Checks),
-        Ask = (options, token) => run.AskAsync(evidence, options, token), // 같은 근거로 다시 묻는다(모으기를 다시 돌리지 않음)
         PickReportFile = ReportPicker(),
     };
 
     private Func<string, CancellationToken, Task<string?>> ReportPicker() =>
         PickScriptFile ?? ((suggested, token) => SqlEditor.SqlEditorHost.Current.Dialogs.PickReportSaveFileAsync(suggested, token));
 
-    private void Present(PartitionAdvisorResultViewModel result)
-    {
-        if (result.HasAi)
-        {
-            _adviceResult = result; // 근거만 창은 「추천 다시 보기」 대상이 아니다
-        }
+    /// <summary>AI 대화 창(AI 튜닝과 같은 도구 창)을 보이고 그 모델. 서비스가 없으면 지금 창 모델.</summary>
+    private Task<AiChatViewModel?> ShowChatAsync() =>
+        _services is { } services ? AiTuningLauncher.For(services).ShowChatAsync() : Task.FromResult(AiChatViewModel.Current);
 
-        if (ShowAdvisorResult is { } show)
+    private void PresentEvidence(PartitionEvidenceViewModel evidence)
+    {
+        if (ShowAdvisorEvidence is { } show)
         {
-            show(result);
+            show(evidence);
             return;
         }
 
-        if (_adviceWindow is { } open)
+        if (_evidenceWindow is { } open)
         {
-            open.DataContext = result; // 탭 하나에 창 하나
+            open.DataContext = evidence; // 탭 하나에 창 하나
             open.Activate();
             return;
         }
 
-        var window = new PartitionAdvisorResultWindow { DataContext = result };
+        var window = new PartitionEvidenceWindow { DataContext = evidence };
         window.Closed += (_, _) =>
         {
-            if (ReferenceEquals(_adviceWindow, window))
+            if (ReferenceEquals(_evidenceWindow, window))
             {
-                _adviceWindow = null;
+                _evidenceWindow = null;
             }
         };
-        _adviceWindow = window;
+        _evidenceWindow = window;
         if (MainWindow() is { } owner)
         {
             window.Show(owner);

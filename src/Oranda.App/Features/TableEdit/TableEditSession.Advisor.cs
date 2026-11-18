@@ -43,7 +43,7 @@ public sealed partial class TableEditSession
         }
     }
 
-    /// <summary>띠의 「추천 다시 보기」 동작(결과 창을 다시 연다). null 이면 단추를 숨긴다.</summary>
+    /// <summary>띠의 「추천 다시 보기」 동작(AI 대화 창을 보인다, PA-22). null 이면 단추를 숨긴다.</summary>
     public Func<Task>? ReopenAiAdvice
     {
         get => _reopenAiAdvice;

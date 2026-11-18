@@ -103,4 +103,29 @@ public class PartitionAdvicePromptTests
         Assert.Contains("unknown", prompt, StringComparison.Ordinal); // 행 수 모름
         Assert.Equal(0, vault.Count);
     }
+
+    [Fact]
+    public void Follow_up_asks_for_the_same_json_and_keeps_placeholders_without_repeating_the_evidence()
+    {
+        var text = PartitionAdvicePrompt.FollowUp("왜 HASH 는 아닌가?", new AdvicePromptOptions(AdviceGoal.Query, SendValues: false, Language: "ko"), fullPrompt: null);
+
+        Assert.StartsWith("# 이어 묻기\n왜 HASH 는 아닌가?", text, StringComparison.Ordinal);
+        Assert.Contains("JSON 객체 하나", text, StringComparison.Ordinal);
+        Assert.Contains("summary", text, StringComparison.Ordinal);
+        Assert.Contains("V1, V2", text, StringComparison.Ordinal);
+        Assert.Contains("도구를 부르지 말고", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("반드시 1~3개", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Follow_up_without_a_resume_id_repeats_the_first_prompt_and_can_require_candidates()
+    {
+        var (first, _) = PartitionAdvicePrompt.Build(AdvisorSamples.Orders(), new AdvicePromptOptions(AdviceGoal.Query, SendValues: true, Language: "en"));
+        var text = PartitionAdvicePrompt.FollowUp("Give me options", new AdvicePromptOptions(AdviceGoal.Query, SendValues: true, Language: "en", RequireCandidates: true), first);
+
+        Assert.StartsWith(first.TrimEnd(), text, StringComparison.Ordinal);
+        Assert.Contains("# Follow-up\nGive me options", text, StringComparison.Ordinal);
+        Assert.Contains("must give 1 to 3 candidates", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Keep hidden values", text, StringComparison.Ordinal); // 값을 보냈으면 자리표시 안내가 없다
+    }
 }

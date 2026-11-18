@@ -84,6 +84,12 @@ public sealed record AdvisorOutcome(
     string? Error,
     DateTime ReceivedAt);
 
+/// <summary>
+/// 대화 창의 한 차례(AI 대화 창, PA-22). <paramref name="Question"/> = 이어 묻기 글(null = 처음 요청 — 근거 프롬프트 그대로),
+/// <paramref name="ResumeId"/> = 앞 대화를 잇는 id(없으면 이어 묻기 글 앞에 처음 프롬프트를 다시 싣는다), <paramref name="OnEvent"/> = 드라이버 사건을 대화 창에 옮기는 쪽.
+/// </summary>
+public sealed record AdviceTurn(string? Question = null, string? ResumeId = null, Action<AiEvent>? OnEvent = null);
+
 /// <summary>Core 함수 묶음(시험이 바꾼다). 기본 = Core 의 프롬프트·파서·확인·채우기.</summary>
 public sealed record AdvisorEngine(
     Func<PartitionEvidence, AdvicePromptOptions, (string Prompt, EvidenceValueVault Vault)> BuildPrompt,
@@ -164,17 +170,27 @@ public sealed class PartitionAdvisorRun
     /// AI 에 보내고 결과를 읽는다. 실패는 <see cref="AdvisorOutcome.Error"/> 로, 취소는 <see cref="OperationCanceledException"/> 으로 끝난다.
     /// 보내기 전에 감사 기록을 남긴다(실패해도 보내기를 막지 않는다 — 게이트의 감사와 같은 규칙).
     /// </summary>
-    public async Task<AdvisorOutcome> AskAsync(PartitionEvidence evidence, AdvicePromptOptions options, CancellationToken ct)
+    /// <remarks>
+    /// <paramref name="turn"/> 이 있으면 대화 창의 한 차례다: 사건을 <see cref="AdviceTurn.OnEvent"/> 로 넘기고, 이어 묻기면 같은 근거·같은 금고로
+    /// <see cref="PartitionAdvicePrompt.FollowUp"/> 글을 보낸다. 차례마다 새 실행 범위를 싣고 끝나면 폐기한다(이어 묻기도 같다 — 드라이버가 늘 요구한다).
+    /// </remarks>
+    public async Task<AdvisorOutcome> AskAsync(PartitionEvidence evidence, AdvicePromptOptions options, CancellationToken ct, AdviceTurn? turn = null)
     {
         ArgumentNullException.ThrowIfNull(evidence);
         options = Normalize(options);
         var (prompt, vault) = Setup.Engine.BuildPrompt(evidence, options);
+        if (turn?.Question is { } question)
+        {
+            prompt = PartitionAdvicePrompt.FollowUp(question, options, turn.ResumeId is null ? prompt : null); // 금고는 처음과 같다(같은 근거·같은 선택)
+        }
+
         await AuditAsync(prompt, vault, options, ct).ConfigureAwait(true);
 
         var session = NewSession();
         var request = new AiRequest(
             prompt,
             Route.Context,
+            turn?.ResumeId,
             OutputSchema: PartitionAdvice.Schema(),
             Session: session,
             Expected: Route.Target.ToExpectation(), // 확인 창에 적은 곳과 실제 전송처가 같게(profile_changed)
@@ -187,6 +203,7 @@ public sealed class PartitionAdvisorRun
         {
             await foreach (var e in Setup.Driver.RunAsync(request, ct).WithCancellation(ct).ConfigureAwait(true))
             {
+                turn?.OnEvent?.Invoke(e);
                 switch (e)
                 {
                     case AiTextDelta delta:

@@ -156,9 +156,9 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             return null;
         }
 
-        if (_flow is { IsRunning: true })
+        if (_flow is { IsRunning: true } || AiChatViewModel.Current?.Owner is { IsRunning: true })
         {
-            await ShowChatAsync().ConfigureAwait(true); // 진행 중인 작업이 있다: 새로 시작하지 않고 그 창만 보인다
+            await ShowChatAsync().ConfigureAwait(true); // 진행 중인 작업이 있다(튜닝 또는 대화를 가진 다른 흐름): 새로 시작하지 않고 그 창만 보인다
             return null;
         }
 
@@ -526,8 +526,9 @@ public sealed class AiTuningLauncher(IServiceProvider services)
 
     /// <summary>
     /// 대화 도구 창을 보이고 그 모델을 돌려준다. 창 모델은 처음 그릴 때 만들어지므로 한 번도 연 적 없으면 몇 차례 기다린다.
+    /// 튜닝 밖의 흐름(AI 파티션 추천)도 같은 창을 이것으로 연다.
     /// </summary>
-    private async Task<AiChatViewModel?> ShowChatAsync()
+    internal async Task<AiChatViewModel?> ShowChatAsync()
     {
         if (ChatOverride is { } provided)
         {

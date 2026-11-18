@@ -1,0 +1,83 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ad="using:Oranda.App.Features.TableEdit.Advisor"
+        x:Class="Oranda.App.Features.TableEdit.Advisor.PartitionEvidenceWindow"
+        x:DataType="ad:PartitionEvidenceViewModel"
+        Title="{Binding Title}" Width="560" Height="680" MinWidth="420" MinHeight="360" WindowStartupLocation="CenterOwner">
+  <!-- 「분포 보기」(PA-9): AI 없이 앱이 모은 근거만. AI 추천은 AI 대화 창에서 받는다(PA-22). -->
+  <Window.Styles>
+    <Style Selector="TextBlock.head">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,8,0,2" />
+    </Style>
+  </Window.Styles>
+  <DockPanel Margin="12">
+    <TextBlock DockPanel.Dock="Top" x:Name="TitleText" Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8" />
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+        <Button x:Name="SaveReportButton" Content="보고서로 저장…" IsEnabled="{Binding CanSaveReport}" ToolTip.Tip="이 근거를 HTML 파일로 저장합니다" />
+        <Button x:Name="CloseButton" Content="닫기" IsCancel="True" />
+      </StackPanel>
+      <TextBlock x:Name="StatusText" Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+    </DockPanel>
+    <ScrollViewer>
+      <StackPanel Spacing="2">
+        <TextBlock Classes="head" Text="근거 (앱이 모음)" Margin="0,0,0,2" />
+        <TextBlock x:Name="StatsText" Text="{Binding StatsText}" Opacity="0.8" TextWrapping="Wrap" />
+        <Grid ColumnDefinitions="*,110,60,*" Margin="0,4,0,0">
+          <TextBlock Grid.Column="0" Text="열" FontWeight="SemiBold" />
+          <TextBlock Grid.Column="1" Text="형식" FontWeight="SemiBold" />
+          <TextBlock Grid.Column="2" Text="고유값" FontWeight="SemiBold" />
+          <TextBlock Grid.Column="3" Text="쓰임" FontWeight="SemiBold" />
+        </Grid>
+        <ItemsControl x:Name="EvidenceColumnList" ItemsSource="{Binding Columns}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ad:EvidenceColumnLine">
+              <Grid ColumnDefinitions="*,110,60,*">
+                <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding DataType}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding Distinct}" />
+                <TextBlock Grid.Column="3" Text="{Binding Usage}" TextWrapping="Wrap" Opacity="0.85" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <ItemsControl x:Name="DistributionList" ItemsSource="{Binding Distributions}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ad:EvidenceDistributionView">
+              <StackPanel>
+                <TextBlock Classes="head" Text="{Binding Title}" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding Lines}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                      <TextBlock Text="{Binding}" FontFamily="{DynamicResource OrandaMonoFont}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="head" Text="인덱스" />
+        <ItemsControl x:Name="IndexList" ItemsSource="{Binding IndexLines}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <StackPanel IsVisible="{Binding HasSkipped}">
+          <TextBlock Classes="head" Text="건너뛴 항목" />
+          <ItemsControl x:Name="EvidenceSkippedList" ItemsSource="{Binding SkippedLines}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" Opacity="0.8" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+        <TextBlock Text="AI 없이 근거만 보는 창입니다. 이 숫자를 보고 파티션 편집기에서 직접 고를 수 있습니다." Opacity="0.7" TextWrapping="Wrap" Margin="0,8,0,0" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

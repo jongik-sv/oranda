@@ -87,6 +87,12 @@ public sealed class ChatImage(AiNormalizedImage image)
 /// <summary>보내기를 눌러 확정한 이어 말하기: 글과 붙인 이미지. 호출 쪽이 취소하면 <see cref="AiChatViewModel.RestoreFollowUp"/> 으로 되돌린다.</summary>
 public sealed record ChatFollowUp(string Text, IReadOnlyList<ChatImage> Images);
 
+/// <summary>
+/// 기능 카드: 튜닝 밖의 흐름(<see cref="IAiChatConversation"/>, 예 AI 파티션 추천 후보)이 대화에 넣는 카드. 모양은 <see cref="Card"/> 형식의
+/// DataTemplate 이 정한다(대화 창 <c>AiChatView.axaml</c>). 카드 모델이 자기 단추 명령을 들고 있다.
+/// </summary>
+public sealed record ChatCardEntry(object Card) : ChatEntry;
+
 /// <summary>AI 가 돌려준 글.</summary>
 public sealed record ChatAssistantEntry(string Text) : ChatEntry;
 

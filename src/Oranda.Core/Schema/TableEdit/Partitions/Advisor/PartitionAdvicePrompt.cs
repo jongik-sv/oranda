@@ -260,6 +260,52 @@ public static class PartitionAdvicePrompt
         }
     }
 
+    /// <summary>
+    /// 같은 대화의 이어 묻기 글(AI 대화 창). 답은 처음과 같은 JSON 스키마로 다시 받고(앱이 후보마다 확인을 다시 돌린다), 질문에 대한 답은 summary 에 쓰게 한다.
+    /// <paramref name="fullPrompt"/> 가 있으면(이어받기 id 가 없어 새 대화로 가는 경로) 처음 프롬프트를 앞에 다시 싣는다 — 근거 없이 묻지 않게.
+    /// 가린 값(V1…)은 그대로 쓰라고 다시 적는다.
+    /// </summary>
+    public static string FollowUp(string question, AdvicePromptOptions options, string? fullPrompt)
+    {
+        ArgumentNullException.ThrowIfNull(question);
+        ArgumentNullException.ThrowIfNull(options);
+        var ko = string.Equals(options.Language?.Trim(), "ko", StringComparison.OrdinalIgnoreCase);
+        string L(string k, string e) => ko ? k : e;
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(fullPrompt))
+        {
+            sb.Append(fullPrompt.TrimEnd()).Append("\n\n");
+        }
+
+        sb.Append(L("# 이어 묻기", "# Follow-up")).Append('\n').Append(question.Trim()).Append("\n\n");
+        var rules = new List<string>
+        {
+            L("답은 위와 같은 JSON 스키마의 JSON 객체 하나로 다시 낸다(설명 글·코드 울타리 없이). 질문에 대한 답은 summary 에 쓴다.",
+                "Answer again with exactly one JSON object that matches the same JSON schema (no prose, no code fence). Put the answer to the question in summary."),
+            L("후보가 바뀌지 않으면 같은 후보를 다시 낸다.", "If the candidates do not change, give the same candidates again."),
+            L("도구를 부르지 말고 앞에 주어진 근거만 써라.", "Do not call any tools; use only the evidence given before."),
+        };
+        if (!options.SendValues)
+        {
+            rules.Add(L("가린 값(V1, V2…)은 그대로 쓴다. 값을 짐작해 지어내지 마라.", "Keep hidden values (V1, V2…) as they are. Do not guess real values."));
+        }
+
+        if (options.RequireCandidates)
+        {
+            rules.Add(L(
+                "이번에는 후보를 반드시 1~3개 내라. 이득이 작다고 보면 verdict = partition 으로 두고 그 이유를 cautions 에 적는다.",
+                "This time you must give 1 to 3 candidates. If you think the gain is small, keep verdict = partition and say why in cautions."));
+        }
+
+        rules.Add(L("title·summary·reasons·cautions·not_chosen 의 글은 한국어로 쓴다.", "Write title, summary, reasons, cautions and not_chosen reasons in English."));
+        foreach (var rule in rules)
+        {
+            sb.Append("- ").Append(rule).Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
     private static void AppendRules(StringBuilder sb, AdvicePromptOptions o, bool ko)
     {
         string L(string k, string en) => ko ? k : en;

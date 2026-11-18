@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Oranda.App.Features.Ai.Chat"
+             xmlns:ad="using:Oranda.App.Features.TableEdit.Advisor"
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              x:Class="Oranda.App.Features.Ai.Chat.AiChatView"
@@ -65,7 +66,92 @@
     <Style Selector="TextBlock.aiResult.failed">
       <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
     </Style>
+    <!-- 파티션 추천 카드의 앱 확인 표식: ✖ 빨강, ⚠ 경고색, ✔ 초록. -->
+    <Style Selector="TextBlock.adviceMark">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaSuccessForegroundBrush}" />
+    </Style>
+    <Style Selector="TextBlock.adviceMark.warn">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaWarningForegroundBrush}" />
+    </Style>
+    <Style Selector="TextBlock.adviceMark.stop">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconRedBrush}" />
+    </Style>
   </UserControl.Styles>
+  <!-- 기능 카드(ChatCardEntry)의 모양: 카드 모델 형식마다 하나. 튜닝 밖의 흐름이 넣는다(AI 파티션 추천, PA-22). -->
+  <UserControl.DataTemplates>
+    <DataTemplate x:DataType="ad:AdviceCandidateCard">
+      <!-- 파티션 추천 후보 카드: 「N안 제목」 · AI 권장 · 방식 요약 · AI 이유 · 주의 · 앱 확인 ✔⚠✖ · 「편집기에 채우기」(✖ 가 있으면 꺼짐). -->
+      <Border Padding="12,10" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource OrandaButtonAccentBrush}">
+        <StackPanel Spacing="4">
+          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <Border Padding="6,1" CornerRadius="4" Background="{DynamicResource OrandaButtonAccentBrush}" VerticalAlignment="Center">
+              <TextBlock Text="후보" FontWeight="Bold" Foreground="White" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+            </Border>
+            <TextBlock x:Name="AdviceCardHeader" Grid.Column="1" Text="{Binding Header}" FontWeight="Bold" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Text="AI 권장" IsVisible="{Binding IsTop}" Opacity="0.7" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </Grid>
+          <TextBlock Text="{Binding Shape}" Opacity="0.75" TextWrapping="Wrap" FontFamily="{DynamicResource OrandaCodeFontFamily}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          <TextBlock Text="AI 이유" FontWeight="SemiBold" Margin="0,4,0,0" />
+          <ItemsControl ItemsSource="{Binding Reasons}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding StringFormat='· {0}'}" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <ItemsControl ItemsSource="{Binding Cautions}" IsVisible="{Binding HasCautions}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding StringFormat='· {0}'}" TextWrapping="Wrap" Opacity="0.8" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="앱 확인" FontWeight="SemiBold" Margin="0,4,0,0" />
+          <ItemsControl x:Name="AdviceCheckList" ItemsSource="{Binding Checks}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="ad:AdviceCheckLine">
+                <Grid ColumnDefinitions="18,*">
+                  <TextBlock Text="{Binding Mark}" Classes="adviceMark" Classes.stop="{Binding IsStop}" Classes.warn="{Binding IsWarn}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+            <TextBlock x:Name="AdviceFilledMark" Text="✔ 채움" IsVisible="{Binding IsFilled}" VerticalAlignment="Center"
+                       Foreground="{DynamicResource OrandaSuccessForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+            <Button x:Name="AdviceFillButton" Grid.Column="1" Classes="accent" Content="편집기에 채우기" MinHeight="30" Command="{Binding FillEditorCommand}"
+                    ToolTip.Tip="{Binding FillTip}" ToolTip.ShowOnDisabled="True" AutomationProperties.Name="편집기에 채우기" />
+          </Grid>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+    <DataTemplate x:DataType="ad:AdviceResultCard">
+      <!-- 파티션 추천 한 차례의 마무리: 못 읽음 안내 · 파티션 안 함 권장 + 「그래도 후보 3개 받기」 · 「왜 그 열은 안 했나」 · 「AI 원문 보기」 · 「보고서로 저장…」. -->
+      <Border Padding="10,8" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}">
+        <StackPanel Spacing="6">
+          <TextBlock x:Name="AdviceUnreadableText" Text="{Binding UnreadableText}" IsVisible="{Binding IsUnreadable}" TextWrapping="Wrap"
+                     Foreground="{DynamicResource OrandaWarningForegroundBrush}" />
+          <Button x:Name="AdviceRequestCandidatesButton" Classes="tool" Content="그래도 후보 3개 받기" IsVisible="{Binding ShowsRequestCandidates}"
+                  Command="{Binding RequestCandidatesCommand}" ToolTip.Tip="같은 대화에서 후보를 꼭 내라고 다시 묻습니다" AutomationProperties.Name="후보 3개 받기" />
+          <WrapPanel Orientation="Horizontal">
+            <ToggleButton x:Name="AdviceNotChosenToggle" Classes="tool" Content="왜 그 열은 안 했나" IsChecked="{Binding IsNotChosenOpen}" IsVisible="{Binding HasNotChosen}" Margin="0,0,6,0" />
+            <ToggleButton x:Name="AdviceRawToggle" Classes="tool" Content="AI 원문 보기" IsChecked="{Binding IsRawOpen}" IsVisible="{Binding HasRawText}" Margin="0,0,6,0" />
+            <Button x:Name="AdviceSaveReportButton" Classes="tool" Content="보고서로 저장…" Command="{Binding SaveReportCommand}" ToolTip.Tip="이 결과와 근거를 HTML 파일로 저장합니다" />
+          </WrapPanel>
+          <ItemsControl x:Name="AdviceNotChosenList" ItemsSource="{Binding NotChosenLines}" IsVisible="{Binding IsNotChosenOpen}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBox x:Name="AdviceRawBox" Text="{Binding RawText}" IsVisible="{Binding IsRawOpen}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                   MaxHeight="320" FontFamily="{DynamicResource OrandaCodeFontFamily}" AutomationProperties.Name="AI 원문" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+  </UserControl.DataTemplates>
   <DockPanel>
     <!-- 제목 줄: 제목 · 오른쪽 아이콘 단추 「튜닝 결과 레포트 저장」(튜닝 결과가 있고 실행 중이 아닐 때만 켜진다. 툴팁이 단추 이름). -->
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8" Margin="10,4,4,4">
@@ -253,6 +339,10 @@
                 </Grid>
               </StackPanel>
             </Border>
+          </DataTemplate>
+          <DataTemplate x:DataType="vm:ChatCardEntry">
+            <!-- 기능 카드: 모양은 위 UserControl.DataTemplates 가 카드 모델 형식으로 고른다. -->
+            <ContentControl x:Name="FeatureCard" Content="{Binding Card}" Margin="0,0,0,12" HorizontalContentAlignment="Stretch" />
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatAssistantEntry">
             <!-- AI 글: Markdown 부분 집합으로 그린다. 글 선택·복사가 된다(SelectableTextBlock). -->

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using Oranda.Core.Schema.TableEdit.Partitions.Advisor;
 
 namespace Oranda.App.Features.TableEdit.Advisor;
 
@@ -21,29 +22,35 @@ public static class PartitionAdviceReport
         @media print{body{max-width:none}.card{break-inside:avoid}}
         """;
 
-    public static string Render(PartitionAdvisorResultViewModel vm, DateTime savedAt)
+    /// <summary>
+    /// 보고서 HTML. <paramref name="outcome"/> 이 null 이면 근거만(「분포 보기」 창). <paramref name="cards"/> = 그 결과의 후보 카드(앱 확인 포함).
+    /// </summary>
+    public static string Render(string title, PartitionEvidenceViewModel evidence, AdvisorOutcome? outcome, IReadOnlyList<AdviceCandidateCard> cards, DateTime savedAt)
     {
-        ArgumentNullException.ThrowIfNull(vm);
+        ArgumentNullException.ThrowIfNull(title);
+        ArgumentNullException.ThrowIfNull(evidence);
+        ArgumentNullException.ThrowIfNull(cards);
+        var e = evidence.Evidence;
         var sb = new StringBuilder(16 * 1024);
         sb.Append("<!doctype html>\n<html lang=\"").Append(TableEditText.T("ko", "en")).Append("\">\n<head>\n<meta charset=\"utf-8\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">\n");
-        sb.Append("<title>").Append(H(vm.Title)).Append("</title>\n<style>").Append(Css).Append("</style>\n</head>\n<body>\n");
-        sb.Append("<h1>").Append(H(vm.Title)).Append("</h1>\n<p class=\"meta\">");
-        sb.Append(H($"{vm.Evidence.Owner}.{vm.Evidence.Table} · {vm.Evidence.Dbms}"));
-        if (vm.Evidence.ServerVersion is { } version)
+        sb.Append("<title>").Append(H(title)).Append("</title>\n<style>").Append(Css).Append("</style>\n</head>\n<body>\n");
+        sb.Append("<h1>").Append(H(title)).Append("</h1>\n<p class=\"meta\">");
+        sb.Append(H($"{e.Owner}.{e.Table} · {e.Dbms}"));
+        if (e.ServerVersion is { } version)
         {
             sb.Append(H(" " + version));
         }
 
-        sb.Append(H(TableEditText.T(" · 근거 모은 때 ", " · evidence collected ") + vm.Evidence.CollectedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)));
-        if (vm.Outcome is { } outcome)
+        sb.Append(H(TableEditText.T(" · 근거 모은 때 ", " · evidence collected ") + e.CollectedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)));
+        if (outcome is not null)
         {
             sb.Append(H(TableEditText.T(" · 받은 때 ", " · received ") + outcome.ReceivedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)));
         }
 
         sb.Append(H(TableEditText.T(" · 저장 ", " · saved ") + savedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture))).Append("</p>\n");
-        if (vm.Outcome is { Options.SendValues: false })
+        if (outcome is { Options.SendValues: false })
         {
             sb.Append("<p class=\"note\">").Append(H(TableEditText.T(
                 "실제 값은 AI 에 보내지 않았습니다(V1, V2… 자리표시와 건수만). 아래 근거의 괄호 안이 그 자리표시입니다.",
@@ -52,42 +59,67 @@ public static class PartitionAdviceReport
 
         sb.Append("<p class=\"note\">").Append(H(TableEditText.T("AI 는 후보만 냅니다. DB 에는 아무것도 실행하지 않았습니다.", "The AI only suggests. Nothing was run on the database."))).Append("</p>\n");
 
-        AppendAdvice(sb, vm);
-        AppendEvidence(sb, vm);
-
-        if (vm.HasRawText)
+        if (outcome is not null)
         {
-            sb.Append("<h2>").Append(H(TableEditText.T("AI 원문", "Raw AI answer"))).Append("</h2>\n<pre>").Append(H(vm.RawText)).Append("</pre>\n");
+            AppendAdvice(sb, outcome, cards);
+        }
+
+        AppendEvidence(sb, evidence);
+
+        if (outcome is { RawText.Length: > 0 } raw)
+        {
+            sb.Append("<h2>").Append(H(TableEditText.T("AI 원문", "Raw AI answer"))).Append("</h2>\n<pre>").Append(H(raw.RawText)).Append("</pre>\n");
         }
 
         sb.Append("</body>\n</html>\n");
         return sb.ToString();
     }
 
-    private static void AppendAdvice(StringBuilder sb, PartitionAdvisorResultViewModel vm)
+    /// <summary>
+    /// 파일을 골라 보고서를 쓴다(제안 이름 = 「표_partition_advice.html」). 고르지 않았으면 (null, null), 쓰지 못했으면 (null, 사유).
+    /// </summary>
+    public static async Task<(string? Path, string? Error)> SaveAsync(Func<string, CancellationToken, Task<string?>> pick, string table, Func<string> render, CancellationToken ct)
     {
-        if (vm.Outcome is null)
+        ArgumentNullException.ThrowIfNull(pick);
+        ArgumentNullException.ThrowIfNull(render);
+        var path = await pick(table + "_partition_advice.html", ct).ConfigureAwait(true);
+        if (string.IsNullOrEmpty(path))
         {
-            return;
+            return (null, null);
         }
 
+        try
+        {
+            await File.WriteAllTextAsync(path, render(), new UTF8Encoding(false), ct).ConfigureAwait(true);
+            return (path, null);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return (null, ex.Message);
+        }
+    }
+
+    private static void AppendAdvice(StringBuilder sb, AdvisorOutcome outcome, IReadOnlyList<AdviceCandidateCard> cards)
+    {
         sb.Append("<h2>").Append(H(TableEditText.T("추천", "Advice"))).Append("</h2>\n");
-        if (vm.IsUnreadable)
+        if (outcome.Advice is null)
         {
-            sb.Append("<p class=\"stop\">").Append(H(vm.UnreadableText)).Append("</p>\n");
+            sb.Append("<p class=\"stop\">").Append(H(outcome.Error is { } error
+                ? TableEditText.T("AI 가 실패했습니다: ", "The AI failed: ") + error
+                : TableEditText.T("AI 응답을 추천 모양으로 읽지 못했습니다.", "Could not read the AI answer as advice."))).Append("</p>\n");
         }
 
-        if (vm.IsNoPartition)
+        if (outcome.Advice is { } advice && string.Equals(advice.Verdict, AdviceVerdict.NoPartition, StringComparison.OrdinalIgnoreCase))
         {
             sb.Append("<p><strong>").Append(H(TableEditText.T("파티션 안 함 권장", "No partitioning recommended"))).Append("</strong></p>\n");
         }
 
-        if (vm.HasSummary)
+        if (outcome.Advice is { Summary.Length: > 0 } withSummary)
         {
-            sb.Append("<p>").Append(H(vm.Summary)).Append("</p>\n");
+            sb.Append("<p>").Append(H(withSummary.Summary)).Append("</p>\n");
         }
 
-        foreach (var card in vm.Cards)
+        foreach (var card in cards)
         {
             sb.Append("<div class=\"card\">\n<h3>").Append(H(card.Header)).Append("</h3>\n<p class=\"meta\">").Append(H(card.Shape)).Append("</p>\n");
             AppendList(sb, TableEditText.T("AI 이유", "AI reasons"), card.Reasons, null);
@@ -107,13 +139,10 @@ public static class PartitionAdviceReport
             sb.Append("</div>\n");
         }
 
-        if (vm.HasNotChosen)
-        {
-            AppendList(sb, TableEditText.T("키로 안 고른 열", "Columns not chosen"), vm.NotChosenLines, "h3");
-        }
+        AppendList(sb, TableEditText.T("키로 안 고른 열", "Columns not chosen"), (outcome.Advice?.NotChosen ?? []).Select(n => n.Column + " — " + n.Reason), "h3");
     }
 
-    private static void AppendEvidence(StringBuilder sb, PartitionAdvisorResultViewModel vm)
+    private static void AppendEvidence(StringBuilder sb, PartitionEvidenceViewModel vm)
     {
         sb.Append("<h2>").Append(H(TableEditText.T("근거 (앱이 모음)", "Evidence (collected by the app)"))).Append("</h2>\n<p>").Append(H(vm.StatsText)).Append("</p>\n");
         if (vm.Columns.Count > 0)

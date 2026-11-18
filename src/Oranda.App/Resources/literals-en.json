@@ -2150,5 +2150,9 @@
   "AI 없이 통계·분포·조회 조건만 모아 봅니다": "Collects statistics, distributions and predicates without AI",
   "파티션 분포 보기": "Partition evidence view",
   "어떤 열로 어떻게 나눌지 모르겠으면 AI 추천을 쓰세요.": "Not sure which column or how to split? Use AI advice.",
-  "값 목록": "Values"
+  "값 목록": "Values",
+  "후보": "Option",
+  "이 결과와 근거를 HTML 파일로 저장합니다": "Save this result and its evidence as an HTML file",
+  "같은 대화에서 후보를 꼭 내라고 다시 묻습니다": "Ask again in the same chat and require options",
+  "이 근거를 HTML 파일로 저장합니다": "Save this evidence as an HTML file"
 }

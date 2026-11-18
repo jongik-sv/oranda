@@ -19,7 +19,7 @@ public enum AdvisorStepState
     Done,
 }
 
-/// <summary>진행 단계 한 줄(열·키 → 통계 → 조회 조건 → 분포 → AI 응답 대기).</summary>
+/// <summary>진행 단계 한 줄(열·키 → 통계 → 조회 조건 → 분포). AI 응답은 AI 대화 창에서 기다린다(PA-22).</summary>
 public sealed partial class AdvisorStepViewModel(string text) : ObservableObject
 {
     [ObservableProperty]
@@ -40,7 +40,8 @@ public sealed partial class AdvisorStepViewModel(string text) : ObservableObject
 /// <summary>
 /// AI 파티션 추천 확인 창(설계 3장 ②, 시안 ②). AI 튜닝 시작 창과 같은 규칙: 받는 곳을 먼저 보이고, 실제 값이 나가는 항목(PA-3)은 따로 켜며
 /// 가림 대상 접속이면 잠근다. 「보낼 내용 보기」 = 근거를 모아 실제로 보낼 글을 펼친다(그 근거를 「모아서 보내기」가 그대로 쓴다).
-/// 진행 중에는 같은 창이 단계와 「취소」를 보인다. 끝나면 <see cref="Outcome"/> 을 채우고 <see cref="CloseRequested"/> 를 낸다.
+/// 모으는 동안 같은 창이 단계와 「취소」를 보인다. 다 모으면 <see cref="Request"/> 를 채우고 <see cref="CloseRequested"/> 를 낸다 —
+/// 보내기와 응답은 AI 대화 창이 맡는다(PA-22).
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "취소 토큰은 한 번의 작업 동안만 쥐고 끝나면 finally 에서 정리한다(창이 닫히면 Stop/Abort 로 취소).")]
 public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
@@ -60,7 +61,6 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
             new(PartitionAdvisorText.Step(EvidenceStep.Statistics)),
             new(PartitionAdvisorText.Step(EvidenceStep.Predicates)),
             new(PartitionAdvisorText.Step(EvidenceStep.Distributions)),
-            new(PartitionAdvisorText.WaitingStep),
         ];
     }
 
@@ -123,7 +123,7 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
     [ObservableProperty]
     private bool _isPreviewOpen;
 
-    /// <summary>모으기·AI 대기 중.</summary>
+    /// <summary>모으는 중.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSendValues), nameof(CanStart), nameof(CancelText))]
     private bool _isBusy;
@@ -137,8 +137,8 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
 
     public string CancelText => IsBusy ? TableEditText.T("멈추기", "Stop") : TableEditText.T("취소", "Cancel");
 
-    /// <summary>받은 결과(창이 닫힌 뒤 부르는 쪽이 결과 창을 연다). 취소·닫기면 null.</summary>
-    public AdvisorOutcome? Outcome { get; private set; }
+    /// <summary>보낼 근거와 선택(창이 닫힌 뒤 부르는 쪽이 AI 대화 창에서 보낸다). 취소·닫기면 null.</summary>
+    public AdvisorSendRequest? Request { get; private set; }
 
     /// <summary>창을 닫아 달라.</summary>
     public event EventHandler? CloseRequested;
@@ -183,7 +183,7 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
         IsPreviewOpen = true;
     }
 
-    /// <summary>「모아서 보내기」: 모으기 → AI. 받았으면 true(창을 닫는다). 실패·취소면 창에 남는다.</summary>
+    /// <summary>「모아서 보내기」: 근거를 모으고(이미 모았으면 그대로) 창을 닫는다. 보내기는 AI 대화 창이 한다. 모았으면 true, 실패·취소면 창에 남는다.</summary>
     public async Task<bool> SendAsync()
     {
         if (IsBusy || await EnsureEvidenceAsync() is not { } evidence)
@@ -191,37 +191,9 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
             return false;
         }
 
-        IsBusy = true;
-        ErrorText = string.Empty;
-        _cts = new CancellationTokenSource();
-        Steps[^1].State = AdvisorStepState.Running;
-        try
-        {
-            var outcome = await _run.AskAsync(evidence, Options, _cts.Token);
-            if (outcome.Error is { } error && outcome.Advice is null && outcome.RawText.Length == 0)
-            {
-                Steps[^1].State = AdvisorStepState.Pending;
-                ErrorText = TableEditText.T("AI 가 답하지 못했습니다: ", "The AI did not answer: ") + error;
-                return false;
-            }
-
-            Steps[^1].State = AdvisorStepState.Done;
-            Outcome = outcome;
-            CloseRequested?.Invoke(this, EventArgs.Empty);
-            return true;
-        }
-        catch (OperationCanceledException)
-        {
-            Steps[^1].State = AdvisorStepState.Pending;
-            ErrorText = TableEditText.T("멈췄습니다. 다시 보낼 수 있습니다.", "Stopped. You can send again.");
-            return false;
-        }
-        finally
-        {
-            _cts.Dispose();
-            _cts = null;
-            IsBusy = false;
-        }
+        Request = new AdvisorSendRequest(evidence, Options);
+        CloseRequested?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     /// <summary>「취소」: 진행 중이면 멈추고(창은 남음), 아니면 창을 닫는다.</summary>
@@ -259,9 +231,9 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
         {
             var options = new EvidenceOptions(IncludePredicates, IncludeDistributions);
             var evidence = await _run.CollectAsync(options, new UiProgress<EvidenceProgress>(OnProgress), _cts.Token);
-            for (var i = 0; i < Steps.Count - 1; i++)
+            foreach (var step in Steps)
             {
-                Steps[i].State = AdvisorStepState.Done;
+                step.State = AdvisorStepState.Done;
             }
 
             _evidence = evidence;
@@ -292,7 +264,7 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
     private void OnProgress(EvidenceProgress p)
     {
         var at = (int)p.Step;
-        for (var i = 0; i < Steps.Count - 1; i++)
+        for (var i = 0; i < Steps.Count; i++)
         {
             Steps[i].State = i < at ? AdvisorStepState.Done : i == at ? AdvisorStepState.Running : AdvisorStepState.Pending;
         }
@@ -349,6 +321,9 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
         };
     }
 }
+
+/// <summary>확인 창이 넘기는 보낼 재료(모은 근거와 선택).</summary>
+public sealed record AdvisorSendRequest(PartitionEvidence Evidence, AdvicePromptOptions Options);
 
 /// <summary>진행 알림을 UI 스레드에서(이미 UI 스레드면 바로) 부른다 — 시험에서도 순서가 그대로다.</summary>
 internal sealed class UiProgress<T>(Action<T> report) : IProgress<T>
