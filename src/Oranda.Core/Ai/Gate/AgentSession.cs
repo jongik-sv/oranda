@@ -160,6 +160,12 @@ public sealed class AgentSession : IDisposable
     /// <summary>호출한 클라이언트 이름(hello 에서 받은 값). 연결을 맡은 쪽이 채운다.</summary>
     public string? Client { get; set; }
 
+    /// <summary>이 실행의 요청 등급(감사 기록 <c>ai_tier</c>). 라우터가 보낼 곳을 고른 뒤 채운다. 모르면 null.</summary>
+    public AiTier? Tier { get; set; }
+
+    /// <summary>이 실행이 보낸 모델 이름(감사 기록 <c>ai_model</c>, <c>AiTierRouting.ModelLabel</c>). 라우터가 채운다. 모르면 null.</summary>
+    public string? ModelLabel { get; set; }
+
     /// <summary>이 요청에서 조회해도 되는 sql_id 인가(문맥의 sql_id + 도구 결과에서 알게 된 sql_id).</summary>
     public bool IsKnownSqlId(string sqlId) => !string.IsNullOrWhiteSpace(sqlId) && _sqlIds.ContainsKey(sqlId);
 

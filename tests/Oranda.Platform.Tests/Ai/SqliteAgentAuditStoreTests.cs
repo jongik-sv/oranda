@@ -161,6 +161,20 @@ public sealed class SqliteAgentAuditStoreTests : IDisposable
         Assert.Equal(["recent"], (await store.ListRecentAsync(10, null, default)).Select(e => e.Tool));
     }
 
+    [Fact]
+    public async Task Tier_and_model_round_trip_and_old_rows_read_as_unknown()
+    {
+        using var store = await StoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        await store.AppendAsync(Entry("describe_object", _p1, now.AddMinutes(-1)), default);
+        await store.AppendAsync(Entry("get_plan", _p1, now) with { Tier = AiTier.Light, Model = "Ollama · qwen3:8b" }, default);
+
+        var rows = await store.ListRecentAsync(10, null, default);
+
+        Assert.Equal((AiTier.Light, "Ollama · qwen3:8b"), (rows[0].Tier, rows[0].Model));
+        Assert.Equal((null as AiTier?, null as string), (rows[1].Tier, rows[1].Model));
+    }
+
     private static AgentAuditEntry Entry(string tool, Guid profile, DateTimeOffset at) => new()
     {
         OccurredAt = at,

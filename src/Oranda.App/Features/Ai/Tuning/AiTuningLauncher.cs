@@ -188,7 +188,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
         }
 
         var (editor, driver, profile, settings, document, tabId, source, statement) = scope;
-        var localAi = AiConversationTarget.From(settings).LocalAi;
+        var localAi = AiConversationTarget.Choose(settings, spec.Tier, AiTierRouting.EstimateTokens(statement?.Text) + AiTierRouting.PromptOverheadTokens).LocalAi; // 흐름과 같은 대상(등급·크기 올림)으로 가림을 미리 읽는다
         var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), tabId, statement?.Text, LocalAi: localAi);
         if (context.AccessLevel == AiAccessLevel.Off)
         {

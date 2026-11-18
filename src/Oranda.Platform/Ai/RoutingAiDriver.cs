@@ -126,8 +126,27 @@ internal sealed class RoutingAiDriver : IAiDriver
         var selected = await SelectAsync(request, ct).ConfigureAwait(false);
         if (selected.Error is not null)
         {
-            yield return selected.Error;
+            // 가벼운 일 모델을 고를 수 없으면 주 모델로 넘기지 않고 닫는다: 화면이 「주 모델로 다시 보내기」 를 붙인다(AE-1).
+            yield return selected.Light ? selected.Error with { RetryOnMain = true } : selected.Error;
             yield break;
+        }
+
+        // 가벼운 일 모델이 정해져 있을 때만 답한 모델을 알린다(비어 있으면 모두 주 모델이라 지금과 같은 사건만 낸다). 크기 올림으로 주 모델에 온 요청도 알린다.
+        if (selected.Label is { } label)
+        {
+            yield return new AiModelChosen(label, request.Tier, request.RequestedTier ?? request.Tier);
+        }
+
+        // 감사 기록(도구 호출마다)에 등급과 실제로 보낸 모델 이름을 남긴다(설계 §1.2 「기록」). 게이트는 설정을 다시 읽지 않고 이 값만 쓴다.
+        if (request.Session is { } session)
+        {
+            session.Tier = selected.Light ? AiTier.Light : AiTier.Main;
+            session.ModelLabel = selected.AuditLabel;
+        }
+
+        if (selected.Light)
+        {
+            request = request with { Model = selected.LightModel, Effort = AiTierRouting.LightEffort }; // 노력은 low 고정(설계 §1.3). 프로필 경로는 프로필 모델을 쓴다
         }
 
         var events = selected.CustomDriver is { } customDriver
@@ -137,22 +156,45 @@ internal sealed class RoutingAiDriver : IAiDriver
                 : selected.Api is { } api ? api.RunAsync(request, selected.Route!, ct) : _cli.RunAsync(request, selected.Route!, ct);
         await foreach (var e in events.ConfigureAwait(false))
         {
-            yield return e;
+            // 가벼운 일 모델의 실패는 다른 모델로 넘기지 않고 다시 보내기 표시만 붙인다.
+            yield return selected.Light && e is AiError failed ? failed with { RetryOnMain = true } : e;
         }
     }
 
     private async Task<Selection> SelectAsync(AiRequest request, CancellationToken ct)
     {
-        AiSettings settings;
+        AiSettings all;
         try
         {
-            settings = (await _settings.LoadAsync(ct).ConfigureAwait(false)).Value.Ai;
+            all = (await _settings.LoadAsync(ct).ConfigureAwait(false)).Value.Ai;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Selection.Fail($"설정을 읽지 못했습니다: {ex.Message}", "settings_unreadable");
         }
 
+        // 등급에 맞는 대상 설정. 가벼운 일 모델이 비어 있으면 그대로다(옛 설정과 같은 동작).
+        if (!AiTierRouting.UsesLightTarget(all, request.Tier))
+        {
+            var main = await SelectForAsync(request, all, ct).ConfigureAwait(false);
+            if (main.Error is not null)
+            {
+                return main;
+            }
+
+            var mainLabel = AiTierRouting.ModelLabel(AiActiveProfile.Find(all, SystemClis), request.Model ?? all.Model);
+            var escalated = request.Tier == AiTier.Main && request.RequestedTier == AiTier.Light && all.Light is { HasTarget: true };
+            return main with { AuditLabel = mainLabel, Label = escalated ? mainLabel : null };
+        }
+
+        var settings = all.ForTier(AiTier.Light);
+        var selected = await SelectForAsync(request, settings, ct).ConfigureAwait(false);
+        var label = AiTierRouting.ModelLabel(AiActiveProfile.Find(settings, SystemClis), settings.Model);
+        return selected with { Light = true, Label = label, AuditLabel = label, LightModel = settings.Model };
+    }
+
+    private async Task<Selection> SelectForAsync(AiRequest request, AiSettings settings, CancellationToken ct)
+    {
         // 손상 복구 직후 첫 실행: 활성 프로필 선택이 기본값으로 돌아가 있을 수 있으므로 한 번 멈추고 사용자가 확인하게 한다.
         if (_settings is IAiSettingsResetSignal reset && reset.TryTakeReset())
         {
@@ -300,6 +342,18 @@ internal sealed class RoutingAiDriver : IAiDriver
 
     private sealed record Selection(AiRoute? Route, IApiAiDriver? Api, AiError? Error, ISystemCliAiDriver? SystemCli = null, ICustomCliAiDriver? CustomDriver = null, AiCustomCli? CustomCli = null)
     {
+        /// <summary>가벼운 일 모델로 보낸다(<see cref="AiTierRouting.UsesLightTarget"/>).</summary>
+        public bool Light { get; init; }
+
+        /// <summary>알릴 모델 이름(<see cref="AiModelChosen.Label"/>). 가벼운 일 모델을 쓰거나 가벼운 일을 주 모델로 올렸을 때만 있다.</summary>
+        public string? Label { get; init; }
+
+        /// <summary>감사 기록에 남길 모델 이름(주 모델 포함 항상).</summary>
+        public string? AuditLabel { get; init; }
+
+        /// <summary>가벼운 일 모델의 Claude Code 모델 이름(요청의 주 모델 값을 대신한다).</summary>
+        public string? LightModel { get; init; }
+
         public static Selection ViaCustomCli(ICustomCliAiDriver driver, AiCustomCli cli) => new(null, null, null, null, driver, cli);
 
         public static Selection Cli(AiRoute route) => new(route, null, null);

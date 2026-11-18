@@ -72,8 +72,8 @@ internal sealed partial class SqliteAgentAuditStore : IAgentAuditStore, IDisposa
             await using var cmd = c.CreateCommand();
             cmd.CommandText = """
                 INSERT INTO agent_audit(occurred_at, profile_id, profile_name, client, run_id, tool, arguments,
-                                        access_level, verdict, reason, result_chars, elapsed_ms)
-                VALUES ($at, $pid, $pname, $client, $run, $tool, $args, $level, $verdict, $reason, $chars, $ms);
+                                        access_level, verdict, reason, result_chars, elapsed_ms, ai_tier, ai_model)
+                VALUES ($at, $pid, $pname, $client, $run, $tool, $args, $level, $verdict, $reason, $chars, $ms, $tier, $model);
                 """;
             cmd.Parameters.AddWithValue("$at", OrandaDatabase.ToText(entry.OccurredAt == default ? DateTimeOffset.UtcNow : entry.OccurredAt));
             cmd.Parameters.AddWithValue("$pid", entry.ProfileId is { } id ? id.ToString("D") : DBNull.Value);
@@ -87,6 +87,8 @@ internal sealed partial class SqliteAgentAuditStore : IAgentAuditStore, IDisposa
             cmd.Parameters.AddWithValue("$reason", (object?)reason ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$chars", (object?)entry.ResultChars ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$ms", (object?)entry.ElapsedMs ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$tier", (object?)entry.Tier?.ToString() ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$model", (object?)Limit(entry.Model is null ? null : Scrub(entry.Model), MaxNameChars) ?? DBNull.Value);
             await cmd.ExecuteNonQueryAsync(ct);
 
             if (DateTimeOffset.UtcNow - _lastPurge >= PurgeInterval)
@@ -112,7 +114,7 @@ internal sealed partial class SqliteAgentAuditStore : IAgentAuditStore, IDisposa
         return await RunAsync<IReadOnlyList<AgentAuditEntry>>(false, async c =>
         {
             await using var cmd = c.CreateCommand();
-            cmd.CommandText = "SELECT id, occurred_at, profile_id, profile_name, client, run_id, tool, arguments, access_level, verdict, reason, result_chars, elapsed_ms "
+            cmd.CommandText = "SELECT id, occurred_at, profile_id, profile_name, client, run_id, tool, arguments, access_level, verdict, reason, result_chars, elapsed_ms, ai_tier, ai_model "
                 + "FROM agent_audit "
                 + (profileId is null ? string.Empty : "WHERE profile_id = $pid ")
                 + "ORDER BY occurred_at DESC, id DESC LIMIT $limit";
@@ -175,6 +177,8 @@ internal sealed partial class SqliteAgentAuditStore : IAgentAuditStore, IDisposa
         Reason = r.IsDBNull(10) ? null : r.GetString(10),
         ResultChars = r.IsDBNull(11) ? null : r.GetInt32(11),
         ElapsedMs = r.IsDBNull(12) ? null : r.GetInt64(12),
+        Tier = !r.IsDBNull(13) && Enum.TryParse<AiTier>(r.GetString(13), out var tier) ? tier : null,
+        Model = r.IsDBNull(14) ? null : r.GetString(14),
     };
 
     /// <summary>

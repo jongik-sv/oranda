@@ -14,6 +14,7 @@ using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
+using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Ai.Schemas;
 using Oranda.Core.Execution;
 using Oranda.Core.Extensibility;
@@ -181,7 +182,7 @@ public sealed partial class AiTuningFlow(
     /// </summary>
     public bool StopIfLocalAiLapsed()
     {
-        if (!IsRunning || _route is not { LocalAi: true } started || CurrentTarget() is not { } now || started.IsSameAs(now))
+        if (!IsRunning || _route is not { LocalAi: true } started || CurrentTarget(started.Tier) is not { } now || started.IsSameAs(now))
         {
             return false;
         }
@@ -215,7 +216,7 @@ public sealed partial class AiTuningFlow(
         }
 
         // 기타 CLI 는 DB 도구가 없어 튜닝에 쓰지 않는다. 아래 _route 와 같은 값으로 판단해, 확인한 뒤 설정이 바뀌어도 어긋나지 않게 한다.
-        var route = CurrentTarget();
+        var route = CurrentTarget(AiCommandTiers.Tune);
         if (AiTuningCustomCli.IsCustom(route))
         {
             chat.AddAssistantText(AiTuningCustomCli.TuningText);
@@ -388,7 +389,7 @@ public sealed partial class AiTuningFlow(
         }
 
         // 보낼 곳(프로필·주소·형식·모델)이 대화를 시작할 때와 다르면 앞 대화의 ResumeId 를 쓸 수 없고, 앞서 보낸 이미지가 경고 없이 새로운 곳으로 가면 안 된다.
-        if (route is { } started && CurrentTarget() is { } now && !started.IsSameAs(now))
+        if (route is { } started && CurrentTarget(started.Tier) is { } now && !started.IsSameAs(now))
         {
             chat.AddAssistantText(ProfileChangedTextFor(now));
             return null;
@@ -438,9 +439,9 @@ public sealed partial class AiTuningFlow(
         }
 
         // 기다리는 동안(접속 새로 고침·확인 창·감사) 대화가 바뀌었거나 보낼 곳이 달라졌으면 확인한 곳과 다른 곳으로 나가지 않도록 접는다.
-        if (generation != _generation || IsRunning || (route is { } confirmed && CurrentTarget() is { } latest && !confirmed.IsSameAs(latest)))
+        if (generation != _generation || IsRunning || (route is { } confirmed && CurrentTarget(confirmed.Tier) is { } latest && !confirmed.IsSameAs(latest)))
         {
-            chat.AddAssistantText(ProfileChangedTextFor(CurrentTarget()));
+            chat.AddAssistantText(ProfileChangedTextFor(CurrentTarget(route?.Tier ?? AiTier.Main)));
             return null;
         }
 
@@ -458,8 +459,12 @@ public sealed partial class AiTuningFlow(
     private bool MaskingRequiredFor(AiContext context, LiteralVault? vault) =>
         vault is not null || maskRequired is null || maskRequired(context);
 
-    /// <summary>이 대화가 지금 보낼 곳(설정을 모르면 null).</summary>
-    private AiConversationTarget? CurrentTarget() => settings?.Invoke() is { } current ? AiConversationTarget.From(current) : null;
+    /// <summary>이 등급의 요청이 지금 보낼 곳(설정을 모르면 null). 이어 말하기는 시작 때의 등급(<see cref="AiConversationTarget.Tier"/>)으로 다시 읽어 같은 모델로 보낸다.</summary>
+    private AiConversationTarget? CurrentTarget(AiTier tier) => settings?.Invoke() is { } current ? AiConversationTarget.From(current, tier) : null;
+
+    /// <summary>명령의 등급과 입력 크기로 보낼 곳을 고른다(크기 올림). 확인 창·가림 판단보다 먼저 부른다.</summary>
+    private AiConversationTarget? ChooseTarget(AiTier tier, string? text) =>
+        settings?.Invoke() is { } current ? AiConversationTarget.Choose(current, tier, AiTierRouting.EstimateTokens(text) + AiTierRouting.PromptOverheadTokens) : null;
 
     /// <summary>설정의 조인 문법. 요청을 만들 때마다 읽으므로 대화 중에 바꾸면 다음 요청부터 따른다. 설정을 모르면 Oracle.</summary>
     private AiJoinSyntax JoinSyntax => settings?.Invoke()?.JoinSyntax ?? AiJoinSyntax.Oracle;
@@ -737,7 +742,9 @@ public sealed partial class AiTuningFlow(
             choice.EffortId == TuningStartInfo.DefaultModelId ? null : choice.EffortId,
             Images: images.Count == 0 ? null : [.. images.Select(i => i.Attachment)],
             Expected: (route ?? _route)?.ToExpectation(), // 확인 창에 적은 곳과 실제 전송처가 같게: 라우터가 설정의 활성 프로필과 대조한다(profile_changed)
-            MaskingRequired: MaskingRequiredFor(context, vault)); // 값을 가려 보낼 수 없는 기타 CLI 의 라우터만 읽는다(알 수 없으면 참으로 닫는다)
+            MaskingRequired: MaskingRequiredFor(context, vault), // 값을 가려 보낼 수 없는 기타 CLI 의 라우터만 읽는다(알 수 없으면 참으로 닫는다)
+            Tier: (route ?? _route)?.Tier ?? AiTier.Main, // 확인한 대상의 등급(라우터는 등급을 바꾸지 않는다)
+            RequestedTier: (route ?? _route)?.RequestedTier);
         JsonElement? result = null;
         try
         {

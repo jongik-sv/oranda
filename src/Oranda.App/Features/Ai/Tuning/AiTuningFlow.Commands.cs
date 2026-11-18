@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Oranda.App.Features.Ai.Tuning.Commands;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
+using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Settings;
 
 namespace Oranda.App.Features.Ai.Tuning;
@@ -60,7 +61,7 @@ public sealed partial class AiTuningFlow
 
         // 기타 CLI 는 DB 도구가 없고 값을 가려 보낼 수 없다: 지원하지 않는 명령·쓸 수 없는 줄·가림 대상 접속은 DB 를 읽기 전에 여기서 닫는다.
         // 아래 _route 와 같은 값으로 판단해, 확인한 뒤 설정이 바뀌어도 어긋나지 않게 한다.
-        var route = CurrentTarget();
+        var route = ChooseTarget(spec.Tier, statement.Text); // 명령 등급과 입력 크기로 고른다: 가림·확인·기대값이 모두 이 대상을 따른다
         context = context with { LocalAi = route?.LocalAi == true }; // 값을 가릴지도 실제 전송처(_route)와 같은 값으로 정한다(D-045)
         var custom = AiTuningCustomCli.IsCustom(route);
         if (custom && !CustomCliCommandAllowed(spec, route!, context))
@@ -112,6 +113,11 @@ public sealed partial class AiTuningFlow
             _context = capped;
             chat.StartConversation(spec.ConversationTitle + " — " + Shorten(promptStatement, 40));
             chat.AddAssistantText(preload is null ? SentLine(spec, promptStatement, vault is not null) : CustomCliSentLine(spec, promptStatement, preload.Sections)); // 첫 줄: 무엇을 보냈고 가렸는지
+            if (route?.Escalated == true)
+            {
+                chat.AddAssistantText(AiTierRouting.EscalatedText); // 가벼운 일을 입력 크기 때문에 주 모델로 보냈다(설계 §1.2 「크기 올림」)
+            }
+
             foreach (var notice in preload?.Notices ?? [])
             {
                 chat.AddAssistantText(notice); // 읽지 못한 정보가 있다는 사실(글에도 적혀 있다)

@@ -148,7 +148,7 @@ public sealed partial class AiTuningFlow
 
         // 기타 CLI 는 글만 주고받는다: 이미지·편집기 문장·DB 도구를 쓰지 않고, 값을 가려 보낼 수 없으므로 가림 대상 접속에는 보내지 않는다.
         // 보낼 곳은 아래 요청의 기대값(_route)이 되는 같은 값으로 한 번만 읽어, 판단과 실제 전송처가 어긋나지 않게 한다.
-        var now = CurrentTarget();
+        var now = CurrentTarget(AiCommandTiers.General);
 
         // 「로컬 AI」 로 보내면 가리지 않는다(D-045). 접속 쪽 판단(scope)을 받아 보낼 곳과 같은 값으로 여기서 한 번만 정한다.
         if (now?.LocalAi == true)
@@ -289,7 +289,7 @@ public sealed partial class AiTuningFlow
             return null;
         }
 
-        if (IsRunning || (route is { } confirmed && CurrentTarget() is { } latest && !confirmed.IsSameAs(latest)))
+        if (IsRunning || (route is { } confirmed && CurrentTarget(confirmed.Tier) is { } latest && !confirmed.IsSameAs(latest)))
         {
             chat.AddAssistantText(GeneralSendCancelledText);
             chat.ForgetResume();
@@ -438,7 +438,8 @@ public sealed partial class AiTuningFlow
                 turn.Prompt, turn.Context, chat.ResumeId, OutputSchema: null, Model: null, session,
                 Images: followUp.Images.Count == 0 ? null : [.. followUp.Images.Select(i => i.Attachment)],
                 Expected: turn.Route?.ToExpectation(), // 확인 창에 적은 곳과 실제 전송처가 같게: 라우터가 설정의 활성 프로필과 대조한다
-                MaskingRequired: turn.Masking); // 값을 가려 보낼 수 없는 기타 CLI 의 라우터만 읽는다(접속을 알 수 없는 대화는 이미 가리는 대화로 본다)
+                MaskingRequired: turn.Masking, // 값을 가려 보낼 수 없는 기타 CLI 의 라우터만 읽는다(접속을 알 수 없는 대화는 이미 가리는 대화로 본다)
+                Tier: turn.Route?.Tier ?? AiCommandTiers.General);
             await chat.RunAsync(driver.RunAsync(request, cts.Token), cts.Token).ConfigureAwait(true);
         }
         finally

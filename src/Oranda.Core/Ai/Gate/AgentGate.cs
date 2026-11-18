@@ -424,6 +424,8 @@ public sealed partial class AgentGate : IAgentGate
             Reason = outcome.Reason,
             ResultChars = outcome.Result.Text.Length,
             ElapsedMs = (long)elapsed.TotalMilliseconds,
+            Tier = session.Tier,
+            Model = session.ModelLabel,
         };
 
     private static GateOutcome Deny(string code, string message) => Reject(AiToolJudgement.Denied, code, message);

@@ -52,7 +52,9 @@ public sealed record AiImageAttachment(string MediaType, byte[] Data);
 /// <param name="Tier">
 /// 요청 등급(<see cref="AiCommandTiers"/>). 기본은 주 모델. 가벼운 일(<see cref="AiTier.Light"/>)은 가벼운 일 모델이 정해져 있을 때만 그쪽으로 가고,
 /// 비어 있으면 주 모델로 간다(<c>AiActiveProfile.Find(settings, tier)</c>). 이어 묻기는 첫 요청과 같은 등급으로 보낸다.
+/// 크기 올림(<c>AiTierRouting.Choose</c>)은 확인 창 전에 호출한 쪽이 하고, 이 칸에는 고른 뒤의 등급을 넣는다. 라우터는 등급을 바꾸지 않는다.
 /// </param>
+/// <param name="RequestedTier">명령이 원한 등급(크기 올림 전). null 이면 <paramref name="Tier"/> 와 같다. 라우터가 <see cref="AiModelChosen.RequestedTier"/> 로 알린다.</param>
 public sealed record AiRequest(
     string Prompt,
     AiContext Context,
@@ -64,7 +66,8 @@ public sealed record AiRequest(
     IReadOnlyList<AiImageAttachment>? Images = null,
     AiProfileExpectation? Expected = null,
     bool? MaskingRequired = null,
-    AiTier Tier = AiTier.Main);
+    AiTier Tier = AiTier.Main,
+    AiTier? RequestedTier = null);
 
 /// <summary>
 /// 호출한 쪽이 기대하는 활성 프로필. <paramref name="ProfileId"/> 가 null 이면 시스템 CLI 의 Claude Code 를 기대한다.

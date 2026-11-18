@@ -56,6 +56,10 @@ public class AiCommandFlowTests
             Task.FromResult(OnPrepare?.Invoke(env) ?? AiCommandPreparation.Ready(new AiCommandTarget(env.CursorStatement!)));
 
         public override string BuildInstruction(AiCommandPromptInput input) => "FREE-INSTRUCTION";
+
+        public AiTier TierValue { get; init; } = AiTier.Main;
+
+        public override AiTier Tier => TierValue;
     }
 
     private sealed class StructuredSpec : AiCommandSpec
@@ -574,5 +578,48 @@ public class AiCommandFlowTests
         Assert.Equal(AiAccessLevel.Metadata, second.Context.AccessLevel);
         Assert.Equal(AiAccessLevel.Metadata, second.Session!.Level);
         Assert.Equal("s-1", second.ResumeId);
+    }
+
+    private static AiSettings PaidMainLocalLight()
+    {
+        var paid = new AiLlmProfile { Id = Guid.NewGuid(), Name = "유료", Preset = AiProfilePreset.Custom, Format = AiApiFormat.OpenAi, BaseUrl = "https://llm.example/v1", Model = "big" };
+        var local = new AiLlmProfile
+        {
+            Id = Guid.NewGuid(), Name = "로컬", Preset = AiProfilePreset.Ollama, Format = AiApiFormat.OpenAi, BaseUrl = "http://127.0.0.1:11434/v1", Model = "small",
+            MaxInputTokens = 8192, LocalAiConfirmedUrl = "http://127.0.0.1:11434/v1",
+        };
+        return new AiSettings { Profiles = [paid, local], ActiveProfileId = paid.Id, Light = new AiLightSettings { ProfileId = local.Id } };
+    }
+
+    [Fact]
+    public async Task A_light_command_goes_to_the_local_light_model_unmasked_and_follow_ups_stay_there()
+    {
+        var settings = PaidMainLocalLight();
+        var rig = new Rig { Mask = true, Settings = settings };
+
+        await rig.StartCommand(new FreeSpec { TierValue = AiTier.Light });
+        await rig.Flow.FollowUpAsync("더");
+
+        Assert.Equal(2, rig.Driver.Requests.Count);
+        Assert.All(rig.Driver.Requests, r => Assert.Equal((AiTier.Light, settings.Light!.ProfileId), (r.Tier, r.Expected!.ProfileId)));
+        var first = rig.Driver.Requests[0];
+        Assert.Contains("SECRET", first.Prompt, StringComparison.Ordinal); // 가벼운 일 모델이 로컬 AI 라 가리지 않는다
+        Assert.True(first.Context.LocalAi);
+    }
+
+    [Fact]
+    public async Task A_large_light_command_is_escalated_to_the_paid_main_model_and_masked_before_sending()
+    {
+        var settings = PaidMainLocalLight();
+        var rig = new Rig { Mask = true, Settings = settings };
+        var large = Cursor + " AND note = '" + new string('x', 3) + "'" + string.Concat(Enumerable.Repeat(" AND c1 = 1", 2000));
+
+        await rig.StartCommand(new FreeSpec { TierValue = AiTier.Light }, large);
+
+        var request = Assert.Single(rig.Driver.Requests);
+        Assert.Equal((AiTier.Main, (AiTier?)AiTier.Light, settings.ActiveProfileId), (request.Tier, request.RequestedTier, request.Expected!.ProfileId));
+        Assert.DoesNotContain("SECRET", request.Prompt, StringComparison.Ordinal); // 실제로 고른 유료 주 모델의 규칙대로 가린다
+        Assert.False(request.Context.LocalAi);
+        Assert.Contains(Oranda.Core.Ai.Profiles.AiTierRouting.EscalatedText, rig.AssistantTexts);
     }
 }

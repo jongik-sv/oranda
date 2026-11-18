@@ -60,4 +60,10 @@ public sealed record AgentAuditEntry
 
     /// <summary>열 <c>elapsed_ms</c>.</summary>
     public long? ElapsedMs { get; init; }
+
+    /// <summary>열 <c>ai_tier</c>: 요청 등급(이름 문자열로 저장). 모르면 null(마이그레이션 0008 전 기록 포함).</summary>
+    public AiTier? Tier { get; init; }
+
+    /// <summary>열 <c>ai_model</c>: 실제로 보낸 모델 이름(예: <c>haiku</c>·<c>Ollama · qwen3:8b</c>). 모르면 null.</summary>
+    public string? Model { get; init; }
 }

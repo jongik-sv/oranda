@@ -18,12 +18,45 @@ namespace Oranda.App.Features.Ai.Tuning;
 /// <param name="SystemCliId">Claude Code 가 아닌 시스템 CLI 의 id(쓸 수 없는 줄 포함). 기타 CLI 면 <c>custom:&lt;id&gt;</c>. 프로필·Claude Code 면 null.</param>
 /// <param name="CustomCliCommandHash">기타 CLI 의 명령 해시(<see cref="AiCustomCliTarget.CommandHash"/>). 명령만 고쳐도 다른 곳이다. 쓸 수 없는 줄·다른 종류면 null.</param>
 /// <param name="LocalAi">프로필이 「로컬 AI」 로 지정되어 있다(<see cref="AiLlmProfile.IsLocalAi"/>, D-045). 값을 가릴지는 대화마다 이 값으로 정하므로, 판단과 실제 전송처가 어긋나지 않는다. 지정을 바꾸면 다른 곳이다.</param>
-public sealed record AiConversationTarget(Guid? ProfileId, string Label, string? BaseUrl, AiApiFormat? Format, string? Model, string? SystemCliId = null, string? CustomCliCommandHash = null, bool LocalAi = false)
+/// <param name="Tier">이 대상의 등급(요청의 <see cref="AiRequest.Tier"/>). 가벼운 일 모델이 비어 있으면 Light 여도 대상은 주 모델이다.</param>
+/// <param name="RequestedTier">명령이 원한 등급(크기 올림 전). 가벼운 일을 주 모델로 올렸으면 <see cref="Tier"/> 와 다르다.</param>
+public sealed record AiConversationTarget(Guid? ProfileId, string Label, string? BaseUrl, AiApiFormat? Format, string? Model, string? SystemCliId = null, string? CustomCliCommandHash = null, bool LocalAi = false, AiTier Tier = AiTier.Main, AiTier RequestedTier = AiTier.Main)
 {
-    /// <summary>설정의 활성 대상으로 만든다. 프로필을 찾지 못하거나 모르는 프로필이어도 id 는 그대로 남겨 라우터가 거부하게 한다.</summary>
-    public static AiConversationTarget From(AiSettings settings)
+    /// <summary>가벼운 일을 입력 크기 때문에 주 모델로 올렸다(대화 창에 <see cref="AiTierRouting.EscalatedText"/> 를 남길 때).</summary>
+    public bool Escalated => RequestedTier == AiTier.Light && Tier == AiTier.Main;
+
+    /// <summary>설정의 활성 대상(주 모델)으로 만든다. 프로필을 찾지 못하거나 모르는 프로필이어도 id 는 그대로 남겨 라우터가 거부하게 한다.</summary>
+    public static AiConversationTarget From(AiSettings settings) => From(settings, AiTier.Main);
+
+    /// <summary>
+    /// 등급의 대상으로 만든다(<see cref="AiSettings.ForTier"/>). 확인 창·가림(<see cref="LocalAi"/>)·라우터 기대값이 모두 이 대상을 따르므로,
+    /// 가벼운 일 모델이 로컬 AI 이고 주 모델이 유료여도 각자 규칙대로 된다(설계 §1.2 「확인·가림」).
+    /// </summary>
+    public static AiConversationTarget From(AiSettings settings, AiTier tier)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        var effective = settings.ForTier(tier);
+        var target = FromActive(effective) with { Tier = tier, RequestedTier = tier };
+
+        // 가벼운 일 모델이 Claude Code 면 확인 창에 모델까지 적는다(주 모델과 같은 「Claude Code」 로만 보이면 어느 쪽인지 모른다).
+        return AiTierRouting.UsesLightTarget(settings, tier) && target is { ProfileId: null, SystemCliId: null } && !string.IsNullOrWhiteSpace(effective.Model)
+            ? target with { Label = $"{target.Label} · {effective.Model.Trim()}" }
+            : target;
+    }
+
+    /// <summary>
+    /// 명령의 등급과 입력 추정 토큰으로 고른다(<see cref="AiTierRouting.Choose"/>). 가벼운 일이 가벼운 일 모델 한도의 70% 를 넘으면 주 모델 대상이 된다.
+    /// 확인 창보다 먼저 불러야 한다: 확인한 뒤에 대상을 바꾸지 않는다.
+    /// </summary>
+    public static AiConversationTarget Choose(AiSettings settings, AiTier requested, int estimatedTokens)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var choice = AiTierRouting.Choose(settings, requested, estimatedTokens);
+        return From(settings, choice.Tier) with { RequestedTier = requested };
+    }
+
+    private static AiConversationTarget FromActive(AiSettings settings)
+    {
         var active = AiActiveProfile.Find(settings);
         return active switch
         {
@@ -48,7 +81,7 @@ public sealed record AiConversationTarget(Guid? ProfileId, string Label, string?
     /// </summary>
     public string? RecipientUrl => Format is { } format && !string.IsNullOrWhiteSpace(BaseUrl) ? AiProfileUrl.BaseFor(format, BaseUrl) : null;
 
-    /// <summary>같은 곳이다: id·주소·형식·모델(기타 CLI 는 명령 해시)과 「로컬 AI」 지정이 모두 같다.</summary>
+    /// <summary>같은 곳이다: id·주소·형식·모델(기타 CLI 는 명령 해시)과 「로컬 AI」 지정·등급이 모두 같다.</summary>
     public bool IsSameAs(AiConversationTarget other)
     {
         ArgumentNullException.ThrowIfNull(other);
@@ -58,6 +91,7 @@ public sealed record AiConversationTarget(Guid? ProfileId, string Label, string?
             && string.Equals(BaseUrl, other.BaseUrl, StringComparison.Ordinal)
             && Format == other.Format
             && string.Equals(Model, other.Model, StringComparison.Ordinal)
-            && LocalAi == other.LocalAi;
+            && LocalAi == other.LocalAi
+            && Tier == other.Tier;
     }
 }
