@@ -5,7 +5,7 @@ namespace Oranda.Core.Schema.TableEdit.Partitions.Advisor;
 
 /// <summary>
 /// 채우기 결과. <see cref="Draft"/> 를 파티션 편집기에 넣는다.
-/// 하위 파티션 템플릿은 <see cref="PartitionScheme"/> 에 바꾸기용 모델이 생기기 전까지 <see cref="Subpartition"/> 에 따로 담는다(값은 되돌린 실제 값, pa-script 머지 뒤 모델로 옮김).
+/// 하위 파티션은 <see cref="PartitionScheme.SubpartitionTemplate"/>, LOCAL 인덱스는 <see cref="PartitionTableDraft.LocalIndexes"/> 에 채우고, 예전 칸 <see cref="Subpartition"/>(값은 되돌린 실제 값)·<see cref="LocalIndexes"/> 도 호환으로 같이 채운다.
 /// </summary>
 /// <param name="LocalIndexes">LOCAL 로 만들 인덱스(PA-12)</param>
 /// <param name="Problems">채우면서 생긴 확인(✖ = <see cref="AdviceCheckCodes.ValueUnknown"/> 등, 있으면 채우지 않음)</param>
@@ -88,7 +88,58 @@ public static partial class PartitionAdviceApplier
         }
 
         var sub = candidate.Subpartition is { } sp ? Unmask(sp, evidence, vault, problems) : null;
-        return new AdviceDraft(new PartitionTableDraft(scheme, rows), sub, [.. candidate.LocalIndexes], problems);
+        if (sub is not null && Template(sub, evidence, problems) is { } template)
+        {
+            scheme = scheme with { SubpartitionTemplate = template };
+        }
+
+        string[] local = [.. candidate.LocalIndexes];
+        return new AdviceDraft(new PartitionTableDraft(scheme, rows) { LocalIndexes = local }, sub, local, problems);
+    }
+
+    /// <summary>
+    /// 하위 파티션 안 → 바꾸기용 템플릿(PA-11). LIST = 묶음마다 줄(값은 열 형식대로 글자 값 따옴표, 기본 묶음 = DEFAULT), HASH = 개수(없으면 <see cref="DefaultHashCount"/>).
+    /// RANGE·모르는 방식 = ✖ method-unknown(Args[0] = <c>subpartition</c>), 키 열이 없으면 ✖ key-missing — 둘 다 템플릿 없음.
+    /// Tibero 의 HASH 이름 템플릿은 문장 만들기가 방언(<see cref="ITableEditDialect.HashSubpartitionsAsTemplate"/>)으로 바꾼다.
+    /// </summary>
+    private static SubpartitionTemplate? Template(SubpartitionAdvice sub, PartitionEvidence evidence, List<AdviceCheck> problems)
+    {
+        var method = AdviceMethod.ToMethod(sub.Method);
+        if (method is not (PartitionMethod.List or PartitionMethod.Hash))
+        {
+            problems.Add(new AdviceCheck(AdviceCheckLevel.Stop, AdviceCheckCodes.MethodUnknown, sub.Method ?? string.Empty, ["subpartition"]));
+            return null;
+        }
+
+        if (sub.KeyColumns.Count == 0)
+        {
+            problems.Add(new AdviceCheck(AdviceCheckLevel.Stop, AdviceCheckCodes.KeyMissing));
+            return null;
+        }
+
+        var keys = new List<EvidenceColumn>();
+        foreach (var name in sub.KeyColumns)
+        {
+            if (evidence.Column(name) is not { } column)
+            {
+                problems.Add(new AdviceCheck(AdviceCheckLevel.Stop, AdviceCheckCodes.KeyMissing, name));
+                return null;
+            }
+
+            keys.Add(column);
+        }
+
+        var template = new SubpartitionTemplate(method.Value, [.. keys.Select(k => k.Name)]);
+        if (method == PartitionMethod.Hash)
+        {
+            return template with { HashCount = Math.Max(1, sub.HashCount ?? DefaultHashCount) };
+        }
+
+        var kind = PartitionBounds.KindOf(keys[0].DataType);
+        return template with
+        {
+            Rows = [.. (sub.Groups ?? []).Select(g => new SubpartitionTemplateRow(g.Name, g.IsDefault ? "DEFAULT" : string.Join(", ", (g.Values ?? []).Select(v => Literal(v, kind)))))],
+        };
     }
 
     private static AdviceDraft Fail(AdviceCheck problem) => new(PartitionTableDraft.None, null, [], [problem]);

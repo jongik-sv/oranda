@@ -185,3 +185,90 @@ public class PartitionAdviceApplierTests
         Assert.Equal(AdviceCheckCodes.MethodUnknown, Assert.Single(unknown.Problems).Code);
     }
 }
+
+// 소유: pa-core PC5 후속. 하위 파티션 템플릿·LOCAL 인덱스를 모델(PartitionScheme.SubpartitionTemplate·PartitionTableDraft.LocalIndexes)에 채움.
+public class PartitionAdviceApplierModelTests
+{
+    private static readonly DateOnly Today = new(2026, 11, 18);
+
+    private static PartitionEvidence Evidence() =>
+        PartitionEvidence.Empty("SAMPLE", "ORDERS", Dbms.Oracle, new DateTime(2026, 11, 18, 9, 0, 0, DateTimeKind.Local)) with
+        {
+            Columns =
+            [
+                new EvidenceColumn("ORDER_DT", "DATE", false, 1000, 0, null, null),
+                new EvidenceColumn("STATUS", "VARCHAR2", false, 4, 0, "FREQUENCY", null),
+                new EvidenceColumn("REGION_NO", "NUMBER", false, 5, 0, null, null),
+            ],
+        };
+
+    private static PartitionCandidate Monthly(SubpartitionAdvice? sub, params string[] local) =>
+        new(1, "t", AdviceMethod.Range, ["ORDER_DT"], AdviceInterval.Month, new PartitionLayout(AdviceLayoutKind.Monthly), sub, local, [], []);
+
+    [Fact]
+    public void List_subpartition_becomes_template_rows_with_real_quoted_values_and_default()
+    {
+        var vault = new EvidenceValueVault();
+        var open = vault.Mask("STATUS", "OPEN");
+        var sub = new SubpartitionAdvice(AdviceMethod.List, ["status"], [new ListGroup("SP_OPEN", [open], false), new ListGroup("SP_REST", [], true)]);
+
+        var d = PartitionAdviceApplier.Apply(Monthly(sub, "IX_ORDERS_DT"), Evidence(), vault, Today);
+
+        var t = d.Draft.Scheme!.SubpartitionTemplate!;
+        Assert.Equal((PartitionMethod.List, "STATUS"), (t.Method, Assert.Single(t.KeyColumns)));
+        Assert.Equal([new SubpartitionTemplateRow("SP_OPEN", "'OPEN'"), new SubpartitionTemplateRow("SP_REST", "DEFAULT")], t.Rows);
+        Assert.Equal(["IX_ORDERS_DT"], d.Draft.LocalIndexes);
+        Assert.Equal(["IX_ORDERS_DT"], d.LocalIndexes); // 예전 칸도 같이
+        Assert.Equal(["OPEN"], d.Subpartition!.Groups![0].Values);
+        Assert.Empty(d.Problems);
+    }
+
+    [Fact]
+    public void Hash_subpartition_count_and_number_list_values()
+    {
+        var hash = PartitionAdviceApplier.Apply(Monthly(new SubpartitionAdvice(AdviceMethod.Hash, ["REGION_NO"], HashCount: 8)), Evidence(), new EvidenceValueVault(), Today);
+        Assert.Equal((PartitionMethod.Hash, 8), (hash.Draft.Scheme!.SubpartitionTemplate!.Method, hash.Draft.Scheme.SubpartitionTemplate.HashCount));
+
+        var noCount = PartitionAdviceApplier.Apply(Monthly(new SubpartitionAdvice(AdviceMethod.Hash, ["REGION_NO"])), Evidence(), new EvidenceValueVault(), Today);
+        Assert.Equal(PartitionAdviceApplier.DefaultHashCount, noCount.Draft.Scheme!.SubpartitionTemplate!.HashCount);
+
+        var list = PartitionAdviceApplier.Apply(Monthly(new SubpartitionAdvice(AdviceMethod.List, ["REGION_NO"], [new ListGroup("SP_A", ["1", "2"], false)])), Evidence(), new EvidenceValueVault(), Today);
+        Assert.Equal("1, 2", list.Draft.Scheme!.SubpartitionTemplate!.Rows[0].Values);
+    }
+
+    [Fact]
+    public void Range_or_unknown_subpartition_and_missing_sub_key_stop_without_a_template()
+    {
+        var range = PartitionAdviceApplier.Apply(Monthly(new SubpartitionAdvice("range", ["REGION_NO"])), Evidence(), new EvidenceValueVault(), Today);
+        var p = Assert.Single(range.Problems);
+        Assert.Equal((AdviceCheckLevel.Stop, AdviceCheckCodes.MethodUnknown, "range"), (p.Level, p.Code, p.Subject));
+        Assert.Equal(["subpartition"], p.Args);
+        Assert.Null(range.Draft.Scheme!.SubpartitionTemplate);
+        Assert.False(PartitionAdviceChecker.CanFill(range.Problems));
+
+        var gone = PartitionAdviceApplier.Apply(Monthly(new SubpartitionAdvice(AdviceMethod.Hash, ["GONE"], HashCount: 4)), Evidence(), new EvidenceValueVault(), Today);
+        Assert.Equal((AdviceCheckCodes.KeyMissing, "GONE"), (Assert.Single(gone.Problems).Code, gone.Problems[0].Subject));
+        Assert.Null(gone.Draft.Scheme!.SubpartitionTemplate);
+    }
+
+    [Fact]
+    public void Checker_local_unique_counts_the_subpartition_key()
+    {
+        // ORA-14039: 고유 LOCAL 인덱스는 파티션 키와 하위 키를 모두 품어야 한다.
+        var e = Evidence() with
+        {
+            Indexes =
+            [
+                new EvidenceIndex("UX_DT", true, ["ORDER_DT"], false),
+                new EvidenceIndex("UX_DT_ST", true, ["ORDER_DT", "STATUS"], false),
+            ],
+        };
+        var sub = new SubpartitionAdvice(AdviceMethod.Hash, ["STATUS"], HashCount: 4);
+
+        var checks = PartitionAdviceChecker.Check(Monthly(sub, "UX_DT", "UX_DT_ST"), e, new AdvisorSamples.Dialect(), AdvisorSamples.Oracle19());
+
+        var stop = Assert.Single(checks, c => c.Code == AdviceCheckCodes.LocalUnique);
+        Assert.Equal(("UX_DT", "STATUS"), (stop.Subject, stop.Args![0]));
+        Assert.Contains(checks, c => c is { Code: AdviceCheckCodes.LocalOk, Subject: "UX_DT_ST" });
+    }
+}
