@@ -129,7 +129,7 @@ public class AdvisorContractTests
 
         Assert.Equal(("SAMPLE", "ORDERS", Dbms.Tibero), (e.Owner, e.Table, e.Dbms));
         Assert.Empty(e.Columns);
-        Assert.Empty(e.Skipped);
+        Assert.Contains(e.Skipped, k => k is { Item: EvidenceItem.Columns, Reason: EvidenceSkipReason.Failed }); // 사전에 없는 표
 
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
@@ -151,7 +151,8 @@ public class AdvisorContractTests
         using var doc = JsonDocument.Parse(SampleAdvice);
         var c = PartitionAdviceParser.Parse(doc.RootElement, null)!.Candidates[0];
 
-        var d = PartitionAdviceApplier.Apply(c, Empty(), new EvidenceValueVault(), new DateOnly(2026, 11, 18));
+        var e = Empty() with { Columns = [new EvidenceColumn("ORDER_DT", "DATE", false, null, null, null, null), new EvidenceColumn("STATUS", "VARCHAR2", false, 3, 0, null, null)] };
+        var d = PartitionAdviceApplier.Apply(c, e, new EvidenceValueVault(), new DateOnly(2026, 11, 18));
 
         Assert.Equal(PartitionMethod.Range, d.Draft.Scheme!.Method);
         Assert.Equal(["ORDER_DT"], d.Draft.Scheme.KeyColumns);
