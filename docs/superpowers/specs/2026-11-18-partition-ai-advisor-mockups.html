@@ -1,0 +1,222 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>AI 파티션 추천 시안</title><style>body{font-family:-apple-system,"Malgun Gothic",sans-serif;max-width:1040px;margin:20px auto;padding:0 16px;color:#222}h2{margin-bottom:4px}h3{margin:26px 0 4px;border-left:4px solid #2a7bd4;padding-left:8px}.subtitle{color:#555;margin-top:0}</style></head><body>
+<style>
+  .ow{font:12px/1.4 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:#222;background:#fff;border:1px solid #bbb;margin:6px 0}
+  .ow .tabs{display:flex;background:#eee;border-bottom:2px solid #2a7bd4}
+  .ow .tabs span{padding:4px 10px}
+  .ow .tabs .on{background:#2a7bd4;color:#fff}
+  .ow .body{display:flex;min-height:200px}
+  .ow .nav{width:70px;background:#f3f3f3;border-right:1px solid #ddd}
+  .ow .nav div{padding:4px 10px}
+  .ow .nav .on{background:#9cc3ea}
+  .ow .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .ow .tb{display:flex;gap:6px;align-items:center;padding:4px 6px;background:#f7f7f7;border-bottom:1px solid #ddd;color:#aaa}
+  .ow .ic{display:inline-block;min-width:18px;height:18px;border:1px solid #c8c8c8;border-radius:3px;background:#fff;text-align:center;font-size:11px;line-height:16px;padding:0 4px}
+  .ow .tog{border-color:#2a7bd4;background:#dbeaf9;color:#222}
+  .ow table{border-collapse:collapse;width:100%}
+  .ow th,.ow td{border:1px solid #d6d6d6;padding:2px 6px;white-space:nowrap;text-align:left}
+  .ow th{background:#efefef;font-weight:600}
+  .ow td.r{text-align:right}
+  .ow .new{background:#e3f4e3}
+  .ow .ddl{border-top:1px solid #bbb;background:#fbfbfb;font:11px/1.45 Consolas,Menlo,monospace;padding:5px 8px;color:#333;white-space:pre;overflow:auto}
+  .ow .ddl b{color:#0b5cad;font-weight:600}
+  .ow .foot{display:flex;gap:6px;justify-content:flex-end;align-items:center;padding:6px 8px;border-top:1px solid #ddd;background:#f3f3f3}
+  .ow .btn{border:1px solid #aaa;border-radius:3px;padding:2px 10px;background:#fff;white-space:nowrap}
+  .ow .pri{background:#2a7bd4;color:#fff;border-color:#2a7bd4}
+  .ow .ai{background:#6b4fd8;color:#fff;border-color:#6b4fd8}
+  .ow .msg{flex:1;color:#666}
+  .ow .fld{display:flex;gap:8px;align-items:center;padding:6px 8px;flex-wrap:wrap}
+  .ow .in{border:1px solid #bbb;border-radius:2px;padding:1px 6px;min-width:80px;background:#fff}
+  .ow .ptitle{background:#e9e9e9;padding:4px 10px;font-weight:600;border-bottom:1px solid #ccc;display:flex;justify-content:space-between}
+  .ow .ok{color:#2e8b3a}.ow .warn{color:#b26a00}.ow .stop{color:#c0392b;font-weight:600}.ow .dim{color:#999}
+  .ow .sec{padding:6px 10px;border-bottom:1px solid #eee}
+  .ow .sec h4{margin:0 0 4px;font-size:12px}
+  .ow .chk{display:flex;gap:6px;align-items:baseline;padding:1px 0}
+  .ow .note{background:#fff8e1;border:1px solid #f0d58a;border-radius:3px;padding:4px 8px;margin:4px 0}
+  .ow .banner{background:#efeaff;border-bottom:1px solid #cfc3fb;padding:4px 10px;display:flex;gap:8px;align-items:center}
+  .ow .card{border:1px solid #cfcfcf;border-radius:4px;margin:6px 8px;background:#fff}
+  .ow .card.best{border-color:#6b4fd8;box-shadow:0 0 0 1px #6b4fd8}
+  .ow .card .hd{display:flex;gap:8px;align-items:center;padding:5px 8px;background:#f6f4ff;border-bottom:1px solid #e3ddfb}
+  .ow .card .hd .rk{background:#6b4fd8;color:#fff;border-radius:10px;padding:0 7px;font-weight:600}
+  .ow .card .hd .t{font-weight:600;flex:1}
+  .ow .card .bd{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;padding:6px 8px}
+  .ow .card ul{margin:2px 0 4px 16px;padding:0}
+  .ow .card li{margin:1px 0}
+  .ow .tag{display:inline-block;border-radius:3px;padding:0 5px;font-size:11px;color:#fff;background:#888}
+  .ow .tag.g{background:#2e8b3a}.ow .tag.y{background:#c98a12}.ow .tag.r{background:#c0392b}.ow .tag.p{background:#6b4fd8}
+  .ow .bar{display:flex;align-items:flex-end;gap:2px;height:46px;padding:2px 0;border-bottom:1px solid #ccc}
+  .ow .bar i{display:block;width:12px;background:#8fb6e3}
+  .ow .bar i.hi{background:#e39b8f}
+  .ow .hbar{display:inline-block;height:9px;background:#8fb6e3;vertical-align:middle}
+  .ow .split{display:grid;grid-template-columns:1fr 1fr}
+  .ow .split>div{border-right:1px solid #eee}
+  .q{font-size:13px;margin:4px 0 14px}
+  .q li{margin:3px 0}
+  .dlg{max-width:760px}
+</style>
+
+<h2>AI 파티션 추천 시안</h2>
+<p class="subtitle">대상 표: <b>CM_MFSAPUSER.TB_MFS_FAIL_DETL</b>(예시 값). 지금 「쉬운 설정」은 DATE·TIMESTAMP 열 + RANGE/INTERVAL 하나만 만듭니다. 이 시안은 통계·분포·PK·인덱스·실제 조회 조건을 모아 AI 에게 보내고, 후보를 받아 <b>앱이 다시 확인한 뒤</b> 기존 파티션 편집기에 채우는 흐름입니다. 실행은 지금처럼 DDL 미리보기 → 실행(또는 Tibero·구 Oracle 재구성 스크립트)을 그대로 거칩니다.</p>
+
+<!-- ① -->
+<h3>① 진입 — 파티션 페이지 「쉬운 설정」 옆</h3>
+<p class="q">「✨ AI 추천…」은 열 형식과 상관없이 늘 보입니다. 날짜 열이 없는 표(코드·번호만 있는 표)도 여기서 시작할 수 있습니다. 쉬운 설정은 지금 그대로 둡니다(③ 아래 「함께 고칠 것」 참고).</p>
+<div class="ow">
+  <div class="tabs"><span>기본 (md)</span><span class="on">CM_MFSAPUSER.TB_MFS_FAIL_DETL ✕</span></div>
+  <div class="body" style="min-height:150px">
+    <div class="nav"><div>일반</div><div>설명</div><div>열</div><div>데이터</div><div>제약</div><div>인덱스</div><div>저장</div><div class="on">파티션</div><div>통계</div><div>크기</div></div>
+    <div class="main">
+      <div class="tb"><span class="ic">⟳</span><span class="ic tog">✎ 편집</span></div>
+      <div class="sec"><h4>쉬운 설정</h4>
+        <div class="fld" style="padding:2px 0">날짜 열 <span class="in">CONFIRM_DATE ▾</span> 단위 <span class="in">월 ▾</span> <span class="btn pri">파티션 테이블로 만들기</span> <span class="dim">또는</span> <span class="btn ai">✨ AI 추천…</span></div>
+        <div class="dim">어떤 열로 어떻게 나눌지 모르겠으면 AI 추천을 쓰세요. 통계·분포·인덱스를 보고 RANGE·LIST·HASH 와 하위 파티션까지 후보를 냅니다.</div>
+      </div>
+      <div class="fld">방식 <span class="in">없음 ▾</span> 자동 추가 <span class="in" style="color:#aaa">끔 ▾</span> 하위 파티션 <span class="dim">없음</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ② -->
+<h3>② 보내기 전 확인 — 무엇을 모으고 어디로 보내는지</h3>
+<p class="q">AI 튜닝 시작 창과 같은 규칙: 받는 곳을 먼저 보이고, 실제 값이 나가는 항목은 따로 켭니다. 「로컬 AI」가 아니면 값은 기본으로 가립니다(형식·건수만). 분포 조회는 실제 SELECT 를 돌리므로 비용을 미리 적습니다.</p>
+<div class="ow dlg">
+  <div class="ptitle"><span>AI 파티션 추천 — TB_MFS_FAIL_DETL</span><span>✕</span></div>
+  <div class="sec">받는 곳 <b>Claude Code</b> <span class="dim">(설정 › AI 에서 바꿈)</span> &nbsp; 목적 <span class="in">조회 성능 + 오래된 데이터 정리 ▾</span></div>
+  <div class="sec"><h4>보낼 정보</h4>
+    <div class="chk">☑ <span>열 이름·형식·NULL 여부 <span class="dim">(사전, 비용 없음)</span></span></div>
+    <div class="chk">☑ <span>PK·UK·FK, 인덱스 열 순서 <span class="dim">(사전)</span></span></div>
+    <div class="chk">☑ <span>통계: 행 수, 열별 고유값 수·NULL 비율·히스토그램 종류, 마지막 수집일 <span class="dim">(사전 — 수집일 2026-09-02, 77일 전)</span></span></div>
+    <div class="chk">☑ <span>이 표를 쓰는 SQL 의 조건 열과 횟수 <span class="dim">(V$SQL_PLAN·V$SQL — 권한 있음, SQL 본문은 안 보냄)</span></span></div>
+    <div class="chk">☑ <span>분포 조회: 날짜 열 월별 건수, 코드 열 상위 20개 건수 <span class="warn">— SAMPLE(1) 로 약 48,000행 읽음, 예상 2초</span></span></div>
+    <div class="chk" style="padding-left:18px">☐ <span>코드·날짜 <b>실제 값</b>도 보내기 <span class="dim">(끄면 「값1, 값2…」와 건수만. 끄면 LIST 경계는 앱이 받은 뒤 실제 값으로 채움)</span></span></div>
+    <div class="chk">☐ <span>표 크기·세그먼트·테이블스페이스 여유 <span class="dim">(DBA_SEGMENTS 권한 없음 — 건너뜀)</span></span></div>
+  </div>
+  <div class="sec"><span class="dim">보낼 내용 보기 ▸</span> <span class="dim">(실제로 보낼 글을 그대로 펼침 — 복사 가능)</span></div>
+  <div class="foot"><span class="msg">AI 는 후보만 냅니다. DB 에는 아무것도 실행하지 않습니다.</span><span class="btn">취소</span><span class="btn ai">모아서 보내기</span></div>
+</div>
+
+<!-- ③ -->
+<h3>③ 결과 — 앱이 먼저 모은 근거 + AI 후보 카드</h3>
+<p class="q">왼쪽 「근거」는 앱이 직접 모은 숫자라서 AI 응답과 상관없이 그대로 맞습니다. 오른쪽 후보마다 AI 의 이유와 <b>앱의 결정론 확인</b>(✔/⚠/✖)이 붙습니다 — AI 인덱스 후보를 기존 인덱스와 대조하는 것과 같은 방식입니다.</p>
+<div class="ow">
+  <div class="ptitle"><span>AI 파티션 추천 — TB_MFS_FAIL_DETL · 4,812,330행 · 받은 곳 Claude Code</span><span>⟳ 다시 받기 &nbsp; ✕</span></div>
+  <div style="display:grid;grid-template-columns:300px 1fr">
+    <div style="border-right:1px solid #ddd">
+      <div class="sec"><h4>근거 (앱이 모음)</h4>
+        <table>
+          <tr><th>열</th><th>형식</th><th class="r">고유값</th><th>쓰임</th></tr>
+          <tr><td>FAIL_DETL_ID</td><td>NUMBER</td><td class="r">4.8M</td><td>PK</td></tr>
+          <tr><td>PLANT_CD</td><td>VARCHAR2(4)</td><td class="r">6</td><td>조건 41%</td></tr>
+          <tr><td>FAIL_TYPE_CD</td><td>VARCHAR2(10)</td><td class="r">38</td><td>조건 12%</td></tr>
+          <tr><td>WORK_YMD</td><td>VARCHAR2(8)</td><td class="r">1,402</td><td>조건 <b>63%</b></td></tr>
+          <tr><td>CONFIRM_DATE</td><td>DATE</td><td class="r">1.1M</td><td>조건 9%</td></tr>
+          <tr><td>ARCHIVED_TS</td><td>TIMESTAMP</td><td class="r">—</td><td>NULL 61%</td></tr>
+        </table>
+      </div>
+      <div class="sec"><h4>WORK_YMD 월별 건수 <span class="dim">(문자열 날짜로 판정 — 표본 100% YYYYMMDD)</span></h4>
+        <div class="bar"><i style="height:18px"></i><i style="height:20px"></i><i style="height:22px"></i><i style="height:21px"></i><i style="height:24px"></i><i style="height:25px"></i><i style="height:27px"></i><i style="height:26px"></i><i style="height:29px"></i><i style="height:31px"></i><i style="height:30px"></i><i style="height:33px"></i><i style="height:35px"></i><i style="height:36px"></i><i style="height:38px"></i><i class="hi" style="height:44px"></i></div>
+        <div class="dim">2025-08 … 2026-11 · 월 25만~31만 행 고르게 늘어남</div>
+      </div>
+      <div class="sec"><h4>PLANT_CD 건수</h4>
+        <div>P100 <span class="hbar" style="width:110px"></span> 38%</div>
+        <div>P200 <span class="hbar" style="width:80px"></span> 27%</div>
+        <div>P300 <span class="hbar" style="width:50px"></span> 17%</div>
+        <div>그 외 3개 <span class="hbar" style="width:52px"></span> 18%</div>
+      </div>
+      <div class="sec"><h4>인덱스</h4>
+        <div>PK_TB_MFS_FAIL_DETL (FAIL_DETL_ID)</div>
+        <div>IX_FAIL_DETL_01 (WORK_YMD, PLANT_CD)</div>
+        <div>IX_FAIL_DETL_02 (FAIL_TYPE_CD)</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card best">
+        <div class="hd"><span class="rk">1안</span><span class="t">RANGE(WORK_YMD) 월별 + LIST(PLANT_CD) 하위</span><span class="tag p">AI 권장</span><span class="btn pri">편집기에 채우기</span></div>
+        <div class="bd">
+          <div><b>AI 이유</b><ul>
+            <li>조회의 63% 가 WORK_YMD 범위 조건 → 월 파티션 프루닝</li>
+            <li>월 30만 행 내외로 고름, 오래된 달은 DROP 으로 정리</li>
+            <li>PLANT_CD 조건 41% — 하위 LIST 로 한 번 더 좁힘</li></ul></div>
+          <div><b>앱 확인</b><ul>
+            <li class="ok">✔ WORK_YMD 값 100% 'YYYYMMDD' — 문자열 비교 순서 = 날짜 순서</li>
+            <li class="warn">⚠ 문자열 키는 INTERVAL 불가 → 경계 16줄 + MAXVALUE 를 만들고 매달 추가가 필요 (아래 「월 추가 스크립트」 같이 만듦)</li>
+            <li class="warn">⚠ PK 에 키 열 없음 → PK 인덱스는 GLOBAL 유지, DROP PARTITION 때 UPDATE INDEXES 필요</li>
+            <li class="ok">✔ IX_FAIL_DETL_01 은 LOCAL 로 바꾸기 좋음 (선두 열 = 키)</li></ul></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><span class="rk" style="background:#888">2안</span><span class="t">RANGE(CONFIRM_DATE) INTERVAL 월</span><span class="btn">편집기에 채우기</span></div>
+        <div class="bd">
+          <div><b>AI 이유</b><ul><li>DATE 라 INTERVAL 로 달 자동 추가 — 관리가 가장 쉬움</li><li>단, 조회 조건에는 9% 만 쓰여 프루닝 효과 작음</li></ul></div>
+          <div><b>앱 확인</b><ul><li class="ok">✔ INTERVAL 가능</li><li class="warn">✖ CONFIRM_DATE NULL 3.2% → INTERVAL 표는 키가 NULL 인 행을 못 넣음(ORA-14300). NULL 행을 먼저 채우거나 NOT NULL 로 바꿔야 함</li></ul></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><span class="rk" style="background:#888">3안</span><span class="t">HASH(FAIL_DETL_ID) 8개</span><span class="btn">편집기에 채우기</span></div>
+        <div class="bd">
+          <div><b>AI 이유</b><ul><li>PK 단건 입력·조회 경합을 나눔</li><li>범위 조회와 오래된 데이터 정리에는 도움 없음</li></ul></div>
+          <div><b>앱 확인</b><ul><li class="ok">✔ 개수 2의 거듭제곱(8)</li><li class="ok">✔ PK 를 LOCAL 로 만들 수 있음</li></ul></div>
+        </div>
+      </div>
+
+      <div class="sec dim">왜 FAIL_TYPE_CD 로 LIST 는 안 했나 ▸ &nbsp;·&nbsp; AI 원문 보기 ▸ &nbsp;·&nbsp; 이 결과를 보고서로 저장 ▸</div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ -->
+<h3>④ 「편집기에 채우기」 뒤 — 지금 편집기 그대로</h3>
+<p class="q">방식·키·하위 파티션·경계 줄이 채워지고 DDL 미리보기가 나옵니다. 실행 여부는 사람이 정합니다. 표 위 띠로 어느 후보에서 왔는지 남기고, 고치면 「직접 고침」으로 바뀝니다.</p>
+<div class="ow">
+  <div class="tabs"><span class="on">CM_MFSAPUSER.TB_MFS_FAIL_DETL ✕</span></div>
+  <div class="body" style="min-height:260px">
+    <div class="nav"><div>열</div><div>인덱스</div><div class="on">파티션</div><div>통계</div></div>
+    <div class="main">
+      <div class="banner">✨ <span>AI 추천 <b>1안</b>을 채웠습니다 — 경계 16줄 + MAXVALUE, 인덱스 1개 LOCAL 로 바꿈. 실행 전에 확인하세요.</span><span class="btn" style="margin-left:auto">추천 다시 보기</span><span class="btn">되돌리기</span></div>
+      <div class="fld">방식 <span class="in">범위(RANGE) ▾</span> 키 열 <span class="in">WORK_YMD ▾</span> 자동 추가 <span class="in" style="color:#aaa">끔 (문자열 키) ▾</span> 하위 파티션 <span class="in">LIST(PLANT_CD) ▾</span></div>
+      <table>
+        <tr><th>이름</th><th>값 미만 (상한값)</th><th>하위</th><th class="r">예상 행 수</th></tr>
+        <tr class="new"><td>P_202508</td><td>'20250901'</td><td>P100 · P200 · P300 · ETC</td><td class="r">251,000</td></tr>
+        <tr class="new"><td>P_202509</td><td>'20251001'</td><td>〃</td><td class="r">262,000</td></tr>
+        <tr class="new"><td class="dim">… 13줄</td><td></td><td></td><td></td></tr>
+        <tr class="new"><td>P_202611</td><td>'20261201'</td><td>〃</td><td class="r">309,000</td></tr>
+        <tr class="new"><td>P_MAX</td><td>MAXVALUE</td><td>〃</td><td class="r">0</td></tr>
+      </table>
+      <div class="ddl"><b>CREATE TABLE</b> TB_MFS_FAIL_DETL_NEW ( … )
+<b>PARTITION BY RANGE</b> (WORK_YMD)
+<b>SUBPARTITION BY LIST</b> (PLANT_CD) <b>SUBPARTITION TEMPLATE</b> (
+  SUBPARTITION SP_P100 VALUES ('P100'), SUBPARTITION SP_P200 VALUES ('P200'),
+  SUBPARTITION SP_P300 VALUES ('P300'), SUBPARTITION SP_ETC VALUES (DEFAULT) )
+( <b>PARTITION</b> P_202508 <b>VALUES LESS THAN</b> ('20250901'), … , <b>PARTITION</b> P_MAX <b>VALUES LESS THAN</b> (MAXVALUE) );
+-- 이후: 데이터 옮기기 · 인덱스 IX_FAIL_DETL_01 LOCAL · 이름 바꾸기 (기존 재구성 스크립트와 같음)</div>
+      <div class="foot"><span class="msg">바뀐 것 3건 (방식, 파티션 17줄, 인덱스 1)</span><span class="btn">월 추가 스크립트 저장…</span><span class="btn">스크립트 저장…</span><span class="btn pri">실행</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ -->
+<h3>⑤ 추천하지 않는 경우도 그대로 보여 줌</h3>
+<div class="ow dlg">
+  <div class="ptitle"><span>AI 파티션 추천 — TB_CODE_MST · 1,240행</span><span>✕</span></div>
+  <div class="sec"><span class="tag y">파티션 안 함 권장</span> 행이 1,240개(8블록)라 파티션으로 얻을 것이 없고 관리만 늘어납니다. 조회 조건 1위 CODE_GRP 는 인덱스로 충분합니다.</div>
+  <div class="sec dim">그래도 후보를 보려면 「후보 3개 받기」 ▸</div>
+  <div class="foot"><span class="btn">닫기</span></div>
+</div>
+
+<h3>함께 고칠 것 (AI 없이도)</h3>
+<ul class="q">
+  <li><b>쉬운 설정 열 목록 넓히기</b>: DATE·TIMESTAMP 에 더해 ‘날짜처럼 보이는 문자열·숫자’(표본 값이 YYYYMMDD·YYYYMM 형식) 열도 넣습니다. 이 열은 INTERVAL 이 안 되므로 「앞으로 N개월 미리 + MAXVALUE」로 만듭니다.</li>
+  <li>근거 패널(③ 왼쪽)은 AI 를 쓰지 않아도 「분포 보기」로 따로 열 수 있게 합니다 — AI 설정이 없는 사용자도 숫자를 보고 직접 고를 수 있습니다.</li>
+</ul>
+
+<h3>정해 주실 것</h3>
+<ol class="q">
+  <li><b>분포 조회 기본값</b>: SAMPLE 1% 로 자동 실행 / 매번 물어보기 / 통계 히스토그램만 사용(실제 SELECT 없음).</li>
+  <li><b>조회 조건 수집(V$SQL)</b>: 넣을지. 권한이 없는 계정이 많으면 「건너뜀」 표시만 하고 넘어갑니다.</li>
+  <li><b>값 보내기 기본</b>: 로컬 AI 가 아니면 가림(시안) / 늘 보냄 / 늘 가림.</li>
+  <li><b>Tibero</b>: 같은 화면을 쓰되 하위 파티션·INTERVAL 지원 차이를 앱 확인에서 걸러 낼지, 처음엔 Oracle 만 할지.</li>
+  <li>문자열 키의 매달 추가: 「월 추가 스크립트」 저장까지만 / DBMS_SCHEDULER 작업 만들기까지.</li>
+</ol>
+</body></html>
