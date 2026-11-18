@@ -33,6 +33,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
     private FoldingManager? _folding;
     private MultiCaretController? _carets;
     private BookmarkRenderer? _bookmarkRenderer;
+    private RunningStatementRenderer? _runningRenderer;
     private IReadOnlyList<StructurePair> _pairs = [];
     private long _pairsVersion = -1;
     private long _lastChangeTimestamp;
@@ -87,6 +88,9 @@ public partial class SqlEditorView : UserControl, IEditorSurface
     /// <summary>실행 범위 잠깐 강조(<see cref="SqlEditorViewModel.FlashRange"/>).</summary>
     public RangeFlashRenderer Flash => _flash;
 
+    /// <summary>스크립트 실행 중 지금 문장 표시(<see cref="SqlEditorViewModel.RunningStatement"/>). 붙기 전이면 null.</summary>
+    public RunningStatementRenderer? Running => _runningRenderer;
+
     public int CursorCount => _carets?.Count ?? 1;
 
     /// <summary>다중 커서 컨트롤러(시험용).</summary>
@@ -131,6 +135,8 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         _carets.StateChanged += OnCaretsChanged;
         _bookmarkRenderer = new BookmarkRenderer(vm);
         Editor.TextArea.TextView.BackgroundRenderers.Add(_bookmarkRenderer);
+        _runningRenderer = new RunningStatementRenderer(vm);
+        Editor.TextArea.TextView.BackgroundRenderers.Add(_runningRenderer);
         Editor.TextArea.TextView.BackgroundRenderers.Add(_brackets);
         Editor.TextArea.TextView.BackgroundRenderers.Add(_flash);
 
@@ -139,6 +145,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         vm.BookmarksChanged += OnBookmarksChanged;
         vm.FlashRequested += OnFlashRequested;
         vm.FlashRangesRequested += OnFlashRangesRequested;
+        vm.RunningStatementChanged += OnRunningStatementChanged;
         vm.PropertyChanged += OnVmPropertyChanged;
 
         int caret = Math.Clamp(vm.CaretOffset, 0, vm.Document.TextLength);
@@ -207,6 +214,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
             _vm.BookmarksChanged -= OnBookmarksChanged;
             _vm.FlashRequested -= OnFlashRequested;
             _vm.FlashRangesRequested -= OnFlashRangesRequested;
+            _vm.RunningStatementChanged -= OnRunningStatementChanged;
             _vm.PropertyChanged -= OnVmPropertyChanged;
             if (ReferenceEquals(_vm.Surface, this))
             {
@@ -231,6 +239,11 @@ public partial class SqlEditorView : UserControl, IEditorSurface
             Editor.TextArea.TextView.BackgroundRenderers.Remove(_bookmarkRenderer);
         }
 
+        if (_runningRenderer is not null)
+        {
+            Editor.TextArea.TextView.BackgroundRenderers.Remove(_runningRenderer);
+        }
+
         Editor.TextArea.TextView.BackgroundRenderers.Remove(_brackets);
         Editor.TextArea.TextView.BackgroundRenderers.Remove(_flash);
         _brackets.Set(null);
@@ -239,6 +252,7 @@ public partial class SqlEditorView : UserControl, IEditorSurface
         _carets = null;
         _folding = null;
         _bookmarkRenderer = null;
+        _runningRenderer = null;
         _vm = null;
         _pairs = [];
         _pairsVersion = -1;
@@ -258,6 +272,9 @@ public partial class SqlEditorView : UserControl, IEditorSurface
     private void OnFlashRequested(object? sender, TextRange range) => _flash.Flash(range);
 
     private void OnFlashRangesRequested(object? sender, IReadOnlyList<TextRange> ranges) => _flash.Flash(ranges);
+
+    private void OnRunningStatementChanged(object? sender, EventArgs e)
+        => Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
 
     private void OnVmTextChanged(object? sender, EventArgs e)
     {

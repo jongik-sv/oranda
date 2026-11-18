@@ -135,6 +135,9 @@ public sealed partial class ExecutionController
         Flash(tab, stmts);
         int ok = 0, failed = 0, done = 0;
         bool cancelled = false;
+        ExecutionResult? last = null;
+        // 여러 문장이면 지금 실행하는 문장으로 커서를 옮기고 칠한다(시작한 탭만). 한 문장 실행은 그대로 둔다.
+        var follow = stmts.Count > 1 ? new ScriptRunFollower(tab, stmts) : null;
         var summary = new StringBuilder();
         await GuardedAsync(session, tab, async token =>
         {
@@ -148,6 +151,11 @@ public sealed partial class ExecutionController
                     // 다음에 보낼 문장이 COMMIT 이면 그 앞에서 커밋 전 경고(설계 10.3). 커밋하지 않으면 스크립트를 멈춘다.
                     // 앞 문장이 실패했고 「계속」 이 아니면 엔진이 멈추거나 먼저 묻는다: 그 COMMIT 은 보내지 않을 수 있으므로 묻지 않는다.
                     var previousFailed = done > 0 && en.Current.Status != ExecutionStatus.Succeeded && State.ErrorMode != ScriptErrorMode.Continue;
+                    if (!previousFailed)
+                    {
+                        follow?.Show(done); // 앞 문장이 실패해 엔진이 먼저 물으면 표시는 실패한 문장에 남긴다
+                    }
+
                     if (done < stmts.Count && !previousFailed && IsCommitStatement(stmts[done])
                         && !await ConfirmIncompleteCommitAsync(session, token).ConfigureAwait(true))
                     {
@@ -161,6 +169,7 @@ public sealed partial class ExecutionController
                     }
 
                     var r = en.Current;
+                    last = r;
                     done++;
                     if (r.Status == ExecutionStatus.Succeeded)
                     {
@@ -185,6 +194,18 @@ public sealed partial class ExecutionController
                 await en.DisposeAsync().ConfigureAwait(true);
             }
         }, ct, results).ConfigureAwait(true);
+
+        if (follow is not null)
+        {
+            if (!cancelled && last is { Status: ExecutionStatus.Failed or ExecutionStatus.Denied } stop)
+            {
+                follow.Fail(stop.Statement, stop.Error?.Offset); // 오류로 멈춘 문장에 커서·표시를 남긴다
+            }
+            else
+            {
+                follow.End();
+            }
+        }
 
         var line = $"스크립트: {stmts.Count.ToString(CultureInfo.InvariantCulture)}개 중 {done.ToString(CultureInfo.InvariantCulture)}개 실행, 성공 {ok.ToString(CultureInfo.InvariantCulture)}, 실패 {failed.ToString(CultureInfo.InvariantCulture)}" + (cancelled ? ", 취소됨" : string.Empty);
         Log.AddMessage(failed > 0 ? MessageKind.Warning : MessageKind.Info, line);
@@ -269,6 +290,7 @@ public sealed partial class ExecutionController
         _runs[session.Id] = cts;
         s_runningProfile.Value = session.Profile;
         State.BeginRun(session.Id, tab is null ? null : Host.WorkspaceOf(tab)); // 시작한 작업 공간(함께 쓰는 세션의 안내 막대, TSK-14-03)
+        tab?.ClearRunningStatement(); // 지난 스크립트의 오류 문장 표시는 새 실행을 시작하면 지운다
         tab?.Run.Begin(); // 이 탭 머리·작업 공간 문서 탭 머리의 실행 중 스피너(TSK-14-13): 다른 탭을 보고 있어도 남는다
         if (results is not null)
         {

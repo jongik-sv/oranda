@@ -204,3 +204,43 @@ public sealed class RangeFlashRenderer : IBackgroundRenderer
         return fills;
     }
 }
+
+/// <summary>
+/// 스크립트 실행 중 지금 실행하는 문장(<see cref="SqlEditorViewModel.RunningStatement"/>)에 옅은 배경을 칠한다. 오류로 멈춘 문장은 붉은 기운으로 칠한다.
+/// 밝은·어두운 테마마다 붓을 따로 둔다(미리 만든 붓을 돌려 쓴다). 표시가 없으면 <see cref="Draw"/> 는 바로 돌아간다.
+/// </summary>
+public sealed class RunningStatementRenderer(SqlEditorViewModel vm) : IBackgroundRenderer
+{
+    private static readonly IBrush LightRunning = new ImmutableSolidColorBrush(Color.FromArgb(0x30, 0x2E, 0x8B, 0x57));
+    private static readonly IBrush DarkRunning = new ImmutableSolidColorBrush(Color.FromArgb(0x38, 0x5F, 0xC9, 0x8A));
+    private static readonly IBrush LightFailed = new ImmutableSolidColorBrush(Color.FromArgb(0x30, 0xD0, 0x30, 0x30));
+    private static readonly IBrush DarkFailed = new ImmutableSolidColorBrush(Color.FromArgb(0x40, 0xFF, 0x5A, 0x5A));
+
+    public KnownLayer Layer => KnownLayer.Background;
+
+    /// <summary>표시에 쓸 붓(시험용): 오류 여부와 어두운 테마 여부로 고른다.</summary>
+    public static IBrush FillFor(bool failed, bool dark) => failed ? (dark ? DarkFailed : LightFailed) : (dark ? DarkRunning : LightRunning);
+
+    public void Draw(TextView textView, DrawingContext drawingContext)
+    {
+        if (vm.RunningStatement is not { } mark || textView.Document is not { } doc)
+        {
+            return;
+        }
+
+        var fill = FillFor(mark.Failed, textView.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark);
+        foreach (var range in mark.Ranges)
+        {
+            if (range.End > doc.TextLength)
+            {
+                continue;
+            }
+
+            var seg = new TextSegment { StartOffset = range.Start, Length = range.Length };
+            foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, seg))
+            {
+                drawingContext.FillRectangle(fill, rect);
+            }
+        }
+    }
+}

@@ -95,6 +95,7 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
 
             OnPropertyChanged(nameof(CanUndo));
             OnPropertyChanged(nameof(CanRedo));
+            ClearRunningStatement(); // 실행 중 문장 표시는 글이 바뀌면 범위가 어긋난다
             TextChanged?.Invoke(this, EventArgs.Empty);
         };
     }
