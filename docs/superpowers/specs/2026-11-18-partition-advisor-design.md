@@ -168,3 +168,19 @@ public static class PartitionAdviceApplier { AdviceDraft Apply(PartitionCandidat
 - 문장: 하위 템플릿·LOCAL 인덱스·월 추가 스크립트를 실서버에서 실행(Oracle 26ai·11g 재구성, Tibero)
 - App: Headless — 확인 창 체크 상태와 가림 잠금, 결과 카드 ✖ 면 채우기 끔, 채우기 → 띠 → 되돌리기, no_partition 화면. 가짜 `IAiDriver` 로
 - 실앱 확인(사용자 몫): 실제 AI 프로필로 한 번 받아 보기
+
+## 9. 구현 중 결정 (2026-11-18 회차 partition-advisor, 레인 보고에서 옮김)
+
+설계 본문과 다른 곳은 이 절이 우선한다. 코드 정본 = `src/Oranda.Core/Schema/TableEdit/Partitions/Advisor/`.
+
+| id | 결정 |
+|---|---|
+| PA-13 | 계약 꼴(4장 초안과 다름): AI 값(방식·간격·배치·verdict)은 enum 대신 글 + 상수 클래스(`AdviceMethod` 등). `EvidenceSkip` = enum `EvidenceItem`·`EvidenceSkipReason` + `Column?`·`Detail?`. `AdviceCheck` = `(Level, Code, Subject?, Args?)` + 문구 키 `TableEdit.partition.ai.check.<code>`(Core 는 문구를 내지 않음). `AdviceDraft = (Draft, Subpartition, LocalIndexes, Problems)`. 모으기 = `IPartitionEvidenceCollector`(DI) |
+| PA-14 | 4.1 에 code 셋 더함: `method-unknown` ✖(스키마 밖 방식·간격·배치·하위 방식, RANGE 하위 포함), `value-unknown` ✖(금고로 못 되돌리는 자리표시자), `index-missing` ✖(LOCAL 로 하라는 인덱스가 근거에 없음) |
+| PA-15 | `key-type`: LOB·LONG 은 HASH 포함 **모든 방식**에서 ✖. INTERVAL 다중 키 ✖. YYYYMM 키 + daily = ⚠(채우기가 월로 바꿈). HASH 개수 없음 = ⚠(채우기가 4), 1 미만 = ✖ |
+| PA-16 | `local-unique` 는 파티션 키 + 하위 키를 모두 담아야 통과(실측 ORA-14039·ORA-14188) |
+| PA-17 | PA-3 보강: 실제 값 보내기는 가림 대상 접속이거나, 접속 AI 허용 수준이 행 값(QueryRows, 로컬 AI 는 DataLevel)까지가 아니면 잠김 — 기본 개발 접속도 잠김. 값을 가리면 월 분포 이름도 상대 표기(M0·M-1…), 통계 수집일은 「N일 전」, 건너뜀 오류 원문은 보내지 않음 |
+| PA-18 | 월별 분포 버킷 = 지금 달 기준 앞 36개월 ~ 뒤 12개월, 그 밖·달 모양 아닌 값(9999-12 등)은 `RestCount`. 문자·숫자 날짜형 월 식은 NULL 을 CASE 로 감쌈. 표본 질의에는 `/* oranda-advisor */` 를 붙이고 조건 수집에서 뺌. Oracle·Tibero 같은 SQL(`.11.sql` 변형 없음) |
+| PA-19 | 하위 파티션: Tibero 는 `SUBPARTITIONS n` 을 받지 않아(TBR-7001) HASH 하위를 이름 템플릿(SP1…SPn)으로 냄(`HashSubpartitionsAsTemplate`). RANGE 하위는 만들지 않음. LOCAL 인덱스를 고르면 재구성 스크립트는 DBMS_REDEFINITION 대신 CTAS + RENAME. `LocalIndexes` 가 비어 있지 않으면 목록 밖 인덱스는 명시적 GLOBAL |
+| PA-20 | 월 추가 스크립트 기본 12개월, 개수 칸 없음. 11g XE 에는 파티션 기능이 없어(ORA-00439) 「11g 재구성」 경로는 같은 문법을 26ai 에서 실행해 확인 |
+| PA-21 | 남은 일: 결과 창(비모달)이 객체 상세 탭을 닫아도 남을 수 있음(채우기는 그 세션에만 됨), 「분포 보기」 모으기 중 멈추기 단추 없음, 확인 창의 「읽을 행 수」는 모은 뒤에 실제 값, LOCAL 인덱스를 직접 고르는 화면 없음(AI 채우기로만), 파티션 기능이 있는 옛 Oracle(11g EE 등) 실서버 미확인 |
