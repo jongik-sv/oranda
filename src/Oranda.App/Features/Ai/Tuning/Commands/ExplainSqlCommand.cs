@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.Core.Ai.Access;
+using Oranda.Core.Ai.Contracts;
 
 namespace Oranda.App.Features.Ai.Tuning.Commands;
 
@@ -32,6 +33,9 @@ public sealed class ExplainSqlCommand : AiCommandSpec
     public override string UserLine => "SQL 설명";
 
     public override AiAccessLevel AccessCeiling => AiAccessLevel.Metadata;
+
+    /// <summary>가벼운 일(설계 §1.4): 문장과 객체 정의만 있으면 된다. 보이는 곳은 채팅창 그대로다.</summary>
+    public override AiTier Tier => AiCommandTiers.ExplainSql;
 
     public override string? SentNote(bool masked) => masked ? MaskedSentNote : null;
 

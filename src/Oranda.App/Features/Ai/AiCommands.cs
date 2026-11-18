@@ -47,7 +47,7 @@ public sealed class AiCommandHandler : ICommandHandler
             AiCommands.Tune or AiCommands.TuneStatement => launcher.RunAsync(cancellationToken),
             AiCommands.ExplainSql => launcher.RunCommandAsync(ExplainSqlCommand.Instance, cancellationToken),
             AiCommands.ExplainPlan => launcher.RunCommandAsync(ExplainPlanCommand.Instance, cancellationToken),
-            AiCommands.FixError => launcher.RunCommandAsync(FixErrorCommand.Instance, cancellationToken),
+            AiCommands.FixError => FixErrorInlineLauncher.RunAsync(_services, cancellationToken), // 채팅창 대신 편집기 아래 제안 막대(TSK-15-04)
             _ => Task.CompletedTask,
         };
     }

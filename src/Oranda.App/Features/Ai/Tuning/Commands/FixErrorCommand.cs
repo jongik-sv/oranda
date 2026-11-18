@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.Execution;
 using Oranda.Core.Ai.Access;
+using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Schemas;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
@@ -77,6 +78,9 @@ public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
     public override string UserLine => "오류 고치기";
 
     public override string WorkName => "오류 고치기";
+
+    /// <summary>가벼운 일(설계 §1.4): 오류문·위치·문장이면 된다. 입력이 크면 라우터가 주 모델로 올린다.</summary>
+    public override AiTier Tier => AiCommandTiers.FixError;
 
     /// <summary>describe_object 와, 수준이 되면 고친 SELECT 를 explain_plan 으로 확인한다. 벤치마크·실행은 닫힌다.</summary>
     public override AiAccessLevel AccessCeiling => AiAccessLevel.Plan;
@@ -250,7 +254,7 @@ public sealed class FixErrorCommand(IEditorTabs tabs) : AiCommandSpec
     /// 프롬프트에 넣는 오류 줄. 가리는 대화(<see cref="AiCommandPromptInput.Masked"/>)는 <c>ORA-nnnnn</c> 번호와 가린 글 기준 위치뿐이고,
     /// 서버 글·원문 기준 줄/열은 쓰지 않는다. 가리지 않는 대화는 번호·글·위치·줄/열을 그대로 보낸다.
     /// </summary>
-    private static IEnumerable<string> ErrorLines(FixErrorState state, AiCommandPromptInput input)
+    internal static IEnumerable<string> ErrorLines(FixErrorState state, AiCommandPromptInput input)
     {
         var code = state.Number > 0
             ? DbErrorCodes.Display(state.Dbms, state.Number)

@@ -163,7 +163,7 @@ public class AiKitRulesTests
     public void Light_route_uses_the_light_target_for_recipient_and_masking()
     {
         var id = Guid.NewGuid();
-        var local = new AiLlmProfile { Id = id, Name = "Ollama qwen3:8b", Preset = AiProfilePreset.Custom, Format = AiApiFormat.OpenAi, BaseUrl = "http://192.0.2.10:11434/v1", Model = "qwen3:8b", LocalAiConfirmedUrl = "http://192.0.2.10:11434/v1" };
+        var local = new AiLlmProfile { Id = id, Name = "Ollama", Preset = AiProfilePreset.Custom, Format = AiApiFormat.OpenAi, BaseUrl = "http://192.0.2.10:11434/v1", Model = "qwen3:8b", LocalAiConfirmedUrl = "http://192.0.2.10:11434/v1" };
         var settings = new AiSettings { Model = "opus", Profiles = [local], Light = new AiLightSettings { ProfileId = id } };
         var prod = KitFakes.Profile(ConnectionEnvironment.Production, AiAccessLevel.Plan);
 
@@ -173,12 +173,14 @@ public class AiKitRulesTests
         Assert.Equal(id, light.Target.ProfileId);
         Assert.False(light.MaskRequired); // 가벼운 일 모델이 로컬 AI 라 가리지 않는다
         Assert.True(light.Context.LocalAi);
-        Assert.Equal("Ollama qwen3:8b · 로컬", light.ModelLabel);
+        Assert.Equal("Ollama · qwen3:8b · 로컬", light.ModelLabel);
         Assert.Null(main.Target.ProfileId); // 주 모델 = Claude Code(유료)라 가린다
         Assert.True(main.MaskRequired);
         Assert.Equal("opus", main.ModelLabel);
         Assert.Equal(AiTier.Light, light.Tier);
-        Assert.Equal(main.Target, AiKitRoute.For(prod, new AiSettings { Model = "opus" }, AiTier.Light).Target); // 비어 있으면 주 모델
+        var empty = AiKitRoute.For(prod, new AiSettings { Model = "opus" }, AiTier.Light); // 비어 있으면 주 모델
+        Assert.Equal(main.Target with { Tier = AiTier.Light, RequestedTier = AiTier.Light }, empty.Target);
+        Assert.Equal("opus", empty.ModelLabel);
         Assert.Contains("tier=light", AiOneShotRun.BuildAuditEntry(light, "f", "p", null, DateTimeOffset.UnixEpoch).Arguments, StringComparison.Ordinal);
     }
 
@@ -186,10 +188,10 @@ public class AiKitRulesTests
     public void Model_label_follows_the_target()
     {
         var id = Guid.NewGuid();
-        var local = new AiLlmProfile { Id = id, Name = "Ollama qwen3:8b", Preset = AiProfilePreset.Custom, Format = AiApiFormat.OpenAi, BaseUrl = "http://192.0.2.10:11434/v1", Model = "qwen3:8b", LocalAiConfirmedUrl = "http://192.0.2.10:11434/v1" };
+        var local = new AiLlmProfile { Id = id, Name = "Ollama", Preset = AiProfilePreset.Custom, Format = AiApiFormat.OpenAi, BaseUrl = "http://192.0.2.10:11434/v1", Model = "qwen3:8b", LocalAiConfirmedUrl = "http://192.0.2.10:11434/v1" };
         var route = AiKitRoute.For(KitFakes.Profile(ConnectionEnvironment.Production), new AiSettings { Profiles = [local], ActiveProfileId = id });
 
-        Assert.Equal("Ollama qwen3:8b · 로컬", route.ModelLabel);
+        Assert.Equal("Ollama · qwen3:8b · 로컬", route.ModelLabel); // 라우터와 같은 이름(AiTierRouting.ModelLabel) + 로컬 표시
         Assert.False(route.MaskRequired); // 로컬 AI 는 가리지 않는다(D-045)
         Assert.Equal("Claude Code", AiKitRoute.For(KitFakes.Profile(), new AiSettings()).ModelLabel);
     }

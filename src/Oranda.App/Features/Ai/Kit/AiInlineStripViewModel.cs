@@ -9,7 +9,8 @@ using Oranda.Core.Ai.Contracts;
 namespace Oranda.App.Features.Ai.Kit;
 
 /// <summary>띠 한 번의 요청: 경로·꾸러미·지시 글·답 틀. 보낼 글은 <see cref="Prompt"/> 하나뿐이다(경고 창·이어 보기가 같은 글을 쓴다).</summary>
-public sealed record AiStripRequest(AiOneShotRun Run, IAiContextBundle Bundle, string Instruction, AiAnswerTemplate? Template = null)
+/// <param name="State">받아들이기에 되돌려 받을 기능 전용 값(대상 문장·탭 등). 띠는 열어 보지 않는다.</param>
+public sealed record AiStripRequest(AiOneShotRun Run, IAiContextBundle Bundle, string Instruction, AiAnswerTemplate? Template = null, object? State = null)
 {
     /// <summary>보낼 글: 지시 → 답 틀 → 꾸러미.</summary>
     public string Prompt
@@ -27,6 +28,9 @@ public sealed record AiStripRequest(AiOneShotRun Run, IAiContextBundle Bundle, s
         }
     }
 }
+
+/// <summary>「받아들이기」 가 받는 값: 보낸 요청·받은 결과·틀대로 읽은 답.</summary>
+public sealed record AiStripAccept(AiStripRequest Request, AiOneShotResult Result, AiTemplatedAnswer? Answer);
 
 /// <summary>띠 요청 준비의 결과: 보낼 요청 또는 보내지 않는 까닭.</summary>
 public sealed class AiStripPreparation
@@ -115,12 +119,21 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
     private DateTime _startedUtc;
 
     /// <summary>크기 올림 안내(설계 §1.2).</summary>
-    public const string EscalatedText = "입력이 커서 주 모델로 보냈습니다.";
+    public const string EscalatedText = Oranda.Core.Ai.Profiles.AiTierRouting.EscalatedText;
 
     public string Title { get; }
 
     /// <summary>보내기 직전 확인(경고 창: 받는 곳·꾸러미 미리 보기). null 이면 묻지 않는다. 거짓이면 보내지 않는다.</summary>
     public Func<AiStripRequest, CancellationToken, Task<bool>>? Confirm { get; init; }
+
+    /// <summary>
+    /// 「받아들이기」(편집기 제안 막대): 답을 편집기에 제안으로 넣는다(기존 차이 미리보기 경로). 넣었으면 null, 못 넣었으면 까닭. null 이면 단추를 숨긴다.
+    /// 틀대로 읽은 답이 있을 때만 켜진다. AI 는 실행하지 않는다 — 넣은 글을 실행하는 일은 사람이 한다.
+    /// </summary>
+    public Func<AiStripAccept, CancellationToken, Task<string?>>? Accept { get; init; }
+
+    /// <summary>받아들인 뒤 상태 줄 글.</summary>
+    public const string AcceptedText = "편집기에 넣었습니다. 실행은 직접 하세요.";
 
     /// <summary>클립보드에 쓴다. 기본 = 주 창의 클립보드.</summary>
     public Func<string, Task> CopyText { get; init; } = DefaultCopyAsync;
@@ -129,9 +142,17 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
     internal Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsVisible), nameof(HasAnswer), nameof(IsDone), nameof(IsFailed), nameof(ShowsRawText), nameof(HasParts), nameof(CanContinueVisible))]
-    [NotifyCanExecuteChangedFor(nameof(RequestCommand), nameof(StopCommand), nameof(RetryCommand), nameof(CopyCommand), nameof(ContinueInChatCommand), nameof(RetryOnMainCommand))]
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsVisible), nameof(HasAnswer), nameof(IsDone), nameof(IsFailed), nameof(ShowsRawText), nameof(HasParts), nameof(CanContinueVisible), nameof(ShowsAccept))]
+    [NotifyCanExecuteChangedFor(nameof(RequestCommand), nameof(StopCommand), nameof(RetryCommand), nameof(CopyCommand), nameof(ContinueInChatCommand), nameof(RetryOnMainCommand), nameof(AcceptCommand), nameof(DiscardCommand))]
     private AiStripState _state;
+
+    /// <summary>받아들였다(같은 답을 두 번 넣지 않는다).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsAccept))]
+    [NotifyCanExecuteChangedFor(nameof(AcceptCommand))]
+    private bool _isAccepted;
+
+    private bool _accepting;
 
     /// <summary>「주 모델로 다시 보내기」 를 보인다(가벼운 일 모델이 실패했을 때만, AE-1).</summary>
     [ObservableProperty]
@@ -183,6 +204,52 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
     public IReadOnlyList<AiAnswerPart> Parts => Answer?.Parts ?? [];
 
     public bool CanContinueVisible => _chatHost is not null && State == AiStripState.Done;
+
+    /// <summary>「받아들이기」·「버리기」 를 보인다(제안 막대: 답을 틀대로 읽었고 아직 넣지 않음).</summary>
+    public bool ShowsAccept => Accept is not null && State == AiStripState.Done && Answer is not null && !IsAccepted;
+
+    private bool CanAccept() => ShowsAccept && !_accepting && LastRequest is not null && LastResult is not null;
+
+    /// <summary>「받아들이기」: 기능이 편집기에 제안으로 넣는다(차이 미리보기에서 사람이 적용).</summary>
+    [RelayCommand(CanExecute = nameof(CanAccept))]
+    private async Task AcceptAsync()
+    {
+        if (Accept is not { } accept || LastRequest is not { } request || LastResult is not { } result)
+        {
+            return;
+        }
+
+        _accepting = true;
+        AcceptCommand.NotifyCanExecuteChanged();
+        try
+        {
+            var failure = await accept(new AiStripAccept(request, result, Answer), CancellationToken.None).ConfigureAwait(true);
+            if (failure is null)
+            {
+                IsAccepted = true;
+                StatusText = AcceptedText;
+            }
+            else
+            {
+                StatusText = failure;
+            }
+        }
+        finally
+        {
+            _accepting = false;
+            AcceptCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private bool CanDiscard() => State is not AiStripState.Idle and not AiStripState.Running;
+
+    /// <summary>「버리기」: 띠를 닫는다(편집기는 그대로).</summary>
+    [RelayCommand(CanExecute = nameof(CanDiscard))]
+    private void Discard()
+    {
+        StatusText = string.Empty;
+        State = AiStripState.Idle;
+    }
 
     /// <summary>진행 줄: 「답을 받는 중 · 3초」.</summary>
     public void RefreshProgress()
@@ -262,6 +329,7 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
         Answer = null;
         LastResult = null;
         ShowsRetryOnMain = false;
+        IsAccepted = false;
         State = AiStripState.Running;
         RefreshProgress();
         try
@@ -335,7 +403,9 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
         State = state;
         OnPropertyChanged(nameof(HasParts));
         OnPropertyChanged(nameof(ShowsRawText));
+        OnPropertyChanged(nameof(ShowsAccept));
         ContinueInChatCommand.NotifyCanExecuteChanged();
+        AcceptCommand.NotifyCanExecuteChanged();
     }
 
     private static async Task DefaultCopyAsync(string text)

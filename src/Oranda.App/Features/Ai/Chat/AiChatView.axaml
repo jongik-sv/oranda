@@ -377,6 +377,11 @@
             <!-- 기능 카드: 모양은 위 UserControl.DataTemplates 가 카드 모델 형식으로 고른다. -->
             <ContentControl x:Name="FeatureCard" Content="{Binding Card}" Margin="0,0,0,12" HorizontalContentAlignment="Stretch" />
           </DataTemplate>
+          <DataTemplate x:DataType="vm:ChatModelEntry">
+            <!-- 이 턴에 답한 모델(가벼운 일 모델을 정했을 때만): 답 머리에 작게. -->
+            <TextBlock x:Name="TurnModelText" Text="{Binding Label}" Opacity="0.6" Margin="0,0,0,4"
+                       FontFamily="{DynamicResource OrandaCodeFontFamily}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </DataTemplate>
           <DataTemplate x:DataType="vm:ChatAssistantEntry">
             <!-- AI 글: Markdown 부분 집합으로 그린다. 글 선택·복사가 된다(SelectableTextBlock). -->
             <vm:MarkdownView Markdown="{Binding Text}" Margin="0,0,0,12" />

@@ -140,6 +140,10 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
     /// <summary>글자가 바뀔 때마다 오르는 번호(자동 저장이 변경 여부를 본다).</summary>
     public long Version { get; private set; }
 
+    /// <summary>편집기 아래 AI 제안 막대(오류 고치기 등, 설계 §2.1 바로 처리). null 이면 자리를 비운다.</summary>
+    [ObservableProperty]
+    private Oranda.App.Features.Ai.Kit.AiInlineStripViewModel? _aiBar;
+
     [ObservableProperty]
     public partial string Title { get; set; } = "SQL";
 

@@ -2184,5 +2184,7 @@
   "AWR 이력과 통계로 계획이 바뀐 원인을 AI 채팅창에서 봅니다(주 모델 · 도구 씀, 실행하지 않음).": "Finds why the plan changed from the AWR history and statistics in the AI chat (main model, uses tools, runs nothing).",
   "AWR 계획 이력을 읽는 중입니다.": "Reading the AWR plan history.",
   "계획 고정 스크립트를 새 편집기 탭에 넣었습니다(실행하지 않음).": "Put the plan pinning script in a new editor tab (not run).",
-  "AI 채팅창을 열지 못했습니다.": "Could not open the AI chat."
+  "AI 채팅창을 열지 못했습니다.": "Could not open the AI chat.",
+  "받아들이기": "Accept",
+  "편집기에 제안으로 넣습니다(바뀌는 곳을 보고 적용합니다. 실행하지 않습니다)": "Puts it in the editor as a suggestion (review the change and apply; nothing is run)"
 }

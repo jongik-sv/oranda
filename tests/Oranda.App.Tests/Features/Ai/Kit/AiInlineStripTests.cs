@@ -223,6 +223,33 @@ public class AiInlineStripTests
     }
 
     [Fact]
+    public Task Chat_turn_shows_the_model_the_router_chose_and_nothing_without_the_event() => HeadlessHost.Run(async () =>
+    {
+        var chat = new AiChatViewModel();
+        var driver = new FakeDriver { Answer = _ => KitFakes.Answer(TemplatedAnswer) };
+        var (strip, _, _) = CreateTiered(driver, chat);
+        await strip.RunAsync(CancellationToken.None);
+        await strip.ContinueInChatCommand.ExecuteAsync(null);
+
+        await strip.Carried!.FollowUpAsync(new ChatFollowUp("없음?", []), CancellationToken.None);
+        Assert.Empty(chat.Entries.OfType<ChatModelEntry>()); // 사건이 없으면 지금처럼
+
+        driver.Answer = _ => [new AiModelChosen("haiku", AiTier.Light, AiTier.Light), .. KitFakes.Answer("두 번째 답")];
+        await strip.Carried.FollowUpAsync(new ChatFollowUp("또?", []), CancellationToken.None);
+        var model = Assert.Single(chat.Entries.OfType<ChatModelEntry>());
+        Assert.Equal("haiku", model.Label);
+        var at = chat.Entries.IndexOf(model);
+        Assert.IsType<ChatUserEntry>(chat.Entries[at - 1]); // 답 머리에
+        Assert.Equal("두 번째 답", Assert.IsType<ChatAssistantEntry>(chat.Entries[at + 1]).Text);
+
+        var window = new Window { Width = 440, Height = 700, Content = new AiChatView { DataContext = chat } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("haiku", Find<TextBlock>((Control)window.Content!, "TurnModelText").Text);
+        window.Close();
+    });
+
+    [Fact]
     public async Task Carried_follow_up_keeps_the_first_request_tier()
     {
         var chat = new AiChatViewModel();

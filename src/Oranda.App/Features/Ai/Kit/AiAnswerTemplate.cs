@@ -51,19 +51,19 @@ public sealed class AiAnswerTemplate
         get
         {
             var text = new StringBuilder();
-            text.AppendLine("Answer in Korean using exactly this Markdown layout, in this order, and nothing before or after it:");
+            text.Append("Answer in Korean using exactly this Markdown layout, in this order, and nothing before or after it:").Append('\n');
             foreach (var section in Sections)
             {
-                text.Append("## ").AppendLine(section.Title);
+                text.Append("## ").Append(section.Title).Append('\n');
                 if (section.IsTable)
                 {
-                    text.Append("| ").Append(string.Join(" | ", section.Columns!)).AppendLine(" |");
-                    text.Append('|').Append(string.Concat(section.Columns!.Select(_ => " --- |"))).AppendLine();
-                    text.Append('(').Append(section.Hint).AppendLine(": one table row per item, keep the header exactly)");
+                    text.Append("| ").Append(string.Join(" | ", section.Columns!)).Append(" |").Append('\n');
+                    text.Append('|').Append(string.Concat(section.Columns!.Select(_ => " --- |"))).Append('\n');
+                    text.Append('(').Append(section.Hint).Append(": one table row per item, keep the header exactly)").Append('\n');
                 }
                 else
                 {
-                    text.Append('(').Append(section.Hint).AppendLine(")");
+                    text.Append('(').Append(section.Hint).Append(")\n");
                 }
             }
 
@@ -135,7 +135,7 @@ public sealed class AiAnswerTemplate
                 continue;
             }
 
-            blocks[^1].Body.AppendLine(line);
+            blocks[^1].Body.Append(line).Append('\n');
         }
 
         return [.. blocks.Select(b => (b.Title, b.Body.ToString().Trim()))];

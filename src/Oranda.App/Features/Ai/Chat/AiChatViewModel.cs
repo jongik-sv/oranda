@@ -541,6 +541,9 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
                 _writingAnswer = false;
                 CompleteToolCall(result);
                 break;
+            case AiModelChosen chosen when !string.IsNullOrWhiteSpace(chosen.Label):
+                Entries.Add(new ChatModelEntry(chosen.Label.Trim())); // 이 턴에 답한 모델(설계 §1.2 「표시」): 머리의 모델 이름은 주 모델이라 턴마다 따로 적는다
+                break;
             case AiNeedsChoice choice:
                 AddAssistantText($"{choice.Question}\n" + string.Join('\n', choice.Options.Select((o, i) => string.Create(CultureInfo.InvariantCulture, $"{i + 1}) {o}"))));
                 EndTurn();

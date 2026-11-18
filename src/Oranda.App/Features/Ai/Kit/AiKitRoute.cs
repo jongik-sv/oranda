@@ -5,6 +5,7 @@ using Oranda.App.Features.Ai.Tuning;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
+using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Connection;
 using Oranda.Core.Settings;
 
@@ -26,34 +27,35 @@ public sealed record AiKitRoute(AiConversationTarget Target, AiContext Context, 
     public string RecipientText => Target.RecipientUrl is { } url ? Target.Label + " · " + url : Target.Label;
 
     /// <summary>
-    /// 접속·설정·등급으로 만든다. 받는 곳은 등급의 대상(<see cref="AiSettings.ForTier"/>: 가벼운 일 모델이 비어 있으면 주 모델)이고,
-    /// 확인·가림도 실제로 고른 그 대상으로 계산한다(가벼운 일 모델이 로컬 AI 면 가리지 않고, 주 모델이 유료면 가린다).
+    /// 접속·설정·등급으로 만든다. 받는 곳은 등급의 대상(<see cref="AiConversationTarget.Choose"/>: 가벼운 일 모델이 비어 있으면 주 모델, 추정 입력이 가벼운 일 모델 한도의 70% 를 넘으면
+    /// 주 모델로 올림)이고, 확인·가림도 실제로 고른 그 대상으로 계산한다(가벼운 일 모델이 로컬 AI 면 가리지 않고, 주 모델이 유료면 가린다).
+    /// 크기 올림은 확인 전에 여기서 정한다(라우터는 등급을 바꾸지 않는다).
     /// </summary>
-    public static AiKitRoute For(ConnectionProfile profile, AiSettings settings, AiTier tier = AiTier.Main)
+    /// <param name="estimatedTokens">보낼 글의 추정 토큰(<see cref="EstimateFor"/>). 0 이면 올리지 않는다.</param>
+    public static AiKitRoute For(ConnectionProfile profile, AiSettings settings, AiTier tier = AiTier.Main, int estimatedTokens = 0)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(settings);
-        var chosen = settings.ForTier(tier);
-        var target = AiConversationTarget.From(chosen);
+        var target = AiConversationTarget.Choose(settings, tier, estimatedTokens);
+        var chosen = settings.ForTier(target.Tier);
         var context = new AiContext(profile.Name, profile.Environment, AiAccessPolicy.Effective(profile), LocalAi: target.LocalAi);
         var mask = AiAccessPolicy.MaskLiterals(profile, chosen.MaskLiterals, target.LocalAi);
-        return new AiKitRoute(target, context, mask, profile, LabelOf(target, chosen), tier);
+        var label = AiTierRouting.ModelLabel(AiActiveProfile.Find(settings, target.Tier), chosen.Model);
+        return new AiKitRoute(target, context, mask, profile, target.LocalAi ? label + " · 로컬" : label, target.Tier);
     }
 
-    /// <summary>
-    /// 답한 모델 이름: Claude Code 는 설정의 모델(없으면 「Claude Code」), 프로필은 프로필 이름(로컬 AI 면 「 · 로컬」), 그 밖은 받는 곳 이름.
-    /// </summary>
-    public static string LabelOf(AiConversationTarget target, AiSettings settings)
+    /// <summary>보낼 글(꾸러미에 넣을 원문들)의 추정 토큰: 글 + 지시·규칙 몫.</summary>
+    public static int EstimateFor(params string?[] texts)
     {
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(settings);
-        if (target.ProfileId is null && target.SystemCliId is null)
-        {
-            return string.IsNullOrWhiteSpace(settings.Model) ? target.Label : settings.Model.Trim();
-        }
-
-        return target.LocalAi ? target.Label + " · 로컬" : target.Label;
+        ArgumentNullException.ThrowIfNull(texts);
+        return texts.Sum(AiTierRouting.EstimateTokens) + AiTierRouting.PromptOverheadTokens;
     }
+
+    /// <summary>요청이 원한 등급(크기 올림 전).</summary>
+    public AiTier RequestedTier => Target.RequestedTier;
+
+    /// <summary>가벼운 일을 입력 크기 때문에 주 모델로 올렸다.</summary>
+    public bool Escalated => Target.Escalated;
 
     /// <summary>꾸러미를 이 받는 곳의 규칙(허용 수준·로컬 AI·가림)으로 모으기 시작한다.</summary>
     public AiContextBundleBuilder Bundle(string title, ISqlLiteralMasker? masker) =>
@@ -131,10 +133,11 @@ public sealed class AiOneShotRun(AiOneShotSetup setup)
             Effort: Setup.Effort,
             Expected: Route.Target.ToExpectation(), // 확인한 곳과 실제 전송처가 같게(profile_changed)
             MaskingRequired: Route.MaskRequired, // 값을 가려 보낼 수 없는 기타 CLI 의 라우터만 읽는다
-            Tier: Route.Tier); // 이어 묻기도 첫 요청과 같은 등급
+            Tier: Route.Tier, // 확인한 대상의 등급(이어 묻기도 같은 등급, 라우터는 바꾸지 않는다)
+            RequestedTier: Route.RequestedTier);
         var text = new StringBuilder();
         var label = Route.ModelLabel;
-        var escalated = false;
+        var escalated = Route.Escalated;
         var retryOnMain = false;
         string? finalText = null;
         string? resume = resumeId;
@@ -159,7 +162,7 @@ public sealed class AiOneShotRun(AiOneShotSetup setup)
                         break;
                     case AiModelChosen chosen:
                         label = string.IsNullOrWhiteSpace(chosen.Label) ? label : chosen.Label;
-                        escalated = chosen.Escalated;
+                        escalated = escalated || chosen.Escalated;
                         break;
                     case AiError fail:
                         error = AiErrorText.Describe(fail);

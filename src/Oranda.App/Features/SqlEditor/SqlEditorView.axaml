@@ -4,6 +4,7 @@
              xmlns:keymaps="using:Oranda.App.Shell.Keymaps"
              xmlns:ae="using:AvaloniaEdit"
              xmlns:vm="using:Oranda.App.Features.SqlEditor"
+             xmlns:kit="using:Oranda.App.Features.Ai.Kit"
              x:Class="Oranda.App.Features.SqlEditor.SqlEditorView"
              keymaps:FocusSlot.Name="sqlText"
              x:DataType="vm:SqlEditorViewModel">
@@ -13,7 +14,7 @@
 
   <!-- 위: 찾기 패널 / 아래: 편집기. 결과 영역은 아래 도구 창 「조회 결과」가 활성 탭의 ResultPane 을 보인다. -->
   <!-- 결과 행 높이는 code-behind 가 정한다(결과가 없으면 0, 있으면 편집기와 3:2 로 나눈다). -->
-  <Grid x:Name="RootGrid" RowDefinitions="Auto,*">
+  <Grid x:Name="RootGrid" RowDefinitions="Auto,*,Auto">
     <Border Grid.Row="0" Name="FindPanel" Classes="panel-toolbar" IsVisible="{Binding IsFindPanelOpen}">
       <StackPanel Spacing="4">
         <StackPanel Orientation="Horizontal" Spacing="6">
@@ -43,6 +44,15 @@
                    HorizontalScrollBarVisibility="Auto"
                    VerticalScrollBarVisibility="Auto"
                    AutomationProperties.Name="SQL 편집기" />
+
+    <!-- AI 제안 막대(설계 §2.1 바로 처리): 오류 고치기 등. 막대가 없거나 닫혔으면 자리를 차지하지 않는다. -->
+    <ContentControl Grid.Row="2" x:Name="AiBarHost" Content="{Binding AiBar}" Margin="6,4,6,6">
+      <ContentControl.DataTemplates>
+        <DataTemplate x:DataType="kit:AiInlineStripViewModel">
+          <kit:AiInlineStrip />
+        </DataTemplate>
+      </ContentControl.DataTemplates>
+    </ContentControl>
 
   </Grid>
 </UserControl>

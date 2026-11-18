@@ -93,6 +93,12 @@ public sealed record ChatFollowUp(string Text, IReadOnlyList<ChatImage> Images);
 /// </summary>
 public sealed record ChatCardEntry(object Card) : ChatEntry;
 
+/// <summary>
+/// 이 턴에 답한 모델 이름(라우터의 <see cref="AiModelChosen"/>, 설계 §1.2 「표시」). 답 머리에 작게 보인다. 가벼운 일 모델이 정해져 있을 때만 사건이 오므로,
+/// 없으면 이 줄도 없다(대화 창 머리의 모델 이름이 그대로 답한 모델이다).
+/// </summary>
+public sealed record ChatModelEntry(string Label) : ChatEntry;
+
 /// <summary>AI 가 돌려준 글.</summary>
 public sealed record ChatAssistantEntry(string Text) : ChatEntry;
 
