@@ -658,6 +658,7 @@ connections.json ◀────── credentialRef 문자열만 저장 ("orand
 | `credentialRef` 형식 | `oranda:conn:{profileId 소문자 GUID}`. 1.0 은 프로필당 비밀 1개(프록시면 프록시 사용자 비밀) |
 | Windows 저장 | `{data}/credentials/{SHA-256(credentialRef) 소문자 hex}.bin`, DPAPI `CurrentUser` 범위 + 엔트로피 상수. 파일 이름에 사용자·호스트가 드러나지 않음 |
 | macOS 저장 | 키체인 일반 암호, service = `Oranda`, account = `credentialRef` |
+| Linux 저장 | 데스크톱 키링(Secret Service — GNOME Keyring·KWallet)에 libsecret 으로. 스키마 `app.oranda.Credential`, 속성 service = `Oranda`, account = `credentialRef`, 값 = 비밀 바이트의 base64(`KeyringPasswordStore`). libsecret·세션 버스·키링이 없으면 메모리에만 두고(앱이 도는 동안만) 재시작 뒤 다시 묻는다. 이때 원복 스크립트도 만들지 않는다(`IRollbackVault.IsDurable` = false). 그 밖의 OS(FreeBSD 등)는 늘 메모리(`VolatileCredentialStore`) |
 | 「저장 안 함」 | `credentialRef = null`. 저장소에 아무것도 쓰지 않고 접속마다 묻는다 |
 | 프로필 삭제 | `ICredentialStore.DeleteAsync(credentialRef)` 를 함께 호출 |
 | 가져오기(CONN-09) | 다른 도구의 암호화 비밀번호는 풀 수 있으면 곧바로 저장소로 옮기고, 파일에는 쓰지 않는다 |

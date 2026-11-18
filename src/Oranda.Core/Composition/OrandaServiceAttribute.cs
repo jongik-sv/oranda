@@ -53,8 +53,11 @@ public enum ServicePlatform
     Windows,
     MacOS,
 
-    /// <summary>Windows·macOS 가 아닌 OS(Linux 등, 빌드만 되고 정식 지원하지 않음 — PRD 2). 플랫폼 서비스의 안전한 대체를 단다.</summary>
+    /// <summary>Windows·macOS·Linux 가 아닌 OS(FreeBSD 등, 빌드만 되고 정식 지원하지 않음 — PRD 2). 플랫폼 서비스의 안전한 대체를 단다.</summary>
     Other,
+
+    /// <summary>Linux. 예: 비밀번호 키링(Secret Service). <see cref="Other"/> 와 겹치지 않는다.</summary>
+    Linux,
 }
 
 /// <summary>

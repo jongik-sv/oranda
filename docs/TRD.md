@@ -253,7 +253,7 @@ SELECT s.inst_id, s.sid, s.serial#, s.username, ...
 | 실행 이력, 메타데이터 캐시 | 같은 폴더 `oranda.db` | SQLite |
 | 작업 공간·자동 저장(복구용) | 같은 폴더 `workspaces/`, `autosave/` | 파일(10 s 간격) |
 | 로그 | 같은 폴더 `logs/` (7일 보관) | Serilog 파일 |
-| 비밀번호·토큰 | Windows DPAPI 암호화 파일(사용자 범위) / macOS 키체인 | `ICredentialStore` |
+| 비밀번호·토큰 | Windows DPAPI 암호화 파일(사용자 범위) / macOS 키체인 / Linux 데스크톱 키링(Secret Service, libsecret — 키링이 없으면 메모리만) | `ICredentialStore` |
 - macOS 키체인 접근 권한은 코드 서명 ID에 묶인다. 업데이트 때 서명 인증서가 바뀌면 다시 묻는다 → 서명 인증서를 일관되게 유지한다.
 - 관리자가 미리 넣는 설정(M3 이후): 앱 폴더의 `policy.json`이 사용자 설정보다 우선하며 잠금 항목을 가진다.
 

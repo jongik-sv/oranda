@@ -57,7 +57,7 @@ jobs:
       - name: Build
         run: dotnet build Oranda.sln -c Release
       - name: Unit and UI tests
-        run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
+        run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf&Category!=Keyring"
       - name: Publish app
         run: dotnet publish src/Oranda.App -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=${{ steps.ver.outputs.version }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/win-x64
       - name: Startup perf (5 runs)
@@ -193,7 +193,7 @@ jobs:
       - name: Build
         run: dotnet build Oranda.sln -c Release
       - name: Unit and UI tests
-        run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf"
+        run: dotnet test Oranda.sln -c Release --no-build --filter "Category!=Integration&Category!=Perf&Category!=Keyring"
       - name: Publish app
         run: dotnet publish src/Oranda.App -c Release -r osx-arm64 --self-contained -p:PublishReadyToRun=true -p:Version=${{ steps.ver.outputs.version }} -p:OrandaUpdateFeed=${{ env.ORANDA_UPDATE_FEED }} -o artifacts/publish/osx-arm64
       - name: Bundle license notices

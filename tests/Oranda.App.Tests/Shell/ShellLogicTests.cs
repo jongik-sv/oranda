@@ -197,12 +197,16 @@ public class ShellLogicTests
     [Fact]
     public void Composition_registers_exactly_one_credential_store_for_this_os()
     {
-        // OS 비밀 저장소가 없는 OS(Linux)도 대체 저장소가 있어야 접속 명령이 죽지 않는다(CI integration 은 Linux 에서 돈다).
+        // OS 마다 저장소가 정확히 하나여야 접속 명령이 죽지 않는다(CI integration 은 Linux 에서 돈다).
+        // Linux 는 키링 저장소이고, 키링이 없으면(CI) 그 안에서 메모리로 대신한다. 그 밖의 OS 는 메모리 저장소.
         var dir = Path.Combine(Path.GetTempPath(), "oranda-comp-" + Guid.NewGuid().ToString("N"));
         using var c = AppComposition.Create(new AppCompositionOptions { DataDirectory = dir });
 
         var store = Assert.Single(c.GetRequiredService<IEnumerable<Oranda.Core.Security.ICredentialStore>>());
-        var expected = OperatingSystem.IsWindows() ? "DpapiCredentialStore" : OperatingSystem.IsMacOS() ? "KeychainCredentialStore" : "VolatileCredentialStore";
+        var expected = OperatingSystem.IsWindows() ? "DpapiCredentialStore"
+            : OperatingSystem.IsMacOS() ? "KeychainCredentialStore"
+            : OperatingSystem.IsLinux() ? "KeyringPasswordStore"
+            : "VolatileCredentialStore";
         Assert.Equal(expected, store.GetType().Name);
         Assert.Same(store, c.GetRequiredService<Oranda.Core.Security.ICredentialStore>());
     }

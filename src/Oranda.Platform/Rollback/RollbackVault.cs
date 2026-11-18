@@ -3,14 +3,16 @@ using Oranda.Core.Composition;
 using Oranda.Core.Rollback;
 using Oranda.Core.Security;
 using Oranda.Platform.Credentials;
+using Oranda.Platform.Keyring;
 
 namespace Oranda.Platform.Rollback;
 
 /// <summary>
 /// 원복 파일 금고(설계 12.2, RD-9). AES-256-GCM, 키는 무작위 32바이트를 <see cref="ICredentialStore"/> 의
-/// <c>oranda:rollback:key:v1</c> 에 둔다(Windows DPAPI 파일, macOS 키체인). 키는 처음 암호화할 때 만들고, 푸는 쪽은 만들지 않는다.
+/// <c>oranda:rollback:key:v1</c> 에 둔다(Windows DPAPI 파일, macOS 키체인, Linux 키링). 키는 처음 암호화할 때 만들고, 푸는 쪽은 만들지 않는다.
 /// 결과 바이트 = <c>ORB1</c>(4) · 판 번호(1, 값 1) · nonce(12) · tag(16) · 암호문. 머리·키·AAD·본문이 틀리면 <see cref="CryptographicException"/>.
-/// 휘발 저장소(<see cref="VolatileCredentialStore"/>)면 재시작 때 키가 사라지므로 <see cref="IsDurable"/> 이 false 다.
+/// 휘발 저장소(<see cref="VolatileCredentialStore"/>)나 키링을 못 써 메모리로 대신하는 Linux 저장소면
+/// 재시작 때 키가 사라지므로 <see cref="IsDurable"/> 이 false 다.
 /// 키·평문은 로그·예외 메시지에 쓰지 않는다. 소유: RB-20.
 /// </summary>
 [OrandaService(typeof(IRollbackVault))]
@@ -35,7 +37,12 @@ internal sealed class RollbackVault : IRollbackVault, IDisposable
         _credentials = credentials;
     }
 
-    public bool IsDurable => _credentials is not VolatileCredentialStore;
+    public bool IsDurable => _credentials switch
+    {
+        VolatileCredentialStore => false,
+        IPersistenceProbe probe => probe.IsPersistent, // Linux 키링: 키링을 못 쓰면 메모리로 대신한다
+        _ => true,
+    };
 
     public void Dispose()
     {
