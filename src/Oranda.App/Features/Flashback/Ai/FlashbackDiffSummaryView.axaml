@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:kit="using:Oranda.App.Features.Ai.Kit"
+             xmlns:vm="using:Oranda.App.Features.Flashback.Ai"
+             x:Class="Oranda.App.Features.Flashback.Ai.FlashbackDiffSummaryView"
+             x:DataType="vm:FlashbackDiffSummaryViewModel">
+  <!-- 플래시백 VERSIONS 결과 위 「차이 요약」(설계 §4.2): 입구 단추 한 줄 + AI 띠 + 값을 보내지 않았을 때 안내 -->
+  <StackPanel Margin="4,2" Spacing="2">
+    <StackPanel Orientation="Horizontal" Spacing="6">
+      <Button x:Name="DiffSummaryButton" Classes="tool" Content="✨ 차이 요약" Command="{Binding Entry.RunCommand}"
+              ToolTip.Tip="{Binding Entry.ToolTip}" AutomationProperties.Name="차이 요약" />
+    </StackPanel>
+    <kit:AiInlineStrip x:Name="DiffSummaryStrip" DataContext="{Binding Strip}" />
+    <TextBlock x:Name="DiffSummaryNote" Classes="dim" Text="{Binding Note}" IsVisible="{Binding Note, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+  </StackPanel>
+</UserControl>

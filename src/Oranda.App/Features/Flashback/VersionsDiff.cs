@@ -74,38 +74,8 @@ public static partial class VersionsDiff
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(rows);
         var result = new Dictionary<int, int[]>();
-        var clock = layout.StartScn >= 0 ? layout.StartScn : layout.StartTime;
-        var descending = newestFirst ?? (clock >= 0 && IsDescending(rows, clock));
-
-        var groups = new Dictionary<string, List<int>>(StringComparer.Ordinal);
-        for (var i = 0; i < rows.Count; i++)
+        foreach (var list in Ordered(layout, rows, newestFirst))
         {
-            if (rows[i] is not { } row)
-            {
-                continue;
-            }
-
-            var key = layout.Keys.Count == 0 ? string.Empty : FlashbackDiff.KeyText(layout.Keys.Select(k => row[k]));
-            if (!groups.TryGetValue(key, out var list))
-            {
-                groups[key] = list = [];
-            }
-
-            list.Add(i);
-        }
-
-        foreach (var list in groups.Values)
-        {
-            if (clock >= 0)
-            {
-                // 시간 순(NULL 이 가장 앞). 같은 시각이면 결과 정렬 방향을 따른다(최신순 결과면 뒤 행이 앞 버전).
-                list.Sort((a, b) => Compare(rows[a]![clock], rows[b]![clock]) is var c && c != 0 ? c : descending ? b.CompareTo(a) : a.CompareTo(b));
-            }
-            else if (descending)
-            {
-                list.Reverse();
-            }
-
             for (var n = 1; n < list.Count; n++)
             {
                 var cur = rows[list[n]]!;
@@ -124,6 +94,52 @@ public static partial class VersionsDiff
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 같은 키 행끼리 묶어 시간 순(가장 오래된 버전 먼저)으로 늘어놓은 원래 행 번호 목록. 키 묶음은 결과에 처음 나온 차례다.
+    /// 「차이 요약」(AI)이 앞 버전 값과 함께 읽는다. 읽지 못한 행(null)은 빠진다.
+    /// </summary>
+    public static IReadOnlyList<List<int>> Ordered(VersionsLayout layout, IReadOnlyList<object?[]?> rows, bool? newestFirst = null)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(rows);
+        var clock = layout.StartScn >= 0 ? layout.StartScn : layout.StartTime;
+        var descending = newestFirst ?? (clock >= 0 && IsDescending(rows, clock));
+
+        var groups = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        var order = new List<List<int>>();
+        for (var i = 0; i < rows.Count; i++)
+        {
+            if (rows[i] is not { } row)
+            {
+                continue;
+            }
+
+            var key = layout.Keys.Count == 0 ? string.Empty : FlashbackDiff.KeyText(layout.Keys.Select(k => row[k]));
+            if (!groups.TryGetValue(key, out var list))
+            {
+                groups[key] = list = [];
+                order.Add(list);
+            }
+
+            list.Add(i);
+        }
+
+        foreach (var list in order)
+        {
+            if (clock >= 0)
+            {
+                // 시간 순(NULL 이 가장 앞). 같은 시각이면 결과 정렬 방향을 따른다(최신순 결과면 뒤 행이 앞 버전).
+                list.Sort((a, b) => Compare(rows[a]![clock], rows[b]![clock]) is var c && c != 0 ? c : descending ? b.CompareTo(a) : a.CompareTo(b));
+            }
+            else if (descending)
+            {
+                list.Reverse();
+            }
+        }
+
+        return order;
     }
 
     private static bool IsDelete(object? op) =>

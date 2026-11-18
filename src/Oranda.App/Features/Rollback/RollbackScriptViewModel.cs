@@ -129,6 +129,7 @@ public sealed partial class RollbackScriptViewModel : ToolPanelViewModelBase
         Execution = () => services.GetService(typeof(IExecutionService)) as IExecutionService;
         Ledger = () => services.GetService(typeof(IRollbackLedger)) as IRollbackLedger;
         PointReader = (session, ct) => ReadPointAsync(services, session, ct);
+        UseAi(new Oranda.App.Features.Ai.InPlace.AiInPlaceHost(services), services); // 「AI 점검」 띠(설계 §4.2)
     }
 
     /// <summary>

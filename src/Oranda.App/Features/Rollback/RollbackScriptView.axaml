@@ -3,6 +3,7 @@
              xmlns:icons="using:Oranda.App.Shell.Icons"
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.Rollback"
+             xmlns:kit="using:Oranda.App.Features.Ai.Kit"
              x:Class="Oranda.App.Features.Rollback.RollbackScriptView"
              x:DataType="vm:RollbackScriptViewModel">
   <!-- 원복 스크립트 탭(되돌리기 지점 설계 11.3, 화면 2): 도구 모음 · 읽기 전용 글 · 실행 결과 · 상태 줄. 자동으로 실행하지 않는다. -->
@@ -16,6 +17,11 @@
         <TextBlock x:Name="ProgressLabel" Classes="dim" VerticalAlignment="Center" Margin="6,0" Text="{Binding ProgressText}" IsVisible="{Binding IsRunning}" />
         <Button Classes="toolbar" x:Name="CopyButton" Content="일반 SQL 탭으로 복사" icons:ButtonIcon.Key="copy" />
         <Button Classes="toolbar" x:Name="ExportButton" Content="파일로 내보내기…" icons:ButtonIcon.Key="exportFile" />
+        <!-- AI 점검(설계 §4.2): 일지의 변경과 스크립트를 맞대어 빠진 행·FK 순서·시퀀스·트리거를 짚는다. 고친 스크립트는 편집기 제안으로만 -->
+        <Button Classes="toolbar" x:Name="AiCheckButton" Content="✨ AI 점검" IsVisible="{Binding AiEntry, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Command="{Binding AiEntry.RunCommand}" ToolTip.Tip="{Binding AiEntry.ToolTip}" AutomationProperties.Name="AI 점검" />
+        <Button Classes="toolbar" x:Name="AiFixButton" Content="고친 스크립트를 편집기에" IsVisible="{Binding HasAiFix}"
+                ToolTip.Tip="원래 스크립트로 새 SQL 탭을 열고 고친 스크립트를 차이 미리 보기로 제안합니다(실행하지 않습니다)" AutomationProperties.Name="고친 스크립트를 편집기에" />
       </WrapPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
@@ -24,6 +30,7 @@
     <TextBlock DockPanel.Dock="Bottom" x:Name="MessageText" Margin="8,4" TextWrapping="Wrap" Text="{Binding Message}"
                IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                Classes.warning-text="{Binding MessageIsWarning}" />
+    <kit:AiInlineStrip DockPanel.Dock="Bottom" x:Name="AiCheckStrip" Margin="8,4" DataContext="{Binding AiStrip}" />
     <!-- 살펴볼 줄만(0행·충돌·오류): 몇 번째 문장의 어느 원복 문장인지와 이유 -->
     <ListBox DockPanel.Dock="Bottom" x:Name="ResultList" ItemsSource="{Binding Results}" MaxHeight="160" Margin="8,0"
              AutomationProperties.Name="원복 실행 결과">

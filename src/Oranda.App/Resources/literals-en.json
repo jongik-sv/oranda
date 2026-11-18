@@ -2169,5 +2169,14 @@
   "더 깊게": "Go deeper",
   "주 모델로 다시 보내기": "Send again to the main model",
   "가벼운 일 모델이 실패했습니다. 주 모델로 다시 보냅니다(보내는 곳을 다시 확인합니다)": "The light model failed. Sends again to the main model (the recipient is checked again)",
-  "가벼운 일 모델": "Light-task model"
+  "가벼운 일 모델": "Light-task model",
+  "✨ 요약": "✨ Summary",
+  "✨ 이 기간 요약": "✨ Summarize this period",
+  "이 기간 요약": "Summarize this period",
+  "✨ 차이 요약": "✨ Summarize differences",
+  "차이 요약": "Summarize differences",
+  "✨ AI 점검": "✨ AI check",
+  "AI 점검": "AI check",
+  "고친 스크립트를 편집기에": "Fixed script to editor",
+  "원래 스크립트로 새 SQL 탭을 열고 고친 스크립트를 차이 미리 보기로 제안합니다(실행하지 않습니다)": "Opens a new SQL tab with the original script and proposes the fixed script through the diff preview (never runs it)"
 }

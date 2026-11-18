@@ -4,6 +4,7 @@
              xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:sqled="using:Oranda.App.Features.SqlEditor"
              xmlns:vm="using:Oranda.App.Features.ChangeJournal"
+             xmlns:kit="using:Oranda.App.Features.Ai.Kit"
              x:Class="Oranda.App.Features.ChangeJournal.ChangeJournalView"
              x:DataType="vm:ChangeJournalViewModel"
              ctl:NarrowLayout.Threshold="{x:Static ctl:NarrowLayout.DefaultThreshold}">
@@ -221,6 +222,9 @@
                   IsEnabled="{Binding CanOpenScript}" ToolTip.Tip="원복 스크립트 열기 — 고른 커밋 묶음의 원복 스크립트를 새 탭에 엽니다(자동으로 실행하지 않습니다)" />
           <Button Classes="toolbar" x:Name="NarrowCompareButton" Content="이 실행 전과 비교…" icons:ButtonIcon.Key="diff" icons:ButtonIcon.IconOnly="True"
                   IsEnabled="{Binding CanCompare}" ToolTip.Tip="이 실행 전과 비교… — 기록한 실행 직전 시점과 지금 데이터를 비교해 되돌립니다" />
+          <Separator Classes="toolbar" />
+          <Button Classes="toolbar" x:Name="NarrowAiSummaryButton" Content="✨ 요약" IsVisible="{Binding AiEntry, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Command="{Binding AiEntry.RunCommand}" ToolTip.Tip="{Binding AiEntry.ToolTip}" AutomationProperties.Name="이 기간 요약" />
         </StackPanel>
       </StackPanel>
     </Border>
@@ -261,11 +265,19 @@
                 ToolTip.Tip="고른 커밋 묶음의 원복 스크립트를 새 탭에 엽니다(자동으로 실행하지 않습니다)" />
         <Button Classes="toolbar" x:Name="CompareButton" Content="이 실행 전과 비교…" icons:ButtonIcon.Key="diff" IsEnabled="{Binding CanCompare}"
                 ToolTip.Tip="기록한 실행 직전 시점과 지금 데이터를 비교해 되돌립니다" />
+        <Separator Classes="toolbar" />
+        <Button Classes="toolbar" x:Name="AiSummaryButton" Content="✨ 이 기간 요약" IsVisible="{Binding AiEntry, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Command="{Binding AiEntry.RunCommand}" ToolTip.Tip="{Binding AiEntry.ToolTip}" AutomationProperties.Name="이 기간 요약" />
       </WrapPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Classes="panel-status">
       <TextBlock Text="{Binding StatusMessage}" TextTrimming="CharacterEllipsis" />
     </Border>
+    <!-- 이 기간 요약 띠(설계 §4.2): 일지 위 한 단락. 값을 보내지 않았으면 아래 안내 한 줄 -->
+    <StackPanel DockPanel.Dock="Top" Margin="8,4,8,0" Spacing="2">
+      <kit:AiInlineStrip x:Name="AiSummaryStrip" DataContext="{Binding AiStrip}" />
+      <TextBlock x:Name="AiSummaryNote" Classes="dim" Text="{Binding AiNote}" IsVisible="{Binding AiNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    </StackPanel>
     <Grid RowDefinitions="*,5,*">
       <!-- 표(되돌리기 지점 설계 11.1): 접기·아이콘 | 시간 | 객체 | 원인 | 요약 | 영향 행 | 시점 | 원복 스크립트.
            DDL 보관본·커밋 묶음·묶음 안 문장 줄이 같은 열을 쓴다(IJournalRow). 머리글 경계를 끌어 열 폭을 바꾼다(TableColumns).

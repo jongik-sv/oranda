@@ -28,6 +28,8 @@
       <Button x:Name="FindCloseButton" Classes="toolbar" Content="닫기" icons:ButtonIcon.Key="clear" icons:ButtonIcon.IconOnly="True" />
       <TextBlock Text="{Binding FindMessage}" VerticalAlignment="Center" />
     </StackPanel>
+    <!-- 결과 위 기능 자리(설계 §2.1 AI 띠): 플래시백 VERSIONS 결과의 「차이 요약」 등. 없으면 숨김 -->
+    <ContentControl x:Name="FeatureStripHost" Content="{Binding FeatureStrip}" IsVisible="{Binding FeatureStrip, Converter={x:Static ObjectConverters.IsNotNull}}" />
     </StackPanel>
     <!-- 결과 거르기 줄(oranda.grid.toggleFilterBar, GRID-10): 결과를 만든 질의를 WHERE·ORDER BY 로 감싸 같은 바인드로 다시 실행한다.
          Enter 적용, Esc 는 칸을 비우고 빈 칸이면 줄을 닫는다. 실패·취소는 아래 상태 줄에 보인다. -->

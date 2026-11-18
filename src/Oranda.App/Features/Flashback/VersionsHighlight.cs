@@ -96,7 +96,11 @@ public sealed class VersionsHighlight
             var keys = await KeysAsync(container, statement, model, sources).ConfigureAwait(true);
             if (keys is not null && ReferenceEquals(pane.Model, model))
             {
-                Attach(model, keys, sources, VersionsDiff.OrderNewestFirst(statement.Text));
+                var highlight = Attach(model, keys, sources, VersionsDiff.OrderNewestFirst(statement.Text));
+                // 「차이 요약」 입구와 AI 띠(설계 §4.2): 결과 그리드 위 자리에 붙는다. 이 결과를 만든 세션의 접속 기준으로 보낸다.
+                var profile = ExecutionCommands.ActiveTabSession(container)?.Profile;
+                var table = FlashbackResultAnalyzer.Analyze(statement.Text).Table is { Name: { } name } t ? (t.Owner is { Length: > 0 } owner ? owner + "." + name : name) : "?";
+                pane.FeatureStrip = new Ai.FlashbackDiffSummaryViewModel(new Oranda.App.Features.Ai.InPlace.AiInPlaceHost(container), () => highlight.SummaryInput(table), () => profile);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -133,6 +137,40 @@ public sealed class VersionsHighlight
             || string.Equals(model.Columns[i].Name, "ROWID", StringComparison.OrdinalIgnoreCase)
             || string.Equals(i < sources.Count ? sources[i] : null, "ROWID", StringComparison.OrdinalIgnoreCase), -1);
         return rowId >= 0 ? [rowId] : null;
+    }
+
+    /// <summary>
+    /// 「차이 요약」(AI, 설계 §4.2) 입력: 지금까지 받은 행을 같은 키끼리 시간 순으로, 버전마다 앞 버전과 달라진 칸(앞뒤 값)을 담는다.
+    /// 값은 여기서 그대로 담고, 보낼지는 프롬프트가 허용 수준으로 정한다.
+    /// </summary>
+    internal Ai.FlashbackDiffInput SummaryInput(string tableName)
+    {
+        Recompute();
+        var names = _model.Columns.Select(c => c.Name).ToList();
+        var versions = new List<Ai.FlashbackVersion>();
+        foreach (var list in VersionsDiff.Ordered(_layout, _rows, _newestFirst))
+        {
+            object?[]? prev = null;
+            foreach (var index in list)
+            {
+                var row = _rows[index]!;
+                var changes = prev is null ? [] : _layout.Data
+                    .Where(d => !FlashbackDiff.SameValue(prev[d], row[d]))
+                    .Select(d => new Ai.FlashbackVersionChange(names[d], Text(prev[d]), Text(row[d])))
+                    .ToList();
+                versions.Add(new Ai.FlashbackVersion(At(_layout.Operation), At(_layout.StartTime), At(_layout.StartScn), changes)
+                {
+                    KeyText = _layout.Keys.Count == 0 ? null : string.Join(", ", _layout.Keys.Select(k => names[k] + "=" + (Text(row[k]) ?? "NULL"))),
+                });
+                prev = row;
+
+                string At(int ordinal) => ordinal >= 0 ? Text(row[ordinal]) ?? string.Empty : string.Empty;
+            }
+        }
+
+        return new Ai.FlashbackDiffInput(tableName, [.. _layout.Keys.Select(k => names[k])], versions);
+
+        static string? Text(object? value) => value is null or DBNull ? null : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>이 칸이 앞 버전과 값이 다른가(계산해 둔 것만 읽는다).</summary>

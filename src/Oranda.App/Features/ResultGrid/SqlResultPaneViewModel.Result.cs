@@ -72,6 +72,7 @@ public sealed partial class SqlResultPaneViewModel
             _ = m.SetLocalFilterAsync(remapped);
         }
 
+        FeatureStrip = null; // 앞 결과의 기능 자리(차이 요약 등)는 새 결과에 맞지 않는다
         ResultAttached?.Invoke(this, m);
         UpdateStatus();
     }

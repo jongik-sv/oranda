@@ -163,6 +163,8 @@ public sealed partial class ChangeJournalViewModel : ToolPanelViewModelBase, IDi
         CommandRunner = (id, arg) => services.GetService(typeof(ICommandRegistry)) is ICommandRegistry registry && services.GetService(typeof(ContextKeyService)) is ContextKeyService keys
             ? registry.ExecuteAsync(id, keys, arg)
             : Task.FromResult(false);
+        CurrentProfile = () => HistoryScriptsCommands.ResolveSession(services)?.Profile;
+        UseAi(new Oranda.App.Features.Ai.InPlace.AiInPlaceHost(services)); // 「이 기간 요약」 띠(설계 §4.2)
     }
 
     /// <summary>시험용: 변경 일지 저장소(와 원복 묶음 저장소)를 직접 넣는다. 명령 실행기는 넣지 않는다(<see cref="CommandRunner"/> 를 시험이 정한다).</summary>
