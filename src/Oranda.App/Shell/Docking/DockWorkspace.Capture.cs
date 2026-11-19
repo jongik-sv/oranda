@@ -15,9 +15,13 @@ namespace Oranda.App.Shell.Docking;
 /// </summary>
 public sealed partial class DockWorkspace
 {
-    /// <summary>지금 배치를 앱 DTO 로 읽는다. 창 위치는 <paramref name="window"/> 로 받아 그대로 싣는다.</summary>
+    /// <summary>
+    /// 지금 배치를 앱 DTO 로 읽는다. 창 위치는 <paramref name="window"/> 로 받아 그대로 싣는다.
+    /// 도구 창과 문서가 섞인 칸이 있으면 먼저 제자리로 옮긴다(<see cref="RepairMixedDocks"/>): 섞인 채 읽으면 도구 창이 닫힌 창으로 저장된다.
+    /// </summary>
     public LayoutDocument Capture(WindowPlacement? window = null)
     {
+        RepairMixedDocks();
         var root = CaptureRoot();
         var inTree = LayoutPlanner.ToolIds(root).ToHashSet(StringComparer.Ordinal);
         var hidden = _registry.Panels

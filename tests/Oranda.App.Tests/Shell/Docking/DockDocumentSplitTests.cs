@@ -382,7 +382,8 @@ public sealed class DockDocumentSplitTests
     });
 
     [Fact]
-    public Task A_tool_window_dropped_into_a_document_cell_is_not_kept_there_after_a_rebuild() => HeadlessHost.Run(async () =>
+    // 섞인 칸은 저장·다시 짓기 전에 바로잡는다: 도구 창은 닫힌 창이 되지 않고 규칙 위치 묶음으로 돌아간다(2026-11-20, DockMixedDocksTests).
+    public Task A_tool_window_dropped_into_a_document_cell_goes_back_to_a_tool_group_on_a_rebuild() => HeadlessHost.Run(async () =>
     {
         var (h, dock, left, right) = await SplitAsync();
         using (h)
@@ -399,11 +400,8 @@ public sealed class DockDocumentSplitTests
             Assert.True(dock.ShowTool(Sessions)); // 재구성
             dock.Rebuild(); // 도구 창 하나는 배치를 다시 짓지 않고 넣으므로(DK-01) 다시 짓는 길을 직접 부른다
             Dispatcher.UIThread.RunJobs();
-            Assert.False(dock.IsToolVisible("oranda.panel.binds"));
             Assert.DoesNotContain(DocumentDocks(dock).SelectMany(d => d.VisibleDockables ?? []), d => d is PanelTool);
-
-            Assert.True(dock.ToggleTool("oranda.panel.binds")); // 보기 메뉴로 다시 연다
-            Dispatcher.UIThread.RunJobs();
+            Assert.IsAssignableFrom<IToolDock>(FindTool(dock, "oranda.panel.binds")!.Owner);
 
             AssertStillSplit(dock, left, right); // Owner 일관성 포함
             AssertNoDockableTwice(dock.Layout!);

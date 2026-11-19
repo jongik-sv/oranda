@@ -41,7 +41,7 @@ public sealed partial class DockWorkspace
         _createViewModel = createViewModel;
         _text = text;
         _text.LanguageChanged += (_, _) => Retitle();
-        Factory = new Factory
+        Factory = new OrandaDockFactory
         {
             HideToolsOnClose = true,
             HideDocumentsOnClose = false,

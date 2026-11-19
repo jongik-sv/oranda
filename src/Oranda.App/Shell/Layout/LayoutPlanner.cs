@@ -113,6 +113,7 @@ public static class LayoutPlanner
         }
 
         var known = all.Where(p => p.Kind == ToolPanelKind.Tool).Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        var strays = StrayTools(saved.Root, all, known);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var root = Prune(saved.Root, known, seen);
         if (root is null || CountDocuments(root) != 1)
@@ -122,7 +123,7 @@ public static class LayoutPlanner
         }
 
         var hidden = (saved.HiddenTools ?? [])
-            .Where(id => known.Contains(id) && !seen.Contains(id))
+            .Where(id => known.Contains(id) && !seen.Contains(id) && !strays.Contains(id)) // 문서 영역에 섞였던 창은 보이던 창이다: 기본 위치로 되돌린다
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
@@ -157,7 +158,7 @@ public static class LayoutPlanner
         {
             if (!seen.Contains(def.Id) && !hiddenSet.Contains(def.Id))
             {
-                if (DefaultHiddenTools.Contains(def.Id))
+                if (DefaultHiddenTools.Contains(def.Id) && !strays.Contains(def.Id))
                 {
                     hidden.Add(def.Id);
                     continue;
@@ -169,6 +170,37 @@ public static class LayoutPlanner
         }
 
         return saved with { Root = Rebalance(root), HiddenTools = hidden, Migrations = migrations };
+    }
+
+    /// <summary>
+    /// 저장된 배치에서 제자리가 아닌 창: 문서 영역 노드에 적힌 도구 창(돌려준다 — 기본 위치로 되돌린다)과 도구 묶음에 적힌 문서 종류 창(<see cref="Prune"/> 이 뺀다).
+    /// 도구 창과 문서가 같은 칸에 섞이면 탭 템플릿이 깨진다(2026-11-20 사용자 신고). 있으면 로그 한 줄을 남긴다.
+    /// </summary>
+    private static HashSet<string> StrayTools(DockNode root, IReadOnlyList<ToolPanelDefinition> panels, HashSet<string> known)
+    {
+        var documentKinds = panels.Where(p => p.Kind == ToolPanelKind.Document).Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        var strays = new HashSet<string>(StringComparer.Ordinal);
+        var documents = new List<string>();
+        Walk(root, n =>
+        {
+            if (n.Kind == DockNodeKind.Documents)
+            {
+                strays.UnionWith((n.Tools ?? []).Where(known.Contains));
+            }
+            else if (n.Kind == DockNodeKind.ToolGroup)
+            {
+                documents.AddRange((n.Tools ?? []).Where(documentKinds.Contains));
+            }
+        });
+        if (strays.Count > 0 || documents.Count > 0)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "배치: 섞인 칸을 바로잡았다(문서 영역의 도구 창 {0} → 기본 위치, 도구 묶음의 문서 {1} → 뺌).",
+                strays.Count == 0 ? "-" : string.Join(", ", strays),
+                documents.Count == 0 ? "-" : string.Join(", ", documents));
+        }
+
+        return strays;
     }
 
     /// <summary>
