@@ -66,6 +66,7 @@ public sealed partial class SchemaBrowserViewModel
         Interlocked.Increment(ref _generation); // 옛 트리 노드의 읽기는 버린다
         Roots.Clear();
         _commentsByOwner.Clear(); // 새로 고침: 주석도 서버에서 다시 읽는다
+        _marksByOwner.Clear(); // 표식은 스키마를 펼칠 때 다시 읽는다(접속이 바뀌었을 수 있다)
         _favoritesNode = null;
         SelectedNode = null;
         // 이전 접속(또는 짓기 전)의 목록 기준 시각을 남기지 않는다: 접속을 바꾸는 동안·짓기에 실패한 뒤에도 다른 접속의 시각이 보이지 않게.
@@ -554,6 +555,12 @@ public sealed partial class SchemaBrowserViewModel
 
         StatusText = $"{node.Owner}: 객체 {objects.Count}개" + (ActiveSavedFilter is { } saved ? $" · 필터 「{saved.Name}」" : "")
             + (javaCut ? $" · Java 객체는 처음 {JavaListLimit}개만" : "");
+
+        // 세부 종류·상태 표식: 목록을 먼저 보인 뒤 캐시에서 읽어 붙인다(서버를 기다리지 않는다 — 낡았으면 제공자가 뒤에서 다시 읽고 ObjectMarksRefreshed 로 알린다).
+        if (node.Owner is { } markOwner)
+        {
+            await LoadMarksAsync(session, markOwner, ct);
+        }
     }
 
     /// <summary>
@@ -567,6 +574,58 @@ public sealed partial class SchemaBrowserViewModel
         ex is ServerStallException
             ? LiteralTranslator.IsEnglish && LiteralTranslator.Table.TryGetValue(StallText, out var english) ? english : StallText
             : prefix + ex.Message;
+
+    /// <summary>소유자별 세부 종류·상태 표식(<see cref="IMetadataProvider.ListObjectMarksAsync"/>, 표식이 있는 객체만). 스키마를 펼칠 때·표식이 새로 오면 다시 읽는다.</summary>
+    private readonly Dictionary<string, IReadOnlyDictionary<DbObjectRef, ObjectMark>> _marksByOwner = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 소유자 <paramref name="owner"/> 의 표식을 읽어 이미 그린 노드에 붙인다. 읽지 못하면(권한·끊김) 표식 없이 그대로 둔다(트리는 막지 않는다).
+    /// </summary>
+    private async Task LoadMarksAsync(ISession session, string owner, CancellationToken ct)
+    {
+        IReadOnlyDictionary<DbObjectRef, ObjectMark> marks;
+        try
+        {
+            marks = await _meta!.ListObjectMarksAsync(session, owner, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(CurrentSession, session))
+        {
+            return;
+        }
+
+        _marksByOwner[owner] = marks;
+        foreach (var root in Roots)
+        {
+            ApplyMarks(root, owner, marks);
+        }
+
+        static void ApplyMarks(SchemaNode node, string owner, IReadOnlyDictionary<DbObjectRef, ObjectMark> marks)
+        {
+            if (node.Kind == SchemaNodeKind.Item && node.Ref is { } r && string.Equals(r.Owner, owner, StringComparison.Ordinal)
+                && !(node.Parent?.FolderKind == SchemaFolderKind.Triggers))
+            {
+                node.Mark = marks.GetValueOrDefault(r);
+            }
+
+            foreach (var child in node.Children)
+            {
+                ApplyMarks(child, owner, marks);
+            }
+        }
+    }
+
+    /// <summary>객체 <paramref name="r"/> 의 표식(그 소유자를 읽었을 때만). 없으면 null.</summary>
+    private ObjectMark? MarkOf(DbObjectRef r) =>
+        _marksByOwner.TryGetValue(r.Owner, out var map) ? map.GetValueOrDefault(r) : null;
 
     /// <summary>스키마 하나에서 보이는 Java 객체 최대 수(SYS 쪽 Java 클래스는 수만 개다). 넘으면 상태 줄에 알린다.</summary>
     public const int JavaListLimit = 5000;
@@ -667,6 +726,7 @@ public sealed partial class SchemaBrowserViewModel
             Detail = detail,
             Comment = CommentOf(r),
             Pair = pair,
+            Mark = MarkOf(r),
             SpecState = badges ? SchemaPairs.StateOf(pair!.Spec, isInvalid!, _filter.InvalidOnly) : SchemaPartState.None,
             BodyState = badges ? SchemaPairs.StateOf(pair!.Body, isInvalid!, _filter.InvalidOnly) : SchemaPartState.None,
         };

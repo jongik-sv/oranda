@@ -100,6 +100,62 @@ public sealed partial class SchemaNode : ObservableObject
     /// <summary>열 노드의 자료형 요약 등 부가 설명.</summary>
     public string? Detail { get; internal init; }
 
+    /// <summary>
+    /// 객체 노드: 세부 종류·상태 표식(보조 질의 <c>meta.marks_*</c>, <see cref="IMetadataProvider.ListObjectMarksAsync"/>). 목록을 보인 뒤 늦게 붙는다(바뀌면 아이콘을 다시 그린다).
+    /// null = 표식 없음·아직 안 읽음.
+    /// </summary>
+    [ObservableProperty]
+    private ObjectMark? _mark;
+
+    partial void OnMarkChanged(ObjectMark? value) => LookChanged();
+
+    /// <summary>열 노드: 그 열(뱃지: 기본키·NOT NULL·IDENTITY·가상·LOB·숨김). 다른 노드는 null.</summary>
+    internal ColumnInfo? Column { get; init; }
+
+    /// <summary>열 노드: 기본키 열인가(테이블의 PK 제약 열).</summary>
+    internal bool IsKeyColumn { get; init; }
+
+    /// <summary>인덱스 노드: 그 인덱스(뱃지: 유니크·비트맵·함수 기반·역방향·파티션·UNUSABLE). 다른 노드는 null.</summary>
+    internal IndexInfo? IndexDef { get; init; }
+
+    /// <summary>제약 노드: 그 제약(뱃지: PK·UK·FK·CHECK·NOT NULL·NOVALIDATE, 꺼짐은 흐림). 다른 노드는 null.</summary>
+    internal ConstraintInfo? ConstraintDef { get; init; }
+
+    private SchemaLook? _look;
+
+    /// <summary>아이콘 모양(기본 아이콘 + 모서리 뱃지 + 흐림, <see cref="SchemaLooks"/>). 트리 줄 앞 아이콘이 이것을 그린다.</summary>
+    public SchemaLook Look => _look ??= Kind switch
+    {
+        SchemaNodeKind.Item when Ref is { } r => SchemaLooks.ForObject(IconKey ?? "objOther", r, Mark, IsInvalid),
+        SchemaNodeKind.Column when Column is { } c => SchemaLooks.ForColumn(c, IsKeyColumn),
+        SchemaNodeKind.Index when IndexDef is { } i => SchemaLooks.ForIndex(i),
+        SchemaNodeKind.Constraint when ConstraintDef is { } k => SchemaLooks.ForConstraint(k),
+        _ => SchemaLook.Plain(IconKey),
+    };
+
+    /// <summary>꺼진 것(트리거·제약·작업 DISABLED, 숨은 열): 아이콘·이름을 흐린 회색으로.</summary>
+    public bool IsDimmed => Look.Dimmed;
+
+    /// <summary>뱃지·상태 툴팁(종류 이름 줄들). 없으면 null.</summary>
+    public string? LookTip => Look.Tip;
+
+    /// <summary>화면 언어가 바뀌었다: 툴팁을 다시 만든다.</summary>
+    internal void RefreshLook()
+    {
+        if (_look is not null)
+        {
+            LookChanged();
+        }
+    }
+
+    private void LookChanged()
+    {
+        _look = null;
+        OnPropertyChanged(nameof(Look));
+        OnPropertyChanged(nameof(IsDimmed));
+        OnPropertyChanged(nameof(LookTip));
+    }
+
     /// <summary>표·뷰 노드: 테이블 명(주석) 한 줄. 이름 옆에 흐리게 보이며 「테이블 명」 체크를 끄면 숨는다. 없으면 null.</summary>
     public string? Comment { get; internal init; }
 

@@ -583,6 +583,8 @@
                     <SolidColorBrush x:Key="OrandaIconPurpleBrush" Color="#8250DF" />
                     <SolidColorBrush x:Key="OrandaIconTealBrush" Color="#0F7B8A" />
                     <SolidColorBrush x:Key="OrandaIconNeutralBrush" Color="#5F6368" />
+                    <!-- 스키마 브라우저 아이콘 모서리 뱃지의 테두리(트리 바탕색): 뱃지가 아이콘과 떨어져 보인다. -->
+                    <SolidColorBrush x:Key="OrandaBadgeOutlineBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="OrandaFocusBrush" Color="#005FB8" />
                     <!-- 결과 그리드: 현재 행 띠(반투명, 선택 색보다 옅게)·행 머리 ▶·복제한 새 행의 바꿔야 할 키 칸. -->
                     <SolidColorBrush x:Key="OrandaGridCurrentRowBrush" Color="#1A2F6FDE" />
@@ -644,6 +646,7 @@
                     <SolidColorBrush x:Key="OrandaIconPurpleBrush" Color="#B794F6" />
                     <SolidColorBrush x:Key="OrandaIconTealBrush" Color="#4FC3C9" />
                     <SolidColorBrush x:Key="OrandaIconNeutralBrush" Color="#B0B5BA" />
+                    <SolidColorBrush x:Key="OrandaBadgeOutlineBrush" Color="#1E1E1E" />
                     <SolidColorBrush x:Key="OrandaFocusBrush" Color="#60CDFF" />
                     <SolidColorBrush x:Key="OrandaGridCurrentRowBrush" Color="#265B9BFF" />
                     <SolidColorBrush x:Key="OrandaGridRowMarkerBrush" Color="#5B9BFF" />

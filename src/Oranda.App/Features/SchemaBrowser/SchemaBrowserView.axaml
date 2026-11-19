@@ -32,6 +32,11 @@
     <Style Selector="Border.part-badge.invalid TextBlock">
       <Setter Property="Foreground" Value="{DynamicResource OrandaDangerForegroundBrush}" />
     </Style>
+    <!-- 꺼진 것(트리거·제약·작업 DISABLED, 숨은 열): 흐린 회색 이름(아이콘은 SchemaLookConverter 가 흐리게) -->
+    <Style Selector="TextBlock.dimmed">
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconNeutralBrush}" />
+      <Setter Property="Opacity" Value="0.75" />
+    </Style>
   </UserControl.Styles>
   <DockPanel>
     <!-- 패널 툴바(Orange Schema Browser 처럼 아이콘 단추 한 줄): 유형 고르기 · 저장 필터 ▾ · INVALID 만 · 즐겨찾기만 · 새로 고침 -->
@@ -82,8 +87,11 @@
       <TreeView.ItemTemplate>
         <TreeDataTemplate x:DataType="vm:SchemaNode" ItemsSource="{Binding Children}">
           <StackPanel Orientation="Horizontal" Spacing="5">
-            <ContentControl Content="{Binding IconKey, Converter={x:Static icons:IconKeyConverter.Instance}}" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Title}" Classes.invalid="{Binding IsInvalid}" VerticalAlignment="Center" />
+            <!-- 아이콘 + 모서리 뱃지(세부 종류·상태, SchemaLooks). 툴팁에 종류 이름. 꺼진 것은 아이콘·이름이 흐리다. -->
+            <ContentControl Content="{Binding Look, Converter={x:Static vm:SchemaLookConverter.Instance}}" VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding LookTip}" />
+            <TextBlock Text="{Binding Title}" Classes.invalid="{Binding IsInvalid}" Classes.dimmed="{Binding IsDimmed}" VerticalAlignment="Center"
+                       ToolTip.Tip="{Binding LookTip}" />
             <!-- 패키지·타입: 명세·본문 상태 표(PKG1) -->
             <Border Classes="part-badge" Classes.invalid="{Binding SpecBadgeInvalid}" IsVisible="{Binding HasSpecBadge}" VerticalAlignment="Center">
               <TextBlock Text="{Binding SpecBadge}" />

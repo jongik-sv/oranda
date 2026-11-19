@@ -715,6 +715,26 @@ public class SchemaBrowserTests
             return Task.FromResult(new ObjectListChange(Objects.Count, 0, 0));
         }
 
+        /// <summary>세부 종류·상태 표식(캐시에 있는 것). 소유자를 펼칠 때 묻는다.</summary>
+        public Dictionary<DbObjectRef, ObjectMark> Marks { get; } = [];
+
+        /// <summary>표식을 물은 소유자 순서대로.</summary>
+        public List<string> MarkCalls { get; } = [];
+
+        /// <summary>참이면 표식 조회가 실패한다.</summary>
+        public bool FailMarks { get; set; }
+
+        public Task<IReadOnlyDictionary<DbObjectRef, ObjectMark>> ListObjectMarksAsync(ISession s, string owner, CancellationToken ct)
+        {
+            MarkCalls.Add(owner);
+            if (FailMarks)
+            {
+                throw new InvalidOperationException("ORA-00942");
+            }
+
+            return Task.FromResult<IReadOnlyDictionary<DbObjectRef, ObjectMark>>(Marks.Where(m => m.Key.Owner == owner).ToDictionary(m => m.Key, m => m.Value));
+        }
+
         /// <summary>테이블·뷰 주석(소유자, 이름) → 주석. 트리 줄의 「테이블 명」.</summary>
         public Dictionary<(string Owner, string Name), string> Comments { get; } = [];
 

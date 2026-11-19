@@ -96,6 +96,8 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
                 node.Title = FavoritesTitle;
             }
 
+            node.RefreshLook(); // 뱃지 툴팁도 화면 언어로
+
             foreach (var child in node.Children)
             {
                 Relabel(child);
@@ -156,6 +158,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             _subscriptions.Add(bus.Subscribe<SessionClosed>(this, e => PostToUi(() => _ = OnSessionClosedAsync(e))));
             _subscriptions.Add(bus.Subscribe<MetadataInvalidated>(this, e => PostToUi(() => _ = OnMetadataInvalidatedAsync(e))));
             _subscriptions.Add(bus.Subscribe<ObjectListRefreshed>(this, e => PostToUi(() => OnObjectListRefreshed(e))));
+            _subscriptions.Add(bus.Subscribe<ObjectMarksRefreshed>(this, e => PostToUi(() => _ = OnObjectMarksRefreshedAsync(e))));
         }
 
         // 패널은 처음 보일 때 만들어진다(같은 자리의 스크립트 창 등 다른 탭 뒤에 있었으면 접속한 뒤). 그 전에 연 접속은 SessionOpened 를
@@ -257,6 +260,29 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         if (CurrentSession is { } s && string.Equals(s.DbKey, e.DbKey, StringComparison.Ordinal))
         {
             ListBaseTimeText = ListBaseTimeLabel(e.RefreshedAt);
+
+            // 펼쳐 둔 스키마의 표식도 새 목록에 맞춘다: 낡았으면 제공자가 뒤에서 다시 읽는다(끝나면 ObjectMarksRefreshed).
+            foreach (var owner in _marksByOwner.Keys.ToList())
+            {
+                _ = ReloadMarksAsync(s, owner);
+            }
+        }
+    }
+
+    /// <summary>제공자가 소유자 하나의 표식을 서버에서 다시 읽었다: 펼쳐 둔 스키마면 캐시에서 다시 읽어 붙인다(트리는 다시 짓지 않는다).</summary>
+    private Task OnObjectMarksRefreshedAsync(ObjectMarksRefreshed e) =>
+        CurrentSession is { } s && string.Equals(s.DbKey, e.DbKey, StringComparison.Ordinal) && _marksByOwner.ContainsKey(e.Owner)
+            ? ReloadMarksAsync(s, e.Owner)
+            : Task.CompletedTask;
+
+    private async Task ReloadMarksAsync(ISession session, string owner)
+    {
+        try
+        {
+            await LoadMarksAsync(session, owner, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
         }
     }
 

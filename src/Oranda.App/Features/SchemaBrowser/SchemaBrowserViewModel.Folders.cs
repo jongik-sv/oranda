@@ -54,9 +54,18 @@ public sealed partial class SchemaBrowserViewModel
         switch (folder.FolderKind)
         {
             case SchemaFolderKind.Columns:
-                foreach (var c in (await LoadTableAsync(table, session, ct)).Columns.OrderBy(c => c.Position))
+                var info = await LoadTableAsync(table, session, ct);
+                var keyColumns = info.Constraints.Where(k => k.Kind == ConstraintKind.PrimaryKey).SelectMany(k => k.Columns).ToHashSet(StringComparer.Ordinal);
+                foreach (var c in info.Columns.OrderBy(c => c.Position))
                 {
-                    items.Add(new SchemaNode(null, SchemaNodeKind.Column, c.Name) { Owner = table.Owner, Detail = DescribeColumn(c), Parent = folder });
+                    items.Add(new SchemaNode(null, SchemaNodeKind.Column, c.Name)
+                    {
+                        Owner = table.Owner,
+                        Detail = DescribeColumn(c),
+                        Parent = folder,
+                        Column = c,
+                        IsKeyColumn = keyColumns.Contains(c.Name),
+                    });
                 }
 
                 break;
@@ -69,6 +78,7 @@ public sealed partial class SchemaBrowserViewModel
                         Detail = (i.IsUnique ? "UNIQUE " : string.Empty) + "(" + string.Join(", ", i.Columns) + ")",
                         Parent = folder,
                         OpenRef = target,
+                        IndexDef = i,
                     });
                 }
 
@@ -82,6 +92,7 @@ public sealed partial class SchemaBrowserViewModel
                         Detail = DescribeConstraint(c),
                         Parent = folder,
                         OpenRef = target,
+                        ConstraintDef = c,
                     });
                 }
 
@@ -101,8 +112,13 @@ public sealed partial class SchemaBrowserViewModel
 
                 foreach (var trg in triggers.Items)
                 {
-                    items.Add(MakeObject(new DbObjectRef(trg.Owner, trg.Name, "TRIGGER"), folder,
-                        detail: string.Equals(trg.Status, "ENABLED", StringComparison.OrdinalIgnoreCase) ? null : "DISABLED"));
+                    var enabled = string.Equals(trg.Status, "ENABLED", StringComparison.OrdinalIgnoreCase);
+                    var node = MakeObject(new DbObjectRef(trg.Owner, trg.Name, "TRIGGER"), folder, detail: enabled ? null : "DISABLED");
+
+                    // 켜짐/꺼짐은 폴더를 펼칠 때 읽은 상태가 더 새롭다: 목록 표식의 시점·단위는 두고 상태만 바꾼다.
+                    var kind = node.Mark?.SubKind;
+                    node.Mark = enabled ? (kind is null ? null : new ObjectMark(kind, null)) : new ObjectMark(kind, "DISABLED");
+                    items.Add(node);
                 }
 
                 break;
