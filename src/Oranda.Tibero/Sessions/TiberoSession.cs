@@ -30,6 +30,8 @@ internal sealed class TiberoSession : ISession
     private readonly IEventBus _events;
     private readonly Action<Guid>? _onDisposed;
     private readonly Func<ValueTask> _closeConnection;
+    private readonly Lazy<Task> _closeOnce;
+    private bool _stalled;
     private readonly Timer? _keepAlive;
     private int _state = (int)SessionState.Idle;
     private int _endInFlight;
@@ -52,6 +54,7 @@ internal sealed class TiberoSession : ISession
         Driver = driver;
         _onDisposed = onDisposed;
         _closeConnection = closeConnection ?? (() => CloseAsync(connection, transaction));
+        _closeOnce = new Lazy<Task>(() => _closeConnection().AsTask());
         Id = id;
         Profile = profile;
         Server = server;
@@ -155,6 +158,32 @@ internal sealed class TiberoSession : ISession
     }
 
     /// <summary>
+    /// 결과를 받는 도중 행 진행이 멈춰(<see cref="ServerStallException"/>, 서버 응답 없음) 기다림을 그만뒀다: 연결은 끊긴 것으로 보고 세션을 Broken 으로 돌린 뒤
+    /// (다음 사용 때 다시 접속) 연결 닫기를 백그라운드에서 시작한다 — 닫으면 멈춘 수신이 깨어 일하던 스레드가 끝날 수 있다. 기다리지 않는다.
+    /// 명령 잠금은 멈춘 일이 쥐고 있으므로 닫기는 잠금 없이 닫는다(<see cref="CloseAsync"/> 의 「잠금을 못 잡으면 트랜잭션은 건드리지 않고 닫음」, 서버가 세션 끝에 롤백).
+    /// 나중에 세션을 닫아도(<see cref="DisposeAsync"/>) 같은 닫기 하나를 기다린다(두 번 닫지 않는다).
+    /// </summary>
+    internal void ReportStalled(ServerStallException stall)
+    {
+        ArgumentNullException.ThrowIfNull(stall);
+        Volatile.Write(ref _stalled, true);
+        MarkBroken(new DbError("ORANDA-STALL", stall.Message) { Dbms = Dbms.Tibero, Kind = DbErrorKind.Disconnected });
+        _ = TimedClose.RunAsync(CloseConnectionOnce, "응답 없는 Tibero 세션 " + Id.ToString("N")[..8]).ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// 행 진행이 멈춰 끊긴 것으로 본 세션인가(<see cref="ReportStalled"/>). 멈춘 일이 명령 잠금을 쥐고 있을 수 있으므로 새 질의는 잠금을 기다리지 않고 바로 실패한다.
+    /// </summary>
+    internal bool IsStalled => Volatile.Read(ref _stalled);
+
+    /// <summary>연결 닫기는 한 번만 시작한다: 멈춤 처리(<see cref="ReportStalled"/>)와 세션 닫기가 같은 닫기를 기다린다.</summary>
+    private ValueTask CloseConnectionOnce() => new(_closeOnce.Value);
+
+    /// <summary>
     /// 커밋(설계 7.3·7.4·13.5): 한 번의 명령 잠금 안에서 열린 묶음 저장(<see cref="TiberoRollbackHooks.BeforeEndAsync"/>) → <c>COMMIT</c> →
     /// 미커밋 표시 내림(잠금을 쥔 채 — 놓은 뒤에 지우면 그 사이 다른 DML 이 켠 플래그까지 지워진다) → 커밋 시점 읽기·원장 끝 처리(<see cref="TransactionEndSource.SessionApi"/>).
     /// COMMIT 이 실패하면 트랜잭션이 남았는지 확인해(<c>LOCAL_TRANSACTION_ID</c>) 끝났으면 「모름」, 남았으면 알리지 않는다. 끊겨서 확인할 수 없으면 「모름」.
@@ -186,7 +215,7 @@ internal sealed class TiberoSession : ISession
         _onDisposed?.Invoke(Id);
         _events.Publish(new SessionClosed(Id));
         // 명령 잠금은 정리하지 않는다: 닫는 중에도 진행 중인 작업·결과 집합 정리가 놓을 수 있어야 한다.
-        await TimedClose.RunAsync(_closeConnection, "Tibero 세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
+        await TimedClose.RunAsync(CloseConnectionOnce, "Tibero 세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
     }
 
     private async Task EndTransactionAsync(string sql, TransactionEndKind kind, CancellationToken ct)

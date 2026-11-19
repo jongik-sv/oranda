@@ -183,6 +183,31 @@ public class SchemaBrowserTests
         Assert.All(tables.Children, c => Assert.Null(c.Comment));
     }
 
+    [Fact]
+    public async Task A_server_stall_shows_the_no_response_notice_in_the_tree_and_the_status_line()
+    {
+        var h = new Harness();
+        h.Meta.ObjectsFailure = new ServerStallException(TimeSpan.FromSeconds(30));
+        await h.Vm.SetSessionAsync(h.Session);
+        var scott = h.Vm.Roots.Single(r => r.Title == "SCOTT");
+        await h.Vm.ExpandAsync(scott);
+
+        var message = Assert.Single(scott.Children);
+        Assert.Equal(SchemaNodeKind.Message, message.Kind);
+        Assert.Equal(SchemaBrowserViewModel.StallText, message.Title);
+        Assert.Equal(SchemaBrowserViewModel.StallText, h.Vm.StatusText);
+        Assert.True(Oranda.App.Features.Localization.LiteralTranslator.Table.ContainsKey(SchemaBrowserViewModel.StallText)); // 영어 화면의 짝
+
+        // 다른 실패는 예전처럼 「읽지 못했다: 」 + 예외 글.
+        Assert.Equal("읽지 못했다: x", SchemaBrowserViewModel.LoadFailureText("읽지 못했다: ", new InvalidOperationException("x")));
+
+        // 새로 고침으로 다시 읽는다(다시 접속한 뒤).
+        h.Meta.ObjectsFailure = null;
+        await h.Vm.LoadAsync();
+        await h.Vm.ExpandAsync(h.Vm.Roots.Single(r => r.Title == "SCOTT"));
+        Assert.DoesNotContain(h.Vm.Roots.Single(r => r.Title == "SCOTT").Children, c => c.Kind == SchemaNodeKind.Message);
+    }
+
     [Theory]
     [InlineData(null, null)]
     [InlineData("  ", null)]
@@ -717,6 +742,9 @@ public class SchemaBrowserTests
         /// <summary>닫아 두면 스키마 목록 조회가 열릴 때까지 끝나지 않는다(취소도 듣지 않는다 — 늦게 끝나는 실제 조회처럼).</summary>
         public TaskCompletionSource? SchemasGate { get; set; }
 
+        /// <summary>정하면 객체 목록 조회가 이 예외로 실패한다.</summary>
+        public Exception? ObjectsFailure { get; set; }
+
         /// <summary>닫아 두면 객체 목록 조회가 열릴 때까지 끝나지 않는다.</summary>
         public TaskCompletionSource? ObjectsGate { get; set; }
 
@@ -740,6 +768,11 @@ public class SchemaBrowserTests
             if (ObjectsGate is { } gate)
             {
                 await gate.Task;
+            }
+
+            if (ObjectsFailure is { } failure)
+            {
+                throw failure;
             }
 
             var like = q.NamePattern is null ? null : LikeToRegex(q.NamePattern);

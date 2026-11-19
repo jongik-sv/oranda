@@ -131,7 +131,7 @@ public sealed partial class SchemaBrowserViewModel
         }
         catch (Exception ex)
         {
-            StatusText = "스키마 목록을 읽지 못했다: " + ex.Message;
+            StatusText = LoadFailureText("스키마 목록을 읽지 못했다: ", ex);
         }
         finally
         {
@@ -403,7 +403,11 @@ public sealed partial class SchemaBrowserViewModel
         catch (Exception ex) when (gen == _generation)
         {
             node.Children.Clear();
-            node.Children.Add(new SchemaNode(null, SchemaNodeKind.Message, "읽지 못했다: " + ex.Message));
+            node.Children.Add(new SchemaNode(null, SchemaNodeKind.Message, LoadFailureText("읽지 못했다: ", ex)));
+            if (ex is ServerStallException)
+            {
+                StatusText = LoadFailureText(string.Empty, ex); // 펼친 노드 밖에서도 보이게 안내줄에도 둔다
+            }
         }
         catch (Exception)
         {
@@ -552,6 +556,18 @@ public sealed partial class SchemaBrowserViewModel
             + (javaCut ? $" · Java 객체는 처음 {JavaListLimit}개만" : "");
     }
 
+    /// <summary>
+    /// 결과를 받는 도중 서버 응답이 없어(<see cref="ServerStallException"/>, 행 진행 감시) 목록을 읽지 못했을 때 보이는 글. 세션은 끊긴 것으로 돌아가 있으므로
+    /// 다시 접속(「세션 새로 고침」)한 뒤 패널의 새로 고침이나 노드를 다시 펼쳐 다시 읽는다. 영어 화면은 literals-en.json 의 짝.
+    /// </summary>
+    internal const string StallText = "서버 응답이 없어 목록을 읽지 못했습니다. 연결이 끊긴 것으로 보았으니 「세션 새로 고침」으로 다시 접속한 뒤 새로 고침하세요.";
+
+    /// <summary>읽기 실패 글: 서버 응답 없음은 정해진 안내(<see cref="StallText"/>, 한/영), 그 밖은 <paramref name="prefix"/> + 예외 글.</summary>
+    internal static string LoadFailureText(string prefix, Exception ex) =>
+        ex is ServerStallException
+            ? LiteralTranslator.IsEnglish && LiteralTranslator.Table.TryGetValue(StallText, out var english) ? english : StallText
+            : prefix + ex.Message;
+
     /// <summary>스키마 하나에서 보이는 Java 객체 최대 수(SYS 쪽 Java 클래스는 수만 개다). 넘으면 상태 줄에 알린다.</summary>
     public const int JavaListLimit = 5000;
 
@@ -570,7 +586,7 @@ public sealed partial class SchemaBrowserViewModel
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not ServerStallException) // 서버 응답 없음은 삼키지 않는다: 세션이 끊겨 뒤 읽기도 못 한다
         {
             return ([], false);
         }
@@ -587,7 +603,7 @@ public sealed partial class SchemaBrowserViewModel
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not ServerStallException) // 서버 응답 없음은 삼키지 않는다: 세션이 끊겨 뒤 읽기도 못 한다
         {
             return new Dictionary<string, string>(StringComparer.Ordinal);
         }

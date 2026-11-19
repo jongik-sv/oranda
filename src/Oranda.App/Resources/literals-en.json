@@ -2200,5 +2200,6 @@
   "실행하기 전에 잠금·공간·시간·무효화·되돌리기를 AI 로 점검합니다(실행을 막지 않습니다)": "Checks locks, space, time, invalidation and undo with AI before running (does not block running)",
   "검토할 문장이 없습니다.": "There are no statements to review.",
   "AI 튜닝 — 커서 위치 문장": "AI Tuning — Statement at Cursor",
-  "AI 튜닝 — 펼친 SQL": "AI Tuning — Expanded SQL"
+  "AI 튜닝 — 펼친 SQL": "AI Tuning — Expanded SQL",
+  "서버 응답이 없어 목록을 읽지 못했습니다. 연결이 끊긴 것으로 보았으니 「세션 새로 고침」으로 다시 접속한 뒤 새로 고침하세요.": "The server stopped responding, so the list could not be read. The connection was treated as lost: reconnect with \"Refresh session\" and then refresh."
 }

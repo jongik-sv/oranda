@@ -615,6 +615,61 @@ public sealed class CachedMetadataProviderTests : IAsyncDisposable
         await entered.Task;
     }
 
+    [Fact]
+    public async Task A_server_stall_while_reading_the_list_is_logged_as_a_refresh_failure_and_thrown_to_the_caller()
+    {
+        _session.DbKey = "STALL/" + Guid.NewGuid().ToString("N") + "/U"; // 다른 시험의 로그와 섞이지 않게
+        var provider = NewProvider(Obj("HR", "EMP"));
+        provider.FetchHook = _ => Task.FromException(new ServerStallException(TimeSpan.FromSeconds(30)));
+        using var listener = new LineListener();
+        System.Diagnostics.Trace.Listeners.Add(listener);
+        try
+        {
+            await Assert.ThrowsAsync<ServerStallException>(() => provider.ListObjectsAsync(_session, new ObjectQuery { Owner = "HR" }, default));
+        }
+        finally
+        {
+            System.Diagnostics.Trace.Listeners.Remove(listener);
+        }
+
+        var lines = listener.Lines.Where(l => l.Contains(_session.DbKey, StringComparison.Ordinal)).ToList();
+        Assert.Contains(lines, l => l.Contains("갱신 시작", StringComparison.Ordinal));
+        Assert.Contains(lines, l => l.Contains("갱신 실패", StringComparison.Ordinal) && l.Contains(nameof(ServerStallException), StringComparison.Ordinal));
+    }
+
+    /// <summary>Trace 이벤트를 글 한 줄로 모은다(병렬 시험이 함께 쓰므로 잠근다).</summary>
+    private sealed class LineListener : System.Diagnostics.TraceListener
+    {
+        private readonly List<string> _lines = [];
+
+        public IReadOnlyList<string> Lines
+        {
+            get
+            {
+                lock (_lines)
+                {
+                    return [.. _lines];
+                }
+            }
+        }
+
+        public override void Write(string? message)
+        {
+        }
+
+        public override void WriteLine(string? message)
+        {
+        }
+
+        public override void TraceEvent(System.Diagnostics.TraceEventCache? eventCache, string source, System.Diagnostics.TraceEventType eventType, int id, string? format, params object?[]? args)
+        {
+            lock (_lines)
+            {
+                _lines.Add(args is null || format is null ? format ?? string.Empty : string.Format(System.Globalization.CultureInfo.InvariantCulture, format, args));
+            }
+        }
+    }
+
     private FakeProvider NewProvider(params MetaObject[] server) => new(_cache, _bus) { Server = [.. server] };
 
     private Task FillCacheAsync(params MetaObject[] objects)
