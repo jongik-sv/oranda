@@ -160,6 +160,73 @@ public sealed class SqliteMetadataCache : IMetadataCache, IDisposable
         }, ct);
     }
 
+    /// <summary>표식은 <c>meta_mark</c>(0009)에 둔다: 그 소유자 줄을 모두 지우고 목록(<c>meta_object</c>)에 있는 객체 줄만 다시 넣는다.</summary>
+    public async Task SetMarksAsync(string dbKey, string owner, IReadOnlyList<MetaObject> marked, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(marked);
+        await RunAsync<object?>(async c =>
+        {
+            await using var tx = (SqliteTransaction)await c.BeginTransactionAsync(ct);
+            await using (var clear = c.CreateCommand())
+            {
+                clear.Transaction = tx;
+                clear.CommandText = "DELETE FROM meta_mark WHERE db_key = $k AND owner = $o";
+                clear.Parameters.AddWithValue("$k", dbKey);
+                clear.Parameters.AddWithValue("$o", owner);
+                await clear.ExecuteNonQueryAsync(ct);
+            }
+
+            var rows = marked.Where(o => string.Equals(o.Owner, owner, StringComparison.Ordinal) && (o.SubKind is not null || o.StateMark is not null)).ToList();
+            if (rows.Count > 0)
+            {
+                await using var cmd = c.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    INSERT OR REPLACE INTO meta_mark(db_key, owner, name, type, sub_kind, state_mark)
+                    SELECT $k, $o, $n, $t, $sk, $sm
+                     WHERE EXISTS (SELECT 1 FROM meta_object WHERE db_key = $k AND owner = $o AND name = $n AND type = $t)
+                    """;
+                var pk = cmd.Parameters.Add("$k", SqliteType.Text);
+                var po = cmd.Parameters.Add("$o", SqliteType.Text);
+                var pn = cmd.Parameters.Add("$n", SqliteType.Text);
+                var pt = cmd.Parameters.Add("$t", SqliteType.Text);
+                var psk = cmd.Parameters.Add("$sk", SqliteType.Text);
+                var psm = cmd.Parameters.Add("$sm", SqliteType.Text);
+                foreach (var o in rows)
+                {
+                    pk.Value = dbKey;
+                    po.Value = o.Owner;
+                    pn.Value = o.Name;
+                    pt.Value = o.Type;
+                    psk.Value = (object?)o.SubKind ?? DBNull.Value;
+                    psm.Value = (object?)o.StateMark ?? DBNull.Value;
+                    await cmd.ExecuteNonQueryAsync(ct);
+                }
+            }
+
+            await tx.CommitAsync(ct);
+            return null;
+        }, ct);
+    }
+
+    /// <summary>표식이 있는 객체만(<c>meta_object</c> ⋈ <c>meta_mark</c>). 다른 읽기(<see cref="GetObjectsAsync"/> 등)는 표식을 채우지 않는다(자동 완성 경로를 무겁게 하지 않게).</summary>
+    public async Task<IReadOnlyList<MetaObject>> GetMarkedAsync(string dbKey, string owner, CancellationToken ct)
+    {
+        return await RunAsync(async c =>
+        {
+            await using var cmd = c.CreateCommand();
+            cmd.CommandText = """
+                SELECT o.db_key, o.owner, o.name, o.type, o.status, o.last_ddl_time, o.payload_json, o.fetched_at, m.sub_kind, m.state_mark
+                  FROM meta_object o
+                  JOIN meta_mark m ON m.db_key = o.db_key AND m.owner = o.owner AND m.name = o.name AND m.type = o.type
+                 WHERE o.db_key = $k AND o.owner = $o
+                """;
+            cmd.Parameters.AddWithValue("$k", dbKey);
+            cmd.Parameters.AddWithValue("$o", owner);
+            return await ReadObjectsAsync(cmd, ct);
+        }, ct);
+    }
+
     /// <summary>
     /// 빈 목록 = 그 dbKey 의 객체 전부. 객체 목록이 더는 완전하다고 볼 수 없으므로 <c>refreshed_at</c> 도 비운다
     /// (다음 목록 조회가 서버를 다시 읽는다). <see cref="DbObjectRef.ObjectType"/> 이 비어 있으면 그 이름의 모든 유형.
@@ -173,6 +240,7 @@ public sealed class SqliteMetadataCache : IMetadataCache, IDisposable
             if (objects.Count == 0)
             {
                 await ExecAsync(c, tx, "DELETE FROM meta_object WHERE db_key = $k", dbKey, ct);
+                await ExecAsync(c, tx, "DELETE FROM meta_mark WHERE db_key = $k", dbKey, ct);
             }
             else
             {
@@ -180,7 +248,8 @@ public sealed class SqliteMetadataCache : IMetadataCache, IDisposable
                 {
                     await using var cmd = c.CreateCommand();
                     cmd.Transaction = tx;
-                    cmd.CommandText = "DELETE FROM meta_object WHERE db_key = $k AND owner = $o AND name = $n AND ($t = '' OR type = $t)";
+                    cmd.CommandText = "DELETE FROM meta_object WHERE db_key = $k AND owner = $o AND name = $n AND ($t = '' OR type = $t);"
+                        + "DELETE FROM meta_mark WHERE db_key = $k AND owner = $o AND name = $n AND ($t = '' OR type = $t)";
                     cmd.Parameters.AddWithValue("$k", dbKey);
                     cmd.Parameters.AddWithValue("$o", o.Owner);
                     cmd.Parameters.AddWithValue("$n", o.Name);
@@ -257,6 +326,8 @@ public sealed class SqliteMetadataCache : IMetadataCache, IDisposable
                 LastDdlTime = OrandaDatabase.FromText(r.IsDBNull(5) ? null : r.GetString(5)),
                 PayloadJson = r.IsDBNull(6) ? null : r.GetString(6),
                 FetchedAt = OrandaDatabase.FromText(r.GetString(7)) ?? default,
+                SubKind = r.FieldCount > 8 && !r.IsDBNull(8) ? r.GetString(8) : null,
+                StateMark = r.FieldCount > 9 && !r.IsDBNull(9) ? r.GetString(9) : null,
             });
         }
 

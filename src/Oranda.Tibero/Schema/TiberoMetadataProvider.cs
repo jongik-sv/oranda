@@ -209,6 +209,18 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
     }
 
     /// <summary>
+    /// 스키마 브라우저 표식 보조 질의(목록을 보인 뒤 소유자마다, <see cref="CachedMetadataProvider.ListObjectMarksAsync"/>).
+    /// 작업(JOB)은 Tibero 객체 목록(*_objects)에 없어 읽지 않는다(6.2.15 실측).
+    /// </summary>
+    internal static readonly IReadOnlyList<string> MarkIds =
+        [ObjectMarkRows.Tables, ObjectMarkRows.Triggers, ObjectMarkRows.Synonyms, ObjectMarkRows.MViews, ObjectMarkRows.Types];
+
+    protected override IReadOnlyList<string> MarkQueryIds => MarkIds;
+
+    protected override Task<IReadOnlyList<object?[]>> RunMarkQueryAsync(ISession s, string id, string owner, CancellationToken ct)
+        => RunAsync(s, id, new Dictionary<string, object?>(StringComparer.Ordinal) { ["owner"] = owner }, ct);
+
+    /// <summary>
     /// 세션이 닫혔거나 끊겼거나 바쁘다(<see cref="SessionBusyException"/> 는 <see cref="InvalidOperationException"/>).
     /// 드라이버 오류는 드라이버 형식을 참조하지 않고 <see cref="TiberoErrorClassifier"/> 가 알아보는 서버 오류로 가른다.
     /// 서버 응답 없음(<see cref="ServerStallException"/>)도 같다: 세션은 이미 끊긴 것으로 돌아갔고, 남은 일은 다시 접속한 세션이 이어 받는다.

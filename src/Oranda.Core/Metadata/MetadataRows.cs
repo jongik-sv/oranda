@@ -48,6 +48,7 @@ public static partial class MetadataRows
     /// → 제약 목록. NOT NULL 검사 제약(<see cref="IsNotNullCheck"/>)은 열 정보에 있으므로 뺀다. SQL 이 이미 거르는 판도 있고,
     /// Oracle 11g 는 조건 열이 LONG 이라 SQL 에서 거르지 못해 여기서 뺀다(meta/constraints.11.sql).
     /// </summary>
+    /// <remarks>[12] validated(Oracle·Tibero 같은 자리, 스키마 브라우저 NOVALIDATE 표식). 열이 없는 예전 행 모양이면 검사함으로 본다.</remarks>
     public static List<ConstraintInfo> BuildConstraints(IReadOnlyList<object?[]> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
@@ -76,6 +77,7 @@ public static partial class MetadataRows
                     ? new DbObjectRef(Str(first[4])!, Str(first[5])!, "TABLE")
                     : null,
                 ReferencedConstraint = kind == ConstraintKind.ForeignKey && first.Length > 8 ? Str(first[8]) : null,
+                IsValidated = first.Length <= ConsValidated || !string.Equals(Str(first[ConsValidated]), "NOT VALIDATED", StringComparison.Ordinal),
             });
         }
 
@@ -102,6 +104,9 @@ public static partial class MetadataRows
         {
             IndexType = Str(g.First()[2]),
         })];
+
+    /// <summary><c>meta.constraints</c> 의 validated 열 자리(Oracle·Tibero 같음).</summary>
+    private const int ConsValidated = 12;
 
     private static string? Str(object? v) => CatalogValues.Str(v);
 

@@ -10,7 +10,8 @@ namespace Oranda.Tibero.Schema;
 /// <item><c>meta.columns</c> [14] char_used(B/C) → <see cref="ColumnInfo.CharSemantics"/>. Tibero 는 n CHAR 열도 DATA_LENGTH = n 이라 이 열로만 가른다.</item>
 /// <item><c>meta.constraints</c> [9] delete_rule → <see cref="ConstraintInfo.DeleteRule"/>, [10] r_column_name → <see cref="ConstraintInfo.ReferencedColumns"/>.</item>
 /// <item><c>meta.indexes</c> [5] descend → <see cref="IndexInfo.Descending"/>(DESC 가 하나라도 있을 때만), [6] column_expression → <see cref="IndexInfo.Expressions"/>(식이 있을 때만),
-/// [7] tablespace_name → <see cref="IndexInfo.Tablespace"/>, [8] constraint_name → <see cref="IndexInfo.ConstraintName"/>.</item>
+/// [7] tablespace_name → <see cref="IndexInfo.Tablespace"/>, [8] constraint_name → <see cref="IndexInfo.ConstraintName"/>,
+/// [9] status → <see cref="IndexInfo.IsUnusable"/>, [10] partitioned → <see cref="IndexInfo.IsPartitioned"/>(스키마 브라우저 표식).</item>
 /// <item><c>meta.table_kind</c>(0행 = 뷰·모름) → <see cref="TableInfo.Kind"/>·<see cref="TableInfo.IsPartitioned"/>·<see cref="TableInfo.Tablespace"/>·<see cref="TableInfo.Storage"/>(T13c). 클러스터는 판정하지 못한다.</item>
 /// <item><c>meta.table_lobs</c>(T13c, LOB 열이 있을 때만) → <see cref="TableInfo.Lobs"/>. SECUREFILE 열이 없어 저장 방식은 null(모름).</item>
 /// </list>
@@ -25,6 +26,8 @@ internal sealed partial class TiberoMetadataProvider
     private const int IdxExpression = 6;
     private const int IdxTablespace = 7;
     private const int IdxConstraint = 8;
+    private const int IdxStatus = 9;
+    private const int IdxPartitioned = 10;
     private const int KindDegree = 10;
 
     /// <summary>
@@ -74,6 +77,8 @@ internal sealed partial class TiberoMetadataProvider
                 Expressions = expressions.Any(e => e is not null) ? expressions : [],
                 Tablespace = At(rows[0], IdxTablespace),
                 ConstraintName = At(rows[0], IdxConstraint),
+                IsUnusable = string.Equals(At(rows[0], IdxStatus), "UNUSABLE", StringComparison.Ordinal),
+                IsPartitioned = string.Equals(At(rows[0], IdxPartitioned), "YES", StringComparison.Ordinal),
             };
         }).ToList();
 

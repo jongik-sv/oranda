@@ -33,4 +33,14 @@ public sealed record MetaObject
     public string? PayloadJson { get; init; }
 
     public DateTimeOffset FetchedAt { get; init; }
+
+    /// <summary>
+    /// 세부 종류 표식(<see cref="ObjectMark.SubKind"/>, 예 <c>GTT_SESSION PART:RANGE</c>). 목록 질의(<c>meta.objects</c>)는 채우지 않고
+    /// 목록 갱신 뒤 보조 질의(<c>meta.marks_*</c>)가 <see cref="Storage.IMetadataCache.SetMarksAsync"/> 로 채운다. 캐시는 <see cref="Storage.IMetadataCache.GetMarkedAsync"/> 에서만
+    /// 채워 돌려준다(다른 읽기는 null). null = 표식 없음·모름(예전 캐시).
+    /// </summary>
+    public string? SubKind { get; init; }
+
+    /// <summary>상태 표식(<see cref="ObjectMark.State"/>, 예 <c>DISABLED</c>·<c>BROKEN</c>). 채우는 방법은 <see cref="SubKind"/> 와 같다.</summary>
+    public string? StateMark { get; init; }
 }

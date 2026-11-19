@@ -4,14 +4,21 @@
 -- 저장 속성(테이블 편집기 「저장」 페이지 18.2, T13c): pct_free, ini_trans, compression(ENABLED/DISABLED), compress_for(BASIC·ADVANCED·OLTP·…), logging(YES/NO),
 -- degree(공백 붙은 글, DEFAULT). 파티션 테이블은 degree 말고는 테이블 줄에 없어 NULL(「알 수 없음」, 파티션 기본값 all_part_tables.def_* 는 읽지 않음).
 -- 익스텐트는 읽지 않는다(기존 테이블에 쓰지 않음 TE-39, 지연 세그먼트면 NULL).
+-- 끝 열 object_table(YES/NO): 객체 테이블(CREATE TABLE t OF 타입)은 all_tables 에 없고 all_object_tables 에만 있어 UNION ALL 로 같은 열을 읽는다(TableKind.ObjectTable).
 -- id: meta.table_props
 -- min-version: 11
--- requires: dba_tables, all_tables, dba_external_tables, all_external_tables
+-- requires: dba_tables, all_tables, dba_external_tables, all_external_tables, dba_object_tables, all_object_tables
 -- license: none
 SELECT t.tablespace_name, t.temporary, t.duration, t.iot_type, t.partitioned, t.cluster_name,
        CASE WHEN EXISTS (SELECT 1 FROM @PFX@_external_tables e WHERE e.owner = t.owner AND e.table_name = t.table_name)
             THEN 'YES' ELSE 'NO' END AS external,
-       t.pct_free, t.ini_trans, t.compression, t.compress_for, t.logging, t.degree
+       t.pct_free, t.ini_trans, t.compression, t.compress_for, t.logging, t.degree, 'NO' AS object_table
   FROM @PFX@_tables t
  WHERE t.owner = :owner
    AND t.table_name = :name
+UNION ALL
+SELECT o.tablespace_name, o.temporary, o.duration, o.iot_type, o.partitioned, o.cluster_name, 'NO' AS external,
+       o.pct_free, o.ini_trans, o.compression, o.compress_for, o.logging, o.degree, 'YES' AS object_table
+  FROM @PFX@_object_tables o
+ WHERE o.owner = :owner
+   AND o.table_name = :name

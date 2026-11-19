@@ -448,7 +448,7 @@ public static partial class TableEditCheckPlanner
                     }
 
                     break;
-                case TableKind.External or TableKind.Cluster:
+                case TableKind.External or TableKind.Cluster or TableKind.ObjectTable:
                     Findings.Add(new CheckFinding(CheckSeverity.Block, CheckCode.Unsupported, TableDraft.TableRowKey) { Subject = edited.Name, Detail = SpecialTableReasonKey });
                     break;
             }

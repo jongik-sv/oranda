@@ -510,6 +510,7 @@ public sealed partial class TableEditSession : ObservableObject
         TableKind.External => TableEditText.T("외부", "external"),
         TableKind.Iot => TableEditText.T("인덱스 구성(IOT)", "index-organized"),
         TableKind.Cluster => TableEditText.T("클러스터", "cluster"),
+        TableKind.ObjectTable => TableEditText.T("객체", "object"),
         _ => TableEditText.T("일반", "heap"),
     };
 

@@ -693,6 +693,24 @@ public sealed class Oracle11gTests : IAsyncLifetime
             var comments = await provider.ListTableCommentsAsync(s, _db.Owner, default);
             Assert.Equal("부서 테이블", comments[dept]);
             Assert.False(comments.ContainsKey(emp));
+
+            // 스키마 브라우저 표식 보조 질의(meta.marks_*)가 11g 사전(dba_/all_)에서도 돈다. 일반 테이블은 표식이 없고 트리거는 시점·단위를 가진다.
+            foreach (var id in OracleMetadataProvider.MarkIds)
+            {
+                var rows = await OracleMetadataProvider.QueryAsync(s, id, c => c.Parameters.Add("owner", _db.Owner), default);
+                var marks = ObjectMarkRows.Read(id, _db.Owner, rows);
+                if (id == ObjectMarkRows.Triggers)
+                {
+                    Assert.Equal(new ObjectMark("BEFORE ROW", null), marks.Single(m => m.Ref.Name == dept + "_T").Mark);
+                }
+                else if (id == ObjectMarkRows.Tables)
+                {
+                    Assert.DoesNotContain(marks, m => m.Ref.Name == dept || m.Ref.Name == emp);
+                }
+            }
+
+            Assert.All(deptInfo.Indexes, i => Assert.False(i.IsUnusable)); // 끝 열(status·validated)이 11g 에서 읽힌다
+            Assert.All(deptInfo.Constraints, c => Assert.True(c.IsValidated));
             Assert.False(deptInfo.Columns.Single(c => c.Name == "NAME").IsNullable);
             Assert.Equal("0", deptInfo.Columns.Single(c => c.Name == "BUDGET").DefaultValue?.Trim());
             Assert.Equal([dept + "_CK", dept + "_PK"], deptInfo.Constraints.Select(c => c.Name).Order(StringComparer.Ordinal));

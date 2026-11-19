@@ -42,6 +42,14 @@ public interface IMetadataProvider
         => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>(StringComparer.Ordinal));
 
     /// <summary>
+    /// 소유자 하나의 세부 종류·상태 표식(<see cref="ObjectMark"/>, 표식이 있는 객체만). 캐시에 있는 것으로 바로 답하고 서버를 기다리지 않는다:
+    /// 캐시의 표식이 지금 목록보다 낡았으면 뒤에서 보조 질의(<c>meta.marks_*</c>)를 시작하고, 끝나면 <see cref="ObjectMarksRefreshed"/> 를 낸다.
+    /// 보조 질의가 실패해도(권한·시간 초과) 목록·화면을 막지 않는다(그 표식만 빈다). 기본 구현은 빈 사전(표식 없음).
+    /// </summary>
+    Task<IReadOnlyDictionary<DbObjectRef, ObjectMark>> ListObjectMarksAsync(ISession s, string owner, CancellationToken ct)
+        => Task.FromResult<IReadOnlyDictionary<DbObjectRef, ObjectMark>>(new Dictionary<DbObjectRef, ObjectMark>());
+
+    /// <summary>
     /// 프로시저·함수·패키지의 멤버와 인자(all_arguments). 단독 프로시저면 원소 1개. TSK-04-04.
     /// </summary>
     Task<IReadOnlyList<ProcedureInfo>> GetProceduresAsync(ISession s, DbObjectRef obj, CancellationToken ct);
@@ -174,6 +182,9 @@ public enum TableKind
 
     /// <summary>클러스터 테이블(<c>CLUSTER_NAME</c> 이 있음).</summary>
     Cluster,
+
+    /// <summary>객체 테이블(<c>ALL_OBJECT_TABLES</c>, <c>CREATE TABLE t OF 타입</c>). 외부·클러스터처럼 편집기는 주석·기본값만 고친다. Tibero 는 판정하지 못한다(뷰 없음).</summary>
+    ObjectTable,
 }
 
 /// <summary>문자 열 길이 기준(<c>CHAR_USED</c>: B = 바이트, C = 글자). TE-29. 문장 표기는 <c>n BYTE</c>·<c>n CHAR</c>.</summary>
@@ -272,6 +283,9 @@ public sealed record ConstraintInfo(string Name, ConstraintKind Kind, IReadOnlyL
 
     public bool IsEnabled { get; init; } = true;
 
+    /// <summary>기존 행을 검사한 제약인가(<c>VALIDATED</c>). false = <c>NOVALIDATE</c>(<c>NOT VALIDATED</c>). 모르면(예전 캐시) true.</summary>
+    public bool IsValidated { get; init; } = true;
+
     /// <summary>외래키 삭제 규칙(TE-29). 외래키가 아니거나 모르면 <see cref="DeleteRule.NoAction"/>.</summary>
     public DeleteRule DeleteRule { get; init; }
 
@@ -297,6 +311,12 @@ public sealed record IndexInfo(string Name, bool IsUnique, IReadOnlyList<string>
     /// 빈 목록 = 식 없음(설계 18.6).
     /// </summary>
     public IReadOnlyList<string?> Expressions { get; init; } = [];
+
+    /// <summary>파티션 인덱스인가(<c>PARTITIONED = 'YES'</c>). 모르면(예전 캐시) false.</summary>
+    public bool IsPartitioned { get; init; }
+
+    /// <summary>쓸 수 없는 인덱스인가(<c>STATUS = 'UNUSABLE'</c>). 파티션 인덱스는 파티션별 상태라 여기서는 false(모름). 모르면 false.</summary>
+    public bool IsUnusable { get; init; }
 }
 
 /// <summary>DBMS_METADATA 변환 옵션(SCH DDL 보기).</summary>

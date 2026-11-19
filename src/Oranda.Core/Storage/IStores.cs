@@ -120,6 +120,17 @@ public interface IMetadataCache
     Task PruneAsync(MetadataCacheSettings settings, CancellationToken ct);
 
     /// <summary>
+    /// 소유자 <paramref name="owner"/> 의 표식(<see cref="MetaObject.SubKind"/>·<see cref="MetaObject.StateMark"/>)을 바꾼다: 그 소유자 모든 행의 표식을 비우고
+    /// <paramref name="marked"/> 의 (소유자, 이름, 유형) 행에만 다시 쓴다. 캐시에 없는 객체는 넣지 않는다(목록은 <see cref="UpsertAsync"/> 몫).
+    /// <see cref="UpsertAsync"/> 는 이미 있는 행의 표식을 바꾸지 않는다(목록 갱신이 표식을 지우지 않게). 기본 구현은 아무것도 하지 않는다(표식 없음).
+    /// </summary>
+    Task SetMarksAsync(string dbKey, string owner, IReadOnlyList<MetaObject> marked, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>소유자 <paramref name="owner"/> 의 행 중 표식이 있는 것만. 기본 구현은 <see cref="GetObjectsAsync"/> 를 거른다.</summary>
+    async Task<IReadOnlyList<MetaObject>> GetMarkedAsync(string dbKey, string owner, CancellationToken ct)
+        => [.. (await GetObjectsAsync(dbKey, owner, null, ct).ConfigureAwait(false)).Where(o => o.SubKind is not null || o.StateMark is not null)];
+
+    /// <summary>
     /// 객체 목록(<c>meta_source.refreshed_at</c>)의 최대 유효기간(설정 <see cref="MetadataCacheSettings.ObjectListMaxAgeDays"/>). 넘은 목록으로 답하면
     /// 메타데이터 제공자가 갱신 간격과 상관없이 뒤에서 전체 목록을 다시 받는다. null = 기한 없음. 기본 구현은 null.
     /// </summary>

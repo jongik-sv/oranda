@@ -33,6 +33,9 @@ internal static partial class OracleTableEditRows
     private const int IdxDescend = 5;
     private const int IdxExpression = 6;
     private const int IdxTablespace = 7;
+    private const int IdxStatus = 8;
+    private const int IdxPartitioned = 9;
+    private const int PropObjectTable = 13;
 
     /// <summary>
     /// 열 한 줄 → 열. 길이 기준은 <c>VARCHAR2</c>·<c>CHAR</c> 에만 둔다(<c>NVARCHAR2</c>·<c>NCHAR</c> 는 늘 글자 기준이라 <c>n CHAR</c> 를 쓰면 문법 오류다).
@@ -172,13 +175,17 @@ internal static partial class OracleTableEditRows
                 Expressions = expressions.Any(e => e is not null) ? expressions : [],
                 Tablespace = Str(own[0][IdxTablespace]),
                 ConstraintName = owners.GetValueOrDefault(index.Name),
+
+                // 스키마 브라우저 표식: [8] status(UNUSABLE·파티션 인덱스는 N/A) [9] partitioned. 열이 없는 예전 행 모양이면 모름(false).
+                IsUnusable = own[0].Length > IdxStatus && Str(own[0][IdxStatus]) == "UNUSABLE",
+                IsPartitioned = own[0].Length > IdxPartitioned && Str(own[0][IdxPartitioned]) == "YES",
             };
         })];
     }
 
     /// <summary>
     /// <c>meta.table_props</c> 한 줄(tablespace_name, temporary, duration, iot_type, partitioned, cluster_name, external, 저장 속성 6열)을 테이블에 붙인다. 행이 없으면(뷰) 그대로.
-    /// 종류 판정 순서: 임시 → 외부 → IOT → 클러스터 → 일반.
+    /// 종류 판정 순서: 객체 테이블([13] object_table) → 임시 → 외부 → IOT → 클러스터 → 일반.
     /// </summary>
     internal static TableInfo WithTableProps(TableInfo table, IReadOnlyList<object?[]> rows)
     {
@@ -190,7 +197,8 @@ internal static partial class OracleTableEditRows
         }
 
         var r = rows[0];
-        var kind = Str(r[1]) == "Y" ? TableKind.Temporary
+        var kind = r.Length > PropObjectTable && Str(r[PropObjectTable]) == "YES" ? TableKind.ObjectTable
+            : Str(r[1]) == "Y" ? TableKind.Temporary
             : Str(r[6]) == "YES" ? TableKind.External
             : Str(r[3]) == "IOT" ? TableKind.Iot
             : Str(r[5]) is { Length: > 0 } ? TableKind.Cluster

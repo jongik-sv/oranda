@@ -120,6 +120,73 @@ public sealed class MetadataCacheTests : IDisposable
     }
 
     [Fact]
+    public async Task Marks_round_trip_survive_list_upserts_and_are_replaced_per_owner()
+    {
+        using var cache = SqliteMetadataCache.InMemory();
+        await cache.UpsertAsync(Source(DateTimeOffset.UtcNow), [Obj("APP", "GTT", "TABLE"), Obj("APP", "HEAP", "TABLE"), Obj("APP", "TRG", "TRIGGER"), Obj("HR", "IOT", "TABLE")], default);
+
+        await cache.SetMarksAsync(Key, "APP",
+        [
+            Obj("APP", "GTT", "TABLE") with { SubKind = "GTT_SESSION PART:RANGE" },
+            Obj("APP", "TRG", "TRIGGER") with { SubKind = "BEFORE ROW", StateMark = "DISABLED" },
+            Obj("APP", "GONE", "TABLE") with { SubKind = "IOT" }, // 목록에 없는 객체는 넣지 않는다
+            Obj("HR", "IOT", "TABLE") with { SubKind = "IOT" }, // 다른 소유자 줄은 무시한다
+        ], default);
+        await cache.SetMarksAsync(Key, "HR", [Obj("HR", "IOT", "TABLE") with { SubKind = "IOT" }], default);
+
+        var marked = await cache.GetMarkedAsync(Key, "APP", default);
+        Assert.Equal(["GTT", "TRG"], marked.Select(o => o.Name).Order(StringComparer.Ordinal));
+        Assert.Equal("GTT_SESSION PART:RANGE", marked.Single(o => o.Name == "GTT").SubKind);
+        Assert.Equal("DISABLED", marked.Single(o => o.Name == "TRG").StateMark);
+        Assert.Equal(3, (await cache.GetObjectsAsync(Key, "APP", null, default)).Count);
+
+        // 목록 갱신(표식 없는 행으로 다시 넣기)은 있는 행의 표식을 지우지 않는다.
+        await cache.UpsertAsync(Source(DateTimeOffset.UtcNow), [Obj("APP", "GTT", "TABLE", status: "INVALID"), Obj("APP", "NEW", "TABLE")], default);
+        var gtt = (await cache.GetMarkedAsync(Key, "APP", default)).Single(o => o.Name == "GTT");
+        Assert.Equal(("INVALID", "GTT_SESSION PART:RANGE"), (gtt.Status, gtt.SubKind));
+        Assert.Null((await cache.GetObjectsAsync(Key, "APP", "TABLE", default)).Single(o => o.Name == "GTT").SubKind); // 목록 읽기는 표식을 채우지 않는다
+
+        // 다시 쓰면 그 소유자 표식을 모두 바꾼다(빠진 것은 비운다). 다른 소유자는 그대로.
+        await cache.SetMarksAsync(Key, "APP", [Obj("APP", "HEAP", "TABLE") with { SubKind = "CLUSTER" }], default);
+        Assert.Equal(["HEAP"], (await cache.GetMarkedAsync(Key, "APP", default)).Select(o => o.Name));
+        Assert.Equal("IOT", Assert.Single(await cache.GetMarkedAsync(Key, "HR", default)).SubKind);
+
+        // 객체를 무효화하면 표식도 지운다(다시 생긴 같은 이름 객체가 옛 표식을 물려받지 않게).
+        await cache.InvalidateAsync(Key, [new DbObjectRef("APP", "HEAP", "TABLE")], default);
+        await cache.UpsertAsync(Source(DateTimeOffset.UtcNow), [Obj("APP", "HEAP", "TABLE")], default);
+        Assert.Empty(await cache.GetMarkedAsync(Key, "APP", default));
+    }
+
+    [Fact]
+    public async Task Old_cache_rows_read_without_marks_after_migration_and_take_them_later()
+    {
+        // 표식 표가 없던 v8 캐시를 흉내 낸다: 만든 뒤 meta_mark 와 v9 기록을 지운다.
+        using (var first = SqliteMetadataCache.ForFile(DbFile))
+        {
+            await first.UpsertAsync(Source(refreshed: DateTimeOffset.UtcNow), [Obj("APP", "GTT", "TABLE", payload: "{\"v\":5}")], default);
+        }
+
+        SqliteConnection.ClearAllPools();
+        await using (var c = new SqliteConnection(RawConnectionString))
+        {
+            await c.OpenAsync();
+            await using var cmd = c.CreateCommand();
+            cmd.CommandText = "DROP TABLE meta_mark; DELETE FROM schema_version WHERE version >= 9;";
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        SqliteConnection.ClearAllPools();
+        using var second = SqliteMetadataCache.ForFile(DbFile);
+        var old = Assert.Single(await second.GetObjectsAsync(Key, null, null, default));
+        Assert.Equal(("GTT", null, null, "{\"v\":5}"), (old.Name, old.SubKind, old.StateMark, old.PayloadJson));
+        Assert.False(second.IsMemoryOnly);
+        Assert.Empty(await second.GetMarkedAsync(Key, "APP", default));
+
+        await second.SetMarksAsync(Key, "APP", [old with { SubKind = "GTT_TRANSACTION" }], default);
+        Assert.Equal("GTT_TRANSACTION", Assert.Single(await second.GetMarkedAsync(Key, "APP", default)).SubKind);
+    }
+
+    [Fact]
     public async Task Invalidate_removes_given_objects_and_marks_list_stale()
     {
         using var cache = SqliteMetadataCache.InMemory();

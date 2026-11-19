@@ -268,6 +268,13 @@ public sealed class TableEditPhase2Tests
         var external = Start(Orders() with { Kind = TableKind.External });
         Assert.Single(TableEditCheckPlanner.Plan(external.Original, external.Edited.AddColumn(new ColumnDraft("n1", "CODE") { DataType = "DATE" }), Dialect, Dev).Findings,
             f => f.Code == CheckCode.Unsupported);
+
+        // 객체 테이블(스키마 브라우저 표식과 함께 더함)도 외부·클러스터처럼 주석·기본값만 고친다.
+        var objectTable = Start(Orders() with { Kind = TableKind.ObjectTable });
+        Assert.Single(TableEditCheckPlanner.Plan(objectTable.Original, objectTable.Edited.AddColumn(new ColumnDraft("n1", "CODE") { DataType = "DATE" }), Dialect, Dev).Findings,
+            f => f.Code == CheckCode.Unsupported);
+        Assert.DoesNotContain(TableEditCheckPlanner.Plan(objectTable.Original, objectTable.Edited.WithColumn("NOTE", c => c with { Comment = "x", DefaultValue = "'-'" }), Dialect, Dev).Findings,
+            f => f.Code == CheckCode.Unsupported);
     }
 
     // ---------- T13 리뷰 반영 ----------

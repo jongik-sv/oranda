@@ -110,6 +110,29 @@ internal sealed class MemoryMetadataCache : IMetadataCache
     }
 
     public Task PruneAsync(MetadataCacheSettings settings, CancellationToken ct) => Task.CompletedTask;
+
+    private readonly Dictionary<(string, string, string, string), (string? SubKind, string? State)> _marks = [];
+
+    /// <summary>SQLite 판과 같은 뜻: 그 소유자 표식을 지우고 목록에 있는 객체만 다시 쓴다.</summary>
+    public Task SetMarksAsync(string dbKey, string owner, IReadOnlyList<MetaObject> marked, CancellationToken ct)
+    {
+        foreach (var key in _marks.Keys.Where(k => k.Item1 == dbKey && k.Item2 == owner).ToList())
+        {
+            _marks.Remove(key);
+        }
+
+        foreach (var m in marked.Where(m => m.Owner == owner && _objects.ContainsKey((dbKey, m.Owner, m.Name, m.Type))))
+        {
+            _marks[(dbKey, m.Owner, m.Name, m.Type)] = (m.SubKind, m.StateMark);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<MetaObject>> GetMarkedAsync(string dbKey, string owner, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<MetaObject>>([.. _objects
+            .Where(o => o.Key.Item1 == dbKey && o.Key.Item2 == owner && _marks.ContainsKey(o.Key))
+            .Select(o => o.Value with { SubKind = _marks[o.Key].SubKind, StateMark = _marks[o.Key].State })]);
 }
 
 [Trait("Category", "Integration")]

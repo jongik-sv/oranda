@@ -36,7 +36,7 @@ namespace Oranda.Core.Metadata;
 /// 같은 <c>DbKey</c> 의 전체 갱신·유형 새로 고침·캐시 초기화는 한 잠금(<c>_refreshGates</c>)으로 차례를 지킨다: 겹치면 오래된 스냅샷이 새 결과를 지우거나 되살린다.
 /// </para>
 /// </summary>
-public abstract class CachedMetadataProvider
+public abstract partial class CachedMetadataProvider
 {
     /// <summary>캐시로 답한 뒤 백그라운드 갱신을 다시 시작하는 기본 최소 간격.</summary>
     protected static readonly TimeSpan DefaultBackgroundRefreshInterval = TimeSpan.FromSeconds(60);
@@ -82,9 +82,11 @@ public abstract class CachedMetadataProvider
     /// 3: 테이블 편집기 메타데이터(TE-29) — 열 길이 기준·신원 속성, FK 삭제 규칙·참조 열, 인덱스 DESC·테이블스페이스·만든 제약·식, 테이블 종류·테이블스페이스·파티션 여부.
     /// 4: 테이블 저장 속성(<see cref="TableInfo.Storage"/>)·LOB 저장 절(<see cref="TableInfo.Lobs"/>)(설계 18.2), 파티션 정보(<see cref="TableInfo.Partitioning"/>, 18.4).
     /// 5: Oracle·Tibero 공급자가 저장 속성·LOB 저장 절을 실제로 채운다(T13c) — 4 로 저장된 캐시는 비어 있어 버린다.
+    /// 6: 스키마 브라우저 표식 — 인덱스 파티션·UNUSABLE(<see cref="IndexInfo.IsPartitioned"/>·<see cref="IndexInfo.IsUnusable"/>), 제약 NOVALIDATE(<see cref="ConstraintInfo.IsValidated"/>),
+    /// 객체 테이블(<see cref="TableKind.ObjectTable"/>).
     /// 한 DBMS 의 읽기만 바뀌어 그 DBMS 캐시만 버려야 하면 상속한 형식이 올린다.
     /// </summary>
-    protected virtual int PayloadVersion => 5;
+    protected virtual int PayloadVersion => 6;
 
     /// <summary>
     /// 뒤 갱신이 이미 시작한 읽기를 이어 갈 때(Oracle: 커서를 연 뒤 행마다 잠금을 다시 잡을 때) 세션 잠금을 기다리는 한도. 이보다 오래 다른 명령(긴 실행 등)이
@@ -223,6 +225,7 @@ public abstract class CachedMetadataProvider
             });
 
             var change = diff.Change;
+            ForgetMarks(dbKey, owner); // 사용자가 F5 로 다시 받았다: 그 소유자의 표식도 다음 조회 때 간격을 기다리지 않고 다시 읽는다
             if (change.Total > 0)
             {
                 _events?.Publish(new MetadataInvalidated(dbKey, [.. diff.Vanished.Concat(diff.Changed).Concat(diff.Added).Select(ToRef)]));
@@ -249,6 +252,7 @@ public abstract class CachedMetadataProvider
         Trace.TraceInformation("메타데이터 캐시 초기화 ({0})", dbKey);
         // 비우기도 갱신 잠금 안에서 한다: 도는 유형 새로 고침이 비운 뒤에 옛 기준 시각을 되살리지 않게.
         var (_, change) = await RefreshObjectListCoreAsync(s, "캐시 초기화", ct, resetFirst: true);
+        ForgetMarks(dbKey, owner: null); // 비운 캐시에는 표식도 없다: 다음 조회 때 간격을 기다리지 않고 다시 읽는다
         _events?.Publish(new MetadataInvalidated(dbKey, []));
         return change;
     }
