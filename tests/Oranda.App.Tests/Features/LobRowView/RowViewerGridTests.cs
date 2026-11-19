@@ -19,7 +19,7 @@ using Oranda.Language.Editing;
 namespace Oranda.App.Tests.Features.LobRowView;
 
 /// <summary>
-/// TSK-14-16: 행 보기의 필드 목록이 조회 결과와 같은 그리드(번호·열 이름·타입·값)로 보이고, 결과 그리드의 현재 행이 바뀌어 다시 채워도
+/// TSK-14-16: 행 보기의 필드 목록이 조회 결과와 같은 그리드(열 이름·타입·값, 번호는 행 머리에만)로 보이고, 결과 그리드의 현재 행이 바뀌어 다시 채워도
 /// 정렬·열 순서·너비·열 필터·고른 칸(열 키)·스크롤이 남는다. 복사(머리글 포함)·LOB 값 보기·값 고치기도 그대로 된다.
 /// </summary>
 [Collection("GridEditStatics")]
@@ -99,7 +99,7 @@ public class RowViewerGridTests
 
     private static string[] Column(ResultGridModel m, int ordinal) => [.. Enumerable.Range(0, (int)m.RowCount).Select(r => m.GetCellText(r, ordinal))];
 
-    private static long RowOf(ResultGridModel m, string name) => Array.IndexOf(Column(m, 1), name);
+    private static long RowOf(ResultGridModel m, string name) => Array.IndexOf(Column(m, 0), name);
 
     private static async Task<string?> ClipboardAsync(Window w, Func<string, bool> done)
     {
@@ -114,21 +114,23 @@ public class RowViewerGridTests
     }
 
     [Fact]
-    public Task Fields_are_shown_in_the_result_grid_as_number_name_type_and_value() => HeadlessHost.Run(async () =>
+    public Task Fields_are_shown_in_the_result_grid_as_name_type_and_value_with_the_number_only_in_the_row_header() => HeadlessHost.Run(async () =>
     {
         var (w, v, _, result) = await OpenAsync();
         try
         {
             var m = v.Grid.Model!;
-            Assert.Equal(["#", "열 이름", "타입", "값"], m.Columns.Select(c => c.Name));
-            Assert.Equal(["1", "2", "3", "4"], Column(m, 0));
-            Assert.True(m.IsRightAligned(0)); // 번호는 숫자 열
-            Assert.Equal(["ID", "NAME", "NOTE", "DOC"], Column(m, 1));
-            Assert.Equal(["NUMBER", "VARCHAR2", "VARCHAR2", "CLOB"], Column(m, 2));
-            Assert.Equal("1", m.GetCellText(0, 3));
-            Assert.Equal("abc", m.GetCellText(3, 3));
-            Assert.True(m.IsNull(2, 3)); // NULL 은 그리드의 NULL 표시(흐린 글자)로
-            Assert.Equal(result.Display.NullText, m.GetCellText(2, 3));
+            // 번호는 그리드 행 머리(1, 2, 3…)에만: 「#」 데이터 열을 따로 두면 같은 번호가 두 번 보인다.
+            Assert.Equal(["열 이름", "타입", "값"], m.Columns.Select(c => c.Name));
+            Assert.DoesNotContain("#", m.Columns.Select(c => c.Name));
+            Assert.True(v.Grid.GridControl.RowHeaderWidth > 0);
+            Assert.Equal(4, m.RowCount);
+            Assert.Equal(["ID", "NAME", "NOTE", "DOC"], Column(m, 0));
+            Assert.Equal(["NUMBER", "VARCHAR2", "VARCHAR2", "CLOB"], Column(m, 1));
+            Assert.Equal("1", m.GetCellText(0, 2));
+            Assert.Equal("abc", m.GetCellText(3, 2));
+            Assert.True(m.IsNull(2, 2)); // NULL 은 그리드의 NULL 표시(흐린 글자)로
+            Assert.Equal(result.Display.NullText, m.GetCellText(2, 2));
             Assert.False(v.Grid.GridControl.IsCommandTarget); // 편집기 결과 명령의 대상이 되지 않는다
         }
         finally
@@ -143,32 +145,53 @@ public class RowViewerGridTests
         var (w, v, vm, result) = await OpenAsync();
         try
         {
-            Click(w, Header(w, v, 1)); // 열 이름 오름차순
-            await HeadlessHost.WaitUntil(() => v.Grid.Model!.SortColumn == 1);
+            Click(w, Header(w, v, 0)); // 열 이름 오름차순
+            await HeadlessHost.WaitUntil(() => v.Grid.Model!.SortColumn == 0);
             var m = v.Grid.Model!;
-            Assert.Equal(["DOC", "ID", "NAME", "NOTE"], Column(m, 1));
+            Assert.Equal(["DOC", "ID", "NAME", "NOTE"], Column(m, 0));
 
-            Assert.True(m.MoveColumn(2, 0)); // 타입을 맨 앞으로
-            m.SetColumnWidth(3, 333);
-            await m.SetLocalFilterAsync(m.LocalFilter.WithColumn(2, new ColumnFilter { Values = new HashSet<string> { "NUMBER", "VARCHAR2" } }));
+            Assert.True(m.MoveColumn(1, 0)); // 타입을 맨 앞으로
+            m.SetColumnWidth(2, 333);
+            await m.SetLocalFilterAsync(m.LocalFilter.WithColumn(1, new ColumnFilter { Values = new HashSet<string> { "NUMBER", "VARCHAR2" } }));
             Assert.Equal(3, m.RowCount);
-            m.SelectCell(new GridCell(RowOf(m, "NAME"), 3));
+            m.SelectCell(new GridCell(RowOf(m, "NAME"), 2));
             Dispatcher.UIThread.RunJobs();
             Assert.Equal("NAME", vm.SelectedField!.Name);
 
             await MoveAsync(v, vm, 1);
             m = v.Grid.Model!;
             Assert.Equal(1, result.Active.Row);
-            Assert.Equal(1, m.SortColumn);
+            Assert.Equal(0, m.SortColumn);
             Assert.False(m.SortDescending);
-            Assert.Equal([2, 0, 1, 3], m.VisibleColumns);
-            Assert.Equal(333, m.GetColumnWidth(3));
-            Assert.Equal(["ID", "NAME", "NOTE"], Column(m, 1)); // CLOB 는 걸러진 채
+            Assert.Equal([1, 0, 2], m.VisibleColumns);
+            Assert.Equal(333, m.GetColumnWidth(2));
+            Assert.Equal(["ID", "NAME", "NOTE"], Column(m, 0)); // CLOB 는 걸러진 채
             Assert.Equal(RowOf(m, "NAME"), m.Active.Row); // 같은 열(키)을 계속 고른다
-            Assert.Equal(3, m.Active.Col);
+            Assert.Equal(2, m.Active.Col);
             Assert.Equal("NAME", vm.SelectedField!.Name);
             Assert.Equal("b", vm.SelectedField.Text);
-            Assert.Equal("b", m.GetCellText(m.Active.Row, 3));
+            Assert.Equal("b", m.GetCellText(m.Active.Row, 2));
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task Clearing_the_sort_brings_back_the_original_column_order_without_a_number_column() => HeadlessHost.Run(async () =>
+    {
+        var (w, v, _, _) = await OpenAsync();
+        try
+        {
+            Click(w, Header(w, v, 0)); // 오름
+            await HeadlessHost.WaitUntil(() => v.Grid.Model!.SortColumn == 0 && !v.Grid.Model.SortDescending);
+            Click(w, Header(w, v, 0)); // 내림
+            await HeadlessHost.WaitUntil(() => v.Grid.Model!.SortDescending);
+            Assert.Equal(["NOTE", "NAME", "ID", "DOC"], Column(v.Grid.Model!, 0));
+            Click(w, Header(w, v, 0)); // 해제: 「#」 열로 정렬하지 않아도 원래 순서
+            await HeadlessHost.WaitUntil(() => v.Grid.Model!.SortColumn < 0);
+            Assert.Equal(["ID", "NAME", "NOTE", "DOC"], Column(v.Grid.Model!, 0));
         }
         finally
         {
@@ -190,7 +213,7 @@ public class RowViewerGridTests
 
             await MoveAsync(v, vm, 1);
             Assert.Equal(y, v.Grid.GridControl.OffsetY);
-            Assert.Equal("100", v.Grid.Model!.GetCellText(0, 3));
+            Assert.Equal("100", v.Grid.Model!.GetCellText(0, 2));
         }
         finally
         {
@@ -205,14 +228,14 @@ public class RowViewerGridTests
         try
         {
             var m = v.Grid.Model!;
-            Click(w, Cell(w, v, 1, 3)); // NAME 의 값 칸
+            Click(w, Cell(w, v, 1, 2)); // NAME 의 값 칸
             Assert.Equal("NAME", vm.SelectedField!.Name);
             v.Grid.GridControl.Focus();
             w.KeyPress(Key.C, Primary, PhysicalKey.C, "c");
             Assert.Equal("a", (await ClipboardAsync(w, t => t == "a"))?.TrimEnd('\n'));
 
-            m.SelectCell(new GridCell(0, 1));
-            m.ExtendTo(new GridCell(1, 3));
+            m.SelectCell(new GridCell(0, 0));
+            m.ExtendTo(new GridCell(1, 2));
             w.KeyPress(Key.C, Primary | RawInputModifiers.Shift, PhysicalKey.C, "C");
             var text = await ClipboardAsync(w, t => t.Contains("열 이름", StringComparison.Ordinal));
             Assert.NotNull(text);
@@ -250,7 +273,7 @@ public class RowViewerGridTests
                 EditSessionProvider = () => null,
             };
 
-            var doc = Cell(w, v, 3, 3);
+            var doc = Cell(w, v, 3, 2);
             Click(w, doc);
             Click(w, doc); // 두 번 누르기
             await HeadlessHost.WaitUntil(() => opened.Count > 0);
@@ -288,7 +311,7 @@ public class RowViewerGridTests
             vm.Refresh();
             await HeadlessHost.WaitUntil(() => vm.Fields.Count == 2 && vm.Fields[1].CanEdit && v.Grid.Model!.RowCount == 2);
             Dispatcher.UIThread.RunJobs();
-            Click(w, Cell(w, v, 1, 3)); // NAME 값
+            Click(w, Cell(w, v, 1, 2)); // NAME 값
             Assert.Equal("NAME", vm.SelectedField!.Name);
             v.Grid.GridControl.Focus();
             w.KeyPress(Key.F2, RawInputModifiers.None, PhysicalKey.F2, null);
@@ -304,9 +327,9 @@ public class RowViewerGridTests
             Dispatcher.UIThread.RunJobs();
 
             Assert.True(result.IsEdited(0, 1));
-            await HeadlessHost.WaitUntil(() => v.Grid.Model is { } m && m.GetCellText(1, 3) == "zzz");
-            Assert.True(v.Grid.Model!.IsEmphasized(1, 3)); // 바꾼 값은 강조색
-            Assert.False(v.Grid.Model.IsEmphasized(0, 3));
+            await HeadlessHost.WaitUntil(() => v.Grid.Model is { } m && m.GetCellText(1, 2) == "zzz");
+            Assert.True(v.Grid.Model!.IsEmphasized(1, 2)); // 바꾼 값은 강조색
+            Assert.False(v.Grid.Model.IsEmphasized(0, 2));
             Assert.False(panel.IsVisible);
         }
         finally

@@ -27,7 +27,7 @@
                  FontFamily="{StaticResource OrandaFixedFontFamily}" AutomationProperties.Name="값 고치기" />
       </DockPanel>
     </Border>
-    <!-- 조회 결과와 같은 그리드(MonitorGrid): 번호·열 이름·타입·값. 머리글 정렬·열 끌기·너비·열 필터·현재 행 ▶. 행은 코드(MonitorGridBinder)가 Fields 에서 채운다. -->
+    <!-- 조회 결과와 같은 그리드(MonitorGrid): 열 이름·타입·값(번호는 행 머리에만). 머리글 정렬·열 끌기·너비·열 필터·현재 행 ▶. 행은 코드(MonitorGridBinder)가 Fields 에서 채운다. -->
     <mon:MonitorGrid x:Name="FieldGrid" />
   </DockPanel>
 </UserControl>
