@@ -2245,5 +2245,8 @@
   "파티션": "Partitioned",
   "파티션 인덱스": "Partitioned index",
   "함수 기반 인덱스": "Function-based index",
-  "행 단위(FOR EACH ROW)": "Row level (FOR EACH ROW)"
+  "행 단위(FOR EACH ROW)": "Row level (FOR EACH ROW)",
+  "열 값 분포": "Column value distribution",
+  "열 통계 요약": "Column statistics summary",
+  "열 통계를 읽는 중": "Reading column statistics…"
 }
