@@ -87,11 +87,12 @@
       <TreeView.ItemTemplate>
         <TreeDataTemplate x:DataType="vm:SchemaNode" ItemsSource="{Binding Children}">
           <StackPanel Orientation="Horizontal" Spacing="5">
-            <!-- 아이콘 + 모서리 뱃지(세부 종류·상태, SchemaLooks). 툴팁에 종류 이름. 꺼진 것은 아이콘·이름이 흐리다. -->
+            <!-- 아이콘(꺼진 것은 아이콘·이름이 흐리다) + 이름 + 세부 종류·상태 글자 표식(GTT·T, PART, IOT …, SchemaLooks). 툴팁에 풀어 쓴 이름. -->
             <ContentControl Content="{Binding Look, Converter={x:Static vm:SchemaLookConverter.Instance}}" VerticalAlignment="Center"
                             ToolTip.Tip="{Binding LookTip}" />
             <TextBlock Text="{Binding Title}" Classes.invalid="{Binding IsInvalid}" Classes.dimmed="{Binding IsDimmed}" VerticalAlignment="Center"
                        ToolTip.Tip="{Binding LookTip}" />
+            <ContentControl Content="{Binding Look, Converter={x:Static vm:SchemaBadgesConverter.Instance}}" VerticalAlignment="Center" />
             <!-- 패키지·타입: 명세·본문 상태 표(PKG1) -->
             <Border Classes="part-badge" Classes.invalid="{Binding SpecBadgeInvalid}" IsVisible="{Binding HasSpecBadge}" VerticalAlignment="Center">
               <TextBlock Text="{Binding SpecBadge}" />

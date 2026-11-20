@@ -123,7 +123,7 @@ public sealed partial class SchemaNode : ObservableObject
 
     private SchemaLook? _look;
 
-    /// <summary>아이콘 모양(기본 아이콘 + 모서리 뱃지 + 흐림, <see cref="SchemaLooks"/>). 트리 줄 앞 아이콘이 이것을 그린다.</summary>
+    /// <summary>줄 모양(기본 아이콘 + 이름 오른쪽 글자 표식 + 흐림, <see cref="SchemaLooks"/>). 줄 앞 아이콘과 표식 줄이 이것을 그린다.</summary>
     public SchemaLook Look => _look ??= Kind switch
     {
         SchemaNodeKind.Item when Ref is { } r => SchemaLooks.ForObject(IconKey ?? "objOther", r, Mark, IsInvalid),

@@ -270,10 +270,29 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     }
 
     /// <summary>제공자가 소유자 하나의 표식을 서버에서 다시 읽었다: 펼쳐 둔 스키마면 캐시에서 다시 읽어 붙인다(트리는 다시 짓지 않는다).</summary>
-    private Task OnObjectMarksRefreshedAsync(ObjectMarksRefreshed e) =>
-        CurrentSession is { } s && string.Equals(s.DbKey, e.DbKey, StringComparison.Ordinal) && _marksByOwner.ContainsKey(e.Owner)
-            ? ReloadMarksAsync(s, e.Owner)
-            : Task.CompletedTask;
+    /// <remarks>
+    /// 그 소유자의 표식을 읽은 적이 없어도(<see cref="_marksByOwner"/> 에 없어도) 트리에 그 스키마의 객체가 그려져 있으면 붙인다:
+    /// 스키마를 그린 적용이 표식을 읽기 전에 끝났거나(취소·실패) 다른 길로 그렸으면 알림을 버려 표식이 끝내 붙지 않았다.
+    /// </remarks>
+    private Task OnObjectMarksRefreshedAsync(ObjectMarksRefreshed e)
+    {
+        if (CurrentSession is not { } s || !string.Equals(s.DbKey, e.DbKey, StringComparison.Ordinal))
+        {
+            return Task.CompletedTask;
+        }
+
+        if (!_marksByOwner.ContainsKey(e.Owner) && !ShowsObjectsOf(e.Owner))
+        {
+            return Task.CompletedTask; // 펼친 적 없는 스키마: 펼칠 때 캐시에서 읽는다
+        }
+
+        return ReloadMarksAsync(s, e.Owner);
+    }
+
+    /// <summary>트리에 소유자 <paramref name="owner"/> 의 객체 줄이 하나라도 그려져 있는가(스키마 아래 범주를 지었다).</summary>
+    private bool ShowsObjectsOf(string owner) =>
+        Roots.Any(r => r.Kind == SchemaNodeKind.Schema && string.Equals(r.Owner, owner, StringComparison.Ordinal)
+            && r.Children.Any(c => c.Kind == SchemaNodeKind.Category));
 
     private async Task ReloadMarksAsync(ISession session, string owner)
     {

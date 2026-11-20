@@ -557,9 +557,11 @@ public sealed partial class SchemaBrowserViewModel
             + (javaCut ? $" · Java 객체는 처음 {JavaListLimit}개만" : "");
 
         // 세부 종류·상태 표식: 목록을 먼저 보인 뒤 캐시에서 읽어 붙인다(서버를 기다리지 않는다 — 낡았으면 제공자가 뒤에서 다시 읽고 ObjectMarksRefreshed 로 알린다).
+        // 트리는 이미 새 결과로 바꿨으므로 이 적용이 취소돼도(다음 글자 입력) 표식 읽기는 끝낸다(캐시 읽기만 한다). 취소로 건너뛰면 이 소유자는
+        // 표식을 읽은 적 없는 것으로 남아 뒤 읽기 알림도 버려졌다.
         if (node.Owner is { } markOwner)
         {
-            await LoadMarksAsync(session, markOwner, ct);
+            await LoadMarksAsync(session, markOwner, CancellationToken.None);
         }
     }
 
@@ -578,11 +580,16 @@ public sealed partial class SchemaBrowserViewModel
     /// <summary>소유자별 세부 종류·상태 표식(<see cref="IMetadataProvider.ListObjectMarksAsync"/>, 표식이 있는 객체만). 스키마를 펼칠 때·표식이 새로 오면 다시 읽는다.</summary>
     private readonly Dictionary<string, IReadOnlyDictionary<DbObjectRef, ObjectMark>> _marksByOwner = new(StringComparer.Ordinal);
 
+    /// <summary>소유자별 표식 읽기 차례(<see cref="LoadMarksAsync"/>). 늦게 끝난 앞 읽기를 버린다.</summary>
+    private readonly Dictionary<string, int> _marksReadSeq = new(StringComparer.Ordinal);
+
     /// <summary>
     /// 소유자 <paramref name="owner"/> 의 표식을 읽어 이미 그린 노드에 붙인다. 읽지 못하면(권한·끊김) 표식 없이 그대로 둔다(트리는 막지 않는다).
     /// </summary>
     private async Task LoadMarksAsync(ISession session, string owner, CancellationToken ct)
     {
+        // 같은 소유자의 읽기가 겹치면(스키마 다시 읽기 · 뒤 읽기 알림) 나중에 시작한 것만 붙인다: 앞서 시작해 늦게 끝난 빈 결과가 새 표식을 덮지 않게.
+        var read = _marksReadSeq[owner] = _marksReadSeq.GetValueOrDefault(owner) + 1;
         IReadOnlyDictionary<DbObjectRef, ObjectMark> marks;
         try
         {
@@ -592,12 +599,15 @@ public sealed partial class SchemaBrowserViewModel
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Trace.TraceWarning("스키마 브라우저 표식을 읽지 못함 ({0}, {1}): {2}: {3}", session.DbKey, owner, ex.GetType().Name, ex.Message);
             return;
         }
 
-        if (!ReferenceEquals(CurrentSession, session))
+        // 같은 접속 대상(DbKey)이면 세션이 바뀌었어도(같은 접속의 다른 탭) 붙인다: 표식은 DbKey 의 캐시에서 읽었다.
+        if (CurrentSession is not { } now || !string.Equals(now.DbKey, session.DbKey, StringComparison.Ordinal)
+            || _marksReadSeq.GetValueOrDefault(owner) != read)
         {
             return;
         }
