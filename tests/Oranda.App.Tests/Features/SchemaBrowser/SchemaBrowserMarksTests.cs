@@ -5,6 +5,7 @@ using Oranda.App.Features.SchemaBrowser;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Avalonia.Layout;
 using Avalonia.Media;
 
 namespace Oranda.App.Tests.Features.SchemaBrowser;
@@ -293,11 +294,47 @@ public sealed class SchemaBrowserMarksTests
     }
 
     [Fact]
-    public Task Icon_stays_plain_and_dims_disabled_ones_and_badges_are_text_pills() => HeadlessHost.Run(() =>
+    public Task Icon_is_painted_in_the_kind_colour_with_corner_marks_and_badges_are_text_pills() => HeadlessHost.Run(() =>
     {
-        Assert.IsType<Viewbox>(SchemaLookConverter.Create(Table("IOT"))); // 아이콘에는 더 겹쳐 그리지 않는다
-        var dim = SchemaLookConverter.Create(SchemaLooks.ForConstraint(new ConstraintInfo("C", ConstraintKind.Check, ["A"]) { IsEnabled = false }));
-        Assert.Equal(0.4, dim!.Opacity);
+        var window = new Window { Width = 200, Height = 100, RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Light };
+        var host = new StackPanel();
+        window.Content = host;
+        window.Show();
+
+        Assert.IsType<Viewbox>(SchemaLookConverter.Create(Table(null))); // 일반 테이블은 기본 아이콘 그대로
+        var iot = Assert.IsType<Panel>(SchemaLookConverter.Create(Table("IOT")));
+        host.Children.Add(iot);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal((SchemaLookConverter.IconSize, SchemaLookConverter.IconSize), (iot.Width, iot.Height)); // 칸 크기는 아이콘 그대로
+        Assert.Equal(Brush(window, "Teal"), IconFill(iot)); // 아이콘 자체를 주 종류 색으로
+        var mark = Assert.Single(Marks(iot));
+        Assert.Equal(BadgeShape.Diamond, ((SchemaBadge)mark.Tag!).Shape);
+        Assert.Equal((SchemaLookConverter.MarkSize, SchemaLookConverter.MarkSize), (mark.Width, mark.Height));
+        Assert.InRange(mark.Width, 8, 9);
+        Assert.Equal((HorizontalAlignment.Right, VerticalAlignment.Bottom), (mark.HorizontalAlignment, mark.VerticalAlignment));
+        Assert.Equal(SchemaLookConverter.MarkOutline, mark.StrokeThickness);
+        Assert.Equal(Brush(window, "Teal"), ((ISolidColorBrush)mark.Fill!).Color);
+        Assert.Equal(Resource(window, "OrandaBadgeOutlineBrush"), ((ISolidColorBrush)mark.Stroke!).Color); // 테두리는 바탕색
+        Assert.InRange(iot.Bounds.Height, 15.9, 16.1);
+
+        // 쓸 수 없음: 왼쪽 아래 주황 세모 + 주 종류는 오른쪽 아래 그대로.
+        var stale = Assert.IsType<Panel>(SchemaLookConverter.Create(SchemaLooks.ForObject("objMview", new DbObjectRef("S", "MV", "MATERIALIZED VIEW"), new ObjectMark("COMPLETE", "STALE"), false)));
+        host.Children.Add(stale);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(Brush(window, "Blue"), IconFill(stale));
+        var marks = Marks(stale).ToList();
+        Assert.Equal([BadgeShape.Square, BadgeShape.Warning], marks.Select(m => ((SchemaBadge)m.Tag!).Shape));
+        Assert.Equal(HorizontalAlignment.Left, marks[1].HorizontalAlignment);
+        Assert.Equal(Brush(window, "Orange"), ((ISolidColorBrush)marks[1].Fill!).Color);
+
+        // 꺼진 것: 기본 아이콘 색(종류 색 안 씀) + 표식째 0.4 로 흐리게.
+        var dim = Assert.IsType<Panel>(SchemaLookConverter.Create(SchemaLooks.ForConstraint(new ConstraintInfo("C", ConstraintKind.Check, ["A"]) { IsEnabled = false })));
+        host.Children.Add(dim);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(0.4, dim.Opacity);
+        Assert.Equal(Brush(window, "Amber"), IconFill(dim)); // key 아이콘 기본 색
+        var hidden = SchemaLookConverter.Create(SchemaLooks.ForColumn(new ColumnInfo("H", 5, "NUMBER") { IsInvisible = true }, false));
+        Assert.Equal(0.4, hidden!.Opacity);
 
         Assert.Null(SchemaBadgesConverter.Create(Table(null))); // 표식이 없으면 아무것도 없다
         var broken = SchemaLooks.ForObject("objSynonym", new DbObjectRef("SCOTT", "S", "SYNONYM"), new ObjectMark(null, "BROKEN"), false);
@@ -316,8 +353,90 @@ public sealed class SchemaBrowserMarksTests
             Assert.Equal(SchemaBadgesConverter.PillFontSize, ((TextBlock)p.Child!).FontSize);
             Assert.False(string.IsNullOrEmpty((string?)ToolTip.GetTip(p)));
         });
+        window.Close();
         return Task.CompletedTask;
     });
+
+    [Theory]
+    [InlineData("IOT", "Teal")]
+    [InlineData("CLUSTER", "Amber")]
+    [InlineData("GTT_SESSION", "Green")]
+    [InlineData("GTT_TRANSACTION", "Green")]
+    [InlineData("EXTERNAL", "Blue")]
+    [InlineData("OBJECT", "Purple")]
+    [InlineData("PART:LIST", "Purple")]
+    [InlineData("IOT PART:HASH", "Teal")] // 주 종류가 앞선다
+    public void Icon_tone_is_the_primary_kind_badge_tone(string mark, string tone)
+    {
+        var look = Table(mark);
+
+        Assert.Equal(tone, look.IconTone);
+        Assert.Equal(look.Badges[0], look.KindBadge);
+        Assert.Equal(look.Badges[0].Tone, look.IconTone); // 글자 표식과 짝
+    }
+
+    [Fact]
+    public void Icon_tone_covers_every_kind_and_keeps_plain_disabled_and_grey_ones_as_they_are()
+    {
+        var trg = new DbObjectRef("S", "T", "TRIGGER");
+        Assert.Equal("Blue", SchemaLooks.ForObject("objTrigger", trg, new ObjectMark("BEFORE ROW", null), false).IconTone);
+        Assert.Equal("Purple", SchemaLooks.ForObject("objSynonym", new DbObjectRef("S", "S", "SYNONYM"), new ObjectMark("TARGET:PACKAGE", null), false).IconTone);
+        Assert.Equal("Teal", SchemaLooks.ForObject("objSynonym", new DbObjectRef("PUBLIC", "DUAL", "SYNONYM"), null, false).IconTone);
+        Assert.Equal("Green", SchemaLooks.ForObject("objMview", new DbObjectRef("S", "M", "MATERIALIZED VIEW"), new ObjectMark("FAST", null), false).IconTone);
+        Assert.Equal("Teal", SchemaLooks.ForObject("objType", new DbObjectRef("S", "T", "TYPE"), new ObjectMark("VARRAY", null), false).IconTone);
+        Assert.Equal("Purple", SchemaLooks.ForIndex(new IndexInfo("I", false, ["A"]) { IndexType = "BITMAP" }).IconTone);
+        Assert.Equal("Blue", SchemaLooks.ForIndex(new IndexInfo("I", true, ["A"])).IconTone);
+        Assert.Equal("Purple", SchemaLooks.ForConstraint(new ConstraintInfo("C", ConstraintKind.ForeignKey, ["A"])).IconTone);
+        Assert.Equal("Amber", SchemaLooks.ForColumn(new ColumnInfo("ID", 1, "NUMBER") { IsNullable = false }, true).IconTone);
+
+        Assert.Null(Table(null).IconTone); // 일반 = 기본 색
+        Assert.Null(SchemaLooks.ForIndex(new IndexInfo("I", false, ["A"]) { IsUnusable = true }).IconTone); // 쓸 수 없음만 = 기본 색 + 주황 세모
+        Assert.Null(SchemaLooks.ForObject("objTrigger", trg, new ObjectMark("BEFORE ROW", "DISABLED"), false).IconTone); // 꺼짐 = 흐린 기본 색
+        Assert.Null(SchemaLooks.ForConstraint(new ConstraintInfo("C", ConstraintKind.Check, ["A"]) { Condition = "\"A\" IS NOT NULL" }).IconTone); // 회색 종류는 꺼짐과 헷갈린다
+        Assert.Null(SchemaLooks.ForObject("objProcedure", new DbObjectRef("S", "P", "PROCEDURE"), null, invalid: true).IconTone); // INVALID 는 빨간 이름만
+    }
+
+    private static readonly string[] TableKinds = ["IOT", "CLUSTER", "GTT_SESSION", "EXTERNAL", "OBJECT", "PART:RANGE"];
+    private static readonly string[] TriggerKinds = ["BEFORE ROW", "AFTER ROW", "INSTEAD ROW", "COMPOUND"];
+    private static readonly string[] MviewKinds = ["FAST", "COMPLETE", "FORCE", "NEVER"];
+    private static readonly string[] SynonymKinds = ["TARGET:TABLE", "TARGET:PACKAGE", "TARGET:SEQUENCE", "TARGET:SYNONYM", "REMOTE"];
+    private static readonly string[] WarningLabels = ["BROKEN", "STALE", "FAIL", "UNUSABLE"];
+
+    [Fact]
+    public void Corner_mark_shapes_are_one_per_kind_and_kinds_in_a_group_differ_by_colour_or_shape()
+    {
+        var syn = new DbObjectRef("S", "S", "SYNONYM");
+        var groups = new List<List<SchemaBadge>>
+        {
+            TableKinds.Select(t => Table(t).KindBadge!).ToList(),
+            TriggerKinds.Select(m => SchemaLooks.ForObject("objTrigger", new DbObjectRef("S", "T", "TRIGGER"), new ObjectMark(m, null), false).KindBadge!).ToList(),
+            MviewKinds.Select(m => SchemaLooks.ForObject("objMview", new DbObjectRef("S", "M", "MATERIALIZED VIEW"), new ObjectMark(m, null), false).KindBadge!).ToList(),
+            SynonymKinds.Select(m => SchemaLooks.ForObject("objSynonym", syn, new ObjectMark(m, null), false).KindBadge!).ToList(),
+            new[] { ConstraintKind.PrimaryKey, ConstraintKind.Unique, ConstraintKind.ForeignKey, ConstraintKind.Check }.Select(k => SchemaLooks.ForConstraint(new ConstraintInfo("C", k, ["A"]) { Condition = "A > 0" }).KindBadge!).ToList(),
+        };
+
+        foreach (var group in groups)
+        {
+            Assert.All(group, b => Assert.NotEqual(BadgeShape.Warning, b.Shape)); // 세모는 쓸 수 없음만
+            Assert.Equal(group.Count, group.Select(b => (b.Tone, b.Shape)).Distinct().Count());
+        }
+
+        // 같은 글자는 어디서나 같은 모양(PK 열·PK 제약, 파티션 테이블·파티션 인덱스).
+        Assert.Equal(SchemaLooks.ForColumn(new ColumnInfo("ID", 1, "NUMBER"), true).KindBadge!.Shape, SchemaLooks.ForConstraint(new ConstraintInfo("P", ConstraintKind.PrimaryKey, ["ID"])).KindBadge!.Shape);
+        Assert.Equal(Table("PART:LIST").KindBadge!.Shape, SchemaLooks.ForIndex(new IndexInfo("I", false, ["A"]) { IsPartitioned = true }).KindBadge!.Shape);
+        Assert.All(WarningLabels, l => Assert.Equal(BadgeShape.Warning, new SchemaBadge(l, "Orange", BadgeCorner.BottomLeft, l).Shape));
+    }
+
+    private static Color Resource(Window window, string key)
+        => Assert.IsAssignableFrom<ISolidColorBrush>(window.TryFindResource(key, window.ActualThemeVariant, out var r) ? r : null).Color;
+
+    private static Color Brush(Window window, string tone) => Resource(window, "OrandaIcon" + tone + "Brush");
+
+    private static Color IconFill(Control look)
+        => ((ISolidColorBrush)look.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>().First(p => !p.Classes.Contains("schema-mark")).Fill!).Color;
+
+    private static IEnumerable<Avalonia.Controls.Shapes.Path> Marks(Control look)
+        => look.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>().Where(p => p.Classes.Contains("schema-mark"));
 
     [Fact]
     public void Every_badge_has_a_short_label_that_tells_kinds_apart()
@@ -360,8 +479,16 @@ public sealed class SchemaBrowserMarksTests
         Assert.NotNull(pill);
         Assert.Equal("EXT", ((TextBlock)pill.Child!).Text);
         Assert.Equal("외부 테이블", ToolTip.GetTip(pill));
-        var host = view.GetVisualDescendants().OfType<ContentControl>().First(c => c.Content is Viewbox && c.FindAncestorOfType<TreeViewItem>()?.DataContext is SchemaNode { Title: "EMP" });
+        ContentControl IconHost(string title) => view.GetVisualDescendants().OfType<ContentControl>()
+            .First(c => c.Content is Panel or Viewbox && c.FindAncestorOfType<TreeViewItem>()?.DataContext is SchemaNode n && n.Title == title);
+        var host = IconHost("EMP");
         Assert.StartsWith("외부 테이블", (string?)ToolTip.GetTip(host), StringComparison.Ordinal);
+        var icon = Assert.IsType<Panel>(host.Content); // 외부 테이블: 파란 아이콘 + 오른쪽 아래 마름모
+        Assert.Equal(Brush(window, "Blue"), IconFill(icon));
+        var mark = Assert.Single(Marks(icon));
+        Assert.Equal((BadgeShape.Diamond, "Blue"), (((SchemaBadge)mark.Tag!).Shape, ((SchemaBadge)mark.Tag!).Tone));
+        Assert.Equal(((ISolidColorBrush)pill.BorderBrush!).Color, ((ISolidColorBrush)mark.Fill!).Color); // 글자 표식과 같은 색
+        Assert.IsType<Viewbox>(IconHost("DEPT").Content); // 표식 없는 테이블은 기본 아이콘
 
         // 크기: 글자 표식은 아이콘보다 낮고, 표식이 붙은 줄도 표식 없는 줄과 높이가 같다.
         Assert.InRange(pill.Bounds.Height, 12, 16);
@@ -381,6 +508,19 @@ public sealed class SchemaBrowserMarksTests
         var dark = Assert.IsAssignableFrom<ISolidColorBrush>(pill.BorderBrush).Color;
         Assert.NotEqual(light, dark);
         Assert.Equal(dept.Bounds.Height, emp.Bounds.Height);
+        Assert.Equal(Brush(window, "Blue"), IconFill(icon)); // 아이콘·모서리 표식도 어두운 토큰으로
+        Assert.Equal(dark, ((ISolidColorBrush)mark.Fill!).Color);
+        Assert.Equal(Resource(window, "OrandaBadgeOutlineBrush"), ((ISolidColorBrush)mark.Stroke!).Color);
+
+        // 늦게 붙는 표식: 뒤에서 다시 읽은 표식에도 아이콘 색·모서리 표식이 바뀌고 줄 높이는 그대로다.
+        var height = dept.Bounds.Height;
+        h.Meta.Marks[new DbObjectRef("SCOTT", "DEPT", "TABLE")] = new ObjectMark("GTT_SESSION", null);
+        h.Bus.Publish(new ObjectMarksRefreshed(h.Session.DbKey, "SCOTT"));
+        Dispatcher.UIThread.RunJobs();
+        var late = Assert.IsType<Panel>(IconHost("DEPT").Content);
+        Assert.Equal(Brush(window, "Green"), IconFill(late));
+        Assert.Equal(BadgeShape.Dot, ((SchemaBadge)Marks(late).Single().Tag!).Shape);
+        Assert.Equal(height, dept.Bounds.Height);
         window.Close();
     });
 }

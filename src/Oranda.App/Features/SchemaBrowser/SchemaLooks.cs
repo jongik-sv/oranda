@@ -18,6 +18,25 @@ public enum BadgeCorner
 }
 
 /// <summary>
+/// 아이콘 오른쪽 아래(주 종류)·왼쪽 아래(쓸 수 없음) 모서리 표식의 모양. 16 DIP 아이콘 위 9 DIP 로 그려도 뭉개지지 않는 채운 도형만 쓴다
+/// (<see cref="SchemaMarkGeometry"/>). 종류마다 모양 하나(<see cref="SchemaLooks.ShapeOf"/>), 세모는 쓸 수 없음 표식만 쓴다.
+/// </summary>
+public enum BadgeShape
+{
+    /// <summary>채운 원.</summary>
+    Dot,
+
+    /// <summary>채운 사각.</summary>
+    Square,
+
+    /// <summary>마름모.</summary>
+    Diamond,
+
+    /// <summary>세모(쓸 수 없음, 주황).</summary>
+    Warning,
+}
+
+/// <summary>
 /// 표식 하나: 이름 오른쪽 작은 알약 모양 글자(<see cref="Label"/>, 예 <c>GTT·T</c>·<c>PART</c>·<c>IOT</c>). <see cref="Tone"/> 은 아이콘 색 토큰 이름
 /// (<c>OrandaIcon&lt;Tone&gt;Brush</c>, 밝게·어둡게 두 벌) — 글자와 테두리를 이 색으로 그린다. <see cref="Tip"/> 은 툴팁 한 줄(풀어 쓴 이름).
 /// </summary>
@@ -25,10 +44,14 @@ public sealed record SchemaBadge(string Label, string Tone, BadgeCorner Corner, 
 {
     /// <summary>쓸 수 없음(깨짐·실패·UNUSABLE·STALE) 표식인가: 바탕을 채워 더 눈에 띄게 한다.</summary>
     public bool IsWarning => Corner == BadgeCorner.BottomLeft;
+
+    /// <summary>아이콘 모서리 표식 모양(글자마다 하나, <see cref="SchemaLooks.ShapeOf"/>).</summary>
+    public BadgeShape Shape => SchemaLooks.ShapeOf(this);
 }
 
 /// <summary>
-/// 트리 줄의 모양: 기본 아이콘(<see cref="IconKey"/>) + 이름 오른쪽 글자 표식(<see cref="Badges"/>, 자리 차례), 꺼진 것(<see cref="Dimmed"/>)은 흐린 회색으로 보인다.
+/// 트리 줄의 모양: 기본 아이콘(<see cref="IconKey"/>, 주 종류 색 <see cref="IconTone"/> 으로 칠하고 모서리 표식을 얹는다) + 이름 오른쪽 글자 표식(<see cref="Badges"/>, 자리 차례),
+/// 꺼진 것(<see cref="Dimmed"/>)은 흐린 회색으로 보인다.
 /// <see cref="Tip"/> 은 뱃지·상태를 줄마다 적은 툴팁(없으면 null).
 /// </summary>
 public sealed record SchemaLook(string? IconKey, IReadOnlyList<SchemaBadge> Badges, bool Dimmed, string? Tip)
@@ -40,6 +63,18 @@ public sealed record SchemaLook(string? IconKey, IReadOnlyList<SchemaBadge> Badg
         other is not null && IconKey == other.IconKey && Dimmed == other.Dimmed && Tip == other.Tip && Badges.SequenceEqual(other.Badges);
 
     public override int GetHashCode() => HashCode.Combine(IconKey, Dimmed, Tip, Badges.Count);
+
+    /// <summary>주 종류 표식: 보이는 표식 중 쓸 수 없음이 아닌 첫 것(자리 차례라 보통 오른쪽 아래 주 종류). 아이콘 색과 오른쪽 아래 모서리 표식을 정한다. 없으면 null.</summary>
+    public SchemaBadge? KindBadge => Badges.FirstOrDefault(b => !b.IsWarning);
+
+    /// <summary>쓸 수 없음 표식(왼쪽 아래 주황 세모). 없으면 null.</summary>
+    public SchemaBadge? WarningBadge => Badges.FirstOrDefault(b => b.IsWarning);
+
+    /// <summary>
+    /// 아이콘을 칠할 색 토큰 이름(<c>OrandaIcon&lt;Tone&gt;Brush</c>) — 주 종류 글자 표식과 같은 색. null 이면 아이콘에 등록된 기본 색 그대로:
+    /// 세부 종류가 없는 일반 객체, 꺼진 것(흐린 회색 규칙이 앞선다), 회색(Neutral) 종류(꺼짐과 헷갈리지 않게).
+    /// </summary>
+    public string? IconTone => Dimmed || KindBadge is not { } k || k.Tone == "Neutral" ? null : k.Tone;
 }
 
 /// <summary>
@@ -418,6 +453,78 @@ public static class SchemaLooks
     private static bool IsNotNull(string? condition)
         => condition is not null && condition.Trim().Trim('(', ')').Trim() is var s
             && s.EndsWith(" IS NOT NULL", StringComparison.OrdinalIgnoreCase) && s.Count(ch => ch == '"') == 2 && s.StartsWith('"');
+
+    /// <summary>
+    /// 글자 표식 → 모서리 표식 모양. 같은 글자는 어디서나 같은 모양이다(PK·PART 등). 한 무리(테이블 종류·트리거 시점 …) 안에서는 색과 모양을 짝지어 겹치지 않게 골랐다.
+    /// 쓸 수 없음은 세모, 표에 없는 글자는 원.
+    /// </summary>
+    public static BadgeShape ShapeOf(SchemaBadge badge)
+    {
+        ArgumentNullException.ThrowIfNull(badge);
+        if (badge.IsWarning)
+        {
+            return BadgeShape.Warning;
+        }
+
+        if (badge.Label.StartsWith('→'))
+        {
+            return BadgeShape.Diamond; // 동의어 대상: 가리키는 것
+        }
+
+        return Shapes.TryGetValue(badge.Label, out var shape) ? shape : BadgeShape.Dot;
+    }
+
+    private static readonly Dictionary<string, BadgeShape> Shapes = new(StringComparer.Ordinal)
+    {
+        // 테이블: 임시 = 원, 저장 구조(클러스터·객체) = 사각, IOT·외부·파티션 = 마름모
+        ["GTT·S"] = BadgeShape.Dot,
+        ["GTT·T"] = BadgeShape.Dot,
+        ["IOT"] = BadgeShape.Diamond,
+        ["CLU"] = BadgeShape.Square,
+        ["EXT"] = BadgeShape.Diamond,
+        ["OBJ"] = BadgeShape.Square,
+        ["PART"] = BadgeShape.Diamond,
+
+        // 트리거: 시점 BEFORE·AFTER = 원, INSTEAD OF = 마름모, 복합 = 사각, 단위·이벤트 = 사각
+        ["BEF"] = BadgeShape.Dot,
+        ["AFT"] = BadgeShape.Dot,
+        ["INST"] = BadgeShape.Diamond,
+        ["CMPD"] = BadgeShape.Square,
+        ["DDL"] = BadgeShape.Square,
+        ["DB"] = BadgeShape.Square,
+        ["STMT"] = BadgeShape.Square,
+
+        // 동의어: 원격 = 원, PUBLIC = 사각(대상 →… = 마름모)
+        ["@LINK"] = BadgeShape.Dot,
+        ["PUB"] = BadgeShape.Square,
+
+        // 구체화 뷰 갱신: FAST = 원, COMPLETE·NEVER = 사각, FORCE = 마름모, ON COMMIT = 원
+        ["FAST"] = BadgeShape.Dot,
+        ["COMPLETE"] = BadgeShape.Square,
+        ["FORCE"] = BadgeShape.Diamond,
+        ["NEVER"] = BadgeShape.Square,
+        ["COMMIT"] = BadgeShape.Dot,
+
+        // 타입·작업
+        ["VARRAY"] = BadgeShape.Square,
+        ["NT"] = BadgeShape.Diamond,
+        ["RUN"] = BadgeShape.Dot,
+
+        // 열·인덱스·제약: 키 = 마름모, NOT NULL·저장 = 사각, 그 밖 = 원
+        ["PK"] = BadgeShape.Diamond,
+        ["NN"] = BadgeShape.Square,
+        ["ID"] = BadgeShape.Dot,
+        ["VIRT"] = BadgeShape.Diamond,
+        ["LOB"] = BadgeShape.Square,
+        ["BMP"] = BadgeShape.Square,
+        ["FBI"] = BadgeShape.Diamond,
+        ["REV"] = BadgeShape.Dot,
+        ["UQ"] = BadgeShape.Dot,
+        ["UK"] = BadgeShape.Dot,
+        ["FK"] = BadgeShape.Square,
+        ["CHK"] = BadgeShape.Dot,
+        ["NOVAL"] = BadgeShape.Square,
+    };
 
     private static int SlotOrder(BadgeCorner c) => c switch
     {

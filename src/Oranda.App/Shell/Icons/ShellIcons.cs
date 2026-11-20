@@ -23,8 +23,8 @@ public static partial class ShellIcons
 
     public static bool Contains(string? key) => key is not null && Cache.ContainsKey(key);
 
-    /// <summary>아이콘 컨트롤. 키를 모르면 null.</summary>
-    public static Control? Create(string? key, double size = 16)
+    /// <summary>아이콘 컨트롤. 키를 모르면 null. <paramref name="tone"/> 을 주면 등록된 색 대신 그 색 토큰(<c>OrandaIcon&lt;tone&gt;Brush</c>)으로 칠한다.</summary>
+    public static Control? Create(string? key, double size = 16, string? tone = null)
     {
         if (key is null || !Cache.TryGetValue(key, out var icon))
         {
@@ -32,7 +32,7 @@ public static partial class ShellIcons
         }
 
         var path = new Path { Data = icon.Geometry };
-        path.Bind(Shape.FillProperty, path.GetResourceObservable("OrandaIcon" + icon.Tone + "Brush"));
+        path.Bind(Shape.FillProperty, path.GetResourceObservable("OrandaIcon" + (tone ?? icon.Tone) + "Brush"));
         var canvas = new Canvas { Width = Grid, Height = Grid, Children = { path } };
         return new Viewbox { Width = size, Height = size, Stretch = Stretch.Uniform, Child = canvas, Classes = { "shell-icon" } };
     }
