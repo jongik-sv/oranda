@@ -224,7 +224,8 @@ public class DbToolsTests
 
         var item = Assert.Single(vm.Results);
         Assert.Equal("SCOTT.EMP", item.Title);
-        Assert.Equal("8 KB", item.Size);
+        Assert.Equal("8.0 K", item.Size);
+        Assert.Equal("8,192 B", item.SizeExact);
         Assert.Equal("SCOTT", admin.LastQuery?.Owner);
         Assert.Equal("1개 찾음", vm.StatusText);
 

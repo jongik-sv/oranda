@@ -17,6 +17,7 @@ using Oranda.Core.Schema;
 using Oranda.Core.Sessions;
 using Oranda.Language.Errors;
 using Oranda.Core.Shell;
+using Oranda.Core.Grid;
 
 namespace Oranda.App.Features.DbTools;
 
@@ -46,6 +47,9 @@ public sealed class ObjectSearchItem
     public string Modified => Row.LastDdlTime?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? string.Empty;
 
     public string Size => DbToolsSupport.FormatSize(Row.SizeBytes);
+
+    /// <summary>크기 칸 툴팁: 정확한 바이트 수(「12,897,485 B」). 크기가 없으면 null(툴팁 없음).</summary>
+    public string? SizeExact => Row.SizeBytes is null ? null : ByteSizeText.Exact(Row.SizeBytes);
 }
 
 /// <summary>소스 검색 결과 한 줄(화면용). 두 번 누르면 PL/SQL 편집기에서 그 줄을 연다.</summary>

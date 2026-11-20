@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
 using Oranda.Core.Sessions;
+using Oranda.Core.Grid;
 
 namespace Oranda.App.Features.DbTools;
 
@@ -51,19 +52,6 @@ internal static class DbToolsSupport
         return string.IsNullOrWhiteSpace(user) ? null : user.Trim().Trim('"').ToUpperInvariant();
     }
 
-    public static string FormatSize(long? bytes)
-    {
-        if (bytes is not { } b)
-        {
-            return string.Empty;
-        }
-
-        return b switch
-        {
-            >= 1L << 30 => (b / (double)(1L << 30)).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " GB",
-            >= 1L << 20 => (b / (double)(1L << 20)).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " MB",
-            >= 1L << 10 => (b / (double)(1L << 10)).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " KB",
-            _ => b.ToString(System.Globalization.CultureInfo.InvariantCulture) + " B",
-        };
-    }
+    /// <summary>용량 표시(「12.3 M」, <see cref="ByteSizeText"/>). null = 빈 글.</summary>
+    public static string FormatSize(long? bytes) => ByteSizeText.Format(bytes);
 }

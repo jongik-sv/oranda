@@ -317,4 +317,45 @@ public class DetailTableTests
             w.Close();
         }
     });
+    [Fact]
+    public Task Byte_column_shows_k_m_g_with_the_exact_count_in_a_tooltip_but_copies_the_raw_number() => HeadlessHost.Run(() =>
+    {
+        // 객체 상세 「크기」 구역 모양: 「바이트」 열은 K·M·G·T 로 보이고, 툴팁·복사는 원래 수.
+        var (w, t) = Open(
+            [new object?[] { "SAMPLE.ORDERS", "TABLE", 12_897_485L, 3L }, new object?[] { "합계", null, 512L, null }],
+            ["세그먼트", "종류", "바이트", "익스텐트"]);
+        try
+        {
+            var cell = CellTexts(t, 0).ElementAt(2);
+            Assert.Equal("12.3 M", cell.Text);
+            Assert.Equal(TextAlignment.Right, cell.TextAlignment);
+            Assert.Equal("12,897,485 B", ToolTip.GetTip(cell));
+            Assert.Equal("512 B", CellTexts(t, 1).ElementAt(2).Text);
+            Assert.Equal("3", CellTexts(t, 0).ElementAt(3).Text); // 바이트가 아닌 수는 그대로
+            Click(w, t, 0);
+            Assert.Equal("SAMPLE.ORDERS\tTABLE\t12897485\t3\n", t.BuildTsv(withHeaders: false));
+        }
+        finally
+        {
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task Other_columns_and_non_numbers_in_a_byte_column_stay_as_they_are() => HeadlessHost.Run(() =>
+    {
+        var (w, t) = Open([new object?[] { "x", "모름" }], ["이름", "바이트"]);
+        var (plainWindow, plain) = Open();
+        try
+        {
+            Assert.Equal("모름", CellTexts(t, 0).ElementAt(1).Text);
+            Assert.Null(ToolTip.GetTip(CellTexts(t, 0).ElementAt(1)));
+            Assert.Equal("1024", CellTexts(plain, 0).ElementAt(1).Text); // 열 이름이 「값」이면 숫자 그대로
+        }
+        finally
+        {
+            w.Close();
+            plainWindow.Close();
+        }
+    });
 }

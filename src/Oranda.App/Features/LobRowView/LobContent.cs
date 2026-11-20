@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Oranda.Core.Grid;
 
 namespace Oranda.App.Features.LobRowView;
 
@@ -178,7 +179,7 @@ public static class LobContent
         var len = new FileInfo(path).Length;
         if (len > MaxUploadBytes)
         {
-            throw new InvalidOperationException($"파일이 너무 큽니다({len:N0} B). 한 번에 {MaxUploadBytes / (1024 * 1024)} MB 까지 불러올 수 있습니다.");
+            throw new InvalidOperationException($"파일이 너무 큽니다({ByteSizeText.Format(len)}). 한 번에 {ByteSizeText.Format(MaxUploadBytes)} 까지 불러올 수 있습니다.");
         }
     }
 

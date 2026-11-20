@@ -271,7 +271,7 @@ public sealed class ManualRollbackScreens
         var month = Directory.CreateDirectory(Path.Combine(data, "rollback", "2026-11"));
         await using (var file = File.Create(Path.Combine(month.FullName, "00000003.orb")))
         {
-            file.SetLength(3_250_000); // 「3.1 MB」
+            file.SetLength(3_250_000); // 「3.1 M」
         }
 
         var settings = new SettingsService(new MemorySettingsStore());

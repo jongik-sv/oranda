@@ -83,7 +83,7 @@ public class AiChatImageNormalizerTests
         var result = AiImageNormalizer.Normalize(png);
 
         Assert.Null(result.Image);
-        Assert.Contains("5.0 MB", result.Error, StringComparison.Ordinal);
+        Assert.Contains("5.0 M", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]

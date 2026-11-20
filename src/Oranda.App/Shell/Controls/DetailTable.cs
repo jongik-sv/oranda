@@ -14,6 +14,7 @@ using Avalonia.Media;
 using Avalonia.VisualTree;
 using Oranda.App.Features.Localization;
 using Oranda.App.Styles;
+using Oranda.Core.Grid;
 
 namespace Oranda.App.Shell.Controls;
 
@@ -167,6 +168,12 @@ public sealed class DetailTable : UserControl
 
     /// <summary>오른쪽 칼럼 번호(0부터)를 오른쪽 맞춤으로 그릴 열. 값이 글자로 미리 서식된 표가 쓴다(숫자 값은 기존대로 자동).</summary>
     public IReadOnlyCollection<int>? RightAlignedColumns { get; set; }
+
+    /// <summary>
+    /// 용량(바이트) 열로 볼 열 이름(SU-1). 이 이름의 열에서 숫자 칸은 「12.3 M」 처럼 보이고 툴팁에 정확한 바이트 수가 뜬다.
+    /// 복사(TSV)는 원래 숫자 그대로다. 객체 상세 「크기」 구역(Oracle·Tibero 공급자)의 「바이트」 열이 여기에 걸린다.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> ByteColumnTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "바이트", "Bytes" };
 
     /// <summary>행을 눌렀다. 값은 그 행의 칸들.</summary>
     public event EventHandler<IReadOnlyList<object?>>? RowActivated;
@@ -406,7 +413,7 @@ public sealed class DetailTable : UserControl
         _probeHost.Child = GridC.Probe(
             shownRows,
             columns.Count + 1,
-            (row, c) => c == 0 ? (RowNumbers ? shownRows.Count.ToString(CultureInfo.InvariantCulture).Length : 0) : GridC.TextWeight(Format(c - 1 < row.Count ? row[c - 1] : null)),
+            (row, c) => c == 0 ? (RowNumbers ? shownRows.Count.ToString(CultureInfo.InvariantCulture).Length : 0) : GridC.TextWeight(Shown(c - 1, c - 1 < row.Count ? row[c - 1] : null)),
             row => Cells(row, shownRows.Count - 1, columns.Count, register: false),
             Group);
         UpdateStatus();
@@ -438,10 +445,15 @@ public sealed class DetailTable : UserControl
 
             var cell = new TextBlock
             {
-                Text = Format(value),
+                Text = Shown(c, value),
                 TextAlignment = (IsNumber(value) || RightAlignedColumns?.Contains(c) == true) && c < columnCount - 1 ? TextAlignment.Right : TextAlignment.Left, // 늘어나는 마지막 열은 왼쪽
                 Opacity = value is null ? 0.45 : 1,
             };
+            if (IsByteColumn(c) && IsNumber(value))
+            {
+                ToolTip.SetTip(cell, ByteSizeText.Exact(Convert.ToInt64(value, CultureInfo.InvariantCulture)));
+            }
+
             if (MonospaceColumns?.Contains(c) == true)
             {
                 cell.Bind(TextBlock.FontFamilyProperty, cell.GetResourceObservable("OrandaGridFontFamily"));
@@ -562,6 +574,11 @@ public sealed class DetailTable : UserControl
 
     // TSV 한 칸에 탭·줄바꿈이 있으면 칸이 갈라지므로 공백으로 바꾼다.
     private static string Flat(string s) => s.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
+
+    private bool IsByteColumn(int c) => Columns is { } cols && c < cols.Count && ByteColumnTitles.Contains(cols[c]);
+
+    // 화면에 보일 칸 글: 용량 열의 숫자는 K·M·G·T, 나머지는 복사와 같은 글.
+    private string Shown(int c, object? value) => IsByteColumn(c) && ByteSizeText.FromValue(value) is { } size ? size : Format(value);
 
     private static bool IsNumber(object? v) => v is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal;
 

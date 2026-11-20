@@ -23,7 +23,7 @@ public class AiChatImageWarningTests
 
         Assert.Equal("ERP 운영", dialog.FindControl<TextBlock>("ConnectionText")!.Text);
         Assert.Equal("예제 LLM · http://llm.example:8080", dialog.FindControl<TextBlock>("RecipientText")!.Text);
-        Assert.Equal("2장 · 1.8 MB", dialog.FindControl<TextBlock>("ImagesText")!.Text);
+        Assert.Equal("2장 · 1.8 M", dialog.FindControl<TextBlock>("ImagesText")!.Text);
         Assert.True(dialog.FindControl<Border>("EnvBadge")!.IsVisible);
         Assert.Equal("그대로 보내기", dialog.FindControl<Button>("ConfirmButton")!.Content);
 

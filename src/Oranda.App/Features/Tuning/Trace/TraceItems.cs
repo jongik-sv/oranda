@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Oranda.Core.Tuning;
+using Oranda.Core.Grid;
 
 namespace Oranda.App.Features.Tuning.Trace;
 
@@ -37,12 +38,8 @@ public sealed record TraceFileEntry(TraceFileInfo Info, IReadOnlyList<string> Li
         }
     }
 
-    public static string Size(long bytes) => bytes switch
-    {
-        >= 1024 * 1024 => (bytes / 1024d / 1024d).ToString("0.0", CultureInfo.InvariantCulture) + " MB",
-        >= 1024 => (bytes / 1024d).ToString("0", CultureInfo.InvariantCulture) + " KB",
-        _ => bytes.ToString(CultureInfo.InvariantCulture) + " B",
-    };
+    /// <summary>「5.0 M」 처럼 사람이 읽는 크기(<see cref="ByteSizeText"/>).</summary>
+    public static string Size(long bytes) => ByteSizeText.Format(bytes);
 }
 
 /// <summary>TKPROF 식 요약 표 한 줄(문장).</summary>

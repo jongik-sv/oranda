@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oranda.Core.Rollback;
 using Oranda.Core.Storage;
+using Oranda.Core.Grid;
 
 namespace Oranda.App.Shell.Settings;
 
@@ -209,14 +210,8 @@ public sealed partial class RollbackSettingsPage : ObservableObject
         }
     }
 
-    /// <summary>「3.1 MB」 처럼 사람이 읽는 크기.</summary>
-    internal static string SizeText(long bytes) => bytes switch
-    {
-        < 1024 => bytes.ToString(CultureInfo.CurrentCulture) + " B",
-        < 1024 * 1024 => (bytes / 1024d).ToString("0.#", CultureInfo.CurrentCulture) + " KB",
-        < 1024L * 1024 * 1024 => (bytes / (1024d * 1024)).ToString("0.#", CultureInfo.CurrentCulture) + " MB",
-        _ => (bytes / (1024d * 1024 * 1024)).ToString("0.#", CultureInfo.CurrentCulture) + " GB",
-    };
+    /// <summary>「3.1 M」 처럼 사람이 읽는 크기(<see cref="ByteSizeText"/>).</summary>
+    internal static string SizeText(long bytes) => ByteSizeText.Format(bytes);
 
     private string Format(string key, params object[] args) =>
         string.Format(CultureInfo.CurrentCulture, _text.Lookup(key), args);

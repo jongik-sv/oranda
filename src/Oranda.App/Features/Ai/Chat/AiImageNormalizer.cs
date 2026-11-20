@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using Oranda.Core.Ai.Contracts;
 using SkiaSharp;
+using Oranda.Core.Grid;
 
 namespace Oranda.App.Features.Ai.Chat;
 
@@ -86,13 +87,8 @@ public static class AiImageNormalizer
         }
     }
 
-    /// <summary>바이트 수를 「1.8 MB」 처럼 보인다.</summary>
-    public static string SizeText(long bytes) => bytes switch
-    {
-        >= 1024 * 1024 => string.Create(CultureInfo.CurrentCulture, $"{bytes / 1024d / 1024d:0.0} MB"),
-        >= 1024 => string.Create(CultureInfo.CurrentCulture, $"{bytes / 1024d:0} KB"),
-        _ => string.Create(CultureInfo.CurrentCulture, $"{bytes} B"),
-    };
+    /// <summary>바이트 수를 「1.8 M」 처럼 보인다(<see cref="ByteSizeText"/>).</summary>
+    public static string SizeText(long bytes) => ByteSizeText.Format(bytes);
 
     /// <summary>파일 머리 바이트로 형식을 알아본다(확장자는 믿지 않는다). 허용 형식이 아니면 null.</summary>
     public static string? SniffMediaType(ReadOnlySpan<byte> data)

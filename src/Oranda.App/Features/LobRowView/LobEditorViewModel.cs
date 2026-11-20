@@ -279,7 +279,7 @@ public sealed partial class LobEditorViewModel : ToolPanelViewModelBase
                 var bytes = await LobContent.ReadBinaryFileAsync(path, ct).ConfigureAwait(true);
                 _pendingBytes = bytes;
                 ShowBytes(bytes);
-                StatusText = $"파일을 불러왔습니다: {path} ({bytes.Length:N0} B). 저장하려면 「DB 에 저장」.";
+                StatusText = $"파일을 불러왔습니다: {path} ({ByteSizeText.Format(bytes.Length)}). 저장하려면 「DB 에 저장」.";
             }
 
             IsDirty = true;
@@ -438,7 +438,7 @@ public sealed partial class LobEditorViewModel : ToolPanelViewModelBase
         HexText = LobContent.HexDump(head.AsSpan(0, got));
         if (lob.Length > got)
         {
-            HexText += $"... (앞 {got:N0} B 만 보임, 전체 {lob.Length:N0} B)" + Environment.NewLine;
+            HexText += $"... (앞 {ByteSizeText.Format(got)} 만 보임, 전체 {ByteSizeText.Format(lob.Length)})" + Environment.NewLine;
         }
     }
 
@@ -448,7 +448,7 @@ public sealed partial class LobEditorViewModel : ToolPanelViewModelBase
         HexText = LobContent.HexDump(bytes.AsSpan(0, n));
         if (bytes.Length > n)
         {
-            HexText += $"... (앞 {n:N0} B 만 보임, 전체 {bytes.Length:N0} B)" + Environment.NewLine;
+            HexText += $"... (앞 {ByteSizeText.Format(n)} 만 보임, 전체 {ByteSizeText.Format(bytes.Length)})" + Environment.NewLine;
         }
 
         ImageBytes = bytes.Length <= LobContent.MaxImageBytes && LobContent.DetectImageMime(bytes) is not null ? bytes : null;
@@ -523,7 +523,12 @@ public sealed partial class LobEditorViewModel : ToolPanelViewModelBase
             LobKind.Blob => "BLOB",
             _ => "BFILE",
         };
-        var unit = lob.Kind is LobKind.Clob or LobKind.NClob ? "문자" : "B";
-        return lob.Length < 0 ? kind : $"{kind} {lob.Length:N0} {unit}";
+        if (lob.Length < 0)
+        {
+            return kind;
+        }
+
+        // CLOB 길이는 글자 수라 그대로, BLOB·BFILE 은 용량 표시(SU-1).
+        return lob.Kind is LobKind.Clob or LobKind.NClob ? $"{kind} {lob.Length:N0} 문자" : $"{kind} {ByteSizeText.Format(lob.Length)}";
     }
 }

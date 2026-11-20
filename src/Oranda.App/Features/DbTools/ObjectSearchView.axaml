@@ -45,7 +45,7 @@
                       <TextBlock Grid.Column="2" Text="{Binding Status}" />
                       <TextBlock Grid.Column="3" Text="{Binding Created}" />
                       <TextBlock Grid.Column="4" Text="{Binding Modified}" />
-                      <TextBlock Grid.Column="5" Text="{Binding Size}" HorizontalAlignment="Right" />
+                      <TextBlock Grid.Column="5" Text="{Binding Size}" ToolTip.Tip="{Binding SizeExact}" HorizontalAlignment="Right" />
                     </Grid>
                   </DataTemplate>
                 </ListBox.ItemTemplate>

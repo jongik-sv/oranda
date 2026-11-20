@@ -163,8 +163,8 @@ public class TraceViewerTests
         await vm.LoadAsync(new TestSession());
         Assert.True(vm.IsTruncated);
         Assert.Equal(5 * 1024, vm.SelectedFile!.Lines.Count);
-        Assert.Contains("앞 5.0 MB 만", vm.StatusText, StringComparison.Ordinal);
-        Assert.Contains("6.0 MB", vm.BodyInfoText, StringComparison.Ordinal);
+        Assert.Contains("앞 5.0 M 만", vm.StatusText, StringComparison.Ordinal);
+        Assert.Contains("6.0 M", vm.BodyInfoText, StringComparison.Ordinal);
 
         vm.ReadAll();
         Assert.False(vm.IsTruncated);
