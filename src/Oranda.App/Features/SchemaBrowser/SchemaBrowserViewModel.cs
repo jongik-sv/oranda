@@ -182,6 +182,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
     {
         CurrentSession = session;
         _dragColumns.Clear();
+        _properties?.ColumnStats.ClearCache();
         return LoadAsync(ct);
     }
 
@@ -245,6 +246,7 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         if (CurrentSession is { } s && string.Equals(s.DbKey, e.DbKey, StringComparison.Ordinal))
         {
             _dragColumns.Clear(); // 표 구조가 바뀌었을 수 있다.
+            _properties?.ColumnStats.ClearCache(); // 통계를 다시 모았을 수 있다(새로 고침 = 다시 읽음).
             if (_ownListRefreshes > 0)
             {
                 return; // 이 창이 부른 유형 새로 고침·캐시 초기화: 끝난 뒤 스스로 다시 그린다(두 번 읽지 않게)
@@ -456,9 +458,15 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
 
 
     /// <summary>트리 아래 속성 창(오렌지 Property 창). 고른 객체의 상세를 탭으로 보인다.</summary>
-    public SchemaPropertiesViewModel Properties => _properties ??= new SchemaPropertiesViewModel(() => _meta, () => CurrentSession);
+    public SchemaPropertiesViewModel Properties => _properties ??= new SchemaPropertiesViewModel(() => _meta, () => CurrentSession, () => Tuning);
 
     private SchemaPropertiesViewModel? _properties;
+
+    /// <summary>열 통계 요약용 튜닝 조회. 열 노드를 처음 고를 때 꺼낸다(트리를 그릴 때는 꺼내지 않는다).</summary>
+    private Oranda.Core.Tuning.ITuningService? Tuning =>
+        _tuningService ??= _services?.GetService(typeof(Oranda.Core.Tuning.ITuningService)) as Oranda.Core.Tuning.ITuningService;
+
+    private Oranda.Core.Tuning.ITuningService? _tuningService;
 
     partial void OnSelectedNodeChanged(SchemaNode? value)
     {
@@ -468,6 +476,15 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
         if (value?.Kind is not (SchemaNodeKind.Column or SchemaNodeKind.Index or SchemaNodeKind.Constraint or SchemaNodeKind.Folder))
         {
             _ = Properties.ShowAsync(value?.Ref);
+        }
+        else if (value is { Kind: SchemaNodeKind.Column, Parent.Parent.Ref: { } table })
+        {
+            // 열 노드: 그 테이블의 열 통계 요약(테이블당 한 번 읽어 둔다).
+            _ = Properties.ColumnStats.ShowAsync(table, value.Column?.Name ?? value.Title);
+        }
+        else
+        {
+            Properties.ColumnStats.Hide();
         }
 
         // 오른쪽 클릭 메뉴·단축키의 활성 조건(commands.md 2.2): 객체 노드면 schemaNodeSelected, 소스가 있는 객체면 plsqlNodeSelected.

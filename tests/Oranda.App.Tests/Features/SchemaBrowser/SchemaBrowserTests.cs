@@ -573,6 +573,9 @@ public class SchemaBrowserTests
 
         public ISchemaAdminProvider? Admin { get; set; }
 
+        /// <summary>열 노드의 통계 요약용(없으면 「접속하면…」 안내).</summary>
+        public Oranda.Core.Tuning.ITuningService? Tuning { get; set; }
+
         public TestEditor Editor { get; } = new();
 
         public InMemorySchemaFavoriteStore Favorites { get; } = new();
@@ -593,6 +596,7 @@ public class SchemaBrowserTests
             : serviceType == typeof(ISchemaFavoriteStore) ? h.Favorites
             : serviceType == typeof(ISchemaTreeProvider) ? h.Tree
             : serviceType == typeof(ISchemaAdminProvider) ? h.Admin
+            : serviceType == typeof(Oranda.Core.Tuning.ITuningService) ? h.Tuning
             : serviceType == typeof(Oranda.App.Shell.Settings.SettingsService) ? h.Settings
             : serviceType == typeof(Oranda.App.Features.ConnectionManager.IConnectionService) ? h.Connections
             : null;

@@ -21,7 +21,8 @@ internal static class StatsFormat
 {
     public static string Count(long? value) => value?.ToString("N0", CultureInfo.InvariantCulture) ?? string.Empty;
 
-    public static string Bytes(long? value) => value is { } v ? v.ToString("N0", CultureInfo.InvariantCulture) + " B" : string.Empty;
+    /// <summary>용량(바이트): 공용 표기 <see cref="Oranda.Core.Grid.ByteSizeText.Format"/>(1024 단위, 「96 B」·「1.5 K」).</summary>
+    public static string Bytes(long? value) => Oranda.Core.Grid.ByteSizeText.Format(value);
 
     /// <summary>밀도: 0.001 아래는 지수 표기(8.0e-8), 그 위는 소수 넷째 자리.</summary>
     public static string Density(double? value)
@@ -58,13 +59,15 @@ public sealed class ColumnStatsItem(ColumnStatsRow row)
 
     public string HistogramText => HasHistogram ? Row.Histogram : T("없음", "None");
 
-    /// <summary>격자 칸(열·고유 값·NULL·밀도·히스토그램·버킷·마지막 수집).</summary>
+    /// <summary>격자 칸(열·고유 값·NULL·밀도·최솟값·최댓값·히스토그램·버킷·마지막 수집).</summary>
     public IReadOnlyList<object?> Cells =>
     [
         Name,
         StatsFormat.Count(Row.NumDistinct),
         StatsFormat.Count(Row.NumNulls),
         StatsFormat.Density(Row.Density),
+        Row.LowValue ?? string.Empty,
+        Row.HighValue ?? string.Empty,
         HistogramText,
         StatsFormat.Count(Row.NumBuckets),
         StatsFormat.Date(Row.LastAnalyzed),

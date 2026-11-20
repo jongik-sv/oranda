@@ -66,7 +66,12 @@ public abstract partial class CatalogTuningService : ITuningService
     {
         var rows = (await QueryAsync(s, "tuning.column_stats", TableBinds(owner, table), TuningQueryOptions, ct)).Rows;
         return [.. rows.Select(r => new ColumnStatsRow(
-            Str(r[0]) ?? string.Empty, Long(r[1]), Long(r[2]), Double(r[3]), Str(r[4]) ?? "NONE", Long(r[5]), Date(r[6])))];
+            Str(r[0]) ?? string.Empty, Long(r[1]), Long(r[2]), Double(r[3]), Str(r[4]) ?? "NONE", Long(r[5]), Date(r[6]))
+        {
+            // 7 = data_type, 8·9 = RAWTOHEX(low_value·high_value). 열이 모자란 옛 질의(덮어쓴 카탈로그)는 값 없이 둔다.
+            LowValue = r.Length > 8 ? ColumnStatValue.Decode(Str(r[7]), r[8]) : null,
+            HighValue = r.Length > 9 ? ColumnStatValue.Decode(Str(r[7]), r[9]) : null,
+        })];
     }
 
     public async Task<IReadOnlyList<HistogramBucket>> GetHistogramAsync(ISession s, string owner, string table, string column, CancellationToken ct)

@@ -3,7 +3,8 @@
 -- min-version: 11
 -- requires: @PFX@_tab_columns, @PFX@_tab_col_statistics
 -- license: none
-SELECT c.column_name, s.num_distinct, s.num_nulls, s.density, NVL(s.histogram, 'NONE') AS histogram, s.num_buckets, s.last_analyzed
+SELECT c.column_name, s.num_distinct, s.num_nulls, s.density, NVL(s.histogram, 'NONE') AS histogram, s.num_buckets, s.last_analyzed,
+       c.data_type, RAWTOHEX(s.low_value) AS low_value, RAWTOHEX(s.high_value) AS high_value
   FROM @PFX@_tab_columns c
   LEFT JOIN @PFX@_tab_col_statistics s
     ON s.owner = c.owner AND s.table_name = c.table_name AND s.column_name = c.column_name

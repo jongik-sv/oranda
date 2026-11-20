@@ -26,7 +26,17 @@ public sealed record TableStatsRow(
 /// <param name="NumBuckets">num_buckets</param>
 /// <param name="LastAnalyzed">last_analyzed</param>
 public sealed record ColumnStatsRow(
-    string ColumnName, long? NumDistinct, long? NumNulls, double? Density, string Histogram, long? NumBuckets, DateTime? LastAnalyzed);
+    string ColumnName, long? NumDistinct, long? NumNulls, double? Density, string Histogram, long? NumBuckets, DateTime? LastAnalyzed)
+{
+    /// <summary>
+    /// 최솟값(low_value 를 자료형에 맞춰 푼 글, <see cref="ColumnStatValue"/>). 통계가 없으면 null. 실제 열 값이다 —
+    /// AI 결과로 내보낼 때는 이름(low_value)이 행 값 가림 목록에 있어 허용 수준 아래면 지워진다.
+    /// </summary>
+    public string? LowValue { get; init; }
+
+    /// <summary>최댓값(high_value 를 푼 글). 통계가 없으면 null. 실제 열 값이다.</summary>
+    public string? HighValue { get; init; }
+}
 
 /// <summary>히스토그램 버킷 하나(TN-03). 출처: @PFX@_tab_histograms.</summary>
 /// <param name="EndpointNumber">endpoint_number(누적 개수 또는 버킷 번호)</param>

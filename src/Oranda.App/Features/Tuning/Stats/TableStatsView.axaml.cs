@@ -29,7 +29,7 @@ public partial class TableStatsView : UserControl
     public TableStatsView()
     {
         InitializeComponent();
-        ColumnTable.RightAlignedColumns = [1, 2, 3, 5];
+        ColumnTable.RightAlignedColumns = [1, 2, 3, 7];
         IndexTable.RightAlignedColumns = [3, 4, 5, 6];
         IndexTable.MonospaceColumns = [0, 1];
         IndexTable.CellEmphasis = (c, row) => c == StaleColumn && _indexRows.TryGetValue(row, out var i) && i.StaleDanger;

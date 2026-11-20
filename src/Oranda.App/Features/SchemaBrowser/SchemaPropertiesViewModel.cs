@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
+using Oranda.Core.Tuning;
 
 namespace Oranda.App.Features.SchemaBrowser;
 
@@ -59,10 +60,22 @@ public sealed partial class SchemaPropertiesViewModel : ObservableObject, IDispo
     private int _generation;
 
     public SchemaPropertiesViewModel(Func<IMetadataProvider?> meta, Func<ISession?> session)
+        : this(meta, session, () => null)
+    {
+    }
+
+    /// <param name="meta">객체 상세·정의.</param>
+    /// <param name="session">지금 세션.</param>
+    /// <param name="tuning">열 노드를 고를 때 보이는 열 통계 요약(<see cref="ColumnStats"/>). 처음 열을 고를 때 부른다.</param>
+    public SchemaPropertiesViewModel(Func<IMetadataProvider?> meta, Func<ISession?> session, Func<ITuningService?> tuning)
     {
         _meta = meta;
         _session = session;
+        ColumnStats = new SchemaColumnStatsViewModel(tuning, session);
     }
+
+    /// <summary>열 노드를 고르면 탭 대신 보이는 열 통계 요약.</summary>
+    public SchemaColumnStatsViewModel ColumnStats { get; }
 
     /// <summary>고른 객체를 보이기 전에 기다리는 시간(시험은 0).</summary>
     public TimeSpan Delay { get; set; } = TimeSpan.FromMilliseconds(250);
@@ -82,6 +95,7 @@ public sealed partial class SchemaPropertiesViewModel : ObservableObject, IDispo
 
     public void Dispose()
     {
+        ColumnStats.Dispose();
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = null;
@@ -90,6 +104,7 @@ public sealed partial class SchemaPropertiesViewModel : ObservableObject, IDispo
     /// <summary>객체를 보인다(null 이면 비운다). 앞서 부른 것은 취소한다.</summary>
     public async Task ShowAsync(DbObjectRef? target)
     {
+        ColumnStats.Hide();
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;

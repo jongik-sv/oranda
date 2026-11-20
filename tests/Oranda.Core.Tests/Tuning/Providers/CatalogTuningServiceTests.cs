@@ -41,6 +41,33 @@ public class CatalogTuningServiceTests
     }
 
     [Fact]
+    public async Task Column_stats_decode_low_and_high_values_by_data_type()
+    {
+        _port.Rows["tuning.column_stats"] = FakeCatalogPort.Of(
+            ["EMPNO", 14L, 0L, 0.07, "NONE", 1L, new DateTime(2026, 1, 2), "NUMBER", "C24A46", "C25023"],
+            ["ENAME", 14L, 0L, 0.07, "FREQUENCY", 14L, new DateTime(2026, 1, 2), "VARCHAR2", "4144414D53", "57415244"],
+            ["NOTE", null, null, null, "NONE", null, null, "VARCHAR2", null, null]);
+
+        var rows = await Service().GetColumnStatsAsync(Session, "SCOTT", "EMP", default);
+
+        Assert.Equal(("7369", "7934"), (rows[0].LowValue, rows[0].HighValue));
+        Assert.Equal(("ADAMS", "WARD"), (rows[1].LowValue, rows[1].HighValue));
+        Assert.Null(rows[2].LowValue);
+        Assert.Null(rows[2].HighValue);
+    }
+
+    [Fact]
+    public async Task Column_stats_without_the_low_high_columns_still_read()
+    {
+        _port.Rows["tuning.column_stats"] = FakeCatalogPort.Of(["EMPNO", 14L, 0L, 0.07, "NONE", 1L, null]);
+
+        var row = Assert.Single(await Service().GetColumnStatsAsync(Session, "SCOTT", "EMP", default));
+
+        Assert.Equal(14, row.NumDistinct);
+        Assert.Null(row.LowValue);
+    }
+
+    [Fact]
     public async Task Plan_controls_without_access_are_empty_but_other_errors_throw()
     {
         var service = Service();

@@ -44,6 +44,19 @@ public class TuningStatsTests
     }
 
     [Fact]
+    public void Column_stats_grid_shows_low_and_high_values_after_density()
+    {
+        var item = new ColumnStatsItem(new ColumnStatsRow("ENAME", 14, 0, 0.07, "FREQUENCY", 14, null) { LowValue = "ADAMS", HighValue = "WARD" });
+
+        Assert.Equal(TableStatsViewModel.ColumnHeaders.Count, item.Cells.Count);
+        Assert.Equal("최솟값", TableStatsViewModel.ColumnHeaders[4]);
+        Assert.Equal("최댓값", TableStatsViewModel.ColumnHeaders[5]);
+        Assert.Equal(("ADAMS", "WARD"), (item.Cells[4], item.Cells[5]));
+        Assert.Equal("14", item.Cells[7]);
+        Assert.Equal(string.Empty, new ColumnStatsItem(new ColumnStatsRow("X", null, null, null, "NONE", null, null)).Cells[4]);
+    }
+
+    [Fact]
     public void Parameters_from_other_windows_become_targets()
     {
         var session = new TuningFakeSession(user: "scott");

@@ -480,7 +480,7 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
     /// <summary>열 통계 격자 머리글.</summary>
     public static IReadOnlyList<string> ColumnHeaders =>
     [
-        T("열", "Column"), T("고유 값", "Distinct"), "NULL", T("밀도", "Density"), T("히스토그램", "Histogram"), T("버킷", "Buckets"), T("마지막 수집", "Last analyzed"),
+        T("열", "Column"), T("고유 값", "Distinct"), "NULL", T("밀도", "Density"), T("최솟값", "Low"), T("최댓값", "High"), T("히스토그램", "Histogram"), T("버킷", "Buckets"), T("마지막 수집", "Last analyzed"),
     ];
 
     /// <summary>인덱스 통계 격자 머리글.</summary>

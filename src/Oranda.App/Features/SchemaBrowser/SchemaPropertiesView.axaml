@@ -3,6 +3,7 @@
              xmlns:vm="using:Oranda.App.Features.SchemaBrowser"
              xmlns:ctl="using:Oranda.App.Shell.Controls"
              xmlns:se="using:Oranda.App.Features.SqlEditor"
+             xmlns:ts="using:Oranda.App.Features.Tuning.Stats"
              x:Class="Oranda.App.Features.SchemaBrowser.SchemaPropertiesView"
              x:DataType="vm:SchemaPropertiesViewModel">
   <UserControl.Styles>
@@ -19,12 +20,24 @@
         </ItemsPanelTemplate>
       </Setter>
     </Style>
+    <!-- 열 통계 요약의 분포 막대: 「테이블 통계 보기」 히스토그램과 같은 가로 막대. -->
+    <Style Selector="ProgressBar.hbar">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Background" Value="{DynamicResource OrandaBarTrackBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource OrandaIconBlueBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
   </UserControl.Styles>
   <DockPanel>
     <Border DockPanel.Dock="Top" Classes="panel-toolbar">
       <TextBlock Text="{Binding Header}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="4,2" />
     </Border>
-    <TabControl x:Name="PropertyTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}" Padding="0">
+    <Panel>
+    <TabControl x:Name="PropertyTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}" Padding="0"
+                IsVisible="{Binding !ColumnStats.IsVisible}">
       <TabControl.ItemTemplate>
         <DataTemplate x:DataType="vm:PropertyTab">
           <TextBlock Text="{Binding Title}" />
@@ -39,5 +52,53 @@
         </DataTemplate>
       </TabControl.ContentTemplate>
     </TabControl>
+    <!-- 열 노드를 고르면 탭 대신 그 열의 통계 요약(고유 값·NULL·최솟값·최댓값·히스토그램·수집 시각 + 분포 막대). -->
+    <ScrollViewer x:Name="ColumnStatsPanel" IsVisible="{Binding ColumnStats.IsVisible}"
+                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <StackPanel Margin="8,6" Spacing="6" DataContext="{Binding ColumnStats}" x:DataType="vm:SchemaColumnStatsViewModel">
+        <DockPanel>
+          <ProgressBar DockPanel.Dock="Right" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="40" Height="2" MinHeight="2" MinWidth="0"
+                       VerticalAlignment="Center" AutomationProperties.Name="열 통계를 읽는 중" />
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+        <TextBlock x:Name="ColumnStatsMessage" Classes="dim" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" />
+        <ItemsControl x:Name="ColumnStatsLines" ItemsSource="{Binding Lines}" Grid.IsSharedSizeScope="True" AutomationProperties.Name="열 통계 요약">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ColumnStatLine">
+              <Grid Margin="0,1">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="cl" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Classes="dim" Text="{Binding Label}" Margin="0,0,12,0" VerticalAlignment="Center" />
+                <SelectableTextBlock Grid.Column="1" Classes="mono" Text="{Binding Value}" TextTrimming="CharacterEllipsis"
+                                     ToolTip.Tip="{Binding Value}" VerticalAlignment="Center" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" Text="{Binding HistogramCaption}" TextWrapping="Wrap" />
+        <ItemsControl x:Name="ColumnStatsBars" ItemsSource="{Binding HistogramBars}" IsVisible="{Binding HasHistogram}" Grid.IsSharedSizeScope="True"
+                      AutomationProperties.Name="열 값 분포">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ts:HistogramBarItem">
+              <Grid Margin="0,1">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="bl" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="bv" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Classes="mono" Text="{Binding Label}" MaxWidth="140" TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding Label}" Margin="0,0,6,0" VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+                <ProgressBar Grid.Column="1" Classes="hbar" Minimum="0" Maximum="100" Value="{Binding Percent}" />
+                <TextBlock Grid.Column="2" Classes="num" Text="{Binding ShareText}" ToolTip.Tip="{Binding CountText}" MinWidth="48" Margin="6,0,0,0"
+                           VerticalAlignment="Center" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
+    </Panel>
   </DockPanel>
 </UserControl>
