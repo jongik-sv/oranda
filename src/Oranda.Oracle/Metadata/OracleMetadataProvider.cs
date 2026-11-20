@@ -159,6 +159,8 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
         // 즉시성 범위(백그라운드 갱신·자동 완성)에서는 읽는 사이에 실행이 잠금을 잡으면 다음 행에서 바쁨으로 그만두고 실행에 양보한다.
         // 커서를 여는 첫 잠금은 지금 흐름의 한도(SessionWait.CurrentLimit)로, 행마다 다시 잡는 이어 잠금은 이어 읽기 한도(SessionWait.Resume)로 기다린다:
         // 뒤 갱신은 시작을 0 으로 두어 사용자 실행 뒤에 줄을 서지 않고(D-041), 시작한 읽기는 짧은 질의 하나에 끊기지 않는다.
+        // 커서를 연 뒤에는 행 하나 읽을 때마다 행 진행을 감시한다(OracleSession.RowStallTimeout): 멈추면 ServerStallException·세션 Broken(ReadRowsAsync).
+        session.ThrowIfStalled();
         var gate = session.CommandGate;
         OracleCommand? cmd = null;
         OracleDataReader? reader = null;
@@ -186,27 +188,72 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
             gate.Release();
         }
 
+        var open = reader;
+        var command = cmd!;
+        return await ReadRowsAsync(session, token => ReadRowAsync(open, token), async () =>
+        {
+            await open.DisposeAsync();
+            await command.DisposeAsync();
+        }, OracleSession.RowStallTimeout, ct);
+    }
+
+    /// <summary>행 하나(없으면 null). 값 읽기(LOB 등)도 같은 서버 왕복에 들 수 있어 함께 감시한다.</summary>
+    private static async Task<object?[]?> ReadRowAsync(OracleDataReader reader, CancellationToken ct)
+    {
+        if (!await reader.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        var row = new object?[reader.FieldCount];
+        for (var i = 0; i < row.Length; i++)
+        {
+            row[i] = await reader.IsDBNullAsync(i, ct) ? null : reader.GetValue(i);
+        }
+
+        return row;
+    }
+
+    /// <summary>
+    /// 이미 연 커서의 이어 읽기: 행마다 명령 잠금을 다시 잡고(<see cref="SessionWait.Resume"/> 한도) <paramref name="readRow"/> 로 행 하나를 읽는다. 끝나면 잠금을 잡고 <paramref name="close"/>(커서 닫기).
+    /// <para>
+    /// 행 진행 감시: 잠금을 잡은 뒤부터 행이 올 때까지를 잰다(잠금 기다림 = 사용자 실행이 도는 시간은 재지 않는다). <paramref name="rowStall"/> 동안 행이 오지 않으면
+    /// <see cref="ServerStallException"/> 을 던지고 세션은 Broken(<see cref="OracleSession.AwaitRowsAsync{T}"/>): 멈춘 읽기가 끝난 뒤 커서를 닫고 잠금을 놓는다(D-041).
+    /// ODP.NET 23 의 ReadAsync 는 실제 비동기(망 수신까지 async)라 따로 스레드 풀에 넘기지 않는다.
+    /// </para>
+    /// </summary>
+    internal static async Task<List<object?[]>> ReadRowsAsync(OracleSession session, Func<CancellationToken, Task<object?[]?>> readRow, Func<ValueTask> close,
+                                                              TimeSpan rowStall, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(readRow);
+        ArgumentNullException.ThrowIfNull(close);
+        var gate = session.CommandGate;
+        var stalled = false;
         try
         {
             using var resume = SessionWait.Resume(); // 이미 연 커서의 이어 읽기
+            var progress = new RowProgressWatch();
             var rows = new List<object?[]>();
             while (true)
             {
                 await gate.EnterAsync(ct);
                 try
                 {
-                    if (!await reader.ReadAsync(ct))
+                    progress.Start(); // 잠금을 잡았다: 여기부터 이 행을 잰다
+                    var row = await session.AwaitRowsAsync(readRow(ct), progress, rowStall, close);
+                    if (row is null)
                     {
                         return rows;
                     }
 
-                    var row = new object?[reader.FieldCount];
-                    for (var i = 0; i < row.Length; i++)
-                    {
-                        row[i] = await reader.IsDBNullAsync(i, ct) ? null : reader.GetValue(i);
-                    }
-
                     rows.Add(row);
+                    progress.Row();
+                }
+                catch (ServerStallException)
+                {
+                    stalled = true; // 커서 닫기·잠금 놓기는 멈춘 읽기가 끝난 뒤 백그라운드에서
+                    throw;
                 }
                 catch (OracleException ex) when (session.ReportFailure(ex))
                 {
@@ -214,21 +261,26 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
                 }
                 finally
                 {
-                    gate.Release();
+                    if (!stalled)
+                    {
+                        gate.Release();
+                    }
                 }
             }
         }
         finally
         {
-            await gate.EnterForCleanupAsync(); // 커서 닫기도 같은 연결로 간다
-            try
+            if (!stalled)
             {
-                await reader.DisposeAsync();
-                await cmd!.DisposeAsync();
-            }
-            finally
-            {
-                gate.Release();
+                await gate.EnterForCleanupAsync(); // 커서 닫기도 같은 연결로 간다
+                try
+                {
+                    await close();
+                }
+                finally
+                {
+                    gate.Release();
+                }
             }
         }
     }
@@ -266,9 +318,12 @@ internal sealed partial class OracleMetadataProvider : CachedMetadataProvider, I
         return [.. rows.Select(r => MetadataRows.ToMeta(dbKey, r, fetchedAt))];
     }
 
-    /// <summary>세션이 닫혔거나 끊겼거나 바쁘다(<see cref="SessionBusyException"/> 는 <see cref="InvalidOperationException"/>).</summary>
+    /// <summary>
+    /// 세션이 닫혔거나 끊겼거나 바쁘다(<see cref="SessionBusyException"/> 는 <see cref="InvalidOperationException"/>).
+    /// 서버 응답 없음(<see cref="ServerStallException"/>)도 같다: 세션은 이미 끊긴 것으로 돌아갔고, 남은 일은 다시 접속한 세션이 이어 받는다.
+    /// </summary>
     protected override bool IsIgnorableBackgroundRefreshFailure(Exception ex)
-        => ex is OracleException or InvalidOperationException or ObjectDisposedException;
+        => ex is OracleException or InvalidOperationException or ObjectDisposedException or ServerStallException;
 
     // ---- 행 → 모델 ----
 

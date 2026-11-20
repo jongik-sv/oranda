@@ -30,44 +30,39 @@ internal static class SchemaQuery
             }
         }
 
-        var gate = session.CommandGate; // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다
-        await gate.EnterAsync(ct);
-        try
-        {
-            await using var cmd = session.Connection.CreateCommand();
-            cmd.BindByName = true;
-            cmd.CommandText = sql;
-            bind(cmd);
+        // 세션 연결의 명령 잠금(D-041) 안에서 읽고, 커서를 연 뒤 행 진행을 감시한다(OracleSession.RowStallTimeout, 멈추면 ServerStallException·세션 Broken).
+        return await session.ReadWatchedAsync(progress => ReadAsync(session, sql, bind, progress, ct), OracleSession.RowStallTimeout, ct);
+    }
 
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            var columns = new string[reader.FieldCount];
-            for (var i = 0; i < columns.Length; i++)
+    private static async Task<Table> ReadAsync(OracleSession session, string sql, Action<OracleCommand> bind, RowProgressWatch progress, CancellationToken ct)
+    {
+        await using var cmd = session.Connection.CreateCommand();
+        cmd.BindByName = true;
+        cmd.CommandText = sql;
+        bind(cmd);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        progress.Start(); // 커서가 열렸다: 여기부터 행 진행을 잰다
+        var columns = new string[reader.FieldCount];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            columns[i] = reader.GetName(i);
+        }
+
+        var rows = new List<object?[]>();
+        while (await reader.ReadAsync(ct))
+        {
+            var row = new object?[columns.Length];
+            for (var i = 0; i < row.Length; i++)
             {
-                columns[i] = reader.GetName(i);
+                row[i] = await reader.IsDBNullAsync(i, ct) ? null : reader.GetValue(i);
             }
 
-            var rows = new List<object?[]>();
-            while (await reader.ReadAsync(ct))
-            {
-                var row = new object?[columns.Length];
-                for (var i = 0; i < row.Length; i++)
-                {
-                    row[i] = await reader.IsDBNullAsync(i, ct) ? null : reader.GetValue(i);
-                }
+            rows.Add(row);
+            progress.Row();
+        }
 
-                rows.Add(row);
-            }
-
-            return new Table(columns, rows);
-        }
-        catch (OracleException ex) when (session.ReportFailure(ex))
-        {
-            throw;
-        }
-        finally
-        {
-            gate.Release();
-        }
+        return new Table(columns, rows);
     }
 
     internal static string? Str(object? v) => v switch

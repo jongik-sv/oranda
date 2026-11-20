@@ -9,6 +9,7 @@ namespace Oranda.Oracle.Catalog;
 /// <summary>
 /// Oracle 의 카탈로그 질의 포트 구현(P0-b): 계획·모니터·튜닝 서비스가 따로 갖던 같은 모양의 QueryAsync 를 하나로 모았다.
 /// 순서 = 세션 형식 확인 → 카탈로그 Get → 라이선스 관문 → <c>@PFX@</c>(선택) → 세션 명령 잠금(D-041) → 명령(BindByName, LOB 끝까지, LONG 은 선택) → 바인드 → 읽기.
+/// 커서를 연 뒤 행 진행을 감시한다(<see cref="OracleSession.ReadWatchedAsync{T}"/>).
 /// </summary>
 internal static class OracleCatalogQuery
 {
@@ -20,53 +21,49 @@ internal static class OracleCatalogQuery
         CatalogLicenseGate.Ensure(s, query.Header.License);
         var sql = options.Apply(query.Sql, s.Server);
 
-        var gate = session.CommandGate; // 세션 연결의 명령 잠금(D-041): 실행·결과 페이지·다른 도구와 한 줄로 선다
-        await gate.EnterAsync(ct);
-        try
+        // 세션 연결의 명령 잠금(D-041) 안에서 읽고, 커서를 연 뒤 행 진행을 감시한다(OracleSession.RowStallTimeout, 멈추면 ServerStallException·세션 Broken).
+        return await session.ReadWatchedAsync(progress => ReadAsync(session, sql, binds, options, progress, ct), OracleSession.RowStallTimeout, ct);
+    }
+
+    private static async Task<CatalogRows> ReadAsync(OracleSession session, string sql, IReadOnlyList<CatalogBind> binds, CatalogQueryOptions options,
+        RowProgressWatch progress, CancellationToken ct)
+    {
+        await using var cmd = session.Connection.CreateCommand();
+        cmd.BindByName = true;
+        cmd.InitialLOBFetchSize = -1;
+        if (options.ReadLong)
         {
-            await using var cmd = session.Connection.CreateCommand();
-            cmd.BindByName = true;
-            cmd.InitialLOBFetchSize = -1;
-            if (options.ReadLong)
+            cmd.InitialLONGFetchSize = -1; // PLAN_TABLE.other 는 LONG(p.* 로 읽는다)
+        }
+
+        cmd.CommandText = sql;
+        AddBinds(cmd, binds);
+
+        var rows = new List<object?[]>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        progress.Start(); // 커서가 열렸다: 여기부터 행 진행을 잰다
+        var names = new List<string>(options.ColumnNames ? reader.FieldCount : 0);
+        if (options.ColumnNames)
+        {
+            for (var i = 0; i < reader.FieldCount; i++)
             {
-                cmd.InitialLONGFetchSize = -1; // PLAN_TABLE.other 는 LONG(p.* 로 읽는다)
+                names.Add(reader.GetName(i));
+            }
+        }
+
+        while (await reader.ReadAsync(ct))
+        {
+            var row = new object?[reader.FieldCount];
+            for (var i = 0; i < row.Length; i++)
+            {
+                row[i] = await reader.IsDBNullAsync(i, ct) ? null : reader.GetValue(i);
             }
 
-            cmd.CommandText = sql;
-            AddBinds(cmd, binds);
-
-            var rows = new List<object?[]>();
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            var names = new List<string>(options.ColumnNames ? reader.FieldCount : 0);
-            if (options.ColumnNames)
-            {
-                for (var i = 0; i < reader.FieldCount; i++)
-                {
-                    names.Add(reader.GetName(i));
-                }
-            }
-
-            while (await reader.ReadAsync(ct))
-            {
-                var row = new object?[reader.FieldCount];
-                for (var i = 0; i < row.Length; i++)
-                {
-                    row[i] = await reader.IsDBNullAsync(i, ct) ? null : reader.GetValue(i);
-                }
-
-                rows.Add(row);
-            }
-
-            return new CatalogRows(names, rows);
+            rows.Add(row);
+            progress.Row();
         }
-        catch (OracleException ex) when (session.ReportFailure(ex))
-        {
-            throw;
-        }
-        finally
-        {
-            gate.Release();
-        }
+
+        return new CatalogRows(names, rows);
     }
 
     /// <summary>

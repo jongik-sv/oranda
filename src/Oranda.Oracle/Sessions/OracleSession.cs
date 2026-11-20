@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Oracle.ManagedDataAccess.Client;
 using Oranda.Core.Connection;
 using Oranda.Core.Events;
@@ -21,6 +22,8 @@ internal sealed class OracleSession : ISession
     private readonly IEventBus _events;
     private readonly Action<Guid>? _onDisposed;
     private readonly Func<ValueTask> _closeConnection;
+    private readonly Lazy<Task> _closeOnce;
+    private bool _stalled;
     private readonly Timer? _keepAlive;
     private int _state = (int)SessionState.Idle;
     private volatile bool _pending;
@@ -34,6 +37,7 @@ internal sealed class OracleSession : ISession
         Rollback = rollback ?? new OracleRollbackHooks(null, null, events);
         _onDisposed = onDisposed;
         _closeConnection = closeConnection ?? connection.DisposeAsync;
+        _closeOnce = new Lazy<Task>(() => _closeConnection().AsTask());
         Id = id;
         Profile = profile;
         Server = server;
@@ -106,6 +110,138 @@ internal sealed class OracleSession : ISession
         MarkBroken(Execution.OracleErrorClassifier.ToDbError(ex));
         return true;
     }
+
+    /// <summary>
+    /// 커서를 연 뒤 행이 하나도 오지 않으면 멈춘 것으로 보는 시간(<see cref="RowProgressWatch.DefaultLimit"/>, 30초). 전체 제한 시간이 아니다:
+    /// 행이 계속 오면 큰 목록도 끝까지 읽는다. 문장 실행(커서를 열기 전 — 서버가 일하는 시간)과 명령 잠금 기다림은 재지 않는다.
+    /// </summary>
+    internal static readonly TimeSpan RowStallTimeout = RowProgressWatch.DefaultLimit;
+
+    /// <summary>행 진행이 멈춰 끊긴 것으로 본 세션에 다시 질의할 때의 오류 글.</summary>
+    internal const string StalledSessionMessage = "서버 응답이 없어 끊긴 것으로 본 세션입니다. 다시 접속한 뒤 다시 시도하세요.";
+
+    /// <summary>
+    /// 행 진행이 멈춰 끊긴 것으로 본 세션인가(<see cref="ReportStalled"/>). 멈춘 일이 명령 잠금을 쥐고 있을 수 있으므로 새 질의는 잠금을 기다리지 않고 바로 실패한다.
+    /// </summary>
+    internal bool IsStalled => Volatile.Read(ref _stalled);
+
+    /// <summary>끊긴 것으로 본 세션이면 잠금을 기다리지 않고 바로 <see cref="InvalidOperationException"/>(<see cref="StalledSessionMessage"/>).</summary>
+    internal void ThrowIfStalled()
+    {
+        if (IsStalled)
+        {
+            // 멈춘 일이 아직 잠금을 쥐고 있을 수 있다: 기다리면 이 호출도 끝나지 않는다. 다시 접속해야 한다.
+            throw new InvalidOperationException(StalledSessionMessage);
+        }
+    }
+
+    /// <summary>
+    /// 결과를 받는 도중 행 진행이 멈춰(<see cref="ServerStallException"/>, 서버 응답 없음) 기다림을 그만뒀다: 연결은 끊긴 것으로 보고 세션을 Broken 으로 돌린 뒤
+    /// (다음 사용 때 다시 접속) 연결 닫기를 백그라운드에서 시작한다 — 닫으면 멈춘 수신이 깨어 일이 끝날 수 있다. 기다리지 않는다.
+    /// 나중에 세션을 닫아도(<see cref="DisposeAsync"/>) 같은 닫기 하나를 기다린다(두 번 닫지 않는다).
+    /// </summary>
+    internal void ReportStalled(ServerStallException stall)
+    {
+        ArgumentNullException.ThrowIfNull(stall);
+        Volatile.Write(ref _stalled, true);
+        MarkBroken(new DbError("ORANDA-STALL", stall.Message) { Dbms = Dbms.Oracle, Kind = DbErrorKind.Disconnected });
+        _ = TimedClose.RunAsync(CloseConnectionOnce, "응답 없는 세션 " + Id.ToString("N")[..8]).ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// 명령 잠금을 잡고 <paramref name="read"/>(커서 열기 → 읽기 전체)를 스레드 풀에서 돌리며 행 진행을 감시한다(<see cref="RowProgressWatch"/>).
+    /// <paramref name="read"/> 는 커서를 연 뒤 <see cref="RowProgressWatch.Start"/>, 행마다 <see cref="RowProgressWatch.Row"/> 를 부른다.
+    /// 멈추면 <see cref="ServerStallException"/>(세션 Broken). 끊긴 것으로 본 세션이면 바로 실패한다(<see cref="ThrowIfStalled"/>).
+    /// </summary>
+    internal async Task<T> ReadWatchedAsync<T>(Func<RowProgressWatch, Task<T>> read, TimeSpan rowStall, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        ThrowIfStalled();
+        await CommandGate.EnterAsync(ct);
+        var handedOff = false;
+        try
+        {
+            var progress = new RowProgressWatch();
+            var work = Task.Run(() => read(progress), CancellationToken.None);
+            return await AwaitRowsAsync(work, progress, rowStall);
+        }
+        catch (ServerStallException)
+        {
+            handedOff = true; // 잠금은 멈춘 일이 끝난 뒤 놓는다
+            throw;
+        }
+        catch (OracleException ex) when (ReportFailure(ex))
+        {
+            throw;
+        }
+        finally
+        {
+            if (!handedOff)
+            {
+                CommandGate.Release();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 명령 잠금을 쥔 채 읽기 일 <paramref name="work"/> 를 기다린다(<see cref="RowProgressWatch.WaitAsync{T}"/>). 멈추면(<see cref="ServerStallException"/>)
+    /// 잠금 놓기는 일이 끝난 뒤로 넘기고(그 전에 놓으면 다른 명령이 같은 연결에 끼어든다, D-041) — 그 앞에 <paramref name="afterWork"/>(커서 닫기 등)를 한다 —
+    /// 세션을 끊긴 것으로 알린 뒤(<see cref="ReportStalled"/>) 다시 던진다. 이 예외를 받은 쪽은 잠금을 놓지 않는다.
+    /// </summary>
+    internal async Task<T> AwaitRowsAsync<T>(Task<T> work, RowProgressWatch progress, TimeSpan rowStall, Func<ValueTask>? afterWork = null)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        ArgumentNullException.ThrowIfNull(progress);
+        try
+        {
+            return await progress.WaitAsync(work, rowStall);
+        }
+        catch (ServerStallException stall)
+        {
+            ReleaseWhenDone(work, afterWork);
+            Trace.TraceWarning("세션 {0} 질의 읽기가 멈춤: {1}초 동안 행이 오지 않아 기다림을 그만두고 연결을 끊긴 것으로 봅니다(행 {2}개까지 받음).",
+                Id.ToString("N")[..8], stall.Limit.TotalSeconds, progress.Rows);
+            ReportStalled(stall);
+            throw;
+        }
+    }
+
+    /// <summary>멈춰 기다림을 그만둔 일이 끝나면(연결이 닫혀 수신이 깨거나 늦게 답이 오면) 정리(<paramref name="afterWork"/>)를 하고 명령 잠금을 놓는다. 결과·예외는 관찰만 한다.</summary>
+    private void ReleaseWhenDone(Task work, Func<ValueTask>? afterWork) =>
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await work;
+            }
+            catch (Exception)
+            {
+                // 멈춘 일의 늦은 실패(닫힌 연결 등)는 이미 끊긴 것으로 알렸다.
+            }
+
+            try
+            {
+                if (afterWork is not null)
+                {
+                    await afterWork();
+                }
+            }
+            catch (Exception)
+            {
+                // 끊긴 연결의 커서 닫기 실패는 삼킨다.
+            }
+            finally
+            {
+                CommandGate.Release();
+            }
+        });
+
+    /// <summary>연결 닫기는 한 번만 시작한다: 멈춤 처리(<see cref="ReportStalled"/>)와 세션 닫기가 같은 닫기를 기다린다.</summary>
+    private ValueTask CloseConnectionOnce() => new(_closeOnce.Value);
 
     /// <summary>
     /// 커밋(설계 7.3·7.4·13.5): 한 번의 명령 잠금 안에서 열린 묶음 저장(<see cref="OracleRollbackHooks.BeforeEndAsync"/>) → <c>COMMIT</c> →
@@ -253,7 +389,7 @@ internal sealed class OracleSession : ISession
         }
 
         // 명령 잠금은 Dispose 하지 않는다(SessionCommandGate): 닫는 중에도 진행 중인 작업·결과 집합 정리가 놓을 수 있어야 한다.
-        await TimedClose.RunAsync(_closeConnection, "세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
+        await TimedClose.RunAsync(CloseConnectionOnce, "세션 " + Id.ToString("N")[..8]).ConfigureAwait(false);
     }
 
     /// <summary>명령 잠금을 쥔 채 문장 하나를 보낸다. 끊김 오류면 세션을 Broken 으로 돌리고 다시 던진다.</summary>
