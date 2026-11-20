@@ -33,6 +33,9 @@ public sealed class MetadataProviderDispatcher : IMetadataProvider
     public Task<IReadOnlyDictionary<string, string>> ListTableCommentsAsync(ISession s, string owner, CancellationToken ct) =>
         _selector.For<IMetadataProvider>(s).ListTableCommentsAsync(s, owner, ct);
 
+    public Task<IReadOnlyDictionary<DbObjectRef, ObjectMark>> ListObjectMarksAsync(ISession s, string owner, CancellationToken ct) =>
+        _selector.For<IMetadataProvider>(s).ListObjectMarksAsync(s, owner, ct);
+
     public Task<IReadOnlyList<ProcedureInfo>> GetProceduresAsync(ISession s, DbObjectRef obj, CancellationToken ct) =>
         _selector.For<IMetadataProvider>(s).GetProceduresAsync(s, obj, ct);
 
