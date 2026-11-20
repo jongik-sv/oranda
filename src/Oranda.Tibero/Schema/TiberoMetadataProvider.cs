@@ -211,10 +211,11 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
     /// <summary>
     /// 세션이 닫혔거나 끊겼거나 바쁘다(<see cref="SessionBusyException"/> 는 <see cref="InvalidOperationException"/>).
     /// 드라이버 오류는 드라이버 형식을 참조하지 않고 <see cref="TiberoErrorClassifier"/> 가 알아보는 서버 오류로 가른다.
+    /// 서버 응답 없음(<see cref="ServerStallException"/>)도 같다: 세션은 이미 끊긴 것으로 돌아갔고, 남은 일은 다시 접속한 세션이 이어 받는다.
     /// 카탈로그 변형 없음(<c>CatalogQueryNotFoundException</c>)은 삼키지 않는다.
     /// </summary>
     protected override bool IsIgnorableBackgroundRefreshFailure(Exception ex)
-        => TiberoErrorClassifier.IsDriverException(ex) || ex is InvalidOperationException or ObjectDisposedException;
+        => TiberoErrorClassifier.IsDriverException(ex) || ex is InvalidOperationException or ObjectDisposedException or ServerStallException;
 
     /// <summary>시험이 부른다(보호 멤버 <see cref="IsIgnorableBackgroundRefreshFailure"/> 를 연다).</summary>
     internal bool IsIgnorable(Exception ex) => IsIgnorableBackgroundRefreshFailure(ex);

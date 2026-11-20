@@ -1,5 +1,6 @@
 using Oranda.Core.Catalog;
 using Oranda.Core.Metadata;
+using Oranda.Core.Sessions;
 using Oranda.Tibero.Schema;
 using Oranda.Tibero.Sessions;
 using static Oranda.Tibero.Tests.Schema.SchemaFakes;
@@ -207,6 +208,16 @@ public class TiberoMetadataProviderTests
         Assert.True(provider.IsIgnorable(new ObjectDisposedException("session")));
         Assert.False(provider.IsIgnorable(new CatalogQueryNotFoundException("meta.objects", 6)));
         Assert.False(provider.IsIgnorable(new IOException()));
+    }
+
+    [Fact]
+    public void A_server_stall_is_ignored_in_the_background_refresh_like_a_lost_session_but_a_plain_timeout_is_not()
+    {
+        var provider = new TiberoMetadataProvider(Throwing(new InvalidOperationException()));
+
+        // 행 진행이 멈추면 세션은 이미 끊긴 것으로 돌아갔다: 남은 일은 다시 접속한 세션이 이어 받는다(Oracle 과 같다).
+        Assert.True(provider.IsIgnorable(new ServerStallException(TimeSpan.FromSeconds(30))));
+        Assert.False(provider.IsIgnorable(new TimeoutException()));
     }
 
     [Fact]
