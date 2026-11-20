@@ -1,5 +1,4 @@
 using Avalonia.Controls;
-using Avalonia.Controls.Documents;
 using Avalonia.Media;
 using Oranda.App.Shell;
 
@@ -52,19 +51,7 @@ public partial class ReleaseNotesWindow : Window
             }
 
             var box = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, Name = "Notes_" + section.Version };
-            box.Inlines ??= new InlineCollection();
-            var first = true;
-            foreach (var noteLine in section.Lines)
-            {
-                if (!first)
-                {
-                    box.Inlines.Add(new LineBreak());
-                }
-
-                first = false;
-                box.Inlines.Add(new Run(noteLine.Text) { FontWeight = noteLine.Bold ? FontWeight.Bold : FontWeight.Normal });
-            }
-
+            ReleaseNotesRenderer.Fill(box, section.Lines);
             panel.Children.Add(box);
         }
     }

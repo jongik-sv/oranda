@@ -41,7 +41,7 @@ public partial class UpdateWindow : Window
         }
     }
 
-    /// <summary>릴리스 노트 줄을 굵은 머리글·일반 줄로 그린다.</summary>
+    /// <summary>릴리스 노트 줄을 굵은 머리글·굵게·고정폭 조각으로 그린다.</summary>
     private void RenderNotes(UpdateViewModel vm)
     {
         if (this.FindControl<SelectableTextBlock>("NotesBox") is not { } box)
@@ -49,19 +49,7 @@ public partial class UpdateWindow : Window
             return;
         }
 
-        box.Inlines ??= new InlineCollection();
-        box.Inlines.Clear();
-        var first = true;
-        foreach (var line in vm.NoteLines)
-        {
-            if (!first)
-            {
-                box.Inlines.Add(new LineBreak());
-            }
-
-            first = false;
-            box.Inlines.Add(new Run(line.Text) { FontWeight = line.Bold ? FontWeight.Bold : FontWeight.Normal });
-        }
+        ReleaseNotesRenderer.Fill(box, vm.NoteLines);
     }
 
     /// <summary>열려 있는 업데이트 창(없으면 null). 시험이 살펴본다.</summary>

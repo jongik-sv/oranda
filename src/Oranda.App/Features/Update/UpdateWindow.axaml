@@ -4,7 +4,7 @@
         x:Class="Oranda.App.Features.Update.UpdateWindow"
         x:DataType="update:UpdateViewModel"
         Title="{Binding TitleText}"
-        Width="480" MinWidth="420"
+        Width="640" MinWidth="480"
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
@@ -33,7 +33,7 @@
 
     <StackPanel Spacing="4" IsVisible="{Binding HasNotes}">
       <TextBlock Classes="hint" Text="{Binding Strings[notes]}" />
-      <Border BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}" CornerRadius="4" Padding="8,6" MaxHeight="180" MinHeight="80">
+      <Border BorderThickness="1" BorderBrush="{DynamicResource OrandaSeparatorBrush}" CornerRadius="4" Padding="8,6" MaxHeight="320" MinHeight="80">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <Panel>
             <SelectableTextBlock x:Name="NotesBox" TextWrapping="Wrap" AutomationProperties.Name="{Binding Strings[notes]}" />
