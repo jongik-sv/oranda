@@ -8,7 +8,7 @@ namespace Oranda.Tibero.Tests.Integration;
 /// <summary>
 /// SG-1 통계 수집 실행의 Tibero 문장(<see cref="GatherStatsDialect"/>)을 실서버로 확인한다. 옵션 조합마다 성공하고 LAST_ANALYZED 가 채워지는지 본다.
 /// 조정자 실측(Tibero 6)으로 AUTO_SAMPLE_SIZE·SKEWONLY 는 되고 AUTO_INVALIDATE 는 ODP-15146 — 생성기가 그 상수를 넣지 않는지도 본다.
-/// 공유 계정이라 <c>ORT_AE_GS</c> 표 하나만 만들고 끝에 지운다.
+/// 공유 계정이라 <c>ORT_TE_GS</c> 표 하나만(TableEditProbe 접두 규칙) 만들고 끝에 지운다.
 /// </summary>
 [Trait("Category", "Integration")]
 public class TiberoGatherStatsIt(ITestOutputHelper output)
@@ -25,7 +25,7 @@ public class TiberoGatherStatsIt(ITestOutputHelper output)
         var session = await it.OpenAsync(SessionPurpose.Dedicated);
         var owner = session.Server.SessionUser!.ToUpperInvariant();
         var p = new TableEditProbe(session, output, owner, it.Env.DbName);
-        var t = TiberoItSessions.ObjectName("AE_GS");
+        var t = TiberoItSessions.ObjectName("TE_GS");
         await p.DropTableAsync(t);
         try
         {
