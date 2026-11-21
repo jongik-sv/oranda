@@ -167,119 +167,201 @@ internal sealed partial class TiberoMetadataProvider
         }
     }
 
+    /// <summary>상세 전체(속성 창·AI 도구 등). 구역은 <see cref="GetDetailPartAsync"/> 와 같은 것을 차례로 읽어 행이 있는 것만 담는다.</summary>
     public async Task<ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(obj);
 
-        var type = obj.ObjectType;
         var sections = new List<DetailSection>();
-        var objectBinds = ObjectBinds(obj.Owner, obj.Name, type);
-        var tableBinds = TiberoCatalogQuery.TableBinds(obj);
-        var features = s.Server.Features;
-
-        var general = await RunAsync(s, "meta.detail_general", objectBinds, ct).ConfigureAwait(false);
-        if (general.Count > 0)
+        sections.AddRange(await ReadPartAsync(s, obj, DetailPart.General, ct).ConfigureAwait(false));
+        if (TableLike.Contains(obj.ObjectType))
         {
-            var g = general[0];
-            sections.Add(new DetailSection("일반", ["항목", "값"],
-            [
-                ["유형", Str(g[0])],
-                ["상태", Str(g[1])],
-                ["생성", g[2]],
-                ["마지막 DDL", g[3]],
-                // Tibero 에는 editionable 속성이 없다(카탈로그는 NULL): 다른 미지원 칸처럼 이유를 보인다.
-                ["편집 가능(editionable)", features.Release12Columns ? Str(g[4]) : features.UnavailableReason],
-                ["객체 ID", Str(g[5])],
-            ]));
+            sections.AddRange(await ReadPartAsync(s, obj, DetailPart.Table, ct).ConfigureAwait(false));
         }
 
-        if (TableLike.Contains(type))
+        foreach (var part in ObjectDetailParts.TailParts(obj.ObjectType))
         {
-            var table = await GetTableAsync(s, obj, ct).ConfigureAwait(false);
-            AddTableSections(sections, table, features);
-        }
-
-        if (type is "TABLE" or "VIEW")
-        {
-            // 뷰는 INSTEAD OF 트리거가 같은 쿼리로 나온다.
-            var triggers = await TryRunAsync(s, "meta.detail_triggers", tableBinds, ct).ConfigureAwait(false);
-            if (triggers is { Count: > 0 })
-            {
-                sections.Add(new DetailSection("트리거", ["이름", "유형", "이벤트", "상태", "WHEN 조건", "소유자"],
-                    [.. triggers.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5])])]));
-            }
-        }
-
-        if (string.Equals(type, "TABLE", StringComparison.Ordinal))
-        {
-            var referencedBy = await TryRunAsync(s, "meta.detail_referenced_by", tableBinds, ct).ConfigureAwait(false);
-            if (referencedBy is { Count: > 0 })
-            {
-                sections.Add(new DetailSection("참조됨", ["소유자", "테이블", "외래키", "열", "참조 키", "삭제 규칙", "상태"],
-                    [.. referencedBy.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5]), Str(r[6])])]));
-            }
-
-            var partitions = await RunAsync(s, "meta.detail_partitions", tableBinds, ct).ConfigureAwait(false);
-            if (partitions.Count > 0)
-            {
-                sections.Add(new DetailSection("파티션",
-                    ["위치", "이름", "방식", "하위 방식", "경계값", "테이블스페이스", "행 수", "마지막 분석"],
-                    [.. partitions.Select(r => (IReadOnlyList<object?>)[Int(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4])?.Trim(), Str(r[5]), Long(r[6]), r[7]])]));
-            }
-
-            var stats = await RunAsync(s, "meta.detail_stats", tableBinds, ct).ConfigureAwait(false);
-            if (stats.Count > 0)
-            {
-                var r = stats[0];
-                sections.Add(new DetailSection("통계", ["항목", "값"],
-                [
-                    ["행 수", Long(r[0])],
-                    ["블록 수", Long(r[1])],
-                    ["평균 행 길이", Long(r[2])],
-                    ["마지막 분석", r[3]],
-                    ["샘플 크기", Long(r[4])],
-                    ["파티션 테이블", Str(r[5])],
-                    ["임시 테이블", Str(r[6])],
-                    ["압축", Str(r[7])],
-                    ["테이블스페이스", Str(r[8])],
-                ]));
-            }
-        }
-
-        if (type is "TABLE" or "MATERIALIZED VIEW" or "INDEX")
-        {
-            // dba 권한이 있으면 dba_segments, 없으면 자기 스키마일 때만 user_segments. 못 읽으면 크기 절을 빼고 계속한다.
-            var sizes = await TryRunAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_size" : "meta.detail_size_user", tableBinds, ct)
-                .ConfigureAwait(false);
-            if (sizes is { Count: > 0 })
-            {
-                var total = sizes.Sum(r => Long(r[2]) ?? 0);
-                sections.Add(new DetailSection("크기", ["세그먼트", "종류", "바이트", "익스텐트"],
-                [
-                    .. sizes.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Long(r[2]), Long(r[3])]),
-                    ["합계", null, total, null],
-                ]));
-            }
-        }
-
-        var privileges = await RunAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_privileges" : "meta.detail_privileges_user", tableBinds, ct)
-            .ConfigureAwait(false);
-        if (privileges.Count > 0)
-        {
-            sections.Add(new DetailSection("권한", ["받는 사람", "권한", "재부여 가능", "부여자"],
-                [.. privileges.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3])])]));
-        }
-
-        var deps = await RunAsync(s, "meta.detail_dependencies", objectBinds, ct).ConfigureAwait(false);
-        if (deps.Count > 0)
-        {
-            sections.Add(new DetailSection("의존", ["방향", "소유자", "이름", "유형"],
-                [.. deps.Select(r => (IReadOnlyList<object?>)[
-                    string.Equals(Str(r[0]), "USES", StringComparison.Ordinal) ? "참조함" : "참조됨", Str(r[1]), Str(r[2]), Str(r[3])])]));
+            sections.AddRange(await ReadPartAsync(s, obj, part, ct).ConfigureAwait(false));
         }
 
         return new ObjectDetail(obj, sections);
+    }
+
+    /// <summary>탭 목록(DL-1): 표·뷰는 캐시된 <see cref="GetTableAsync"/> 로 표 구역을 바로 만들고, 나머지 탭은 머리만. 파티션 탭은 파티션 테이블일 때만.</summary>
+    public async Task<ObjectDetailOutline> GetDetailOutlineAsync(ISession s, DbObjectRef obj, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(obj);
+        if (!TableLike.Contains(obj.ObjectType))
+        {
+            return ObjectDetailParts.Outline(obj, [], partitioned: false);
+        }
+
+        TableInfo? table = null;
+        var sections = await ObjectDetailParts.TimedAsync(s.DbKey, obj, DetailPart.Table, async () =>
+        {
+            table = await GetTableAsync(s, obj, ct).ConfigureAwait(false);
+            var list = new List<DetailSection>();
+            AddTableSections(list, table, s.Server.Features);
+            return list;
+        }).ConfigureAwait(false);
+        return ObjectDetailParts.Outline(obj, sections, table!.IsPartitioned || table.Partitioning is not null);
+    }
+
+    /// <summary>상세 구역 하나만 읽는다(DL-1). 행이 없거나 덧붙이는 구역을 읽지 못하면 빈 목록. 걸린 시간은 Trace 한 줄.</summary>
+    public Task<IReadOnlyList<DetailSection>> GetDetailPartAsync(ISession s, DbObjectRef obj, DetailPart part, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(obj);
+        return ObjectDetailParts.TimedAsync(s.DbKey, obj, part, () => ReadPartAsync(s, obj, part, ct));
+    }
+
+    private async Task<IReadOnlyList<DetailSection>> ReadPartAsync(ISession s, DbObjectRef obj, DetailPart part, CancellationToken ct)
+    {
+        var type = obj.ObjectType;
+        var objectBinds = ObjectBinds(obj.Owner, obj.Name, type);
+        var tableBinds = TiberoCatalogQuery.TableBinds(obj);
+        var features = s.Server.Features;
+        switch (part)
+        {
+            case DetailPart.Whole:
+                return (await GetObjectDetailAsync(s, obj, ct).ConfigureAwait(false)).Sections;
+            case DetailPart.General:
+            {
+                var general = await RunAsync(s, "meta.detail_general", objectBinds, ct).ConfigureAwait(false);
+                if (general.Count == 0)
+                {
+                    return [];
+                }
+
+                var g = general[0];
+                return
+                [
+                    new DetailSection("일반", ["항목", "값"],
+                    [
+                        ["유형", Str(g[0])],
+                        ["상태", Str(g[1])],
+                        ["생성", g[2]],
+                        ["마지막 DDL", g[3]],
+                        // Tibero 에는 editionable 속성이 없다(카탈로그는 NULL): 다른 미지원 칸처럼 이유를 보인다.
+                        ["편집 가능(editionable)", features.Release12Columns ? Str(g[4]) : features.UnavailableReason],
+                        ["객체 ID", Str(g[5])],
+                    ]),
+                ];
+            }
+
+            case DetailPart.Table:
+            {
+                if (!TableLike.Contains(type))
+                {
+                    return [];
+                }
+
+                var list = new List<DetailSection>();
+                AddTableSections(list, await GetTableAsync(s, obj, ct).ConfigureAwait(false), features);
+                return list;
+            }
+
+            case DetailPart.Triggers:
+            {
+                // 뷰는 INSTEAD OF 트리거가 같은 쿼리로 나온다.
+                var triggers = await TryRunAsync(s, "meta.detail_triggers", tableBinds, ct).ConfigureAwait(false);
+                return triggers is { Count: > 0 }
+                    ? [new DetailSection("트리거", ["이름", "유형", "이벤트", "상태", "WHEN 조건", "소유자"],
+                        [.. triggers.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5])])])]
+                    : [];
+            }
+
+            case DetailPart.ReferencedBy:
+            {
+                var referencedBy = await TryRunAsync(s, "meta.detail_referenced_by", tableBinds, ct).ConfigureAwait(false);
+                return referencedBy is { Count: > 0 }
+                    ? [new DetailSection("참조됨", ["소유자", "테이블", "외래키", "열", "참조 키", "삭제 규칙", "상태"],
+                        [.. referencedBy.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5]), Str(r[6])])])]
+                    : [];
+            }
+
+            case DetailPart.Partitions:
+            {
+                var partitions = await RunAsync(s, "meta.detail_partitions", tableBinds, ct).ConfigureAwait(false);
+                return partitions.Count > 0
+                    ? [new DetailSection("파티션",
+                        ["위치", "이름", "방식", "하위 방식", "경계값", "테이블스페이스", "행 수", "마지막 분석"],
+                        [.. partitions.Select(r => (IReadOnlyList<object?>)[Int(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4])?.Trim(), Str(r[5]), Long(r[6]), r[7]])])]
+                    : [];
+            }
+
+            case DetailPart.Stats:
+            {
+                var stats = await RunAsync(s, "meta.detail_stats", tableBinds, ct).ConfigureAwait(false);
+                if (stats.Count == 0)
+                {
+                    return [];
+                }
+
+                var r = stats[0];
+                return
+                [
+                    new DetailSection("통계", ["항목", "값"],
+                    [
+                        ["행 수", Long(r[0])],
+                        ["블록 수", Long(r[1])],
+                        ["평균 행 길이", Long(r[2])],
+                        ["마지막 분석", r[3]],
+                        ["샘플 크기", Long(r[4])],
+                        ["파티션 테이블", Str(r[5])],
+                        ["임시 테이블", Str(r[6])],
+                        ["압축", Str(r[7])],
+                        ["테이블스페이스", Str(r[8])],
+                    ]),
+                ];
+            }
+
+            case DetailPart.Size:
+            {
+                // dba 권한이 있으면 dba_segments, 없으면 자기 스키마일 때만 user_segments. 못 읽으면 크기 절을 빼고 계속한다.
+                var sizes = await TryRunAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_size" : "meta.detail_size_user", tableBinds, ct)
+                    .ConfigureAwait(false);
+                if (sizes is not { Count: > 0 })
+                {
+                    return [];
+                }
+
+                var total = sizes.Sum(r => Long(r[2]) ?? 0);
+                return
+                [
+                    new DetailSection("크기", ["세그먼트", "종류", "바이트", "익스텐트"],
+                    [
+                        .. sizes.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Long(r[2]), Long(r[3])]),
+                        ["합계", null, total, null],
+                    ]),
+                ];
+            }
+
+            case DetailPart.Privileges:
+            {
+                var privileges = await RunAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_privileges" : "meta.detail_privileges_user", tableBinds, ct)
+                    .ConfigureAwait(false);
+                return privileges.Count > 0
+                    ? [new DetailSection("권한", ["받는 사람", "권한", "재부여 가능", "부여자"],
+                        [.. privileges.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3])])])]
+                    : [];
+            }
+
+            case DetailPart.Dependencies:
+            {
+                var deps = await RunAsync(s, "meta.detail_dependencies", objectBinds, ct).ConfigureAwait(false);
+                return deps.Count > 0
+                    ? [new DetailSection("의존", ["방향", "소유자", "이름", "유형"],
+                        [.. deps.Select(r => (IReadOnlyList<object?>)[
+                            string.Equals(Str(r[0]), "USES", StringComparison.Ordinal) ? "참조함" : "참조됨", Str(r[1]), Str(r[2]), Str(r[3])])])]
+                    : [];
+            }
+
+            default:
+                return []; // Java 객체는 Tibero 에 없다
+        }
     }
 
     /// <summary>

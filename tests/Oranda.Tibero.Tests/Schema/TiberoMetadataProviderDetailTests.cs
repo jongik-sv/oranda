@@ -113,6 +113,70 @@ public class TiberoMetadataProviderDetailTests
     }
 
     [Fact]
+    public async Task Outline_of_a_table_reads_only_the_table_and_lists_every_tab_head_without_detail_queries()
+    {
+        var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
+        var provider = new TiberoMetadataProvider(Recording(calls, ById(TableAnswers)));
+        await using var session = Session();
+
+        var outline = await provider.GetDetailOutlineAsync(session, Emp, CancellationToken.None);
+
+        Assert.Equal(["일반", "열", "트리거", "참조됨", "통계", "크기", "권한", "의존"], outline.Tabs.Select(t => t.Title)); // 파티션 테이블이 아니면 파티션 탭이 없다
+        Assert.NotNull(outline.Tabs[1].Section);
+        Assert.All(outline.Tabs.Where(t => t.Part != DetailPart.Table), t => Assert.Null(t.Section));
+        Assert.DoesNotContain(calls, c => c.Id.StartsWith("meta.detail_", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Outline_of_a_package_asks_nothing()
+    {
+        var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
+        var provider = new TiberoMetadataProvider(Recording(calls, ById(TableAnswers)));
+        await using var session = Session();
+
+        var outline = await provider.GetDetailOutlineAsync(session, new DbObjectRef("HR", "PKG", "PACKAGE"), CancellationToken.None);
+
+        Assert.Equal(["일반", "권한", "의존"], outline.Tabs.Select(t => t.Title));
+        Assert.Empty(calls);
+    }
+
+    [Theory]
+    [InlineData(DetailPart.General, "meta.detail_general", "일반")]
+    [InlineData(DetailPart.Stats, "meta.detail_stats", "통계")]
+    [InlineData(DetailPart.Privileges, "meta.detail_privileges_user", "권한")]
+    [InlineData(DetailPart.Dependencies, "meta.detail_dependencies", "의존")]
+    [InlineData(DetailPart.Size, "meta.detail_size_user", "크기")]
+    public async Task A_part_read_sends_only_its_own_query(DetailPart part, string id, string title)
+    {
+        var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();
+        var provider = new TiberoMetadataProvider(Recording(calls, ById(TableAnswers)));
+        await using var session = Session();
+
+        var sections = await provider.GetDetailPartAsync(session, Emp, part, CancellationToken.None);
+
+        Assert.Equal([id], calls.Select(c => c.Id));
+        Assert.Equal(title, Assert.Single(sections).Title);
+    }
+
+    [Fact]
+    public async Task An_empty_or_denied_part_is_an_empty_list_and_a_required_failure_is_thrown()
+    {
+        var denied = ServerError(-8033, "TBR-8033: Specified schema object was not found.");
+        var answer = ById(TableAnswers);
+        var provider = new TiberoMetadataProvider((_, id, _, _) => id switch
+        {
+            "meta.detail_triggers" => Task.FromException<TiberoSessionQuery.Table>(denied),
+            "meta.detail_stats" => Task.FromException<TiberoSessionQuery.Table>(denied),
+            _ => Task.FromResult(answer(id)),
+        });
+        await using var session = Session();
+
+        Assert.Empty(await provider.GetDetailPartAsync(session, Emp, DetailPart.Triggers, CancellationToken.None));
+        Assert.Empty(await provider.GetDetailPartAsync(session, Emp, DetailPart.Partitions, CancellationToken.None)); // 행 없음
+        Assert.Same(denied, await Assert.ThrowsAnyAsync<Exception>(() => provider.GetDetailPartAsync(session, Emp, DetailPart.Stats, CancellationToken.None)));
+    }
+
+    [Fact]
     public async Task Ddl_of_a_type_not_built_yet_is_not_supported_and_asks_nothing()
     {
         var calls = new List<(string Id, IReadOnlyDictionary<string, object?>? Binds)>();

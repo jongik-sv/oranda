@@ -60,6 +60,19 @@ public interface IMetadataProvider
     /// <summary>객체 상세 탭(파티션·권한·의존·통계·크기 등). TSK-07-03.</summary>
     Task<ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct);
 
+    /// <summary>
+    /// 상세 탭 목록(DL-1): 탭 머리를 곧바로 보이려고 질의 없이(표·뷰는 캐시된 <see cref="GetTableAsync"/> 한 번) 만든다. 표 구역은 이미 읽힌 채로 온다.
+    /// 나머지 탭은 고를 때 <see cref="GetDetailPartAsync"/> 로 읽는다. 기본 구현은 상세 전체를 읽어 모든 탭을 읽힌 채로 준다.
+    /// </summary>
+    async Task<ObjectDetailOutline> GetDetailOutlineAsync(ISession s, DbObjectRef obj, CancellationToken ct)
+        => ObjectDetailOutline.FromDetail(await GetObjectDetailAsync(s, obj, ct).ConfigureAwait(false));
+
+    /// <summary>
+    /// 상세 구역 하나만 읽는다(DL-1). 행이 없거나 덧붙이는 구역을 읽을 권한이 없으면 빈 목록. 기본 구현은 상세 전체를 읽어 모든 구역을 준다(부르는 쪽이 제목으로 고른다).
+    /// </summary>
+    async Task<IReadOnlyList<DetailSection>> GetDetailPartAsync(ISession s, DbObjectRef obj, DetailPart part, CancellationToken ct)
+        => (await GetObjectDetailAsync(s, obj, ct).ConfigureAwait(false)).Sections;
+
     /// <summary>PL/SQL 소스(all_source). 명세/본문은 <see cref="DbObjectRef.ObjectType"/> 로 구분. TSK-08-01.</summary>
     Task<string> GetSourceAsync(ISession s, DbObjectRef obj, CancellationToken ct);
 

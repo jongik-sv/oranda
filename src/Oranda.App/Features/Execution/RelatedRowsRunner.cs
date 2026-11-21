@@ -171,8 +171,9 @@ public sealed class RelatedRowsRunner(ExecutionState state, Func<ISession?> sess
         var (info, detail) = await BusyAsync(s, async () =>
         {
             var table = await meta.GetTableAsync(s, source.Table, ct).ConfigureAwait(true);
-            var objectDetail = await meta.GetObjectDetailAsync(s, source.Table, ct).ConfigureAwait(true);
-            return (table, objectDetail);
+            // 「참조됨」 구역만 읽는다(DL-1: 상세 전체의 통계·크기·권한 질의를 보내지 않는다).
+            var referencedBy = await meta.GetDetailPartAsync(s, source.Table, DetailPart.ReferencedBy, ct).ConfigureAwait(true);
+            return (table, new Oranda.Core.Metadata.ObjectDetail(source.Table, referencedBy));
         }).ConfigureAwait(true);
         var display = RowEditPlanner.Display(source.Table);
         var referencing = ReadReferencedBy(detail);

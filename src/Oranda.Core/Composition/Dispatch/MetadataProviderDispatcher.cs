@@ -45,6 +45,12 @@ public sealed class MetadataProviderDispatcher : IMetadataProvider
     public Task<ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct) =>
         _selector.For<IMetadataProvider>(s).GetObjectDetailAsync(s, obj, ct);
 
+    public Task<ObjectDetailOutline> GetDetailOutlineAsync(ISession s, DbObjectRef obj, CancellationToken ct) =>
+        _selector.For<IMetadataProvider>(s).GetDetailOutlineAsync(s, obj, ct);
+
+    public Task<IReadOnlyList<DetailSection>> GetDetailPartAsync(ISession s, DbObjectRef obj, DetailPart part, CancellationToken ct) =>
+        _selector.For<IMetadataProvider>(s).GetDetailPartAsync(s, obj, part, ct);
+
     public Task<string> GetSourceAsync(ISession s, DbObjectRef obj, CancellationToken ct) =>
         _selector.For<IMetadataProvider>(s).GetSourceAsync(s, obj, ct);
 

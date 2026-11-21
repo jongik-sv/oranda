@@ -838,8 +838,8 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     private static async Task<DateTime?> ReadLastDdlAsync(IMetadataProvider meta, ISession session, DbObjectRef target, CancellationToken ct)
     {
-        var detail = await meta.GetObjectDetailAsync(session, target, ct).ConfigureAwait(true);
-        var row = detail.Sections.FirstOrDefault(s => s.Title == "일반")?.Rows.FirstOrDefault(r => r.Count > 1 && Equals(r[0], "마지막 DDL"));
+        var sections = await meta.GetDetailPartAsync(session, target, DetailPart.General, ct).ConfigureAwait(true); // 「일반」만(DL-1)
+        var row = sections.FirstOrDefault(s => s.Title == "일반")?.Rows.FirstOrDefault(r => r.Count > 1 && Equals(r[0], "마지막 DDL"));
         return row?[1] switch
         {
             DateTime d => d,

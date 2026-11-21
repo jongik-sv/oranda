@@ -28,14 +28,17 @@ public enum DetailKeyKind
 public sealed class ObjectDetailSection : ObservableObject
 {
     private IReadOnlyList<IReadOnlyList<object?>> _rows;
+    private IReadOnlyList<string> _columns;
     private int _editCount;
+    private string _notice = string.Empty;
 
     public ObjectDetailSection(DetailSection source)
     {
         ArgumentNullException.ThrowIfNull(source);
         Title = source.Title;
-        Columns = source.Columns;
+        _columns = source.Columns;
         _rows = source.Rows;
+        IsLoaded = true;
         KeyKind = source.Title switch
         {
             "인덱스" => DetailKeyKind.Index,
@@ -74,7 +77,39 @@ public sealed class ObjectDetailSection : ObservableObject
     /// <summary>고를 수 있는 페이지. 거짓 = 흐림(새 테이블 탭의 데이터·통계·크기, 설계 7.5).</summary>
     public bool IsAvailable { get; init; } = true;
 
-    public IReadOnlyList<string> Columns { get; }
+    public IReadOnlyList<string> Columns
+    {
+        get => _columns;
+        private set
+        {
+            if (SetProperty(ref _columns, value))
+            {
+                OnPropertyChanged(nameof(HasNumberColumn));
+                OnPropertyChanged(nameof(Text));
+            }
+        }
+    }
+
+    /// <summary>이 탭을 읽을 때 공급자에 넘길 구역 종류(DL-1). 이미 읽힌 채로 온 탭은 <see cref="DetailPart.Whole"/>·<see cref="DetailPart.Table"/>.</summary>
+    public DetailPart Part { get; private init; } = DetailPart.Whole;
+
+    /// <summary>내용을 읽었다(행이 없어 「없음」인 것 포함). 거짓이면 고를 때 <see cref="Part"/> 를 읽는다.</summary>
+    public bool IsLoaded { get; private set; }
+
+    /// <summary>표 대신 보일 안내(읽는 중·없음·읽지 못함). 빈 글이면 표를 보인다.</summary>
+    public string Notice
+    {
+        get => _notice;
+        private set
+        {
+            if (SetProperty(ref _notice, value))
+            {
+                OnPropertyChanged(nameof(HasNotice));
+            }
+        }
+    }
+
+    public bool HasNotice => Notice.Length > 0;
 
     public IReadOnlyList<IReadOnlyList<object?>> Rows
     {
@@ -108,6 +143,32 @@ public sealed class ObjectDetailSection : ObservableObject
         Rows = rows;
         return true;
     }
+
+    /// <summary>아직 읽지 않은 탭 머리(DL-1): 고르면 <paramref name="part"/> 를 읽는다.</summary>
+    internal static ObjectDetailSection CreatePending(string title, DetailPart part) =>
+        new(new DetailSection(title, [], [])) { Part = part, IsLoaded = false };
+
+    /// <summary>읽은 내용을 채운다. <paramref name="source"/> 가 null 이면 행이 없다(「없음」 안내).</summary>
+    internal void Load(DetailSection? source)
+    {
+        if (source is null)
+        {
+            Columns = [];
+            Rows = [];
+            Notice = LiteralTranslator.IsEnglish ? "None" : "없음";
+        }
+        else
+        {
+            Columns = source.Columns;
+            Rows = source.Rows;
+            Notice = string.Empty;
+        }
+
+        IsLoaded = true;
+    }
+
+    /// <summary>표 대신 안내만 바꾼다(읽는 중·읽지 못함). 내용은 읽지 않은 채로 둔다.</summary>
+    internal void ShowNotice(string notice) => Notice = notice;
 
     /// <summary>「데이터」 탭 항목(표 내용 없음).</summary>
     internal static ObjectDetailSection CreateData() =>
@@ -173,6 +234,9 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
     private ObjectDataViewModel? _data;
     private int _generation;
     private bool _opening;
+    private CancellationTokenSource? _detailCts;
+    private readonly Dictionary<DetailPart, Task> _partLoads = [];
+    private bool _ddlLoaded;
 
     public ObjectDetailViewModel()
     {
@@ -337,17 +401,47 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         {
             _ = Data.EnsureLoadedAsync(); // 처음 고를 때만 읽는다(실패는 데이터 탭 안내에)
         }
-    }
-
-    private void ReloadDdlOnOptionChange()
-    {
-        if (!_opening && Target is not null && _session is not null)
+        else if (!_opening && value is { IsLoaded: false })
         {
-            _ = LoadDdlAsync();
+            SectionLoad = EnsureSectionLoadedAsync(value, _generation); // 처음 고를 때만 읽는다(DL-1)
         }
     }
 
-    /// <summary>객체를 열어 상세와 DDL 을 채운다. 어느 한쪽이 실패해도 다른 쪽은 보여 준다.</summary>
+    partial void OnIsDdlSelectedChanged(bool value)
+    {
+        if (value && !_opening && !_ddlLoaded && !IsNewTableMode && Target is not null && _session is not null)
+        {
+            DdlLoad = LoadDdlAsync(); // DDL 은 그 탭을 처음 고를 때 읽는다(DL-1)
+        }
+    }
+
+    /// <summary>시험용: 마지막으로 시작한 탭 읽기(고른 탭이 이미 읽혔으면 바뀌지 않는다).</summary>
+    internal Task? SectionLoad { get; private set; }
+
+    /// <summary>시험용: 마지막으로 시작한 DDL 읽기.</summary>
+    internal Task? DdlLoad { get; private set; }
+
+    private void ReloadDdlOnOptionChange()
+    {
+        if (_opening || Target is null || _session is null)
+        {
+            return;
+        }
+
+        if (IsDdlSelected)
+        {
+            DdlLoad = LoadDdlAsync();
+        }
+        else
+        {
+            _ddlLoaded = false; // DDL 탭을 고를 때 새 옵션으로 읽는다
+        }
+    }
+
+    /// <summary>
+    /// 객체를 열어 탭 머리를 곧바로 보이고, 선택된 탭(기본 「열」, DDL 로 열면 DDL)만 먼저 읽는다(DL-1). 다른 탭·DDL 은 고를 때 한 번 읽는다.
+    /// 어느 한쪽이 실패해도 다른 쪽은 보여 준다. 다시 열면(새로 고침 포함) 읽은 탭을 잊고 앞의 읽기는 취소한다.
+    /// </summary>
     public async Task OpenAsync(ISession session, DbObjectRef target, bool showDdl, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -356,48 +450,53 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         WatchFeatureGate();
         EndTableEdit(); // 다시 열면 편집은 꺼진다(묻는 일은 부르는 쪽: 새로 고침·실행 성공 뒤, 설계 7.1)
         IsNewTableMode = false; // 있는 객체를 열면 새 테이블 탭이 아니다(설계 7.5)
+        var gen = Interlocked.Increment(ref _generation);
+        _detailCts?.Cancel(); // 앞 객체의 탭·DDL 읽기를 멈춘다(버리지 않는다: 읽는 쪽이 아직 토큰을 볼 수 있다)
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _detailCts = cts;
+        _partLoads.Clear();
+        _ddlLoaded = false;
         _session = session;
         Target = target;
         Title = $"{target.Owner}.{target.Name}";
-        // JAVA SOURCE 는 소스 글이 본문이라 DDL 탭(소스 글)을 먼저 보인다.
-        IsDdlSelected = showDdl || target.ObjectType == "JAVA SOURCE";
-        SourceTarget = null;
-        Sections.Clear();
-        SelectedSection = null;
-        DdlText = string.Empty;
-        DdlError = null;
-        Data.Reset(session, target);
-        _keyCache.Clear();
-        ResetKeyColumns(null);
-        var gen = Interlocked.Increment(ref _generation);
-
-        var meta = ResolveMeta();
-        if (meta is null)
-        {
-            StatusText = "메타데이터 제공자가 없다";
-            return;
-        }
-
-        IsBusy = true;
         _opening = true;
         try
         {
+            // JAVA SOURCE 는 소스 글이 본문이라 DDL 탭(소스 글)을 먼저 보인다.
+            IsDdlSelected = showDdl || target.ObjectType == "JAVA SOURCE";
+            SourceTarget = null;
+            Sections.Clear();
+            SelectedSection = null;
+            DdlText = string.Empty;
+            DdlError = null;
+            Data.Reset(session, target);
+            _keyCache.Clear();
+            ResetKeyColumns(null);
+
+            var meta = ResolveMeta();
+            if (meta is null)
+            {
+                StatusText = "메타데이터 제공자가 없다";
+                return;
+            }
+
+            IsBusy = true;
             string? error = null;
-            await UpdateJavaStateAsync(meta, session, ct); // Java 소스·클래스면 「다시 컴파일」을 쓸 수 있나(TSK-14-23)
+            await UpdateJavaStateAsync(meta, session, cts.Token); // Java 소스·클래스면 「다시 컴파일」을 쓸 수 있나(TSK-14-23)
             try
             {
-                var detail = await meta.GetObjectDetailAsync(session, target, ct);
+                var outline = await meta.GetDetailOutlineAsync(session, target, cts.Token);
                 if (gen != _generation)
                 {
                     return;
                 }
 
-                foreach (var s in detail.Sections)
+                foreach (var tab in outline.Tabs)
                 {
-                    Sections.Add(new ObjectDetailSection(s));
+                    Sections.Add(tab.Section is { } loaded ? new ObjectDetailSection(loaded) : ObjectDetailSection.CreatePending(tab.Title, tab.Part));
                 }
 
-                SourceTarget = detail.SourceObject;
+                SourceTarget = outline.SourceObject;
 
                 // 「데이터」 탭은 「열」 바로 뒤(SQL Developer 테이블 편집기의 Columns → Data 순서). 고르기 전에는 읽지 않는다.
                 if (ObjectDataViewModel.Supports(target))
@@ -417,10 +516,20 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
                 error = "상세를 읽지 못했다: " + ex.Message;
             }
 
-            await LoadDdlCoreAsync(meta, gen, ct);
+            _opening = false;
+            if (IsDdlSelected)
+            {
+                await LoadDdlCoreAsync(meta, gen, cts.Token);
+            }
+            else if (SelectedSection is { IsLoaded: false } first)
+            {
+                SectionLoad = EnsureSectionLoadedAsync(first, gen);
+                await SectionLoad;
+            }
+
             if (gen == _generation)
             {
-                StatusText = error ?? DdlError ?? $"{target.ObjectType} {Title}";
+                StatusText = error ?? (IsDdlSelected ? DdlError : null) ?? $"{target.ObjectType} {Title}";
             }
         }
         catch (OperationCanceledException)
@@ -428,10 +537,80 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         }
         finally
         {
-            _opening = false;
             if (gen == _generation)
             {
+                _opening = false;
                 IsBusy = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 탭 하나를 읽어 채운다(DL-1). 같은 구역 종류(<see cref="ObjectDetailSection.Part"/>)의 탭은 한 번에 채우고, 읽는 동안 그 탭들에 「읽는 중」을 보인다.
+    /// 다른 객체를 열면 결과를 버린다. 실패하면 이유를 보이고 다시 고를 때 다시 읽는다.
+    /// </summary>
+    private Task EnsureSectionLoadedAsync(ObjectDetailSection section, int gen)
+    {
+        if (section.IsLoaded || _session is not { } session || Target is not { } target || ResolveMeta() is not { } meta || _detailCts is not { } cts)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (_partLoads.TryGetValue(section.Part, out var running))
+        {
+            return running;
+        }
+
+        var task = LoadPartAsync(meta, session, target, section.Part, gen, cts.Token);
+        if (!task.IsCompleted)
+        {
+            _partLoads[section.Part] = task; // 읽는 동안 같은 구역을 또 고르면 같은 읽기를 기다린다(끝난 것은 탭의 IsLoaded 로 안다)
+        }
+
+        return task;
+    }
+
+    private async Task LoadPartAsync(IMetadataProvider meta, ISession session, DbObjectRef target, DetailPart part, int gen, CancellationToken ct)
+    {
+        var tabs = Sections.Where(s => s.Part == part && !s.IsLoaded && !s.IsData).ToList();
+        foreach (var tab in tabs)
+        {
+            tab.ShowNotice(LiteralTranslator.IsEnglish ? "Reading…" : "읽는 중…");
+        }
+
+        try
+        {
+            var sections = await meta.GetDetailPartAsync(session, target, part, ct);
+            if (gen != _generation)
+            {
+                return;
+            }
+
+            foreach (var tab in tabs)
+            {
+                tab.Load(sections.FirstOrDefault(x => string.Equals(x.Title, tab.Title, StringComparison.Ordinal)));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (gen == _generation)
+            {
+                _partLoads.Remove(part);
+                foreach (var tab in tabs)
+                {
+                    tab.ShowNotice(string.Empty);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (gen == _generation)
+            {
+                _partLoads.Remove(part); // 다시 고르면 다시 읽는다
+                foreach (var tab in tabs)
+                {
+                    tab.ShowNotice((LiteralTranslator.IsEnglish ? "Could not read: " : "읽지 못했다: ") + ex.Message);
+                }
             }
         }
     }
@@ -448,7 +627,8 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
         IsBusy = true;
         try
         {
-            await LoadDdlCoreAsync(meta, gen, ct);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _detailCts?.Token ?? CancellationToken.None);
+            await LoadDdlCoreAsync(meta, gen, linked.Token);
             if (gen == _generation && DdlError is not null)
             {
                 StatusText = DdlError;
@@ -480,6 +660,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
             {
                 DdlText = ddl;
                 DdlError = null;
+                _ddlLoaded = true;
             }
         }
         catch (OperationCanceledException)
@@ -492,6 +673,7 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
             {
                 DdlText = string.Empty;
                 DdlError = "DDL 을 읽지 못했다: " + ex.Message;
+                _ddlLoaded = true; // 옵션을 바꾸거나 새로 고치면 다시 읽는다
             }
         }
     }

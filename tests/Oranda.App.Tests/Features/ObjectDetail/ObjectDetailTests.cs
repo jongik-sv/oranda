@@ -123,6 +123,9 @@ public class ObjectDetailTests
         var meta = new FakeMeta();
         var vm = new ObjectDetailViewModel(meta);
         await vm.OpenAsync(new FakeSession(), Emp, showDdl: false);
+        Assert.Null(meta.LastOptions); // DDL 은 그 탭을 고를 때 읽는다(DL-1)
+        vm.IsDdlSelected = true;
+        await vm.DdlLoad!;
         Assert.False(meta.LastOptions!.IncludeStorage);
         Assert.True(meta.LastOptions.SqlTerminator);
 
@@ -156,7 +159,7 @@ public class ObjectDetailTests
         var meta = new FakeMeta { DetailFails = true };
         var vm = new ObjectDetailViewModel(meta);
 
-        await vm.OpenAsync(new FakeSession(), Emp, showDdl: false);
+        await vm.OpenAsync(new FakeSession(), Emp, showDdl: true);
 
         Assert.Empty(vm.Sections);
         Assert.Equal("CREATE TABLE EMP;", vm.DdlText);

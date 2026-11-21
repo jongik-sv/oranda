@@ -61,13 +61,79 @@ internal sealed partial class OracleMetadataProvider
         }
     }
 
+    /// <summary>상세 전체(속성 창·AI 도구 등). 구역은 <see cref="GetDetailPartAsync"/> 와 같은 것을 차례로 읽어 행이 있는 것만 담는다.</summary>
     public async Task<ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(obj);
 
-        var type = obj.ObjectType;
         var sections = new List<DetailSection>();
+        sections.AddRange(await ReadPartAsync(s, obj, DetailPart.General, ct));
+        if (TableLike.Contains(obj.ObjectType))
+        {
+            sections.AddRange(await ReadPartAsync(s, obj, DetailPart.Table, ct));
+        }
+
+        DbObjectRef? sourceObject = null;
+        foreach (var part in ObjectDetailParts.TailParts(obj.ObjectType))
+        {
+            if (part == DetailPart.Dependencies && JavaTypes.Contains(obj.ObjectType))
+            {
+                sourceObject = await AddJavaSectionsAsync(s, obj, sections, ct); // Java 구역은 권한과 의존 사이
+            }
+
+            sections.AddRange(await ReadPartAsync(s, obj, part, ct));
+        }
+
+        return new ObjectDetail(obj, sections) { SourceObject = sourceObject };
+    }
+
+    /// <summary>
+    /// 탭 목록(DL-1): 표·뷰는 캐시된 <see cref="GetTableAsync"/> 로 표 구역을 바로 만들고, 나머지 탭은 머리만. 파티션 탭은 파티션 테이블일 때만.
+    /// Java 객체는 「소스 열기」 대상이 필요해 상세 전체를 읽는다(드문 유형이라 나눠 읽지 않는다).
+    /// </summary>
+    public async Task<ObjectDetailOutline> GetDetailOutlineAsync(ISession s, DbObjectRef obj, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(obj);
+        if (JavaTypes.Contains(obj.ObjectType))
+        {
+            ObjectDetail? whole = null;
+            await ObjectDetailParts.TimedAsync(s.DbKey, obj, DetailPart.Whole, async () =>
+            {
+                whole = await GetObjectDetailAsync(s, obj, ct);
+                return whole.Sections;
+            });
+            return ObjectDetailOutline.FromDetail(whole!);
+        }
+
+        if (!TableLike.Contains(obj.ObjectType))
+        {
+            return ObjectDetailParts.Outline(obj, [], partitioned: false);
+        }
+
+        TableInfo? table = null;
+        var sections = await ObjectDetailParts.TimedAsync(s.DbKey, obj, DetailPart.Table, async () =>
+        {
+            table = await GetTableAsync(s, obj, ct);
+            var list = new List<DetailSection>();
+            AddTableSections(list, table, s.Server.Features);
+            return list;
+        });
+        return ObjectDetailParts.Outline(obj, sections, table!.IsPartitioned || table.Partitioning is not null);
+    }
+
+    /// <summary>상세 구역 하나만 읽는다(DL-1). 행이 없거나 덧붙이는 구역을 읽지 못하면 빈 목록. 걸린 시간은 Trace 한 줄.</summary>
+    public Task<IReadOnlyList<DetailSection>> GetDetailPartAsync(ISession s, DbObjectRef obj, DetailPart part, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(obj);
+        return ObjectDetailParts.TimedAsync(s.DbKey, obj, part, () => ReadPartAsync(s, obj, part, ct));
+    }
+
+    private async Task<IReadOnlyList<DetailSection>> ReadPartAsync(ISession s, DbObjectRef obj, DetailPart part, CancellationToken ct)
+    {
+        var type = obj.ObjectType;
 
         void BindObject(OracleCommand c)
         {
@@ -82,110 +148,153 @@ internal sealed partial class OracleMetadataProvider
             c.Parameters.Add("name", obj.Name);
         }
 
-        var general = await QueryAsync(s, "meta.detail_general", BindObject, ct);
-        if (general.Count > 0)
+        switch (part)
         {
-            var g = general[0];
-            sections.Add(new DetailSection("일반", ["항목", "값"],
-            [
-                ["유형", Str(g[0])],
-                ["상태", Str(g[1])],
-                ["생성", g[2]],
-                ["마지막 DDL", g[3]],
-                ["편집 가능(editionable)", s.Server.Features.Release12Columns ? Str(g[4]) : ServerFeatures.UnavailableText],
-                ["객체 ID", Str(g[5])],
-            ]));
-        }
-
-        if (TableLike.Contains(type))
-        {
-            var table = await GetTableAsync(s, obj, ct);
-            AddTableSections(sections, table, s.Server.Features);
-        }
-
-        if (type is "TABLE" or "VIEW")
-        {
-            // 뷰는 INSTEAD OF 트리거가 같은 쿼리로 나온다.
-            var triggers = await TryQueryAsync(s, "meta.detail_triggers", BindTable, ct);
-            if (triggers is { Count: > 0 })
+            case DetailPart.Whole:
+                return (await GetObjectDetailAsync(s, obj, ct)).Sections;
+            case DetailPart.General:
             {
-                sections.Add(new DetailSection("트리거", ["이름", "유형", "이벤트", "상태", "WHEN 조건", "소유자"],
-                    [.. triggers.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5])])]));
-            }
-        }
+                var general = await QueryAsync(s, "meta.detail_general", BindObject, ct);
+                if (general.Count == 0)
+                {
+                    return [];
+                }
 
-        if (string.Equals(type, "TABLE", StringComparison.Ordinal))
-        {
-            var referencedBy = await TryQueryAsync(s, "meta.detail_referenced_by", BindTable, ct);
-            if (referencedBy is { Count: > 0 })
-            {
-                sections.Add(new DetailSection("참조됨", ["소유자", "테이블", "외래키", "열", "참조 키", "삭제 규칙", "상태"],
-                    [.. referencedBy.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5]), Str(r[6])])]));
+                var g = general[0];
+                return
+                [
+                    new DetailSection("일반", ["항목", "값"],
+                    [
+                        ["유형", Str(g[0])],
+                        ["상태", Str(g[1])],
+                        ["생성", g[2]],
+                        ["마지막 DDL", g[3]],
+                        ["편집 가능(editionable)", s.Server.Features.Release12Columns ? Str(g[4]) : ServerFeatures.UnavailableText],
+                        ["객체 ID", Str(g[5])],
+                    ]),
+                ];
             }
 
-            var partitions = await QueryAsync(s, "meta.detail_partitions", BindTable, ct);
-            if (partitions.Count > 0)
+            case DetailPart.Table:
             {
-                sections.Add(new DetailSection("파티션",
-                    ["위치", "이름", "방식", "하위 방식", "경계값", "테이블스페이스", "행 수", "마지막 분석"],
-                    [.. partitions.Select(r => (IReadOnlyList<object?>)[Int(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4])?.Trim(), Str(r[5]), Long(r[6]), r[7]])]));
+                if (!TableLike.Contains(type))
+                {
+                    return [];
+                }
+
+                var list = new List<DetailSection>();
+                AddTableSections(list, await GetTableAsync(s, obj, ct), s.Server.Features);
+                return list;
             }
 
-            var stats = await QueryAsync(s, "meta.detail_stats", BindTable, ct);
-            if (stats.Count > 0)
+            case DetailPart.Triggers:
             {
+                // 뷰는 INSTEAD OF 트리거가 같은 쿼리로 나온다.
+                var triggers = await TryQueryAsync(s, "meta.detail_triggers", BindTable, ct);
+                return triggers is { Count: > 0 }
+                    ? [new DetailSection("트리거", ["이름", "유형", "이벤트", "상태", "WHEN 조건", "소유자"],
+                        [.. triggers.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5])])])]
+                    : [];
+            }
+
+            case DetailPart.ReferencedBy:
+            {
+                var referencedBy = await TryQueryAsync(s, "meta.detail_referenced_by", BindTable, ct);
+                return referencedBy is { Count: > 0 }
+                    ? [new DetailSection("참조됨", ["소유자", "테이블", "외래키", "열", "참조 키", "삭제 규칙", "상태"],
+                        [.. referencedBy.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4]), Str(r[5]), Str(r[6])])])]
+                    : [];
+            }
+
+            case DetailPart.Partitions:
+            {
+                var partitions = await QueryAsync(s, "meta.detail_partitions", BindTable, ct);
+                return partitions.Count > 0
+                    ? [new DetailSection("파티션",
+                        ["위치", "이름", "방식", "하위 방식", "경계값", "테이블스페이스", "행 수", "마지막 분석"],
+                        [.. partitions.Select(r => (IReadOnlyList<object?>)[Int(r[0]), Str(r[1]), Str(r[2]), Str(r[3]), Str(r[4])?.Trim(), Str(r[5]), Long(r[6]), r[7]])])]
+                    : [];
+            }
+
+            case DetailPart.Stats:
+            {
+                var stats = await QueryAsync(s, "meta.detail_stats", BindTable, ct);
+                if (stats.Count == 0)
+                {
+                    return [];
+                }
+
                 var r = stats[0];
-                sections.Add(new DetailSection("통계", ["항목", "값"],
+                return
                 [
-                    ["행 수", Long(r[0])],
-                    ["블록 수", Long(r[1])],
-                    ["평균 행 길이", Long(r[2])],
-                    ["마지막 분석", r[3]],
-                    ["샘플 크기", Long(r[4])],
-                    ["파티션 테이블", Str(r[5])],
-                    ["임시 테이블", Str(r[6])],
-                    ["압축", Str(r[7])],
-                    ["테이블스페이스", Str(r[8])],
-                ]));
+                    new DetailSection("통계", ["항목", "값"],
+                    [
+                        ["행 수", Long(r[0])],
+                        ["블록 수", Long(r[1])],
+                        ["평균 행 길이", Long(r[2])],
+                        ["마지막 분석", r[3]],
+                        ["샘플 크기", Long(r[4])],
+                        ["파티션 테이블", Str(r[5])],
+                        ["임시 테이블", Str(r[6])],
+                        ["압축", Str(r[7])],
+                        ["테이블스페이스", Str(r[8])],
+                    ]),
+                ];
             }
-        }
 
-        if (type is "TABLE" or "MATERIALIZED VIEW" or "INDEX")
-        {
-            var sizes = await ReadSizesAsync(s, BindTable, ct);
-            if (sizes is { Count: > 0 })
+            case DetailPart.Size:
             {
+                var sizes = await ReadSizesAsync(s, BindTable, ct);
+                if (sizes is not { Count: > 0 })
+                {
+                    return [];
+                }
+
                 var total = sizes.Sum(r => Long(r[2]) ?? 0);
-                sections.Add(new DetailSection("크기", ["세그먼트", "종류", "바이트", "익스텐트"],
+                return
                 [
-                    .. sizes.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Long(r[2]), Long(r[3])]),
-                    ["합계", null, total, null],
-                ]));
+                    new DetailSection("크기", ["세그먼트", "종류", "바이트", "익스텐트"],
+                    [
+                        .. sizes.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Long(r[2]), Long(r[3])]),
+                        ["합계", null, total, null],
+                    ]),
+                ];
             }
-        }
 
-        var privileges = await QueryAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_privileges" : "meta.detail_privileges_user", BindTable, ct);
-        if (privileges.Count > 0)
-        {
-            sections.Add(new DetailSection("권한", ["받는 사람", "권한", "재부여 가능", "부여자"],
-                [.. privileges.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3])])]));
-        }
+            case DetailPart.Privileges:
+            {
+                var privileges = await QueryAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_privileges" : "meta.detail_privileges_user", BindTable, ct);
+                return privileges.Count > 0
+                    ? [new DetailSection("권한", ["받는 사람", "권한", "재부여 가능", "부여자"],
+                        [.. privileges.Select(r => (IReadOnlyList<object?>)[Str(r[0]), Str(r[1]), Str(r[2]), Str(r[3])])])]
+                    : [];
+            }
 
-        DbObjectRef? sourceObject = null;
-        if (JavaTypes.Contains(type))
-        {
-            sourceObject = await AddJavaSectionsAsync(s, obj, sections, ct);
-        }
+            case DetailPart.Java:
+            {
+                if (!JavaTypes.Contains(type))
+                {
+                    return [];
+                }
 
-        var deps = await QueryAsync(s, "meta.detail_dependencies", BindObject, ct);
-        if (deps.Count > 0)
-        {
-            sections.Add(new DetailSection("의존", ["방향", "소유자", "이름", "유형"],
-                [.. deps.Select(r => (IReadOnlyList<object?>)[
-                    string.Equals(Str(r[0]), "USES", StringComparison.Ordinal) ? "참조함" : "참조됨", Str(r[1]), Str(r[2]), Str(r[3])])]));
-        }
+                var list = new List<DetailSection>();
+                await AddJavaSectionsAsync(s, obj, list, ct);
+                return list;
+            }
 
-        return new ObjectDetail(obj, sections) { SourceObject = sourceObject };
+            case DetailPart.Dependencies:
+            {
+                var deps = await QueryAsync(s, "meta.detail_dependencies", BindObject, ct);
+                return deps.Count > 0
+                    ? [new DetailSection("의존", ["방향", "소유자", "이름", "유형"],
+                        [.. deps.Select(r => (IReadOnlyList<object?>)[
+                            string.Equals(Str(r[0]), "USES", StringComparison.Ordinal) ? "참조함" : "참조됨", Str(r[1]), Str(r[2]), Str(r[3])])])]
+                    : [];
+            }
+
+            default:
+                return [];
+        }
     }
 
     private static void AddTableSections(List<DetailSection> sections, TableInfo table, ServerFeatures features)
@@ -249,7 +358,6 @@ internal sealed partial class OracleMetadataProvider
     private static Task<List<object?[]>?> ReadSizesAsync(ISession s, Action<OracleCommand> bind, CancellationToken ct)
         => TryQueryAsync(s, s.Server.Capabilities.CanQueryDictionary ? "meta.detail_size" : "meta.detail_size_user", bind, ct);
 
-    /// <summary>덧붙이는 구역 하나를 읽는다. 권한·뷰 문제로 실패하면 null(그 구역만 빼고 상세는 계속한다).</summary>
     /// <summary>
     /// 이름 풀이 한 단계(<c>meta.name_step</c>, TSK-13-44): 표·뷰면 <see cref="NameStep.TableOrView"/>, 시노님이면 가리키는 곳. 없거나 사전을 읽지 못하면 null
     /// (부른 쪽은 적힌 이름 그대로 메타데이터를 읽어 「찾을 수 없음」을 알린다).
@@ -276,6 +384,7 @@ internal sealed partial class OracleMetadataProvider
             : NameStep.TableOrView;
     }
 
+    /// <summary>덧붙이는 구역 하나를 읽는다. 권한·뷰 문제로 실패하면 null(그 구역만 빼고 상세는 계속한다).</summary>
     private static async Task<List<object?[]>?> TryQueryAsync(ISession s, string id, Action<OracleCommand> bind, CancellationToken ct)
     {
         try

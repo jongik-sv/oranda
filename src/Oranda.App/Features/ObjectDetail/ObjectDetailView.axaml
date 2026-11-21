@@ -166,6 +166,9 @@
               <Grid x:Name="SectionGrid" RowDefinitions="*,Auto,0" IsVisible="{Binding ShowsSectionTable}">
                 <ctl:DetailTable x:Name="SectionTable" Columns="{Binding SelectedSection.Columns}" Rows="{Binding SelectedSection.Rows}"
                                  RowNumbers="{Binding !SelectedSection.HasNumberColumn}" KeepSelectionOnSameShape="True" />
+                <!-- 고를 때 읽는 탭(DL-1): 읽는 중·없음·읽지 못함 안내. -->
+                <TextBlock x:Name="SectionNoticeText" Text="{Binding SelectedSection.Notice, FallbackValue=''}" IsVisible="{Binding SelectedSection.HasNotice, FallbackValue=False}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7" TextWrapping="Wrap" Margin="12" />
                 <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="{Binding HasKeyColumns}" Background="{DynamicResource OrandaSeparatorBrush}" />
                 <DockPanel Grid.Row="2" IsVisible="{Binding HasKeyColumns}">
                   <Border DockPanel.Dock="Top" Classes="panel-toolbar">
