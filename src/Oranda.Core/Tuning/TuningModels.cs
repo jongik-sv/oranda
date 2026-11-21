@@ -40,7 +40,7 @@ public sealed record ColumnStatsRow(
 
 /// <summary>히스토그램 버킷 하나(TN-03). 출처: @PFX@_tab_histograms.</summary>
 /// <param name="EndpointNumber">endpoint_number(누적 개수 또는 버킷 번호)</param>
-/// <param name="EndpointValue">endpoint_actual_value, 없으면 endpoint_value 를 문자열로</param>
+/// <param name="EndpointValue">끝점 글: endpoint_actual_value(_raw), 없으면 endpoint_value 를 자료형대로 푼 글(<see cref="ColumnStatValue.HistogramEndpoint"/>)</param>
 /// <param name="Frequency">endpoint_number 의 앞 버킷과의 차(막대 높이)</param>
 public sealed record HistogramBucket(long EndpointNumber, string? EndpointValue, long Frequency);
 

@@ -257,7 +257,7 @@ public sealed class AiToolHandlersIntegrationTests(AiToolsDbFixture db) : IClass
         Assert.Equal("FREQUENCY", col["histogram"]!.GetValue<string>());
         Assert.Equal(20000, plan["total_count"]!.GetValue<long>());
         Assert.DoesNotContain("\"endpoint\"", plan.ToJsonString(), StringComparison.Ordinal);
-        // 짧은 문자열 열은 endpoint_actual_value 가 비어 서버가 준 숫자 인코딩(endpoint_value)이 그대로 나온다. 해석은 후속(OracleTuningService).
+        // 짧은 문자열 열은 endpoint_actual_value 가 비어 endpoint_value(앞 바이트를 담은 수)만 온다 — 서비스가 글로 풀어 준다(ColumnStatValue.HistogramEndpoint).
         var endpoints = rows["buckets"]!.AsArray().Select(b => b!["endpoint"]!.GetValue<string>()).ToList();
         Assert.Equal(3, endpoints.Count);
         Assert.All(endpoints, e => Assert.False(string.IsNullOrEmpty(e)));

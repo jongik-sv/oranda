@@ -35,8 +35,25 @@ public partial class TuningCatalogTests
     public void No_pack_query_exists_for_11_2_and_later_without_license(string id)
     {
         Assert.Equal(11, Catalog.Get(id, 11).Header.MinVersion);
-        Assert.Same(Catalog.Get(id, 11), Catalog.Get(id, 26));
+        if (id != "tuning.histogram") // 12c 변형(endpoint_actual_value_raw)이 따로 있다 — 아래 시험.
+        {
+            Assert.Same(Catalog.Get(id, 11), Catalog.Get(id, 26));
+        }
+
         Assert.Equal(CatalogLicense.None, Catalog.Get(id, 19).Header.License);
+        Assert.Equal(CatalogLicense.None, Catalog.Get(id, 26).Header.License);
+    }
+
+    [Fact]
+    public void Histogram_reads_the_data_type_and_the_raw_actual_value_from_12c()
+    {
+        var old = Catalog.Get("tuning.histogram", 11).Sql;
+        var current = Catalog.Get("tuning.histogram", 19).Sql;
+        Assert.Contains("data_type", old, StringComparison.Ordinal);
+        Assert.Contains("data_type", current, StringComparison.Ordinal);
+        Assert.DoesNotContain("endpoint_actual_value_raw", old, StringComparison.Ordinal); // 11g 에는 없는 열
+        Assert.Contains("RAWTOHEX(h.endpoint_actual_value_raw)", current, StringComparison.Ordinal);
+        Assert.Equal(12, Catalog.Get("tuning.histogram", 12).Header.MinVersion);
     }
 
     [Theory]

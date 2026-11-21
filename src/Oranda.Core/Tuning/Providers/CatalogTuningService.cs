@@ -79,7 +79,9 @@ public abstract partial class CatalogTuningService : ITuningService
         ArgumentException.ThrowIfNullOrWhiteSpace(column);
         var rows = (await QueryAsync(s, "tuning.histogram",
             CatalogBinds.Defer(() => [.. BindTable(owner, table), CatalogBinds.Trimmed("column_name", column)]), TuningQueryOptions, ct)).Rows;
-        return ToBuckets(rows.Select(r => (Long(r[0]) ?? 0, Str(r[1]) ?? Str(r[2]))));
+        // 3 = data_type, 4 = RAWTOHEX(endpoint_actual_value_raw)(12c+). 열이 모자란 질의(11g·Tibero·덮어쓴 카탈로그)는 있는 것만으로 푼다.
+        return ToBuckets(rows.Select(r => (Long(r[0]) ?? 0,
+            ColumnStatValue.HistogramEndpoint(r.Length > 3 ? Str(r[3]) : null, r.Length > 4 ? r[4] : null, Str(r[1]), Str(r[2])))));
     }
 
     public async Task<IReadOnlyList<IndexStatsRow>> GetIndexStatsAsync(ISession s, string owner, string table, CancellationToken ct)
