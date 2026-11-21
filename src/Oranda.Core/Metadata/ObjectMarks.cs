@@ -11,6 +11,7 @@ namespace Oranda.Core.Metadata;
 /// 테이블: <c>IOT</c>·<c>CLUSTER</c>·<c>GTT_SESSION</c>·<c>GTT_TRANSACTION</c>·<c>EXTERNAL</c>·<c>OBJECT</c> 중 하나와 <c>PART:방식</c>(예 <c>PART:RANGE-HASH</c>, 간격 파티션은 <c>PART:RANGE+INTERVAL</c>).
 /// 트리거: 시점 <c>BEFORE</c>·<c>AFTER</c>·<c>INSTEAD</c>·<c>COMPOUND</c>, 단위 <c>ROW</c>·<c>STATEMENT</c>, 이벤트 <c>DDL</c>·<c>DB</c>(없으면 DML).
 /// 동의어: <c>TARGET:유형</c>(공백은 <c>_</c>, 예 <c>TARGET:MATERIALIZED_VIEW</c>) 또는 <c>REMOTE</c>(DB 링크).
+/// 작업: <c>DBMS_JOB</c>(Tibero 의 DBMS_JOB 작업, 스케줄러 잡은 낱말 없음).
 /// 구체화 뷰: 갱신 방식 <c>FAST</c>·<c>COMPLETE</c>·<c>FORCE</c>·<c>NEVER</c>, 커밋 때 갱신이면 <c>COMMIT</c>.
 /// 타입: <c>VARRAY</c>·<c>NESTED_TABLE</c>.
 /// </para>
@@ -203,12 +204,14 @@ public static class ObjectMarkRows
         => events is not null && DatabaseEvents.Any(e => events.Contains(e, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// <c>meta.marks_jobs</c>(Oracle 만): [0] job_name [1] enabled(TRUE/FALSE) [2] state(SCHEDULED 는 SQL 이 뺀다).
+    /// <c>meta.marks_jobs</c>: [0] job_name [1] enabled(TRUE/FALSE) [2] state(SCHEDULED 는 SQL 이 뺀다) [3] job_kind(Tibero 만: DBMS_JOB 이면 <c>DBMS_JOB</c>, Oracle 은 열 없음).
     /// 꺼짐 = DISABLED, 실행 중 = RUNNING, 실패 = FAILED(RETRY SCHEDULED·CHAIN_STALLED 포함, 원래 글은 <c>FAILED:원래</c>), BROKEN. 그 밖의 상태(완료 등)는 표식 없음.
+    /// DBMS_JOB 은 종류 낱말 <c>DBMS_JOB</c> 이 붙는다(스케줄러 잡과 같은 폴더에서 가른다).
     /// </summary>
     public static ObjectMark Job(object?[] r)
     {
         ArgumentNullException.ThrowIfNull(r);
+        var kind = string.Equals(Str(At(r, 3)), "DBMS_JOB", StringComparison.OrdinalIgnoreCase) ? "DBMS_JOB" : null;
         var state = (Str(At(r, 2)) ?? string.Empty).ToUpperInvariant();
         var code = state switch
         {
@@ -219,11 +222,11 @@ public static class ObjectMarkRows
             "DISABLED" or "STOPPED" => "DISABLED",
             _ => string.Equals(Str(At(r, 1)), "FALSE", StringComparison.OrdinalIgnoreCase) ? "DISABLED" : null,
         };
-        return new ObjectMark(null, code);
+        return new ObjectMark(kind, code);
     }
 
     /// <summary>
-    /// <c>meta.marks_synonyms</c>: [0] synonym_name [1] db_link(Tibero NULL) [2] target_type(대상 객체의 유형, 대상을 못 찾으면 NULL).
+    /// <c>meta.marks_synonyms</c>: [0] synonym_name [1] db_link(Tibero 는 대상 이름의 @ 뒤) [2] target_type(대상 객체의 유형, 대상을 못 찾으면 NULL).
     /// DB 링크를 거치면 REMOTE(대상은 확인하지 않는다), 대상이 없으면 상태 BROKEN.
     /// </summary>
     public static ObjectMark Synonym(object?[] r)

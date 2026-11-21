@@ -326,8 +326,14 @@ public static class SchemaLooks
         }
     }
 
+    /// <summary>작업: Tibero DBMS_JOB 은 종류 표식 <c>DBMS</c>(이름이 작업 번호일 수 있다, 스케줄러 잡과 같은 폴더) + 상태(실행 중·고장·실패).</summary>
     private static void JobBadges(ObjectMark? mark, List<SchemaBadge> badges)
     {
+        if (mark?.Has("DBMS_JOB") == true)
+        {
+            badges.Add(new("DBMS", Teal, BadgeCorner.BottomRight, L("DBMS_JOB 작업(이름이 없으면 작업 번호)")));
+        }
+
         switch (mark?.StateCode)
         {
             case "RUNNING":
@@ -509,6 +515,7 @@ public static class SchemaLooks
         ["VARRAY"] = BadgeShape.Square,
         ["NT"] = BadgeShape.Diamond,
         ["RUN"] = BadgeShape.Dot,
+        ["DBMS"] = BadgeShape.Square,
 
         // 열·인덱스·제약: 키 = 마름모, NOT NULL·저장 = 사각, 그 밖 = 원
         ["PK"] = BadgeShape.Diamond,

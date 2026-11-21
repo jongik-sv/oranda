@@ -75,9 +75,9 @@ internal static partial class TiberoDdlAssembler
 
     /// <summary>
     /// <c>CREATE OR REPLACE SYNONYM "O"."N" FOR "TO"."TN"</c>, 소유자가 PUBLIC 이면 <c>CREATE OR REPLACE PUBLIC SYNONYM "N" FOR …</c>(Oracle 모양).
-    /// Tibero <c>*_SYNONYMS</c> 에는 DB 링크 열이 없어 <c>@링크</c> 는 붙지 않는다(카탈로그 <c>meta.name_step</c>). 대상 소유자가 없으면 이름만.
+    /// 원격 동의어는 끝에 <c>@링크</c>(사전 값 그대로, 따옴표 없음 — 대상 이름 글에서 읽는다, <see cref="TiberoSynonymTarget"/>). 대상 소유자가 없으면 이름만.
     /// </summary>
-    internal static string Synonym(string owner, string name, string? targetOwner, string targetName, bool terminator)
+    internal static string Synonym(string owner, string name, string? targetOwner, string targetName, bool terminator, string? dbLink = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(owner);
         ArgumentException.ThrowIfNullOrEmpty(targetName);
@@ -85,7 +85,26 @@ internal static partial class TiberoDdlAssembler
         var head = string.Equals(owner, "PUBLIC", StringComparison.Ordinal)
             ? "CREATE OR REPLACE PUBLIC SYNONYM " + SqlIdentifier.QuoteAlways(name)
             : "CREATE OR REPLACE SYNONYM " + TiberoDdlText.Qualified(owner, name);
-        return Statement(head + " FOR " + target, terminator);
+        return Statement(head + " FOR " + target + (string.IsNullOrEmpty(dbLink) ? string.Empty : "@" + dbLink), terminator);
+    }
+
+    /// <summary>
+    /// DBMS_JOB 작업 → 같은 작업을 다시 만드는 PSM 블록: <c>DBMS_JOB.SUBMIT(l_job, '내용', TO_DATE('다음 실행', …), '간격')</c>, 고장(BROKEN)이면
+    /// <c>DBMS_JOB.BROKEN(l_job, TRUE)</c>, 끝에 <c>COMMIT</c>. 작업 번호는 서버가 새로 매긴다(SUBMIT, 2026-11-21 Tibero 6 실측으로 SUBMIT·BROKEN·REMOVE 가 돈다).
+    /// 다음 실행이 없으면 <c>SYSDATE</c>, 간격이 없으면 <c>NULL</c>(한 번만). <paramref name="terminator"/> 면 새 줄에 <c>/</c>.
+    /// </summary>
+    internal static string DbmsJob(string what, string? nextDate, string? interval, bool broken, bool terminator)
+    {
+        ArgumentNullException.ThrowIfNull(what);
+        var next = string.IsNullOrEmpty(nextDate) ? "SYSDATE" : $"TO_DATE({Literal(nextDate)}, 'YYYY-MM-DD HH24:MI:SS')";
+        var every = string.IsNullOrEmpty(interval) ? "NULL" : Literal(interval);
+        var block = "DECLARE\n  l_job NUMBER;\nBEGIN\n"
+            + $"  DBMS_JOB.SUBMIT(l_job, {Literal(what)}, {next}, {every});\n"
+            + (broken ? "  DBMS_JOB.BROKEN(l_job, TRUE);\n" : string.Empty)
+            + "  COMMIT;\nEND;";
+        return TiberoDdlText.WithTerminator(block, terminator);
+
+        static string Literal(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
     }
 
     /// <summary>

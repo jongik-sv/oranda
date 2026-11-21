@@ -30,14 +30,21 @@ internal sealed partial class TiberoMetadataProvider
         return rows.Count == 0 ? throw DdlNotFound(obj) : TiberoDdlAssembler.Sequence(obj.Owner, obj.Name, rows[0], o.SqlTerminator);
     }
 
-    /// <summary>시노님(PUBLIC 소유자 포함): <c>meta.name_step</c> 의 SYNONYM 행(kind, table_owner, table_name, db_link)이 가리키는 곳.</summary>
+    /// <summary>
+    /// 시노님(PUBLIC 소유자 포함): <c>meta.name_step</c> 의 SYNONYM 행(kind, table_owner, table_name, db_link)이 가리키는 곳.
+    /// 원격 시노님은 대상 이름 글의 <c>"이름"@링크</c> 를 나눠 <c>FOR "소유자"."이름"@링크</c> 로 만든다(<see cref="TiberoSynonymTarget"/>).
+    /// </summary>
     private async Task<string> GetSynonymDdlAsync(ISession s, DbObjectRef obj, DdlOptions o, CancellationToken ct)
     {
         var rows = await RunAsync(s, "meta.name_step", TiberoCatalogQuery.TableBinds(obj), ct).ConfigureAwait(false);
         var row = rows.FirstOrDefault(r => string.Equals(Str(r[0]), "SYNONYM", StringComparison.Ordinal));
-        return row is null || Str(row[2]) is not { Length: > 0 } target
-            ? throw DdlNotFound(obj)
-            : TiberoDdlAssembler.Synonym(obj.Owner, obj.Name, Str(row[1]), target, o.SqlTerminator);
+        if (row is null || Str(row[2]) is not { Length: > 0 } raw)
+        {
+            throw DdlNotFound(obj);
+        }
+
+        var target = TiberoSynonymTarget.Parse(Str(row[1]), raw);
+        return TiberoDdlAssembler.Synonym(obj.Owner, obj.Name, target.Owner, target.Name, o.SqlTerminator, target.DbLink ?? Str(row[3]));
     }
 
     /// <summary>인덱스: <c>meta.ddl_index</c>(머리·열). 만들 수 없는 인덱스(도메인·파티션 등)면 이유를 담은 <see cref="NotSupportedException"/>.</summary>

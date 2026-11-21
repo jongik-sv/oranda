@@ -1,5 +1,6 @@
 -- 이름 풀이 한 단계(시노님 따라가기). 바인드: owner, name. 그 스키마의 표·뷰(OBJECT)가 먼저, 아니면 시노님(SYNONYM)이 가리키는 소유자·이름·DB 링크. 없으면 행 없음.
--- Oracle 과 달라진 점: Tibero *_SYNONYMS 의 table_owner/table_name 은 org_object_owner/org_object_name 이고, db_link 열이 없어 NULL 로 채운다(원격 시노님은 따라가지 못함).
+-- Oracle 과 달라진 점: Tibero *_SYNONYMS 의 table_owner/table_name 은 org_object_owner/org_object_name 이고, db_link 열이 없어 NULL 로 채운다.
+-- 원격 시노님은 org_object_name 에 "이름"@링크 로 적혀 있다(2026-11-21 Tibero 6 실측) — 이름·링크는 받는 쪽(TiberoSynonymTarget)이 나눈다.
 -- id: meta.name_step
 -- dbms: tibero
 -- min-version: 6

@@ -37,7 +37,7 @@ public partial class TiberoObjectMarksTests
             Assert.NotEmpty(query.Header.Requires);
         }
 
-        Assert.DoesNotContain(ObjectMarkRows.Jobs, TiberoMetadataProvider.MarkIds); // 작업은 Tibero 객체 목록에 없다
+        Assert.Contains(ObjectMarkRows.Jobs, TiberoMetadataProvider.MarkIds); // 작업은 meta.jobs 로 목록에 넣는다(2026-11-21)
     }
 
     [Fact]
@@ -50,7 +50,8 @@ public partial class TiberoObjectMarksTests
 
         Assert.Contains("NULL AS base_object_type", Catalog.Get(ObjectMarkRows.Triggers, 6, Dbms.Tibero).Sql, StringComparison.Ordinal);
         var synonyms = Catalog.Get(ObjectMarkRows.Synonyms, 6, Dbms.Tibero).Sql;
-        Assert.Contains("NULL AS db_link", synonyms, StringComparison.Ordinal);
+        Assert.Contains("THEN SUBSTR(s.org_object_name, INSTR(s.org_object_name, '@', -1) + 1) END AS db_link", synonyms, StringComparison.Ordinal); // "이름"@링크(실측)
+        Assert.Contains("CASE WHEN x.db_link IS NULL THEN", synonyms, StringComparison.Ordinal); // 원격이면 대상을 찾지 않는다
         Assert.Contains("s.owner <> 'PUBLIC'", synonyms, StringComparison.Ordinal); // PUBLIC 동의어 수천 개는 읽지 않는다
         Assert.Contains("org_object_owner", synonyms, StringComparison.Ordinal);
     }
@@ -72,7 +73,7 @@ public partial class TiberoObjectMarksTests
         await using var session = Session();
 
         await provider.RefreshAsync(session, CancellationToken.None);
-        Assert.Equal(["meta.objects"], calls.Select(c => c.Id)); // 목록 질의는 그대로(표식을 같이 읽지 않는다)
+        Assert.Equal(["meta.objects", "meta.jobs"], calls.Select(c => c.Id)); // 목록 질의는 그대로(표식을 같이 읽지 않는다), 작업은 따로 덧붙인다
 
         Assert.Empty(await provider.ListObjectMarksAsync(session, "SCOTT", CancellationToken.None));
         for (var i = 0; i < 300 && !bus.Published.OfType<ObjectMarksRefreshed>().Any(); i++)
@@ -80,8 +81,8 @@ public partial class TiberoObjectMarksTests
             await Task.Delay(10);
         }
 
-        Assert.Equal(TiberoMetadataProvider.MarkIds, calls.Skip(1).Select(c => c.Id));
-        Assert.All(calls.Skip(1), c => Assert.Equal(new Dictionary<string, object?> { ["owner"] = "SCOTT" }, c.Binds));
+        Assert.Equal(TiberoMetadataProvider.MarkIds, calls.Skip(2).Select(c => c.Id));
+        Assert.All(calls.Skip(2), c => Assert.Equal(new Dictionary<string, object?> { ["owner"] = "SCOTT" }, c.Binds));
         var marks = await provider.ListObjectMarksAsync(session, "SCOTT", CancellationToken.None);
         Assert.Equal(new ObjectMark("GTT_SESSION PART:RANGE", null), marks[new DbObjectRef("SCOTT", "GTT", "TABLE")]);
         Assert.Equal(new ObjectMark("BEFORE DDL", null), marks[new DbObjectRef("SCOTT", "TRG", "TRIGGER")]);

@@ -33,7 +33,7 @@ public class TiberoMetadataProviderTests
         var unresolved = TiberoMetadataProvider.CatalogIds.Where(id => string.IsNullOrWhiteSpace(TiberoCatalogQuery.Sql(session, id))).ToList();
 
         Assert.Empty(unresolved);
-        Assert.Equal(32, TiberoMetadataProvider.CatalogIds.Distinct(StringComparer.Ordinal).Count()); // +meta.table_kind(TE-29), +meta.part_scheme·part_indexes(T14), +meta.table_lobs(T13c)
+        Assert.Equal(34, TiberoMetadataProvider.CatalogIds.Distinct(StringComparer.Ordinal).Count()); // +meta.table_kind(TE-29), +meta.part_scheme·part_indexes(T14), +meta.table_lobs(T13c), +meta.jobs·job_detail(TM-2)
     }
 
     /// <summary>
@@ -136,7 +136,8 @@ public class TiberoMetadataProviderTests
         var objects = await provider.RefreshAsync(session, CancellationToken.None);
         var listed = await provider.ListObjectsAsync(session, new ObjectQuery { ObjectTypes = ["VIEW"] }, CancellationToken.None);
 
-        var (id, binds) = Assert.Single(calls);
+        Assert.Equal(["meta.objects", "meta.jobs"], calls.Select(c => c.Id)); // 작업(JOB)은 따로 읽어 덧붙인다(이 가짜는 JOB 줄을 주지 않는다)
+        var (id, binds) = calls[0];
         Assert.Equal("meta.objects", id);
         Assert.Equal(TiberoMetadataProvider.ObjectBinds(new ObjectQuery()), binds);
         var emp = objects.Single(o => o.Name == "EMP");
@@ -166,7 +167,7 @@ public class TiberoMetadataProviderTests
 
         Assert.Equal([new DbObjectRef("APP", "T_A", "TABLE"), new DbObjectRef("HR", "T_Z", "TABLE")], found);
         Assert.Equal([new DbObjectRef("APP", "T_A", "TABLE")], first);
-        Assert.Single(calls);
+        Assert.Equal(["meta.objects", "meta.jobs"], calls.Select(c => c.Id)); // 목록 한 번(작업 덧붙이기 포함), 접두어 찾기는 서버에 묻지 않는다
     }
 
     [Fact]

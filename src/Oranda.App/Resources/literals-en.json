@@ -2250,5 +2250,13 @@
   "열 통계 요약": "Column statistics summary",
   "열 통계를 읽는 중": "Reading column statistics…",
   "통계 수집 실행": "Gather now",
-  "확인 창에서 옵션을 고른 뒤 DBMS_STATS.GATHER_TABLE_STATS 를 따로 연 세션에서 실행합니다(DB 에 씁니다).": "Pick options in a confirmation window, then run DBMS_STATS.GATHER_TABLE_STATS on a separate session (it writes to the database)."
+  "확인 창에서 옵션을 고른 뒤 DBMS_STATS.GATHER_TABLE_STATS 를 따로 연 세션에서 실행합니다(DB 에 씁니다).": "Pick options in a confirmation window, then run DBMS_STATS.GATHER_TABLE_STATS on a separate session (it writes to the database).",
+  "DBMS_JOB 작업(이름이 없으면 작업 번호)": "DBMS_JOB job (named by its job number when it has no name)",
+  "다음 실행": "Next run",
+  "실행 간격": "Interval",
+  "실행 내용(WHAT)": "What (WHAT)",
+  "실패 수": "Failures",
+  "마지막 실행": "Last run",
+  "작업 번호": "Job number",
+  "작업 종류": "Job type"
 }

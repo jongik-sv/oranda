@@ -16,7 +16,7 @@ internal sealed partial class TiberoMetadataProvider
     /// 따로 필요하다(카탈로그 <c>meta.ddl</c> 머리말: DBMS_METADATA 는 TABLE 만 받는다).
     /// </summary>
     internal static string DdlNotSupported(string objectType) =>
-        $"Tibero 는 {objectType} 유형의 DDL 추출을 아직 지원하지 않습니다(지원: TABLE, VIEW, SEQUENCE, SYNONYM, INDEX, PROCEDURE, FUNCTION, PACKAGE, PACKAGE BODY, TYPE, TYPE BODY, TRIGGER).";
+        $"Tibero 는 {objectType} 유형의 DDL 추출을 아직 지원하지 않습니다(지원: TABLE, VIEW, SEQUENCE, SYNONYM, INDEX, PROCEDURE, FUNCTION, PACKAGE, PACKAGE BODY, TYPE, TYPE BODY, TRIGGER, JOB(DBMS_JOB)).";
 
     /// <summary>열·제약·인덱스를 가진 객체 유형(<see cref="GetTableAsync"/> 로 읽는다).</summary>
     private static readonly HashSet<string> TableLike = new(StringComparer.Ordinal) { "TABLE", "VIEW", "MATERIALIZED VIEW" };
@@ -43,6 +43,7 @@ internal sealed partial class TiberoMetadataProvider
     /// <item>PROCEDURE·FUNCTION·PACKAGE(명세만)·PACKAGE BODY·TYPE(명세만)·TYPE BODY·TRIGGER: <c>meta.source</c> 글로 만든
     /// <c>CREATE OR REPLACE … "OWNER"."NAME" …</c>. 명세와 본문은 Oracle 처럼 따로다(합치지 않는다). <see cref="DdlOptions.SqlTerminator"/> 면 새 줄에 <c>/</c> 를 붙인다(PL/SQL 관례).
     /// TRIGGER 는 Oracle 처럼 뒤에 <c>ALTER TRIGGER … ENABLE|DISABLE</c> 이 붙는다.</item>
+    /// <item>JOB: DBMS_JOB 은 <c>DBMS_JOB.SUBMIT</c> 블록(<c>meta.job_detail</c>, .Jobs.cs). 스케줄러 잡은 <see cref="NotSupportedException"/>.</item>
     /// <item>그 밖의 유형: <see cref="NotSupportedException"/>. 만들 수 없는 인덱스(도메인 등)도 이유를 담아 같은 예외.</item>
     /// <item>없거나 볼 수 없는 객체(줄·결과 없음): <see cref="InvalidOperationException"/>(<see cref="GetSourceAsync"/> 와 같은 모양). 없는 TABLE 은 서버 오류(ODP-15104)가 그대로 올라간다.</item>
     /// </list>
@@ -72,6 +73,8 @@ internal sealed partial class TiberoMetadataProvider
                 return await GetIndexDdlAsync(s, obj, o, ct).ConfigureAwait(false);
             case "TRIGGER":
                 return await GetTriggerDdlAsync(s, obj, o, ct).ConfigureAwait(false);
+            case JobType:
+                return await GetJobDdlAsync(s, obj, o, ct).ConfigureAwait(false);
         }
 
         if (SourceDdlTypes.Contains(type))
@@ -227,6 +230,8 @@ internal sealed partial class TiberoMetadataProvider
         {
             case DetailPart.Whole:
                 return (await GetObjectDetailAsync(s, obj, ct).ConfigureAwait(false)).Sections;
+            case DetailPart.General when type == JobType:
+                return await ReadJobGeneralAsync(s, obj, ct).ConfigureAwait(false);
             case DetailPart.General:
             {
                 var general = await RunAsync(s, "meta.detail_general", objectBinds, ct).ConfigureAwait(false);
@@ -366,7 +371,7 @@ internal sealed partial class TiberoMetadataProvider
 
     /// <summary>
     /// 이름 풀이 한 단계(<c>meta.name_step</c>): 표·뷰면 <see cref="NameStep.TableOrView"/>, 시노님이면 가리키는 곳. 없거나 서버 오류(끊김 제외)면 null.
-    /// Tibero 의 시노님 뷰에는 DB 링크 열이 없어 원격 시노님은 링크 없이 풀린다(카탈로그 머리말).
+    /// Tibero 의 시노님 뷰에는 DB 링크 열이 없고 원격 시노님은 대상 이름 글에 <c>"이름"@링크</c> 로 적혀 있어 나눠 읽는다(<see cref="TiberoSynonymTarget"/>).
     /// </summary>
     public async Task<NameStep?> GetNameStepAsync(ISession s, string owner, string name, CancellationToken ct)
     {
@@ -381,9 +386,13 @@ internal sealed partial class TiberoMetadataProvider
         }
 
         var row = rows[0];
-        return string.Equals(Str(row[0]), "SYNONYM", StringComparison.Ordinal)
-            ? NameStep.Synonym(Str(row[1]), Str(row[2]) ?? name, Str(row[3]) is { Length: > 0 } link ? link : null)
-            : NameStep.TableOrView;
+        if (!string.Equals(Str(row[0]), "SYNONYM", StringComparison.Ordinal))
+        {
+            return NameStep.TableOrView;
+        }
+
+        var target = TiberoSynonymTarget.Parse(Str(row[1]), Str(row[2]) ?? name);
+        return NameStep.Synonym(target.Owner, target.Name, target.DbLink ?? (Str(row[3]) is { Length: > 0 } link ? link : null));
     }
 
     /// <summary>표 상세 구역(설명·열·제약·인덱스). Oracle 과 같은 제목·열·순서다. Tibero 는 <c>Release12Columns</c> 가 꺼져 있어 identity·invisible·도메인 칸을 숨긴다.</summary>

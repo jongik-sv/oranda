@@ -29,7 +29,8 @@ public sealed class TiberoDdlBulkExporterTests : IDisposable
         Assert.Equal(Oranda.Core.Connection.Dbms.Tibero, exporter.Dbms);
         Assert.DoesNotContain("MATERIALIZED VIEW", exporter.DefaultTypes);
         Assert.Equal(["SEQUENCE", "TYPE", "TABLE", "VIEW", "SYNONYM", "FUNCTION", "PROCEDURE", "PACKAGE", "PACKAGE BODY", "TYPE BODY", "TRIGGER"], exporter.DefaultTypes);
-        Assert.Equal("meta.objects", Assert.Single(calls).Id);
+        Assert.Equal("meta.objects", calls[0].Id);
+        Assert.All(calls, c => Assert.True(c.Id is "meta.objects" or "meta.jobs", c.Id)); // 목록(작업 덧붙이기 포함)만 읽는다
         Assert.Empty(result.Items);
         Assert.Empty(result.Files);
     }

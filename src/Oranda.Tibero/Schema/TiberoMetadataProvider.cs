@@ -39,7 +39,7 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
         "meta.detail_stats", "meta.detail_size", "meta.detail_size_user", "meta.detail_privileges", "meta.detail_privileges_user",
         "meta.detail_dependencies", "meta.source", "meta.compile_errors", "meta.name_step",
         "meta.ddl_view", "meta.ddl_sequence", "meta.ddl_index", "meta.ddl_table_indexes", "meta.ddl_constraints", "meta.ddl_trigger",
-        "meta.table_kind", "meta.part_scheme", "meta.part_indexes", "meta.table_lobs",
+        "meta.table_kind", "meta.part_scheme", "meta.part_indexes", "meta.table_lobs", "meta.jobs", "meta.job_detail",
     ];
 
     private readonly CatalogRunner _run;
@@ -201,19 +201,50 @@ internal sealed partial class TiberoMetadataProvider : CachedMetadataProvider, I
     /// <returns>갱신 후 캐시에 있는 전체 목록(캐시를 못 쓰면 서버에서 받은 목록).</returns>
     internal Task<IReadOnlyList<MetaObject>> RefreshAsync(ISession s, CancellationToken ct) => RefreshObjectListAsync(s, ct);
 
+    /// <summary>
+    /// 서버 객체 목록: <c>meta.objects</c> 에 작업(JOB)을 덧붙인다. Tibero <c>*_objects</c> 에는 JOB 유형이 없어 스케줄러 잡·DBMS_JOB 을 <c>meta.jobs</c> 로 따로 읽는다
+    /// (2026-11-21 실측). 작업 줄은 만든·바뀐 시각과 INVALID 가 없어 그 조건이 있으면 읽지 않는다. 작업 질의가 서버 오류로 실패하면(권한 등) 작업 없이 목록만 낸다.
+    /// </summary>
     protected override async Task<IReadOnlyList<MetaObject>> FetchObjectsAsync(ISession s, ObjectQuery q, DateTimeOffset fetchedAt, CancellationToken ct)
     {
         var dbKey = s.DbKey;
         var rows = await RunAsync(s, "meta.objects", ObjectBinds(q), ct).ConfigureAwait(false);
-        return [.. rows.Select(r => MetadataRows.ToMeta(dbKey, r, fetchedAt))];
+        var objects = rows.Select(r => MetadataRows.ToMeta(dbKey, r, fetchedAt)).ToList();
+        if (!WantsJobs(q))
+        {
+            return objects;
+        }
+
+        var jobs = await TryRunAsync(s, "meta.jobs", JobBinds(q), ct).ConfigureAwait(false);
+        var jobObjects = (jobs ?? []).Select(r => MetadataRows.ToMeta(dbKey, r, fetchedAt)).Where(o => o.Type == JobType).ToList();
+        if (jobObjects.Count == 0)
+        {
+            return objects;
+        }
+
+        IEnumerable<MetaObject> all = objects.Concat(jobObjects)
+            .OrderBy(o => o.Owner, StringComparer.Ordinal).ThenBy(o => o.Type, StringComparer.Ordinal).ThenBy(o => o.Name, StringComparer.Ordinal);
+        return [.. q.Limit is { } limit ? all.Take(limit) : all];
     }
+
+    /// <summary>작업 객체 유형(<c>ALL_OBJECTS.OBJECT_TYPE</c> 의 Oracle 이름, 스키마 브라우저 「스케줄러 잡」 폴더).</summary>
+    internal const string JobType = "JOB";
+
+    /// <summary>이 조건이 작업 줄을 받을 수 있는가(유형 조건에 JOB 이 있거나 없음, 시각·INVALID 조건 없음).</summary>
+    internal static bool WantsJobs(ObjectQuery q) =>
+        (q.ObjectTypes.Count == 0 || q.ObjectTypes.Contains(JobType, StringComparer.Ordinal))
+        && !q.InvalidOnly && q.CreatedAfter is null && q.ModifiedAfter is null;
+
+    /// <summary><c>meta.jobs</c> 바인드: owner, name_pattern.</summary>
+    internal static Dictionary<string, object?> JobBinds(ObjectQuery q) =>
+        new(StringComparer.Ordinal) { ["owner"] = q.Owner, ["name_pattern"] = q.NamePattern };
 
     /// <summary>
     /// 스키마 브라우저 표식 보조 질의(목록을 보인 뒤 소유자마다, <see cref="CachedMetadataProvider.ListObjectMarksAsync"/>).
-    /// 작업(JOB)은 Tibero 객체 목록(*_objects)에 없어 읽지 않는다(6.2.15 실측).
+    /// 작업(JOB)은 <c>*_objects</c> 에 없지만 <c>meta.jobs</c> 로 목록에 넣으므로 표식도 읽는다(스케줄러 잡·DBMS_JOB, 2026-11-21 실측).
     /// </summary>
     internal static readonly IReadOnlyList<string> MarkIds =
-        [ObjectMarkRows.Tables, ObjectMarkRows.Triggers, ObjectMarkRows.Synonyms, ObjectMarkRows.MViews, ObjectMarkRows.Types];
+        [ObjectMarkRows.Tables, ObjectMarkRows.Triggers, ObjectMarkRows.Jobs, ObjectMarkRows.Synonyms, ObjectMarkRows.MViews, ObjectMarkRows.Types];
 
     protected override IReadOnlyList<string> MarkQueryIds => MarkIds;
 

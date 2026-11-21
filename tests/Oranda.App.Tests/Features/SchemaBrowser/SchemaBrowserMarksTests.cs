@@ -116,6 +116,21 @@ public sealed class SchemaBrowserMarksTests
         Assert.Empty(SchemaLooks.ForObject("objJob", job, null, false).Badges); // 켜짐·예약됨 = 기본
     }
 
+    /// <summary>Tibero DBMS_JOB(이름이 작업 번호일 수 있다)은 같은 폴더의 스케줄러 잡과 가르는 종류 표식 DBMS 가 붙고, 고장이면 주황 BROKEN 도 붙는다.</summary>
+    [Fact]
+    public void Dbms_jobs_show_a_kind_badge_next_to_their_state()
+    {
+        var job = new DbObjectRef("SCOTT", "10", "JOB");
+
+        var plain = SchemaLooks.ForObject("objJob", job, new ObjectMark("DBMS_JOB", null), false);
+        var broken = SchemaLooks.ForObject("objJob", job, new ObjectMark("DBMS_JOB", "BROKEN"), false);
+
+        Assert.Equal(("DBMS", "Teal", BadgeCorner.BottomRight, BadgeShape.Square), plain.Badges.Select(b => (b.Label, b.Tone, b.Corner, b.Shape)).Single());
+        Assert.Equal(["DBMS", "BROKEN"], broken.Badges.Select(b => b.Label));
+        Assert.Equal("BROKEN", broken.WarningBadge?.Label);
+        Assert.False(broken.Dimmed);
+    }
+
     [Fact]
     public void Synonyms_show_public_and_target_kind()
     {

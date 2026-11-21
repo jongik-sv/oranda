@@ -91,6 +91,20 @@ public class ObjectMarkRowsTests
         Assert.Null(mark.SubKind);
     }
 
+    /// <summary>Tibero DBMS_JOB 줄(넷째 열 job_kind): 종류 낱말 DBMS_JOB 이 붙고, 상태가 없어도 표식이 남는다(같은 폴더에서 스케줄러 잡과 가른다).</summary>
+    [Theory]
+    [InlineData("BROKEN", "BROKEN")]
+    [InlineData("FAILED", "FAILED")]
+    [InlineData(null, null)]
+    public void Dbms_job_rows_carry_the_kind_token(string? state, string? expected)
+    {
+        var mark = ObjectMarkRows.Job(["10", "TRUE", state, "DBMS_JOB"]);
+
+        Assert.Equal(new ObjectMark("DBMS_JOB", expected), mark);
+        Assert.False(mark.IsEmpty);
+        Assert.Null(ObjectMarkRows.Job(["J", "FALSE", "DISABLED", null]).SubKind); // 스케줄러 잡 줄(Tibero)은 낱말 없음
+    }
+
     [Fact]
     public void Failed_job_keeps_the_original_state_as_detail()
     {
