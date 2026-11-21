@@ -100,6 +100,16 @@ public sealed partial class SchemaColumnStatsViewModel : ObservableObject, IDisp
         _cachedFor = null;
     }
 
+    /// <summary>한 테이블의 열 통계·히스토그램만 버린다(통계를 새로 모은 뒤, SG-1). 다음에 그 테이블 열을 고르면 다시 읽는다.</summary>
+    public void Invalidate(string owner, string table)
+    {
+        _tables.Remove((owner, table));
+        foreach (var key in _histograms.Keys.Where(k => k.Owner == owner && k.Table == table).ToList())
+        {
+            _histograms.Remove(key);
+        }
+    }
+
     /// <summary><paramref name="table"/> 의 <paramref name="column"/> 통계 요약을 보인다. 앞서 부른 것은 취소한다.</summary>
     public async Task ShowAsync(DbObjectRef table, string column)
     {

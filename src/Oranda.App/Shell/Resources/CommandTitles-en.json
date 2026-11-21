@@ -177,6 +177,8 @@
   "Cmd.oranda.tuning.childCursors": "Child Cursors…",
   "Cmd.oranda.tuning.gatherStatsScript": "Gather Table Statistics Script (DBMS_STATS)",
   "Cmd.oranda.schema.tableStats": "Table Statistics…",
+  "Cmd.oranda.schema.gatherStats": "Gather Statistics…",
+  "Cmd.oranda.tuning.gatherStats": "Gather Table Statistics Now…",
   "Cmd.oranda.monitor.locks.showHistory": "Toggle Lock History Strip",
   "Cmd.oranda.monitor.sqlShowPlan": "Actual Plan of Selected SQL",
   "Cmd.oranda.tuning.assistant": "Tuning Assistant",

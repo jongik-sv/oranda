@@ -255,6 +255,8 @@
   "Cmd.oranda.tuning.childCursors": "자식 커서…",
   "Cmd.oranda.tuning.gatherStatsScript": "테이블 통계 수집 스크립트 (DBMS_STATS)",
   "Cmd.oranda.schema.tableStats": "테이블 통계 보기…",
+  "Cmd.oranda.schema.gatherStats": "통계 수집…",
+  "Cmd.oranda.tuning.gatherStats": "테이블 통계 수집 실행…",
   "Cmd.oranda.tuning.assistant": "튜닝 도우미",
   "Cmd.oranda.tuning.indexCandidates": "인덱스 후보",
   "Cmd.oranda.tuning.rewriteCandidates": "재작성 후보",

@@ -37,7 +37,7 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
     private string _targetText = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Title), nameof(CanGatherScript))]
+    [NotifyPropertyChangedFor(nameof(Title), nameof(CanGatherScript), nameof(CanGatherStats))]
     private TableStatsTarget? _target;
 
     [ObservableProperty]
@@ -45,7 +45,7 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
     private TuningPanelState _state = TuningPanelState.NoSession;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanGatherScript), nameof(CanRefresh))]
+    [NotifyPropertyChangedFor(nameof(CanGatherScript), nameof(CanRefresh), nameof(CanGatherStats))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -153,6 +153,12 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
 
     public bool CanGatherScript => Target is not null && !IsBusy;
 
+    /// <summary>「통계 수집 실행」 단추(SG-1): 표가 정해졌고 읽기 전용 접속이 아니다.</summary>
+    public bool CanGatherStats => Target is not null && !IsBusy && Session is { Profile.ReadOnly: false };
+
+    /// <summary>「통계 수집 실행」 — 확인 창을 띄우는 방법(셸이 넣는다). 없으면 단추가 아무것도 하지 않는다.</summary>
+    public Func<TableStatsTarget, Task>? GatherStats { get; set; }
+
     public bool CanRefresh => !IsBusy;
 
     public bool HasHistogram => HistogramBars.Count > 0;
@@ -195,6 +201,7 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
     public void Attach(ISession? session, TableStatsTarget? target)
     {
         Session = session;
+        OnPropertyChanged(nameof(CanGatherStats));
         Target = target;
         TargetText = target?.Display ?? string.Empty;
         Stats = null;
@@ -447,6 +454,22 @@ public sealed partial class TableStatsViewModel : ToolPanelViewModelBase, IDispo
         StatusText = T("통계 수집 스크립트를 새 편집기 탭에 넣었습니다. 검토한 뒤 직접 실행하세요(DB 에 씁니다).",
             "Put the statistics gathering script in a new editor tab. Review it and run it yourself (it writes to the database).");
         return true;
+    }
+
+    /// <summary>「통계 수집 실행」: 이 표로 확인 창을 띄운다(실행은 확인 창이 전용 세션에서).</summary>
+    public Task RunGatherStatsAsync()
+    {
+        if (!CanGatherStats || Target is not { } target || GatherStats is not { } gather)
+        {
+            if (Target is null)
+            {
+                StatusText = T("통계를 볼 테이블을 먼저 고르세요.", "Pick a table first.");
+            }
+
+            return Task.CompletedTask;
+        }
+
+        return gather(target);
     }
 
     /// <summary>「복사」: 요약·열·인덱스 통계를 탭으로 나눈 글로.</summary>

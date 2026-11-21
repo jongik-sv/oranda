@@ -20,6 +20,7 @@ public static class TuningCommands
     [
         "oranda.tuning.stats",
         "oranda.tuning.gatherStatsScript",
+        "oranda.tuning.gatherStats",
         "oranda.tuning.childCursors",
         "oranda.tuning.traceViewer",
         "oranda.tuning.optimizerTrace",

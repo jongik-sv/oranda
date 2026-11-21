@@ -108,6 +108,7 @@ public sealed class TableStatsCommandHandler : ICommandHandler
         var vm = new TableStatsViewModel(container);
         vm.Attach(session, target);
         vm.EditorTable = () => EditorTable(container, vm.Session);
+        vm.GatherStats = t => vm.Session is { } s ? GatherStatsCommandHandler.ShowAsync(container, s, [t]) : Task.CompletedTask;
         if (shell.Docking.OpenDocument(TuningCommands.StatsPanelId, vm, vm.Title) is not { } opened)
         {
             return Task.CompletedTask;

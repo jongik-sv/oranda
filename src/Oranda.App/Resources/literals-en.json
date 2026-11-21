@@ -2248,5 +2248,7 @@
   "행 단위(FOR EACH ROW)": "Row level (FOR EACH ROW)",
   "열 값 분포": "Column value distribution",
   "열 통계 요약": "Column statistics summary",
-  "열 통계를 읽는 중": "Reading column statistics…"
+  "열 통계를 읽는 중": "Reading column statistics…",
+  "통계 수집 실행": "Gather now",
+  "확인 창에서 옵션을 고른 뒤 DBMS_STATS.GATHER_TABLE_STATS 를 따로 연 세션에서 실행합니다(DB 에 씁니다).": "Pick options in a confirmation window, then run DBMS_STATS.GATHER_TABLE_STATS on a separate session (it writes to the database)."
 }

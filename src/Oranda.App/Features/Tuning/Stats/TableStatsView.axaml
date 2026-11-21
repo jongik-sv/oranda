@@ -140,6 +140,9 @@
         <Button x:Name="ScriptButton" Classes="tool" Classes.emphasis="{Binding ScriptEmphasis}" Content="통계 수집 스크립트 만들기"
                 icons:ButtonIcon.Key="docEdit" IsEnabled="{Binding CanGatherScript}"
                 ToolTip.Tip="DBMS_STATS.GATHER_TABLE_STATS 문안을 새 편집기 탭에 넣습니다. 실행하지 않습니다(실행하면 DB 에 씁니다)." />
+        <Button x:Name="GatherButton" Classes="tool" Content="통계 수집 실행" icons:ButtonIcon.Key="refresh"
+                IsEnabled="{Binding CanGatherStats}"
+                ToolTip.Tip="확인 창에서 옵션을 고른 뒤 DBMS_STATS.GATHER_TABLE_STATS 를 따로 연 세션에서 실행합니다(DB 에 씁니다)." />
         <Separator Classes="toolbar" />
         <Button x:Name="CopyButton" Classes="tool" Content="복사" icons:ButtonIcon.Key="copy" IsEnabled="{Binding ShowContent}"
                 ToolTip.Tip="요약·열 통계·인덱스 통계를 탭으로 나눈 글로 복사합니다" />

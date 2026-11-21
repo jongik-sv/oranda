@@ -46,6 +46,7 @@ public partial class TableStatsView : UserControl
         EditorTableButton.Click += (_, _) => _ = _bound?.UseEditorTableAsync();
         RefreshButton.Click += (_, _) => _ = _bound?.LoadAsync();
         ScriptButton.Click += (_, _) => _bound?.OpenGatherScript();
+        GatherButton.Click += (_, _) => _ = _bound?.RunGatherStatsAsync();
         CopyButton.Click += async (_, _) =>
         {
             if (_bound?.BuildCopyText() is { Length: > 0 } text)
