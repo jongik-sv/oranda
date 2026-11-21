@@ -26,10 +26,9 @@ public sealed class CopyRunnerLanesTests
     public async Task At_most_N_tables_load_at_once_each_on_its_own_session_pair()
     {
         var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 2), ("B", 2), ("C", 2), ("D", 2));
-        f.Bulk.OnDml = async (_, _) =>
+        f.Bulk.OnDml = async (_, ct) =>
         {
-            await f.Bulk.ActiveReached(2).WaitAsync(TimeSpan.FromSeconds(3), CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default);
-            await Task.Delay(30, CancellationToken.None);
+            await f.Bulk.LanesOverlap(2, ct);
             return null;
         };
 
@@ -224,11 +223,11 @@ public sealed class CopyRunnerLanesTests
     {
         // A 는 배치 셋(2·2·2), B 는 둘(2·1): 배치 줄 글로 어느 테이블 줄인지 안다. 첫 배치에서 둘이 함께 돌게 한다.
         var f = new Fixture(new CopyOptions { BatchSize = 2 }, lanes: 2, stages: null, ("A", 6), ("B", 3));
-        f.Bulk.OnDml = async (call, _) =>
+        f.Bulk.OnDml = async (call, ct) =>
         {
             if (call.Batch == 1)
             {
-                await f.Bulk.ActiveReached(2).WaitAsync(TimeSpan.FromSeconds(3), CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default);
+                await f.Bulk.LanesOverlap(2, ct);
             }
 
             return null;
@@ -317,11 +316,10 @@ public sealed class CopyRunnerLanesTests
             ConsistentRead = true,
             ReadPointSupport = TestPoint,
         };
-        // 두 레인이 함께 돌 때까지 첫 배치를 붙들어 한 레인이 테이블 넷을 혼자 끝내지 못하게 한다(느린 러너에서 T2 가 늦게 뜨는 경우).
-        f.Bulk.OnDml = async (_, _) =>
+        // 두 레인이 함께 돌 때까지 배치를 붙들어 한 레인이 테이블 넷을 혼자 끝내지 못하게 한다(느린 러너에서 T2 가 늦게 뜨는 경우).
+        f.Bulk.OnDml = async (_, ct) =>
         {
-            await f.Bulk.ActiveReached(2).WaitAsync(TimeSpan.FromSeconds(3), CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default);
-            await Task.Delay(30, CancellationToken.None);
+            await f.Bulk.LanesOverlap(2, ct);
             return null;
         };
 
@@ -470,6 +468,12 @@ public sealed class CopyRunnerLanesTests
         {
             ConsistentRead = true,
             ReadPointSupport = TestTsn,
+        };
+        // 두 레인이 함께 돌 때까지 배치를 붙든다: 둘째 레인이 늦게 뜨면 첫 레인이 A·B 를 혼자 끝내 T1 만 남는다(v0.1.30 CI 한 번 실패).
+        f.Bulk.OnDml = async (_, ct) =>
+        {
+            await f.Bulk.LanesOverlap(2, ct);
+            return null;
         };
 
         var result = await f.RunAsync().WaitAsync(Quick);
@@ -794,6 +798,12 @@ public sealed class CopyRunnerLanesTests
         }
 
         public Task ActiveReached(int n) => Signal("active " + n).Task;
+
+        /// <summary>
+        /// 배치 <paramref name="n"/> 개가 함께 돌 때까지 이 배치를 붙든다(첫 레인이 테이블을 혼자 다 끝내지 못하게). 시간 제한 없이 신호만 기다린다 —
+        /// 끝내 겹치지 않으면 실행 전체가 시험의 시간 제한(Quick)에 걸려 실패한다.
+        /// </summary>
+        public Task LanesOverlap(int n, CancellationToken ct) => ActiveReached(n).WaitAsync(ct);
 
         public Task DmlCountReached(string table, int n) => Signal($"dml {table} {n}").Task;
 
