@@ -445,7 +445,7 @@ public class TiberoTuningServiceIt(ITestOutputHelper output)
         }
     }
 
-    private static TiberoTuningService NewService(TiberoItSessions it)
+    internal static TiberoTuningService NewService(TiberoItSessions it)
     {
         var exec = new TiberoExecutionService(new AllowAll(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
         return new TiberoTuningService(exec, new TiberoExecutionPlanService(exec), NewLanguage());

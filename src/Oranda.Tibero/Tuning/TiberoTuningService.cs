@@ -55,6 +55,13 @@ internal sealed class TiberoTuningService : CatalogTuningService
 
     protected override string? TraceUnavailableReason(ISession s) => TraceUnavailable;
 
+    /// <summary>Tibero 의 low_value·high_value 는 RAW 가 아니라 글이다(<see cref="TiberoStatValue"/>).</summary>
+    protected override string? StatValue(string? dataType, object? value) => TiberoStatValue.Decode(dataType, value);
+
+    /// <summary>Tibero 히스토그램은 _RAW 가 없고 ENDPOINT_ACTUAL_VALUE(글)가 늘 채워진다.</summary>
+    protected override string? HistogramLabel(string? dataType, object? actualRaw, string? actualText, string? endpointValue) =>
+        TiberoStatValue.HistogramEndpoint(dataType, actualText, endpointValue);
+
     /// <summary>Tibero 에는 자식 커서 사유 뷰가 없다. 화면은 <c>DbmsFeature.SharedCursorReasons</c> 가 막고, 이것은 마지막 방어선(실패한 작업으로 돌려준다).</summary>
     public override Task<IReadOnlyList<SharedCursorReason>> GetSharedCursorReasonsAsync(ISession s, string sqlId, CancellationToken ct) =>
         Task.FromException<IReadOnlyList<SharedCursorReason>>(new NotSupportedException(SharedCursorReasonsUnavailable));

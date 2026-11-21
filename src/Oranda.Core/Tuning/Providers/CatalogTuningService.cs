@@ -69,8 +69,8 @@ public abstract partial class CatalogTuningService : ITuningService
             Str(r[0]) ?? string.Empty, Long(r[1]), Long(r[2]), Double(r[3]), Str(r[4]) ?? "NONE", Long(r[5]), Date(r[6]))
         {
             // 7 = data_type, 8·9 = RAWTOHEX(low_value·high_value). 열이 모자란 옛 질의(덮어쓴 카탈로그)는 값 없이 둔다.
-            LowValue = r.Length > 8 ? ColumnStatValue.Decode(Str(r[7]), r[8]) : null,
-            HighValue = r.Length > 9 ? ColumnStatValue.Decode(Str(r[7]), r[9]) : null,
+            LowValue = r.Length > 8 ? StatValue(Str(r[7]), r[8]) : null,
+            HighValue = r.Length > 9 ? StatValue(Str(r[7]), r[9]) : null,
         })];
     }
 
@@ -81,8 +81,15 @@ public abstract partial class CatalogTuningService : ITuningService
             CatalogBinds.Defer(() => [.. BindTable(owner, table), CatalogBinds.Trimmed("column_name", column)]), TuningQueryOptions, ct)).Rows;
         // 3 = data_type, 4 = RAWTOHEX(endpoint_actual_value_raw)(12c+). 열이 모자란 질의(11g·Tibero·덮어쓴 카탈로그)는 있는 것만으로 푼다.
         return ToBuckets(rows.Select(r => (Long(r[0]) ?? 0,
-            ColumnStatValue.HistogramEndpoint(r.Length > 3 ? Str(r[3]) : null, r.Length > 4 ? r[4] : null, Str(r[1]), Str(r[2])))));
+            HistogramLabel(r.Length > 3 ? Str(r[3]) : null, r.Length > 4 ? r[4] : null, Str(r[1]), Str(r[2])))));
     }
+
+    /// <summary>열 통계 low_value·high_value 를 글로. 기본 = Oracle 내부 형식 RAW(<see cref="ColumnStatValue.Decode(string?, object?)"/>). 형식이 다른 DBMS 는 재정의한다.</summary>
+    protected virtual string? StatValue(string? dataType, object? value) => ColumnStatValue.Decode(dataType, value);
+
+    /// <summary>히스토그램 끝점 글. 기본 = Oracle(<see cref="ColumnStatValue.HistogramEndpoint"/>). 형식이 다른 DBMS 는 재정의한다.</summary>
+    protected virtual string? HistogramLabel(string? dataType, object? actualRaw, string? actualText, string? endpointValue) =>
+        ColumnStatValue.HistogramEndpoint(dataType, actualRaw, actualText, endpointValue);
 
     public async Task<IReadOnlyList<IndexStatsRow>> GetIndexStatsAsync(ISession s, string owner, string table, CancellationToken ct)
     {
