@@ -1,8 +1,9 @@
 -- 인덱스와 열. 바인드: owner, name. 앞 5열은 Oracle 판과 같다.
 -- 끝 열(테이블 편집기 TE-29): descend(열별 ASC/DESC — Tibero 는 DESC 인덱스도 NORMAL·실제 열 이름), column_expression(함수 기반 식, 열 이름은
 -- 「- EXPRESSION COLUMN -」), tablespace_name, constraint_name(이 인덱스를 쓰는 PK·UK 제약, 없으면 NULL). 실측 tibero-table-edit-probe.md 5·16장.
--- 그 뒤(스키마 브라우저 표식): status(VALID·UNUSABLE), partitioned(YES/NO). Tibero index_type 은 NORMAL·IOT - TOP·LOB 뿐이라(6.2.15 실측)
--- 비트맵·역방향은 모름(표식 없음), 함수 기반은 column_expression 으로 가른다.
+-- 그 뒤(스키마 브라우저 표식): status(VALID·UNUSABLE), partitioned(YES/NO). index_type 값은 NORMAL·BITMAP·NORMAL/REV·IOT - TOP·LOB
+-- (2026-11-21 실측). 비트맵·역방향 표식은 Oracle 처럼 index_type 에서 나오고, 함수 기반은 index_type 이 NORMAL 그대로라
+-- column_expression 으로 가른다.
 -- id: meta.indexes
 -- dbms: tibero
 -- min-version: 6
