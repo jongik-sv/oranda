@@ -362,7 +362,7 @@ public static class AppTools
             } }
             """),
         new(AppToolNames.GetSource,
-            "Source of a PL/SQL object (owner, name, type, text, members). With member, only that procedure or function of a package." + DataNote,
+            "Source of a PL/SQL object (owner, name, type, sql_text, members). With member, only that procedure or function of a package." + DataNote,
             AiAccessLevel.Metadata,
             $$"""
             { "type": "object", "additionalProperties": false, "required": ["object"], "properties": {

@@ -48,7 +48,7 @@
 | `find_objects` | Db | R | Metadata | `name_like` | `objects[{owner, name, type, status, comment?}], truncated` |
 | `list_schemas` | Db | R | Metadata | — | `schemas[]` |
 | `get_ddl` | Db | R | Metadata | `object` | `owner, name, type, sql_text`(DDL 글은 리터럴 가림을 타는 `sql_text` 칸) |
-| `get_source` | Db | R | Metadata | `object` | `owner, name, type, text, members[]` |
+| `get_source` | Db | R | Metadata | `object` | `owner, name, type, sql_text, members[]`(소스 글도 `sql_text` 칸, A3 에서 바꿈) |
 | `resolve_names` | Db | R | Metadata | `names` | `names[{input, found, owner?, name?, type?, via_synonym?}]` |
 | `get_procedure_args` | Db | R | Metadata | `object` | `members[{member, overload, args[{name, type, in_out, default}], returns?}]` |
 | `query` | Db | X | Query(운영 불가) | `sql` | `columns[{name, type}], row_values?[[…]], row_count, truncated, elapsed_ms, sql_id` |
@@ -105,3 +105,19 @@ JSON-RPC 오류(hello 단계)는 `AgentRpc.ErrorCodes.ToErrorCode` 로 위 글�
 - `AgentGrantView(GrantId, Connections, CreatedAt, ExpiresAt, Clients, AllowUnboundTabText)` — 변하지 않는 사본. `ResolveConnection(alias, out code)`·`FindConnection(alias|profileId)`·`LevelFor(profileId)`·`IsLocked(profileId)`·`CanReadTabText(profileId)`(운영 탭은 언제나 거짓)·`IsExpired(now)`.
 - `AgentGrantConnection.Level` = `AgentGrantPolicy.LevelFor(profile, cap)` = min(접속 실효 수준, 상한, 환경 상한). 환경 상한 = 운영 Metadata, 그 밖 QueryRows. 기본 기한 8시간.
 - `IAgentGrants`: `Active`·`Create(AgentGrantRequest)`→`AgentGrantIssue(Grant, Token)`·`Resolve(token)`·`Extend(id, by)`·`AddClient(id, name)`·`Revoke(id)`·`Changed` 사건.
+
+## 7. A2~A4 에서 더한 것
+
+| 타입 | 파일 | 뜻 |
+|---|---|---|
+| `AgentGrantStore` (`IAgentGrants` + `IAgentGrantSessions`) | `src/Oranda.Core/Ai/Gate/AgentGrantStore.cs` | 메모리 허가 저장소. 창마다 허가 하나(다시 켜면 옛 것 폐기), 기한 타이머, 접속 저장(`ConnectionProfileSaved`) 때 수준 다시 계산·하위 세션 폐기. 앱 조립(`AppComposition.RegisterAi`)이 하나만 등록 |
+| `IAgentGrantSessions` · `AgentGrantLookup` | 같은 파일 | 다리·게이트용: `Lookup(token)`(만료 구분)·`Find(id)`·`SessionFor(id, profileId, client)`·`AddClient`·`AttachWriter`·`RevokeAll` |
+| `IAgentEndpointWriter` | 같은 파일 | 연결 파일 쓰기(`Publish`·`Update`·`Remove`). 다리가 열릴 때 붙인다. 안 붙었으면 `Create` 가 `InvalidOperationException` |
+| `IAgentExternalGate` · `AgentExternalToolActivity` | `src/Oranda.Core/Ai/Gate/AgentGate.External.cs` | 외부 관문(= `AgentGate`). `ListTools(grant)`·`RunsWithoutDatabase(tool)`·`CallToolAsync(grant, client, tool, args)`·`ExternalToolCompleted` 사건(허가 id·클라이언트·접속·도구·판단·크기·메모·시각, Db·App·Lang 모두) |
+| `AgentRunScope.External` | `src/Oranda.Core/Ai/Gate/AgentSession.cs` | 외부 하위 세션 표시(게이트가 `AppTools.External` 의 Db 도구를 찾는다) |
+| `AgentEndpointFiles` · `AgentSocketPath` | `src/Oranda.Platform/Ai/Bridge/` | 연결 파일 0600·임시 이름 뒤 바꿔 넣기·시작 때 죽은 pid/같은 pid 파일 청소, 소켓 경로가 sun_path 한도(macOS 103·Linux 107 바이트)를 넘으면 `<tmp>/oranda-<uid>/agent[-pid].sock` |
+
+- 하위 세션 = 접속 × 클라이언트마다 하나. 실행 id `허가 id:별칭`, 시작 문장 없음, 보낼 범위 = 접속 전체, 운영은 빈 리터럴 사전 + 가림 필수(결과의 `sql_text` 를 가린다). 개발·시험은 리터럴을 가리지 않는다.
+- 다리: hello 토큰이 내장 실행이 아니면 허가로 푼다(만료 = `-32006`). 끝난 허가는 열린 연결에서도 `TokenInvalid`. App·Lang 도구는 DB 대기열(`_callGate`) 밖에서 처리한다. 다리를 닫으면 모든 허가를 폐기하고 파일을 지운다.
+- 게이트: `query` 는 문장을 실제로 실행하는 도구로 본다(사용자 함수 확인). 커서 실측 대체가 없으므로 DB 링크·확인 못 한 함수는 `sql_unsafe`. 외부 하위 세션의 `get_ddl`·`get_source`·`get_procedure_args` 는 `object` 이름 풀기(표·뷰·동의어만)를 거치지 않고 그대로 넘긴다 — 처리자가 스스로 푼다(`Resolved` 비어 있음).
+- App·Lang 도구: 스키마 `maxLength`·`enum`·`boolean` 을 검사한다(Db 도구 글 인자 한도는 기존 20,000자). `connection` 은 값이 있으면 허가 안 별칭이어야 하고, `reveal_object` 만 꼭 필요하다(나머지는 고르기용). 접속이 정해진 호출은 그 수준으로 정의 최소 수준·운영 제한·행 값 가림을 건다.

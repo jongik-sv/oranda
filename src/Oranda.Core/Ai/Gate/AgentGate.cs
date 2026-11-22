@@ -21,7 +21,7 @@ namespace Oranda.Core.Ai.Gate;
 /// 거부는 예외가 아니라 <c>IsError</c> 결과 <c>{"error":…,"code":…}</c> 로 돌려주고, 어떤 경로로 끝나든 감사 한 줄과 <see cref="ToolCompleted"/> 한 번을 낸다.
 /// 한 세션의 호출은 한 번에 하나씩 처리한다(같은 DB 세션을 겹쳐 쓰지 않는다). 세션 폐기는 진행 중인 호출도 멈추고, 처리자에서 돌아온 결과를 버린다.
 /// </summary>
-public sealed partial class AgentGate : IAgentGate
+public sealed partial class AgentGate : IAgentGate, IAgentExternalGate
 {
     /// <summary>결과 글 최대 길이. 넘으면 처리자 결과를 버린다(LLM 문맥과 파이프 한 줄 한도를 지키려는 안전장치).</summary>
     public const int MaxResultChars = 80_000;
@@ -65,9 +65,13 @@ public sealed partial class AgentGate : IAgentGate
         IAgentAuditStore audit,
         TimeProvider? time = null,
         ISqlLiteralMasker? masker = null,
-        IUserFunctionSafetyChecker? userFunctions = null)
+        IUserFunctionSafetyChecker? userFunctions = null,
+        IAgentGrantSessions? grants = null,
+        IServiceProvider? services = null)
     {
         _userFunctions = userFunctions;
+        _grants = grants;
+        _services = services;
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _extractor = extractor ?? throw new ArgumentNullException(nameof(extractor));
         ArgumentNullException.ThrowIfNull(handlers);
@@ -222,11 +226,13 @@ public sealed partial class AgentGate : IAgentGate
             return Deny("run_revoked", "This run has ended and no longer accepts tool calls.");
         }
 
-        var tool = AgentTools.Find(toolName);
+        var tool = FindTool(session, toolName);
         if (tool is null)
         {
             return Deny("unknown_tool", "Unknown tool.");
         }
+
+        state.CanSubstitute = tool.Name == AgentToolNames.BenchmarkQueries;
 
         // 리터럴 가림이 켜져 있는가는 첫 거부보다 먼저 정한다(어느 거부든 감사 요약에 literals=masked 가 남도록).
         var literals = session.Run.Literals;
@@ -418,7 +424,7 @@ public sealed partial class AgentGate : IAgentGate
             Client = session.Client,
             RunId = session.RunId,
             Tool = shownName,
-            Arguments = AgentTools.Find(toolName) is null ? null : SummarizeArguments(state),
+            Arguments = FindTool(session, toolName) is null ? null : SummarizeArguments(state),
             AccessLevel = level,
             Verdict = outcome.Judgement,
             Reason = outcome.Reason,
@@ -427,6 +433,15 @@ public sealed partial class AgentGate : IAgentGate
             Tier = session.Tier,
             Model = session.ModelLabel,
         };
+
+    /// <summary>
+    /// 이 세션이 쓸 수 있는 도구 정의. 앱 안 AI 실행은 기존 12개, 외부 허가의 하위 세션(<see cref="AgentRunScope.External"/>)은
+    /// 외부 목록 중 Host 가 Db 인 도구(앱·언어 도구는 <see cref="CallToolAsync(AgentGrantView, string?, string, JsonNode?, CancellationToken)"/> 가 맡는다).
+    /// </summary>
+    private static AgentToolDefinition? FindTool(AgentSession session, string toolName) =>
+        session.Run.External
+            ? AppTools.Find(toolName) is { Host: AgentToolHost.Db } external ? external : null
+            : AgentTools.Find(toolName);
 
     private static GateOutcome Deny(string code, string message) => Reject(AiToolJudgement.Denied, code, message);
 
@@ -718,6 +733,9 @@ public sealed partial class AgentGate : IAgentGate
 
         /// <summary>실행할 문장에 사용자 함수가 있고 확인을 통과했다(또는 사용자가 위험 함수 실행을 켰다): 처리자는 읽기 전용 트랜잭션 안에서만 실행한다.</summary>
         public bool ReadOnlyExecution { get; set; }
+
+        /// <summary>실행하지 않고 커서 실측으로 대체할 수 있는 도구다(<c>benchmark_queries</c>). <c>query</c> 는 거짓.</summary>
+        public bool CanSubstitute { get; set; }
 
         /// <summary><c>variants</c> 순서대로, 실행하지 않고 커서 실측으로 대체할 변형의 사유 코드(실행하면 null).</summary>
         public List<string?> Substitutions { get; } = [];

@@ -19,7 +19,7 @@ public sealed partial class AgentGate
         var clean = state.Clean;
         var hasSql = TryGetString(clean, AgentFields.Sql, out var sql);
         var hasSqlId = TryGetString(clean, AgentFields.SqlId, out var sqlId);
-        var executes = tool.Name == AgentToolNames.BenchmarkQueries; // 문장을 실제로 실행하는 도구(나머지는 계획·통계 조회)
+        var executes = tool.Name is AgentToolNames.BenchmarkQueries or AppToolNames.Query; // 문장을 실제로 실행하는 도구(나머지는 계획·통계 조회)
 
         if (tool.Name == AgentToolNames.GetTuningContext
             && !hasSql
@@ -29,9 +29,13 @@ public sealed partial class AgentGate
             return Deny("no_statement", "There is no statement to work on; pass sql or sql_id, or start from an editor statement.");
         }
 
+        // 외부 허가(보낼 범위 = 접속 전체)의 DDL·소스·인자 도구는 패키지·프로시저·시퀀스도 대상이라, 표·뷰·동의어만 푸는 이름 풀기를 거치지 않는다.
+        // 범위가 접속 전체라 거를 것이 없고, 처리자가 자기 풀이(객체 목록 + 동의어)로 찾는다(Resolved 에 넣지 않는다).
+        var skipObjectResolution = session.Run.External && session.Send.AllObjects
+            && tool.Name is AppToolNames.GetDdl or AppToolNames.GetSource or AppToolNames.GetProcedureArgs;
         foreach (var argument in ObjectArguments)
         {
-            if (!TryGetString(clean, argument, out var name))
+            if (skipObjectResolution || !TryGetString(clean, argument, out var name))
             {
                 continue;
             }
@@ -137,7 +141,9 @@ public sealed partial class AgentGate
         }
 
         string? substitute = null;
-        if (info.HasLockingClause || ((info.HasRemoteReference || HasUnvettedCall(info)) && !executes))
+        // 커서 실측으로 대체할 수 있는 것은 벤치마크뿐이다. query 는 대체할 길이 없으므로 대체 사유가 생기면 거부한다.
+        var canSubstitute = executes && state.CanSubstitute;
+        if (info.HasLockingClause || ((info.HasRemoteReference || HasUnvettedCall(info)) && !canSubstitute))
         {
             return SqlCheck.Denied(Deny("sql_unsafe", $"The SQL{where} must not use FOR UPDATE, database links, sequence references, Oracle-supplied packages (DBMS_*, UTL_*) or URL types."));
         }
@@ -189,7 +195,9 @@ public sealed partial class AgentGate
         // 대체: 문장을 실행하지 않고 처리자가 글에서 sql_id 를 계산해 공유 풀의 실측만 읽는다. 원래 글(사용자 앱이 실행한 글)을 넘긴다.
         if (substitute is not null)
         {
-            return new SqlCheck(null, sql, substitute);
+            return canSubstitute
+                ? new SqlCheck(null, sql, substitute)
+                : SqlCheck.Denied(Deny("sql_unsafe", $"The SQL{where} calls a function that could not be verified as read-only; it is not executed."));
         }
 
         // 추출기가 준 풀어 쓴 글은 분석한 글이 아니다. 처리자에게 넘기기 전에 그 글을 다시 분석해 같은 문장(1개·SELECT·깨끗·같은 참조 객체)인지 확인한다.

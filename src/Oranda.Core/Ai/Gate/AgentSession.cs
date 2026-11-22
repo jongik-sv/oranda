@@ -67,6 +67,12 @@ public sealed record AgentRunScope(string RunId, ConnectionProfile Profile, AiCo
     }
 
     private readonly int _benchmarkTimeoutSeconds = Oranda.Core.Settings.AiSettings.DefaultBenchmarkTimeoutSeconds;
+
+    /// <summary>
+    /// 외부 허가(밖의 LLM CLI)의 하위 세션이다(설계 agent-cli-control §3.2). 참이면 게이트가 도구를 외부 목록(<c>AppTools.External</c>)에서 찾는다 —
+    /// 그중 Host 가 Db 인 도구만 이 세션으로 처리한다. 앱 안 AI 실행은 거짓(기존 12개만).
+    /// </summary>
+    public bool External { get; init; }
 }
 
 /// <summary>

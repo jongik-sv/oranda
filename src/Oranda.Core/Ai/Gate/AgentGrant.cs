@@ -14,13 +14,15 @@ namespace Oranda.Core.Ai.Gate;
 /// <param name="ExpiresAt">만료 시각. null 이면 앱을 끌 때까지.</param>
 /// <param name="Clients">hello 로 붙은 클라이언트 이름(붙은 순서, 같은 이름은 한 번).</param>
 /// <param name="AllowUnboundTabText">접속이 없는 탭의 글을 읽어도 된다(「탭 글 읽기 허용」, 기본 켬).</param>
+/// <param name="Label">창 이름(<see cref="AgentGrantRequest.Label"/>, 연결 파일의 <c>label</c>).</param>
 public sealed record AgentGrantView(
     string GrantId,
     IReadOnlyList<AgentGrantConnection> Connections,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ExpiresAt,
     IReadOnlyList<string> Clients,
-    bool AllowUnboundTabText = true)
+    bool AllowUnboundTabText = true,
+    string Label = "")
 {
     /// <summary>별칭(대소문자 무시)으로 허용 접속을 찾는다. 없으면 null.</summary>
     public AgentGrantConnection? FindConnection(string? alias)

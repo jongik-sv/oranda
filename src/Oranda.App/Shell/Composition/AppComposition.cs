@@ -122,7 +122,12 @@ public static class AppComposition
     {
         container.AddType(typeof(IAgentRunTokens), typeof(AgentRunTokenStore));
         container.AddFactory(typeof(IAgentSessionSource), c => new AppAgentSessionSource(c).Publish());
+        // 외부 허가(밖의 LLM CLI, agent-cli A2·A3): 저장소 하나를 허가 화면·다리·게이트가 같이 쓴다. 외부 관문은 같은 게이트 인스턴스다.
+        container.AddType(typeof(AgentGrantStore), typeof(AgentGrantStore));
+        container.AddFactory(typeof(IAgentGrants), c => c.GetRequiredService<AgentGrantStore>());
+        container.AddFactory(typeof(IAgentGrantSessions), c => c.GetRequiredService<AgentGrantStore>());
         container.AddType(typeof(IAgentGate), typeof(AgentGate));
+        container.AddFactory(typeof(IAgentExternalGate), c => (IAgentExternalGate)c.GetRequiredService<IAgentGate>());
         if (typeof(PlatformAssembly).Assembly.GetType("Oranda.Platform.Ai.Bridge.IAgentBridgeEndpoint") is { } endpoint)
         {
             container.AddFactory(endpoint, c => c.GetRequiredService<IAgentBridgeHost>());

@@ -79,9 +79,11 @@ public sealed partial class AgentGate
                 return Deny("invalid_arguments", $"The argument '{property.Name}' {problem}.");
             }
 
-            if (HasLongString(value))
+            // 글 한도: 스키마의 maxLength(앱 도구의 긴 글 인자) 또는 기본 MaxArgumentChars.
+            var limit = property.MaxLength ?? MaxArgumentChars;
+            if (HasLongString(value, limit))
             {
-                return Deny("invalid_arguments", $"The argument '{property.Name}' contains a text longer than {MaxArgumentChars} characters.");
+                return Deny("invalid_arguments", $"The argument '{property.Name}' contains a text longer than {limit} characters.");
             }
 
             if (property.Name == AgentFields.SqlId && !(value is JsonValue id && id.TryGetValue<string>(out var idText) && SqlIdPattern().IsMatch(idText)))
@@ -99,7 +101,7 @@ public sealed partial class AgentGate
     /// <summary>SQL 글을 인자로 받거나(<c>sql</c>·<c>variants[].sql</c>) 결과에 SQL 글·술어를 싣는 도구. 리터럴 가림이 필요하면 사전이 있어야 쓸 수 있다.</summary>
     private static bool TouchesSql(string toolName) =>
         toolName is AgentToolNames.ExplainPlan or AgentToolNames.GetCursorPlan or AgentToolNames.GetTuningContext or AgentToolNames.BenchmarkQueries
-            or AgentToolNames.GetAwrPlan;
+            or AgentToolNames.GetAwrPlan or AppToolNames.Query or AppToolNames.GetDdl or AppToolNames.GetSource;
 
     /// <summary>
     /// <c>sql</c>·<c>variants[].sql</c> 의 자리표시(<c>:v1</c>)를 원래 글로 되돌려 <paramref name="clean"/> 에 넣는다.
@@ -153,16 +155,16 @@ public sealed partial class AgentGate
             "literal_unknown",
             $"The SQL uses the placeholder '{Clip(restored.UnknownPlaceholder, 40)}' that this request did not create; use only the placeholders that appear in the statement you were given.");
 
-    private static bool HasLongString(JsonNode? node)
+    private static bool HasLongString(JsonNode? node, int limit)
     {
         switch (node)
         {
             case JsonValue value:
-                return value.TryGetValue<string>(out var text) && text.Length > MaxArgumentChars;
+                return value.TryGetValue<string>(out var text) && text.Length > limit;
             case JsonArray array:
-                return array.Any(HasLongString);
+                return array.Any(item => HasLongString(item, limit));
             case JsonObject obj:
-                return obj.Any(pair => HasLongString(pair.Value));
+                return obj.Any(pair => HasLongString(pair.Value, limit));
             default:
                 return false;
         }
@@ -304,6 +306,12 @@ public sealed partial class AgentGate
 
         private int? MaxItems { get; init; }
 
+        /// <summary>글 최대 길이(<c>maxLength</c>). 없으면 게이트 기본 한도.</summary>
+        public int? MaxLength { get; init; }
+
+        /// <summary>글 값이 이 중 하나여야 한다(<c>enum</c>). 없으면 null.</summary>
+        private IReadOnlyList<string>? Allowed { get; init; }
+
         public static SchemaProperty Parse(string name, JsonObject node, bool required) =>
             new(name, node["type"]?.GetValue<string>() ?? "string", required)
             {
@@ -312,6 +320,10 @@ public sealed partial class AgentGate
                 Maximum = node["maximum"]?.GetValue<long>(),
                 MinItems = node["minItems"]?.GetValue<int>(),
                 MaxItems = node["maxItems"]?.GetValue<int>(),
+                MaxLength = node["maxLength"]?.GetValue<int>(),
+                Allowed = node["enum"] is JsonArray values && node["type"]?.GetValue<string>() is null or "string"
+                    ? [.. values.Select(v => v!.GetValue<string>())]
+                    : null,
             };
 
         /// <summary>값이 스키마에 맞는지 본다. 어긋나면 「…해야 한다」 꼴의 영어 구절, 맞으면 null.</summary>
@@ -320,7 +332,16 @@ public sealed partial class AgentGate
             switch (Type)
             {
                 case "string":
-                    return IsString(value) ? null : "must be a string";
+                    if (!IsString(value))
+                    {
+                        return "must be a string";
+                    }
+
+                    return Allowed is { } allowed && !allowed.Contains(value!.GetValue<string>(), StringComparer.Ordinal)
+                        ? "must be one of: " + string.Join(", ", allowed)
+                        : null;
+                case "boolean":
+                    return value is JsonValue b && b.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? null : "must be true or false";
                 case "integer":
                     if (!TryGetInteger(value, out var number))
                     {
