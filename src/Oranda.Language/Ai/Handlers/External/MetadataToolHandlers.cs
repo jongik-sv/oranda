@@ -21,6 +21,8 @@ internal sealed class FindObjectsHandler(IMetadataProvider metadata) : ExternalD
 
     public override string ToolName => AppToolNames.FindObjects;
 
+    protected override long? RowCountOf(JsonNode result) => CountOf(result, "objects");
+
     protected override async Task<JsonNode> RunAsync(AgentToolInvocation inv, CancellationToken ct)
     {
         var args = inv.Arguments;
@@ -107,6 +109,8 @@ internal sealed class FindObjectsHandler(IMetadataProvider metadata) : ExternalD
 internal sealed class ListSchemasHandler(IMetadataProvider metadata) : ExternalDbHandlerBase
 {
     public override string ToolName => AppToolNames.ListSchemas;
+
+    protected override long? RowCountOf(JsonNode result) => CountOf(result, "schemas");
 
     protected override async Task<JsonNode> RunAsync(AgentToolInvocation inv, CancellationToken ct)
     {

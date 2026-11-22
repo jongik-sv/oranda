@@ -25,7 +25,7 @@ internal abstract class ExternalDbHandlerBase : IAgentToolHandler
         try
         {
             var result = await RunAsync(invocation, ct).ConfigureAwait(false);
-            return new AgentToolOutput { Result = result, SqlIds = SqlIdsOf(result) };
+            return new AgentToolOutput { Result = result, SqlIds = SqlIdsOf(result), RowCount = RowCountOf(result) };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -54,6 +54,12 @@ internal abstract class ExternalDbHandlerBase : IAgentToolHandler
 
     /// <summary>이 결과로 조회해도 되게 된 sql_id. 문장을 실행한 도구만 덮어쓴다.</summary>
     protected virtual IReadOnlyList<string> SqlIdsOf(JsonNode result) => [];
+
+    /// <summary>이 결과가 담은 행(항목) 수. 게이트가 감사 사유에 <c>rows=N</c> 으로 남긴다(<see cref="AgentToolOutput.RowCount"/>). 목록이 아닌 도구는 null.</summary>
+    protected virtual long? RowCountOf(JsonNode result) => null;
+
+    /// <summary>결과의 배열 칸 <paramref name="field"/> 의 길이. 칸이 없으면 null.</summary>
+    protected static long? CountOf(JsonNode result, string field) => result[field] is JsonArray items ? items.Count : null;
 
     /// <summary>이름 풀기 기본 스키마: 실행 범위의 현재 스키마, 없으면 접속 사용자(null).</summary>
     protected static string? DefaultSchema(AgentToolInvocation inv) =>

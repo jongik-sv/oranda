@@ -119,6 +119,10 @@ internal sealed class QueryHandler(
         }
     }
 
+    /// <summary>가져온 행 수 = 결과의 <c>row_count</c>(행 값을 싣지 않는 수준에서도 센다).</summary>
+    protected override long? RowCountOf(JsonNode result) =>
+        result["row_count"] is JsonValue v && v.TryGetValue<int>(out var rows) ? rows : null;
+
     /// <summary>앞에서부터 <paramref name="maxRows"/> 행(+ 하나 더 있는지)을 읽어 결과 JSON 을 만든다.</summary>
     internal static async Task<JsonObject> ReadAsync(Oranda.Core.Grid.IResultSet set, int maxRows, bool withValues, CancellationToken ct, bool maskSensitive = true)
     {

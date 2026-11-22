@@ -80,7 +80,7 @@ internal sealed class GetHistoryHandler(IHistoryStore history, ISqlLiteralMasker
                 entries.Add(Entry(entry, connection, invocation.Grant));
             }
 
-            return AgentToolOutput.Ok(new JsonObject { ["entries"] = entries });
+            return AppToolOutputs.OkWithRows(new JsonObject { ["entries"] = entries }, entries.Count);
         });
 
     /// <summary>
