@@ -258,7 +258,7 @@ namespace Oranda.App.Tests.Features.Roles
         {
             using var shell = new GatedShell(new FakeFeatureGate());
 
-            Assert.Equal(10, shell.Window.ViewModel!.StatusItems.Count);
+            Assert.Equal(11, shell.Window.ViewModel!.StatusItems.Count); // + 외부 에이전트 띠(agent-cli 2026-11-22)
         });
 
         [Fact]
@@ -270,7 +270,7 @@ namespace Oranda.App.Tests.Features.Roles
             var types = StatusTypes(shell);
             Assert.DoesNotContain("MapperSaveStatusViewModel", types);
             Assert.Contains("BlockerStatusViewModel", types);
-            Assert.Equal(9, types.Count);
+            Assert.Equal(10, types.Count); // + 외부 에이전트 띠(agent-cli 2026-11-22)
             Assert.Contains(gate.TypeQueries, t => t.Name == "MapperSaveStatusViewModel");
         });
 
@@ -293,7 +293,7 @@ namespace Oranda.App.Tests.Features.Roles
             using var shell = new GatedShell(new FakeFeatureGate().Disable(FeatureIds.BlockerAlert));
 
             var types = StatusTypes(shell);
-            Assert.Equal(9, types.Count);
+            Assert.Equal(10, types.Count); // + 외부 에이전트 띠(agent-cli 2026-11-22)
             Assert.DoesNotContain("BlockerStatusViewModel", types);
         });
 

@@ -198,6 +198,7 @@ internal static class PrdMatrix
         {
             "BlockerStatusViewModel" => on.Contains("blockerAlert"),
             "MapperSaveStatusViewModel" => on.Contains("myBatis"),
+            "ExternalAgentStatusViewModel" => on.Contains("aiTuning"), // 외부 에이전트 띠(agent-cli 2026-11-22)
             _ => true,
         }),
     ];

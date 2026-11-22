@@ -313,7 +313,7 @@ public sealed class RoleSurfaceMatrixTests
         Assert.Equal(OptInItems.Without(all.Commands).Count(), s.RegistryCommands.Count); // 직접 켜는 기능(aiTuning)의 항목은 「모든 기능」 에 들지 않는다
         Assert.Equal(OptInItems.Without(all.Panels).Count(), s.RegistryPanels.Count);
         Assert.Equal(11, s.TopMenus.Count);
-        Assert.Equal(10, s.StatusTypes.Count);
+        Assert.Equal(11, s.StatusTypes.Count); // + 외부 에이전트 띠(agent-cli 2026-11-22)
         Assert.Equal(22, s.StartupTasks.Count); // + TableDraftStartup(T16d) + 반영 묶음 자동 넣기 ChangeBundleRecorder·알림 ChangeBundleNotices(2026-11-17)
         Assert.Equal(OptInItems.StartupTaskNames.Order(StringComparer.Ordinal), s.SkippedTasks.Order(StringComparer.Ordinal));
         Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());

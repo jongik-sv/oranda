@@ -356,6 +356,7 @@
     {"id": "oranda.status.blocker", "page": "tools/monitor"},
     {"id": "oranda.status.connection", "page": "connect/manage"},
     {"id": "oranda.status.editor", "page": "editor/sql-editor"},
+    {"id": "oranda.status.externalAgent", "page": "ai/external-agents"},
     {"id": "oranda.status.lastRun", "page": "run/execute"},
     {"id": "oranda.status.mybatis", "page": "editor/mybatis"},
     {"id": "oranda.status.protection", "page": "connect/manage"},

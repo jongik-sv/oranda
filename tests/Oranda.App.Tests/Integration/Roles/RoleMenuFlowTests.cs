@@ -191,7 +191,7 @@ public sealed class RoleMenuFlowTests
                 Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());
                 Assert.Equal(11, s.TopMenus.Count);
                 Assert.Equal(22, s.StartupTasks.Count); // + TableDraftStartup(T16d) + 반영 묶음 자동 넣기 ChangeBundleRecorder·알림 ChangeBundleNotices(2026-11-17)
-                Assert.Equal(10, s.StatusTypes.Count);
+                Assert.Equal(11, s.StatusTypes.Count); // + 외부 에이전트 띠(agent-cli 2026-11-22)
                 Assert.Subset(s.RegistryCommands, mybatisCommands.ToHashSet(StringComparer.Ordinal));
                 Assert.Contains("MapperSaveStatusViewModel", s.StatusTypes);
                 Assert.False(app.Window.GetVisualDescendants().OfType<StartPage>().First().ShowsRoleLink);
