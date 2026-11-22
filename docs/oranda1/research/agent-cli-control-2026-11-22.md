@@ -671,6 +671,40 @@ flowchart LR
 - Claude Code 2.1 `-p --allowedTools "Bash(<orandactl>:*)"`: 통과(탭 읽기 → `sql check` → 고친 문장 제안 → 받아들임, 허락 거부 0, 약 $0.06)
 - opencode: 통과(묻지 않음, 감사 client = opencode). Codex: 인증이 없어 linux 에서는 못 돌림(mac 에서 스킬 읽기·샌드박스만 확인)
 
+## 10B. 2단계 구현 결과 (회차 agent-cli-1122, 2026-11-23)
+
+계획 정본 = [2단계 계획](agent-cli-phase2-plan.md), 계약 요약 = [계약 문서](agent-cli-contract.md) §8. 이 장이 계획서보다 앞선다.
+
+### 10B.1 들어간 것
+
+| 요청 | 들어간 것 |
+|---|---|
+| F1 탭 실행·내보내기 | `run_tab`(탭 SQL 을 그 탭 세션에서 실행, 이력 출처 Agent, 탭 띠 「실행하는 중 → 실행했습니다 · N행」), `export_result`(xlsx·csv, `.part` 뒤 바꿔 넣기, `file_exists`·`path_invalid`). 두 도구 공통 SELECT 가드 = DML·`FOR UPDATE`·DB 링크·시퀀스·안전하지 않은 사용자 함수 거부 |
+| F2 튜닝 자동 | 스킬에 튜닝 절차(설명 계획 → 벤치 → 최선 고르기). `tune_start` = 탭을 앞에 내고 앱 안 AI 튜닝 시작(시작 확인 창 유지) |
+| F3 매뉴얼 링크 | `orandactl docs <검색어>`(매뉴얼 35쪽 색인, `tools/manual-index/gen.py` 로 다시 만듦). 스킬 = 링크는 docs 결과에서만 |
+| F4 로컬 모델 | 연결 창 「로컬 모델」 확인란 → 허가 `LocalModel`. 로컬 모델이면 민감 열·리터럴을 가리지 않음 |
+| F5 UI 명령 | `list_commands`·`run_command`. 등급표 now 165·confirm 16·deny 132(등록 명령 313). 표 밖 id 는 거부. confirm 은 탭 에이전트 띠에서 사람이 받아들일 때만(120초) |
+| D5 운영 | `AgentGrantPolicy.ProductionRuns`·`LocalModelCoversProduction` 켬. 운영도 SELECT 자동 실행·내보내기. 클라우드 모델 = 운영 행 값 자체를 주지 않음(행 수·열 형만), 민감 열 `***`, 리터럴·오류 글 가림, 운영 탭 글 거부. 로컬 모델 = 운영도 보임. 내장 AI 는 운영 거부 그대로(E-23) |
+| 감사 | 성공 사유에 `rows=N`(query·find_objects·list_schemas·get_history·run_tab·export_result), `run_command` 는 `grade=…,status=…`. 탭 도구는 탭이 쓴 접속을 감사 줄에 적음, 로컬 모델이면 인자 요약에 `data=local_ai`, 허가 밖 접속은 `connection=outside_grant` |
+
+### 10B.2 계획과 달라진 것
+
+| 곳 | 바뀐 것 | 까닭 |
+|---|---|---|
+| 계획 §3.2 운영 클라우드 | 「민감 열 `***`」 → 행 값 자체를 주지 않음 | 운영 행 값은 모델에 가지 않게(구현·e2e 기준) |
+| `run_command` 허가 | 대상 탭 접속이 허가 밖이면 접속·SELECT 명령 거부, 운영 SELECT 명령은 `MayExecute` | 사람 화면이어도 허가 밖 접속에 SELECT 를 띄우지 않게 |
+| SELECT 가드 스키마 | 검사 직전 세션의 `SYS_CONTEXT('USERENV','CURRENT_SCHEMA')` 로 이름 풀기, 읽기 실패 = `sql_schema_unresolved` | `ALTER SESSION SET CURRENT_SCHEMA`(PL/SQL 안 포함) 뒤 다른 스키마 함수가 가드를 지나 실행되던 틈(26ai 실측으로 재현·닫힘 확인) |
+| SELECT 가드 없는 이름 | 사전에 없는 객체 = 실행 전 `sql_schema_unresolved`. SYS·SYSCAT 소유(사전 뷰)는 사전 확인 건너뜀 | 「풀지 못한 이름은 거부」 규칙 지키기. Tibero 정적 사전 소유자 = SYSCAT(실측) |
+| 사용자 함수 확인 질의 | 카탈로그 `app.user_fn_*`(Oracle·Tibero 따로) | Tibero 사전 열 이름이 달라(`PARENT_OBJ_*`·`ORG_OBJECT_*`) 안전 함수도 모두 거부되던 것. 내장 `benchmark_queries` 대체도 같이 고쳐짐 |
+| `run_tab` 행 수 | 첫 쪽을 읽은 뒤 셈 | 실DB 에서 `fetched`·띠·감사가 0 이던 것 |
+
+### 10B.3 실측
+
+- Oracle IT(26ai): `ExternalRunExportIntegrationTests` 17·`ExternalRunExportFlowTests` 7 — 운영 클라우드/로컬, CURRENT_SCHEMA, 사전 뷰(SELECT_CATALOG_ROLE·SELECT ANY DICTIONARY·DBA·권한 없음 계정) 포함 통과
+- Tibero IT: `TiberoExternalRunGuardIt`(안전 함수 통과·자치 트랜잭션·UTL_HTTP 거부·사전 뷰 통과·없는 표 거부), 통계 수집 IT 통과
+- 실제 CLI(tools/agent-e2e, linux): claude 2.1.330·opencode 1.19.6 로 시나리오 8개(nl2sql-export·tune-full·manual-link·ui-command·tune-start·prod-mask-cloud·prod-mask-local·dev-mask-cloud) 전부 통과, 금지 동작 0. codex·agy 는 이 단계 시나리오 못 돌림
+- 못 잰 것: Tibero 개인 시노님 경유 자치 함수·원격 의존(시험 계정 권한 없음), 실앱 화면(사용자 확인)
+
 ## 11. 출처
 
 ### 11.1 저장소 (읽기만)
