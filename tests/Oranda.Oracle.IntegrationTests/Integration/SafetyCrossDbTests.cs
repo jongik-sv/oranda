@@ -580,7 +580,9 @@ public sealed class SafetyCrossDbTests : IClassFixture<SafetyDbFixture>, IAsyncL
         ["unclassifiable"] = new($"FOO BAR {T}", RowsOf(T), DevChanges: false),
         ["lock-table"] = new($"LOCK TABLE {T} IN EXCLUSIVE MODE", RowsOf(T), DevChanges: false),
         ["alter-session"] = new("ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY'", "SELECT 1 FROM dual", DevChanges: false, ProdAsks: false),
-        ["alter-system"] = new("ALTER SYSTEM FLUSH SHARED_POOL", "SELECT 1 FROM dual", DevChanges: false, Danger: true),
+        // FLUSH SHARED_POOL 은 쓰지 않는다: 함께 도는 시험(AI 커서 도구·튜닝)이 공유 풀의 커서를 읽는데, 비우면 그 시험들이 실패한다.
+        // 판단은 동사(ALTER SYSTEM)로만 하므로 해가 없는 CHECKPOINT 로 같은 경로를 본다.
+        ["alter-system"] = new("ALTER SYSTEM CHECKPOINT", "SELECT 1 FROM dual", DevChanges: false, Danger: true),
     };
 
     private string Rows() => RowsOf(T);

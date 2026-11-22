@@ -96,14 +96,7 @@ public sealed class AiToolsDbFixture : IAsyncLifetime
         // 공유 풀에 실제 계획이 남도록 한 번 실행한다(sql_id 는 본문에 넣은 표지로 찾는다).
         var tag = "AITOOLS_" + sfx;
         StatementText = $"SELECT /*+ gather_plan_statistics {tag} */ o.order_id, d.dept_nm FROM {Order} o JOIN {Dept} d ON d.dept_id = o.dept_id WHERE o.stat_cd = 'B'";
-        await using (var run = _raw.CreateCommand())
-        {
-            run.CommandText = StatementText;
-            await using var reader = await run.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-            }
-        }
+        await RunStatementAsync();
 
         await using (var find = _raw.CreateCommand())
         {
@@ -161,6 +154,20 @@ public sealed class AiToolsDbFixture : IAsyncLifetime
     }
 
     public AgentObjectRef Table(string name) => new(Owner, name, "TABLE");
+
+    /// <summary>
+    /// 시험 문장을 한 번 더 실행해 공유 풀에 커서를 되살린다(같은 글이라 sql_id 가 같다). 함께 도는 다른 시험이 공유 풀을 비우거나
+    /// 커서가 밀려나도, 커서를 읽는 시험은 이것을 먼저 불러 자기 자리에서 커서를 확보한다.
+    /// </summary>
+    public async Task RunStatementAsync()
+    {
+        await using var run = _raw!.CreateCommand();
+        run.CommandText = StatementText;
+        await using var reader = await run.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+        }
+    }
 
     public AgentToolInvocation Invoke(
         JsonObject args, AiAccessLevel level = AiAccessLevel.Plan, ConnectionEnvironment env = ConnectionEnvironment.Development,
@@ -271,6 +278,8 @@ public sealed class AiToolHandlersIntegrationTests(AiToolsDbFixture db) : IClass
             return;
         }
 
+        await db.RunStatementAsync(); // 커서는 공유 풀에 있어야 한다. 다른 시험이 비웠을 수 있어 이 자리에서 되살린다.
+
         var planHandler = new GetCursorPlanHandler(db.Boxes);
         var statsHandler = new GetSqlStatsHandler(db.Boxes);
         var args = new JsonObject { ["sql_id"] = db.SqlId };
@@ -303,6 +312,8 @@ public sealed class AiToolHandlersIntegrationTests(AiToolsDbFixture db) : IClass
         {
             return;
         }
+
+        await db.RunStatementAsync(); // 커서는 공유 풀에 있어야 한다. 다른 시험이 비웠을 수 있어 이 자리에서 되살린다.
 
         var ctx = await new GetTuningContextHandler(db.Boxes, db.Extractor).ExecuteAsync(db.Invoke(new JsonObject()), default);
         Assert.Equal([db.SqlId], ctx.SqlIds);
@@ -345,6 +356,8 @@ public sealed class AiToolHandlersIntegrationTests(AiToolsDbFixture db) : IClass
         {
             return;
         }
+
+        await db.RunStatementAsync(); // 커서는 공유 풀에 있어야 한다. 다른 시험이 비웠을 수 있어 이 자리에서 되살린다.
 
         var h = new GetTuningContextHandler(db.Boxes, db.Extractor);
 

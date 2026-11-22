@@ -96,6 +96,8 @@ public sealed partial class AiMaskedGateIntegrationTests(AiToolsDbFixture db) : 
             return;
         }
 
+        await db.RunStatementAsync(); // 커서는 공유 풀에 있어야 한다. 다른 시험이 비웠을 수 있어 이 자리에서 되살린다.
+
         var (session, _) = NewSession(AiAccessLevel.Plan);
         using var _s = session;
 

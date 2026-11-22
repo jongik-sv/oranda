@@ -143,6 +143,8 @@ public sealed class AiToolsGateIntegrationTests(AiToolsDbFixture db) : IClassFix
             return;
         }
 
+        await db.RunStatementAsync(); // 커서는 공유 풀에 있어야 한다. 다른 시험이 비웠을 수 있어 이 자리에서 되살린다.
+
         using var session = NewSession(AiAccessLevel.Query);
 
         // 요청의 대상 문장 sql_id 는 처음부터 조회된다. 모르는 sql_id 는 거부된다.
@@ -168,6 +170,8 @@ public sealed class AiToolsGateIntegrationTests(AiToolsDbFixture db) : IClassFix
         {
             return;
         }
+
+        await db.RunStatementAsync(); // 커서는 공유 풀에 있어야 한다. 다른 시험이 비웠을 수 있어 이 자리에서 되살린다.
 
         var audit = new MemoryAudit();
         using var session = NewSession(AiAccessLevel.Plan);
