@@ -22,4 +22,10 @@ internal static class AiSetupWizardText
     /// <summary>자리 표시 단계 설명.</summary>
     public static string PlaceholderDetail(bool english) =>
         AiSetupText.T(english, "「다음」을 눌러 넘어가세요.", "Press Next to go on.");
+
+    /// <summary>떠나기 질문: 그만두고 떠남.</summary>
+    public static string LeaveYes(bool english) => AiSetupText.T(english, "그만두기", "Stop");
+
+    /// <summary>떠나기 질문: 계속함.</summary>
+    public static string LeaveNo(bool english) => AiSetupText.T(english, "계속하기", "Keep going");
 }

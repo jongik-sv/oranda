@@ -46,6 +46,7 @@ public sealed class AiSetupWizardViewModel : INotifyPropertyChanged, IDisposable
     private IAiSetupStep _current;
     private IReadOnlyList<AiSetupRailItem> _rail = [];
     private Task _queue = Task.CompletedTask;
+    private PendingLeave? _question;
     private bool _busy;
     private bool _started;
     private bool _closing;
@@ -140,15 +141,71 @@ public sealed class AiSetupWizardViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>[이전]. 끝남은 그대로 둔다.</summary>
-    public Task BackAsync(CancellationToken ct = default)
+    public async Task BackAsync(CancellationToken ct = default)
     {
-        if (_busy || _closing || !_flow.CanGoBack)
+        if (_busy || _closing || !_flow.CanGoBack || !await ConfirmLeaveAsync().ConfigureAwait(true))
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        return Enqueue(() => MoveCoreAsync(() => _flow.GoBack(), ct));
+        if (_busy || _closing || !_flow.CanGoBack)
+        {
+            return;
+        }
+
+        await Enqueue(() => MoveCoreAsync(() => _flow.GoBack(), ct)).ConfigureAwait(true);
     }
+
+    /// <summary>창 안에 띄운 떠나기 확인 질문(설치 중 등). 없으면 null.</summary>
+    public string? PendingQuestion
+    {
+        get => _question?.Text;
+    }
+
+    /// <summary>
+    /// 지금 단계가 떠나기 전에 물어야 하면(<see cref="IAiSetupLeaveGuard"/>) 질문을 띄우고 답을 기다린다. 물을 것이 없으면 바로 true.
+    /// 이미 질문 중이면 같은 답을 기다린다. 단, [이전] 질문 중에 창 닫기가 오면 [이전] 쪽은 false 로 풀고 닫기 질문으로 바꾼다
+    /// (「그만두기」 한 번에 뒤로 갔다가 닫혀 이어 하기 단계를 잃지 않게).
+    /// </summary>
+    /// <param name="forClose">창 닫기 쪽 질문이다.</param>
+    public Task<bool> ConfirmLeaveAsync(bool forClose = false)
+    {
+        if (_question is { } open)
+        {
+            if (!forClose || open.ForClose)
+            {
+                return open.Answer.Task;
+            }
+
+            _question = open with { ForClose = true, Answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously) };
+            open.Answer.TrySetResult(false);
+            return _question.Answer.Task;
+        }
+
+        if (_current is not IAiSetupLeaveGuard { LeaveQuestion: { Length: > 0 } text })
+        {
+            return Task.FromResult(true);
+        }
+
+        _question = new PendingLeave(text, new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously), forClose);
+        OnPropertyChanged(nameof(PendingQuestion));
+        return _question.Answer.Task;
+    }
+
+    /// <summary>떠나기 질문에 답한다(true = 그만두고 떠남).</summary>
+    public void AnswerLeave(bool leave)
+    {
+        if (_question is not { } open)
+        {
+            return;
+        }
+
+        _question = null;
+        OnPropertyChanged(nameof(PendingQuestion));
+        open.Answer.TrySetResult(leave);
+    }
+
+    private sealed record PendingLeave(string Text, TaskCompletionSource<bool> Answer, bool ForClose = false);
 
     /// <summary>
     /// [닫기]·창 닫기: 하던 이동·끝내기를 기다린 뒤 지금 단계를 떠나고 갈래·단계를 이어 하기 칸에 저장하고 모든 단계를 버린다.
@@ -361,6 +418,13 @@ public sealed class AiSetupWizardViewModel : INotifyPropertyChanged, IDisposable
         if (all || e.PropertyName == nameof(IAiSetupStep.IsComplete))
         {
             _flow.SetComplete(step.StepId, step.IsComplete);
+        }
+
+        // 묻는 사이 물을 까닭이 사라지면(설치가 끝남) 떠나도 되므로 그대로 진행한다.
+        if (_question is not null && ReferenceEquals(step, _current) && (all || e.PropertyName == nameof(IAiSetupLeaveGuard.LeaveQuestion))
+            && step is IAiSetupLeaveGuard { LeaveQuestion: null or "" })
+        {
+            AnswerLeave(true);
         }
 
         if (all || e.PropertyName == nameof(IAiSetupStep.Title))

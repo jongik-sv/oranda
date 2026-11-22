@@ -97,9 +97,26 @@ public sealed class AiSetupWindow : Window
         var footBorder = new Border { BorderThickness = new Thickness(0, 1, 0, 0), Child = foot };
         footBorder.Bind(Border.BorderBrushProperty, footBorder.GetResourceObservable("OrandaSeparatorBrush"));
 
+        var question = new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+        question.Bind(TextBlock.TextProperty, new Binding(nameof(AiSetupWizardViewModel.PendingQuestion)));
+        LeaveYesButton = new Button { Content = AiSetupWizardText.LeaveYes(english) };
+        LeaveYesButton.Click += (_, _) => _vm.AnswerLeave(true);
+        LeaveNoButton = new Button { Content = AiSetupWizardText.LeaveNo(english), Classes = { "accent" } };
+        LeaveNoButton.Click += (_, _) => _vm.AnswerLeave(false);
+        var questionButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { LeaveYesButton, LeaveNoButton } };
+        var questionRow = new DockPanel { LastChildFill = true, Margin = new Thickness(16, 8) };
+        DockPanel.SetDock(questionButtons, Avalonia.Controls.Dock.Right);
+        questionRow.Children.Add(questionButtons);
+        questionRow.Children.Add(question);
+        QuestionBar = new Border { BorderThickness = new Thickness(0, 1, 0, 0), Child = questionRow };
+        QuestionBar.Bind(Border.BorderBrushProperty, QuestionBar.GetResourceObservable("OrandaWarningForegroundBrush"));
+        QuestionBar.Bind(IsVisibleProperty, new Binding(nameof(AiSetupWizardViewModel.PendingQuestion)) { Converter = Avalonia.Data.Converters.StringConverters.IsNotNullOrEmpty });
+
         var pane = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(footBorder, Avalonia.Controls.Dock.Bottom);
+        DockPanel.SetDock(QuestionBar, Avalonia.Controls.Dock.Bottom);
         pane.Children.Add(footBorder);
+        pane.Children.Add(QuestionBar);
         pane.Children.Add(body);
 
         var root = new DockPanel { LastChildFill = true };
@@ -119,6 +136,13 @@ public sealed class AiSetupWindow : Window
     internal ContentControl StepHost { get; }
 
     internal Button CloseButton { get; }
+
+    /// <summary>떠나기 질문 줄(시험용).</summary>
+    internal Border QuestionBar { get; }
+
+    internal Button LeaveYesButton { get; }
+
+    internal Button LeaveNoButton { get; }
 
     internal Button BackButton { get; }
 
@@ -157,7 +181,7 @@ public sealed class AiSetupWindow : Window
         }
 
         _closeStarted = true;
-        _ = CloseAfterSaveAsync();
+        _ = ConfirmThenCloseAsync();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -166,6 +190,17 @@ public sealed class AiSetupWindow : Window
         _vm.Finished -= OnFinished;
         _vm.Dispose();
         base.OnClosed(e);
+    }
+
+    private async System.Threading.Tasks.Task ConfirmThenCloseAsync()
+    {
+        if (!await _vm.ConfirmLeaveAsync(forClose: true).ConfigureAwait(true))
+        {
+            _closeStarted = false;
+            return;
+        }
+
+        await CloseAfterSaveAsync().ConfigureAwait(true);
     }
 
     private async System.Threading.Tasks.Task CloseAfterSaveAsync()
