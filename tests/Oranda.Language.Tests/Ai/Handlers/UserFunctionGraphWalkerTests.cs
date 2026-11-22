@@ -71,7 +71,7 @@ public partial class UserFunctionGraphWalkerTests
     private static Task<UserFunctionVerdict> Check(FakeDictionary d, params string[] functions) => CheckIn(d, "APP", functions);
 
     private static Task<UserFunctionVerdict> CheckIn(FakeDictionary d, string schema, params string[] functions) =>
-        new UserFunctionGraphWalker(d.QueryAsync).CheckAsync(functions, schema, CancellationToken.None).AsTask();
+        new UserFunctionGraphWalker(d.QueryAsync, OracleQueries).CheckAsync(functions, schema, CancellationToken.None).AsTask();
 
     [Fact]
     public async Task Oracle_supplied_dependencies_are_not_read_but_functions_made_in_a_system_schema_are()

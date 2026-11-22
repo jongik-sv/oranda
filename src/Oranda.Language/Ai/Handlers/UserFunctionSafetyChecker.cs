@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Text;
 using System.Text.RegularExpressions;
 using Oranda.Core.Ai.Gate;
+using Oranda.Core.Catalog;
 using Oranda.Core.Composition;
 using Oranda.Core.Execution;
 using Oranda.Core.History;
@@ -10,18 +11,29 @@ using Oranda.Core.Sessions;
 namespace Oranda.Language.Ai.Handlers;
 
 /// <summary>
-/// <see cref="IUserFunctionSafetyChecker"/> 구현. 딕셔너리 뷰(ALL_OBJECTS·ALL_DEPENDENCIES·ALL_SOURCE)를 <see cref="IExecutionService"/>(에이전트 출처, SELECT 만)로 읽는다.
+/// <see cref="IUserFunctionSafetyChecker"/> 구현. 딕셔너리 뷰(ALL_OBJECTS·ALL_DEPENDENCIES·ALL_SYNONYMS·ALL_SOURCE)를 <see cref="IExecutionService"/>(에이전트 출처, SELECT 만)로 읽는다.
+/// 질의 글은 세션 DBMS 의 카탈로그(<c>app.user_fn_*</c>, <see cref="UserFunctionQueries"/>)에서 꺼낸다 — Tibero 는 의존·동의어 뷰의 열 이름이 다르다.
 /// 이름은 식별자 문자만 받아 문장에 직접 넣는다(바인드를 쓰지 않으므로 그 밖의 글자가 든 이름은 확인하지 못한 것으로 본다).
 /// </summary>
 [OrandaService(typeof(IUserFunctionSafetyChecker))]
-internal sealed class UserFunctionSafetyChecker(IExecutionService execution) : IUserFunctionSafetyChecker
+internal sealed class UserFunctionSafetyChecker(IExecutionService execution, ISqlCatalog catalog) : IUserFunctionSafetyChecker
 {
     public async ValueTask<UserFunctionVerdict> CheckAsync(ISession db, IReadOnlyList<string> functions, string? defaultSchema, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(functions);
         var schema = (string.IsNullOrWhiteSpace(defaultSchema) ? db.Profile.User : defaultSchema).ToUpperInvariant();
-        var walker = new UserFunctionGraphWalker((sql, token) => QueryAsync(db, sql, token));
+        UserFunctionQueries queries;
+        try
+        {
+            queries = UserFunctionQueries.From(catalog, db.Server);
+        }
+        catch (Exception ex) when (ex is CatalogQueryNotFoundException or DbmsNotSupportedException)
+        {
+            return UserFunctionVerdict.Unverified; // 그 DBMS 용 질의가 없다: 닫힌 쪽
+        }
+
+        var walker = new UserFunctionGraphWalker((sql, token) => QueryAsync(db, sql, token), queries);
         return await walker.CheckAsync(functions, schema, ct).ConfigureAwait(false);
     }
 
@@ -72,8 +84,9 @@ internal sealed class UserFunctionSafetyChecker(IExecutionService execution) : I
 /// 오라클 제공 객체(시스템 스키마·PUBLIC)는 의존으로 닿았을 때 소스를 읽지 않고 따라가지도 않지만, 외부 패키지 이름이면 의존으로 센다.
 /// 단 호출이 직접 가리킨 객체와 현재 스키마의 객체는 소유자가 SYSTEM 같은 시스템 스키마여도 늘 읽는다(사용자가 그 스키마에 만든 함수를 건너뛰지 않게).
 /// 동적 SQL(<c>EXECUTE IMMEDIATE</c>)로 숨은 호출은 의존 정보에 없어 잡지 못한다(남는 위험).
+/// 질의 글은 <paramref name="sql"/>(DBMS 별 카탈로그 글, <c>@PAIRS@</c> 자리)로 받는다. 돌려받는 열 순서는 DBMS 와 무관하게 같다.
 /// </summary>
-internal sealed partial class UserFunctionGraphWalker(Func<string, CancellationToken, Task<IReadOnlyList<object?[]>>> query)
+internal sealed partial class UserFunctionGraphWalker(Func<string, CancellationToken, Task<IReadOnlyList<object?[]>>> query, UserFunctionQueries sql)
 {
     internal const int MaxDepth = 5;
     internal const int MaxObjects = 200;
@@ -83,8 +96,9 @@ internal sealed partial class UserFunctionGraphWalker(Func<string, CancellationT
         "UTL_HTTP UTL_TCP UTL_SMTP UTL_FILE UTL_MAIL DBMS_PIPE DBMS_SCHEDULER DBMS_JOB DBMS_AQ")
         .Split(' ').ToFrozenSet(StringComparer.Ordinal);
 
+    /// <summary>제품이 만든 스키마. 끝의 SYSCAT·SYSGIS 는 Tibero 의 사전·공간 스키마(Oracle 에는 없다).</summary>
     private static readonly FrozenSet<string> OracleOwners = (
-        "SYS SYSTEM XDB CTXSYS MDSYS ORDSYS ORDDATA OUTLN DBSNMP WMSYS LBACSYS DVSYS OJVMSYS APPQOSSYS GSMADMIN_INTERNAL PUBLIC")
+        "SYS SYSTEM XDB CTXSYS MDSYS ORDSYS ORDDATA OUTLN DBSNMP WMSYS LBACSYS DVSYS OJVMSYS APPQOSSYS GSMADMIN_INTERNAL PUBLIC SYSCAT SYSGIS")
         .Split(' ').ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>소스가 있어 자치 트랜잭션을 확인할 수 있는 객체 종류. 소스가 없어도 되는 종류(뷰·타입 명세)는 따라가기만 한다.</summary>
@@ -158,7 +172,7 @@ internal sealed partial class UserFunctionGraphWalker(Func<string, CancellationT
 
         var resolved = new List<(string Owner, string Name, string Type, string Link)>();
         resolved.AddRange(targets.Where(t => t.Link.Length > 0).Select(t => (t.Owner, t.Name, string.Empty, t.Link)));
-        var local = targets.Where(t => t.Link.Length == 0 && Identifier().IsMatch(t.Owner) && Identifier().IsMatch(t.Name)).ToList();
+        var local = targets.Where(t => t.Link.Length == 0 && Identifier().IsMatch(t.Owner) && DictionaryName().IsMatch(t.Name)).ToList();
         if (local.Count < targets.Count(t => t.Link.Length == 0))
         {
             return resolved; // 이름에 식별자 밖 글자가 있는 대상은 확인하지 못한다(빠진 수로 드러난다)
@@ -179,6 +193,13 @@ internal sealed partial class UserFunctionGraphWalker(Func<string, CancellationT
 
     [GeneratedRegex(@"^[A-Z][A-Z0-9_$#]*$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
     private static partial Regex Identifier();
+
+    /// <summary>
+    /// 사전이 돌려준 동의어 대상 이름. 식별자 문자에 더해 밑줄로 시작해도 받는다 — Tibero 의 PUBLIC.DUAL 은 SYS._VT_DUAL 을 가리킨다(2026-11-23 실측).
+    /// 문장에 넣어도 되는 글자만이라는 점은 같다.
+    /// </summary>
+    [GeneratedRegex(@"^[A-Z_][A-Z0-9_$#]*$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex DictionaryName();
 
     /// <summary>래핑된 소스의 첫 줄(<c>FUNCTION f wrapped</c>). ALL_SOURCE 의 1행 글에는 암호화된 줄들이 이어 붙어 있으므로 줄 끝마다 본다.</summary>
     [GeneratedRegex(@"\swrapped[ \t\r]*$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Multiline, matchTimeoutMilliseconds: 100)]
@@ -425,24 +446,36 @@ internal sealed partial class UserFunctionGraphWalker(Func<string, CancellationT
         return sb.ToString();
     }
 
-    private static string ObjectsSql(IEnumerable<(string Owner, string Name)> pairs) =>
-        "SELECT owner, object_name, object_type FROM all_objects WHERE object_type IN ('FUNCTION','PROCEDURE','PACKAGE','TYPE') AND ("
-        + Pairs(pairs, "owner", "object_name") + ")";
+    private string ObjectsSql(IEnumerable<(string Owner, string Name)> pairs) => UserFunctionQueries.Fill(sql.Objects, Pairs(pairs, "owner", "object_name"));
 
-    private static string DependenciesSql(IEnumerable<(string Owner, string Name)> pairs) =>
-        "SELECT DISTINCT referenced_owner, referenced_name, referenced_type, referenced_link_name FROM all_dependencies WHERE ("
-        + Pairs(pairs, "owner", "name") + ")";
+    private string DependenciesSql(IEnumerable<(string Owner, string Name)> pairs) => UserFunctionQueries.Fill(sql.Dependencies, Pairs(pairs, "owner", "name"));
 
-    private static string SynonymsSql(IEnumerable<(string Owner, string Name)> pairs) =>
-        "SELECT owner, synonym_name, table_owner, table_name, db_link FROM all_synonyms WHERE ("
-        + Pairs(pairs, "owner", "synonym_name") + ")";
+    private string SynonymsSql(IEnumerable<(string Owner, string Name)> pairs) => UserFunctionQueries.Fill(sql.Synonyms, Pairs(pairs, "owner", "synonym_name"));
 
-    private static string TargetsSql(IEnumerable<(string Owner, string Name)> pairs) =>
-        "SELECT owner, object_name, object_type FROM all_objects WHERE object_type NOT IN ('PACKAGE BODY','TYPE BODY') AND ("
-        + Pairs(pairs, "owner", "object_name") + ")";
+    private string TargetsSql(IEnumerable<(string Owner, string Name)> pairs) => UserFunctionQueries.Fill(sql.Targets, Pairs(pairs, "owner", "object_name"));
 
-    // 명세(PACKAGE·TYPE)도 읽는다: 외부 언어 호출 명세는 명세에 적힐 수 있다.
-    private static string SourceSql(IEnumerable<(string Owner, string Name)> pairs) =>
-        "SELECT owner, name, type, line, text FROM all_source WHERE type IN ('FUNCTION','PROCEDURE','PACKAGE','PACKAGE BODY','TYPE','TYPE BODY','TRIGGER') AND ("
-        + Pairs(pairs, "owner", "name") + ") AND (line = 1 OR REGEXP_LIKE(text, 'AUTONOMOUS_TRANSACTION|LANGUAGE|EXTERNAL|MLE|SQL_MACRO|POLYMORPHIC', 'i'))";
+    private string SourceSql(IEnumerable<(string Owner, string Name)> pairs) => UserFunctionQueries.Fill(sql.Source, Pairs(pairs, "owner", "name"));
+}
+
+/// <summary>
+/// 사용자 함수 확인의 딕셔너리 질의 다섯 개(카탈로그 <c>app.user_fn_*</c>). 글마다 <c>@PAIRS@</c> 자리에 (소유자, 이름) 조건을 OR 로 넣는다.
+/// Oracle 판과 Tibero 판은 열 순서가 같다(Tibero = 의존 <c>parent_obj_*</c>, 동의어 <c>org_object_*</c>, 링크는 이름 끝 <c>@링크</c> 에서 읽음).
+/// </summary>
+internal sealed record UserFunctionQueries(string Objects, string Dependencies, string Synonyms, string Targets, string Source)
+{
+    /// <summary>세션 서버의 DBMS·버전에 맞는 글. 없으면 <see cref="CatalogQueryNotFoundException"/>.</summary>
+    public static UserFunctionQueries From(ISqlCatalog catalog, Oranda.Core.Connection.ServerInfo server)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(server);
+        return new(
+            catalog.Get("app.user_fn_objects", server).Sql,
+            catalog.Get("app.user_fn_dependencies", server).Sql,
+            catalog.Get("app.user_fn_synonyms", server).Sql,
+            catalog.Get("app.user_fn_targets", server).Sql,
+            catalog.Get("app.user_fn_source", server).Sql);
+    }
+
+    /// <summary><c>@PAIRS@</c> 자리를 조건 글로 바꾼다(조건 글은 식별자 문자만으로 만든 것).</summary>
+    public static string Fill(string template, string pairs) => CatalogText.Fill(template, ("pairs", pairs));
 }

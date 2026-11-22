@@ -207,7 +207,7 @@ public sealed class AiUserFunctionIntegrationTests(AiToolsDbFixture db) : IClass
 
         public ISession Session { get; set; } = null!;
 
-        public UserFunctionSafetyChecker Checker { get; } = new(exec);
+        public UserFunctionSafetyChecker Checker { get; } = new(exec, Oranda.Oracle.Catalog.EmbeddedCatalog.Load());
 
         public OracleTuningService Tuning() => new(exec, new OracleExecutionPlanService(exec), new LanguageService());
 

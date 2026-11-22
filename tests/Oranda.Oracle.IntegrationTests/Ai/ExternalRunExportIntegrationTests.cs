@@ -106,7 +106,7 @@ public sealed class ExternalRunGuardDbFixture : IAsyncLifetime
         Exec = new OracleExecutionService(new ExecutionPolicy(), new ExecInteraction(), _bus, null, pageSize: 500);
         var metadata = new OracleMetadataProvider(new MemoryMetadataCache(), _bus, Timeout.InfiniteTimeSpan);
         var extractor = new AgentStatementReferenceExtractor(Language, metadata);
-        Guard = new ExternalSelectGuard(Language, extractor, new UserFunctionSafetyChecker(Exec), Exec);
+        Guard = new ExternalSelectGuard(Language, extractor, new UserFunctionSafetyChecker(Exec, Oranda.Oracle.Catalog.EmbeddedCatalog.Load()), Exec);
         var plans = new OracleExecutionPlanService(Exec);
         var boxes = new AgentToolboxProvider(new OracleTuningService(Exec, plans, Language), metadata, new OracleTableKeyDetailProvider(), plans, Language);
         Query = new QueryHandler(Language, Exec, extractor, boxes);
