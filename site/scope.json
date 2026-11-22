@@ -369,6 +369,7 @@
   "dialogs": [
     {"id": "ExternalAgentConnectWindow", "page": "ai/external-agents"},
     {"id": "AgentSkillInstallWindow", "page": "ai/external-agents"},
+    {"id": "AiSetupWindow", "page": "ai/setup"},
     {"id": "AiImageWarningDialog", "page": "ai/chat"},
     {"id": "AiProfileManagerWindow", "page": "ai/models"},
     {"id": "AiTextWarningDialog", "page": "ai/chat"},
