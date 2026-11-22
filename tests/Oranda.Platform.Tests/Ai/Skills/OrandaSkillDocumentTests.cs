@@ -148,7 +148,8 @@ public sealed class OrandaSkillDocumentTests
         var run = Section(OrandaSkillDocument.Render(Ctl), OrandaSkillGuides.RunHeading);
 
         foreach (var phrase in new[] { "`orandactl tab run --tab <id> --base-version <version>`", "`stale`", "--range statement", "`canceled`", "`tab_busy`",
-                     "No rows come back", "`orandactl result export", "`file_exists`", "never delete the user's files", "`path_invalid`" })
+                     "No rows come back", "`fetched`", "`orandactl result export", "`file_exists`", "never delete the user's files", "`path_invalid`",
+                     "`connection` (exit 4)", "saving a file", "`sql_unsafe`" })
         {
             Assert.Contains(phrase, run, StringComparison.Ordinal);
         }
@@ -165,6 +166,9 @@ public sealed class OrandaSkillDocumentTests
         Assert.Contains("`confirm` asks the user once", ui, StringComparison.Ordinal);
         Assert.Contains("Use a dev or test connection first", production, StringComparison.Ordinal);
         Assert.Contains("access-control solution may block", production, StringComparison.Ordinal);
+        Assert.Contains("production results come without row values", production, StringComparison.Ordinal); // D5: 클라우드 모델은 운영 행 값 없음
+        Assert.Contains("local model sees everything unmasked", production, StringComparison.Ordinal); // D4·D5
+        Assert.DoesNotContain("metadata only", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("`orandactl tune start --tab <id>` is not part of this procedure", Section(text, OrandaSkillGuides.TuningHeading), StringComparison.Ordinal);
     }
 

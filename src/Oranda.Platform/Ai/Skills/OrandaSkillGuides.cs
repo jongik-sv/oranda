@@ -43,10 +43,13 @@ public static class OrandaSkillGuides
     [
         "- `orandactl tab run --tab <id> --base-version <version>` runs the tab's one SELECT/WITH in the user's result grid, like the user pressing F5. "
             + "Pass the `version` from `tab get` or `tab new`; `stale` means the user changed the tab, so read it again first. "
-            + "A tab with several statements needs `--range statement` (the statement at the caret).",
+            + "A tab with several statements needs `--range statement` (the statement at the caret). "
+            + "`connection` (exit 4) means the tab is not connected in Oranda; ask the user to connect the tab (Oranda does not ask for you).",
         "- It runs for at most 30 s by default (`--timeout`, up to 60); after that it is canceled (`canceled`). "
-            + "`tab_busy` (exit 1) means the tab's session is already running something; tell the user or try once more later, do not loop.",
-        "- No rows come back from `tab run`. Read a few with `orandactl result get --tab <id> --index <result_index> --limit 5`.",
+            + "`tab_busy` (exit 1) means the tab's session is already running something or saving a file; tell the user or try once more later, do not loop.",
+        "- `tab run` and `result export` refuse FOR UPDATE, database links, sequences, Oracle-supplied packages and user functions Oranda cannot verify as read-only "
+            + "(`sql_unsafe`, exit 4), and binds without a value in the tab. Rewrite the SELECT or ask the user.",
+        "- No rows come back from `tab run`, only `fetched` (rows in the grid) and `more`. Read a few with `orandactl result get --tab <id> --index <result_index> --limit 5`.",
         "- `orandactl result export --tab <id> --format xlsx --out <absolute path>` makes Oranda read all rows again and write the file itself (no row limit; rows do not come to you). "
             + "It only creates a new file: `file_exists` (exit 4) means pick another name; never delete the user's files. "
             + "`path_invalid` (exit 2) means a relative path, a missing folder or an extension that does not match `--format`.",
@@ -66,7 +69,10 @@ public static class OrandaSkillGuides
     public static IReadOnlyList<string> Production { get; } =
     [
         "- On a production connection every SELECT you run (`query`, `tab run`, `tune bench`, `result export`) runs on the live database. Use a dev or test connection first.",
-        "- Whether production allows running at all, and whether values are masked (`***`), is the user's setting in Oranda. A refusal (exit 4) is expected; report it and stop.",
+        "- With a cloud model, production results come without row values (row counts and column types only), sensitive columns are `***`, "
+            + "literals and error texts are masked, and production tab text is refused (`environment`). Do not ask the user to work around this. "
+            + "A grant marked local model sees everything unmasked.",
+        "- What a grant allows is the user's setting in Oranda. A refusal (exit 4) is a decision; report it and stop.",
         "- The company's database access-control solution may block, hold for approval or record these runs. If a run fails because of such a policy, tell the user; do not retry another way.",
     ];
 
