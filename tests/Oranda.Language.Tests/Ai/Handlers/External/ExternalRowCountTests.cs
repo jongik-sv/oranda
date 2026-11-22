@@ -25,7 +25,7 @@ public class ExternalRowCountTests
     }
 
     private QueryHandler Query() =>
-        new(new LanguageService(), _exec, new AgentStatementReferenceExtractor(new LanguageService(), _meta), VisibleCursors.Boxes(_meta));
+        new(new LanguageService(), new SchemaAnsweringExecution(_exec), new AgentStatementReferenceExtractor(new LanguageService(), _meta), VisibleCursors.Boxes(_meta));
 
     private static FakeResultSet Rows(int count) =>
         new(

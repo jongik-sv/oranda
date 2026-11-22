@@ -34,7 +34,8 @@ internal sealed class QueryHandler(
     internal const int MaxRowChars = 60_000;
 
     // 생성자 모양은 그대로 둔다(시험·IT 가 직접 만든다). query 는 사용자 함수를 확인하지 않으므로 확인기 없이 만든다.
-    private readonly ExternalSelectGuard _guard = new(language, extractor, userFunctions: null);
+    // 가드는 실행 엔진으로 에이전트 세션의 현재 스키마를 검사 직전에 읽는다.
+    private readonly ExternalSelectGuard _guard = new(language, extractor, userFunctions: null, execution);
 
     public override string ToolName => AppToolNames.Query;
 
@@ -186,11 +187,12 @@ internal sealed class QueryHandler(
 
     /// <summary>
     /// 처리자 쪽 문장 검사(게이트 검사의 이중 방어, <see cref="IExternalSelectGuard"/>): 한 문장 SELECT, 잠금 절·DB 링크·금지 호출·사용자 함수 없음,
-    /// 그리고 현재 스키마와 접속 사용자에서 같은 객체로 풀린다(실행은 접속 사용자 스키마에서 한다). 사용자 함수는 확인 없이 모두 거부한다.
+    /// 그리고 게이트가 이름을 푼 스키마(실행 범위의 현재 스키마, 없으면 접속 사용자)와 에이전트 세션의 지금 현재 스키마(가드가 읽는다)에서 같은 객체로 풀린다.
+    /// 사용자 함수는 확인 없이 모두 거부한다.
     /// </summary>
     private async Task<SqlStatement> CheckStatementAsync(AgentToolInvocation inv, string sql, CancellationToken ct)
     {
-        var options = new ExternalSelectOptions { DefaultSchema = DefaultSchema(inv), ExecutingSchema = inv.Session.Profile.User };
+        var options = new ExternalSelectOptions { DefaultSchema = DefaultSchema(inv) ?? inv.Session.Profile.User };
         var check = await _guard.CheckAsync(inv.Db, sql, options, ct).ConfigureAwait(false);
         return check.Statement ?? throw new ExternalToolException(check.Code!, check.Message!);
     }

@@ -91,6 +91,7 @@ public sealed class ExportResultHandlerTests : IDisposable
         using var _ = env;
         var path = Path.Combine(_folder, "orders.csv");
         env.Guard.Checked.Clear();
+        env.Guard.Sessions.Clear();
 
         var output = await export.ExecuteAsync(env.Call(Args(env, "csv", path)), CancellationToken.None);
 
@@ -108,6 +109,7 @@ public sealed class ExportResultHandlerTests : IDisposable
         Assert.Contains("sample_orders", query.Text, StringComparison.Ordinal);
         Assert.Equal(TransferFormat.Csv, options.Format);
         Assert.Equal([query.Text], env.Guard.Checked); // 서버에 보낼 글 그대로 다시 본다
+        Assert.Same(env.Rig.Controller.SessionFor(env.Tab), Assert.Single(env.Guard.Sessions)); // 내보낼 그 세션의 현재 스키마로 검사
 
         var bar = env.Tab.AgentBar!;
         Assert.Equal($"저장함 · {path} · 1,234행", bar.Headline);
@@ -161,6 +163,8 @@ public sealed class ExportResultHandlerTests : IDisposable
         Assert.Equal("no_result", (await export.ExecuteAsync(env.Call(Args(env, "csv", path, index: 5)), CancellationToken.None)).ErrorCode);
         env.Guard.Refusal = ExternalSelectRefusal.Unsafe;
         Assert.Equal("sql_unsafe", (await export.ExecuteAsync(env.Call(Args(env, "csv", path)), CancellationToken.None)).ErrorCode);
+        env.Guard.Refusal = ExternalSelectRefusal.SchemaUnknown; // 세션의 현재 스키마를 못 읽었다: 닫힌 쪽
+        Assert.Equal("sql_schema_unresolved", (await export.ExecuteAsync(env.Call(Args(env, "csv", path)), CancellationToken.None)).ErrorCode);
 
         Assert.Empty(transfer.Exports);
         Assert.False(File.Exists(path));

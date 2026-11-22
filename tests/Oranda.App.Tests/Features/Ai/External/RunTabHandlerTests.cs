@@ -28,15 +28,27 @@ public sealed class RunTabHandlerTests
 
         public List<string> Checked { get; } = [];
 
+        /// <summary>검사를 받은 세션(가드가 그 세션의 현재 스키마를 읽는다 — 실행할 탭 세션이어야 한다).</summary>
+        public List<ISession> Sessions { get; } = [];
+
         public ValueTask<ExternalSelectCheck> CheckAsync(ISession db, string sql, ExternalSelectOptions options, CancellationToken ct)
         {
             Checked.Add(sql);
+            Sessions.Add(db);
             Assert.True(options.VerifyUserFunctions);
             Assert.True(options.RequireResolvedNames);
+            Assert.Null(options.DefaultSchema); // 미리 푼 이름이 없다: 가드가 세션에서 읽은 스키마로만 푼다
             return ValueTask.FromResult(Refusal == ExternalSelectRefusal.None
                 ? new ExternalSelectCheck(ExternalSelectRefusal.None, null, null, null)
-                : new ExternalSelectCheck(Refusal, Refusal == ExternalSelectRefusal.NotSingleQuery ? "sql_not_single_query" : "sql_unsafe", "no", null));
+                : new ExternalSelectCheck(Refusal, Code(Refusal), "no", null));
         }
+
+        private static string Code(ExternalSelectRefusal refusal) => refusal switch
+        {
+            ExternalSelectRefusal.NotSingleQuery or ExternalSelectRefusal.Unresolved => "sql_not_single_query",
+            ExternalSelectRefusal.SchemaMismatch or ExternalSelectRefusal.SchemaUnknown => "sql_schema_unresolved",
+            _ => "sql_unsafe",
+        };
     }
 
     private sealed class NoServices : IServiceProvider
@@ -107,6 +119,7 @@ public sealed class RunTabHandlerTests
         Assert.Equal("SELECT n FROM sample_orders", Assert.Single(env.Rig.Exec.Statements).Text);
         Assert.Equal(HistorySource.Agent, Assert.Single(env.Rig.Exec.SingleOptions)!.Source);
         Assert.Equal(["SELECT n FROM sample_orders"], env.Guard.Checked);
+        Assert.Same(env.Rig.Controller.SessionFor(env.Tab), Assert.Single(env.Guard.Sessions)); // 실행할 그 탭 세션으로 검사
 
         var results = (ResultTabsViewModel)env.Tab.ResultPane!;
         Assert.StartsWith("AI·", results.Tabs[0].Title, StringComparison.Ordinal);
@@ -150,6 +163,8 @@ public sealed class RunTabHandlerTests
     [InlineData(ExternalSelectRefusal.Unsafe, "sql_unsafe")]
     [InlineData(ExternalSelectRefusal.UserFunction, "sql_unsafe")]
     [InlineData(ExternalSelectRefusal.NotSingleQuery, "sql_not_single_query")]
+    [InlineData(ExternalSelectRefusal.SchemaUnknown, "sql_schema_unresolved")]
+    [InlineData(ExternalSelectRefusal.SchemaMismatch, "sql_schema_unresolved")]
     public Task Guard_refusal_runs_nothing(ExternalSelectRefusal refusal, string code) => Ui.Run(async () =>
     {
         using var env = new Env();
@@ -161,6 +176,16 @@ public sealed class RunTabHandlerTests
         Assert.Empty(env.Rig.Exec.Statements);
         Assert.Null(env.Tab.AgentBar);
     });
+
+    [Fact]
+    public void Real_container_builds_the_guard_that_reads_the_session_schema()
+    {
+        // 가드는 실행 엔진(현재 스키마 읽기)까지 주입받아야 한다. 못 만들면 ExternalRunParts.From 이 조용히 null 이 되어 run_tab·export_result 가 꺼진다.
+        var dir = Path.Combine(Path.GetTempPath(), "oranda-guard-" + Guid.NewGuid().ToString("N"));
+        using var container = Oranda.App.Shell.Composition.AppComposition.Create(new Oranda.App.Shell.Composition.AppCompositionOptions { DataDirectory = dir });
+
+        Assert.Equal("ExternalSelectGuard", container.GetService<IExternalSelectGuard>()?.GetType().Name);
+    }
 
     [Fact]
     public Task Connection_rules_lock_low_level_production_and_tabs_without_connection() => Ui.Run(async () =>

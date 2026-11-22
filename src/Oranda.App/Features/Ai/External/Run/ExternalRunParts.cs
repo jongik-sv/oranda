@@ -118,7 +118,11 @@ internal static class ExternalRunSupport
         _ => check.Message ?? ExternalRunText.NotSingleSelect,
     });
 
-    /// <summary>가드 조건: 탭 실행은 사용자 함수를 확인해 안전한 것만, 참조는 모두 풀려야 한다. 이름은 그 세션이 실행하는 대로 푼다.</summary>
+    /// <summary>
+    /// 가드 조건: 탭 실행은 사용자 함수를 확인해 안전한 것만, 참조는 모두 풀려야 한다. 이름은 그 세션이 실행하는 대로 푼다 —
+    /// 가드가 검사 직전에 그 탭 세션의 현재 스키마를 읽는다(<c>ALTER SESSION SET CURRENT_SCHEMA</c>·PL/SQL 블록이 바꾼 것 포함, 못 읽으면 거부).
+    /// 미리 푼 이름이 없으므로 <see cref="ExternalSelectOptions.DefaultSchema"/> 는 비운다.
+    /// </summary>
     public static ExternalSelectOptions GuardOptions { get; } = new() { VerifyUserFunctions = true, RequireResolvedNames = true };
 
     /// <summary>클라이언트 이름(없으면 「외부 에이전트」, 지금 언어로).</summary>

@@ -53,6 +53,17 @@ internal static class ExternalFakes
 
     public static IServiceProvider Services(params IAppToolHandler[] handlers) => new HandlerServices(handlers);
 
+    /// <summary>가드가 검사 직전에 보내는 현재 스키마 읽기인가(<see cref="Oranda.Language.Ai.Handlers.External.ExternalSelectGuard.CurrentSchemaSql"/>).</summary>
+    public static bool IsSchemaRead(ExecutionCall call) =>
+        call.Statement.Text == Oranda.Language.Ai.Handlers.External.ExternalSelectGuard.CurrentSchemaSql;
+
+    /// <summary>현재 스키마 읽기의 답(한 행 한 열). <paramref name="schema"/> 가 null 이면 빈 값.</summary>
+    public static Oranda.Core.Execution.ExecutionResult SchemaRow(ExecutionCall call, string? schema) =>
+        new(call.Statement, Oranda.Core.Execution.ExecutionStatus.Succeeded)
+        {
+            ResultSet = new FakeResultSet([new Oranda.Core.Grid.ResultColumn(0, "CURRENT_SCHEMA", "VARCHAR2", Oranda.Core.Grid.ColumnDataKind.Text)], [[schema]]),
+        };
+
     private sealed class HandlerServices(IAppToolHandler[] handlers) : IServiceProvider
     {
         public object? GetService(Type serviceType) => serviceType == typeof(IEnumerable<IAppToolHandler>) ? handlers : null;
@@ -146,4 +157,32 @@ internal sealed class VisibleCursors : ITuningService
 
         public Task<ExecutionPlan> GetCursorPlanAsync(ISession s, CursorRef cursor, string format, CancellationToken ct) => throw new NotSupportedException();
     }
+}
+
+/// <summary>
+/// 가드의 현재 스키마 읽기만 답하고 나머지는 <paramref name="inner"/> 로 넘기는 실행 엔진(처리자 시험이 실행 호출만 세게).
+/// </summary>
+internal sealed class SchemaAnsweringExecution(Oranda.Core.Execution.IExecutionService inner) : Oranda.Core.Execution.IExecutionService
+{
+    /// <summary>세션의 현재 스키마(답). 기본 SCOTT = 접속 사용자.</summary>
+    public string? Schema { get; set; } = "SCOTT";
+
+    public List<ExecutionCall> Reads { get; } = [];
+
+    public Task<Oranda.Core.Execution.ExecutionResult> ExecuteAsync(ISession s, Oranda.Core.Execution.SqlStatement stmt,
+        IReadOnlyDictionary<string, Oranda.Core.Execution.BindValue> binds, Oranda.Core.Execution.ExecutionOptions? options, CancellationToken ct)
+    {
+        var call = new ExecutionCall(s, stmt, binds, options ?? Oranda.Core.Execution.ExecutionOptions.Default);
+        if (!ExternalFakes.IsSchemaRead(call))
+        {
+            return inner.ExecuteAsync(s, stmt, binds, options, ct);
+        }
+
+        Reads.Add(call);
+        return Task.FromResult(ExternalFakes.SchemaRow(call, Schema));
+    }
+
+    public IAsyncEnumerable<Oranda.Core.Execution.ExecutionResult> ExecuteScriptAsync(ISession s, IReadOnlyList<Oranda.Core.Execution.SqlStatement> stmts,
+        Oranda.Core.Execution.ScriptErrorMode mode, Oranda.Core.Execution.ExecutionOptions? options, CancellationToken ct) =>
+        inner.ExecuteScriptAsync(s, stmts, mode, options, ct);
 }

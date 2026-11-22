@@ -17,16 +17,18 @@ public class QueryHandlerTests
     private readonly FakeMetadataProvider _meta = new();
     private readonly FakeExecutionService _exec = new();
     private readonly VisibleCursors _cursors = new();
+    private readonly SchemaAnsweringExecution _schemas;
 
     public QueryHandlerTests()
     {
+        _schemas = new SchemaAnsweringExecution(_exec);
         _meta.NameSteps[("SCOTT", "EMP")] = NameStep.TableOrView;
         _meta.NameSteps[("APP", "EMP")] = NameStep.TableOrView;
         _exec.Responder = call => new ExecutionResult(call.Statement, ExecutionStatus.Succeeded) { ResultSet = Rows(3), Elapsed = TimeSpan.FromMilliseconds(5) };
     }
 
     private QueryHandler Handler() =>
-        new(new LanguageService(), _exec, new AgentStatementReferenceExtractor(new LanguageService(), _meta), VisibleCursors.Boxes(_meta, _cursors));
+        new(new LanguageService(), _schemas, new AgentStatementReferenceExtractor(new LanguageService(), _meta), VisibleCursors.Boxes(_meta, _cursors));
 
     private static FakeResultSet Rows(int count, int pageSize = 2) =>
         new(
@@ -177,6 +179,31 @@ public class QueryHandlerTests
     public async Task Query_refuses_names_that_resolve_differently_in_current_schema()
     {
         var output = await Handler().ExecuteAsync(ExternalFakes.Db(Sql("SELECT * FROM emp"), currentSchema: "APP"), CancellationToken.None);
+
+        Assert.Equal("sql_schema_unresolved", output.ErrorCode);
+        Assert.Empty(_exec.Calls);
+    }
+
+    [Fact]
+    public async Task Query_checks_names_in_the_agent_session_current_schema_not_the_login()
+    {
+        // 로그온 트리거·PL/SQL 이 에이전트 세션의 현재 스키마를 APP 로 바꿨다: 게이트는 SCOTT.EMP 로 봤지만 실행은 APP.EMP 를 읽는다.
+        _schemas.Schema = "APP";
+        var db = new FakeSession(TestData.Profile());
+
+        var output = await Handler().ExecuteAsync(ExternalFakes.Db(Sql("SELECT * FROM emp"), db: db), CancellationToken.None);
+
+        Assert.Equal("sql_schema_unresolved", output.ErrorCode);
+        Assert.Same(db, Assert.Single(_schemas.Reads).Session);
+        Assert.Empty(_exec.Calls);
+    }
+
+    [Fact]
+    public async Task Query_refuses_when_the_session_schema_cannot_be_read()
+    {
+        _schemas.Schema = null;
+
+        var output = await Handler().ExecuteAsync(ExternalFakes.Db(Sql("SELECT * FROM emp")), CancellationToken.None);
 
         Assert.Equal("sql_schema_unresolved", output.ErrorCode);
         Assert.Empty(_exec.Calls);
