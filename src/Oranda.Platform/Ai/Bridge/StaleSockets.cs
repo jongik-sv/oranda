@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.Net.Sockets;
+using System.IO.Pipes;
 
 namespace Oranda.Platform.Ai.Bridge;
 
@@ -61,20 +61,35 @@ internal static class StaleSockets
             && int.TryParse(fileName.AsSpan(Prefix.Length, fileName.Length - Prefix.Length - Suffix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out _);
     }
 
-    /// <summary>소켓에 붙어 본다. 붙으면 참(바로 끊는다), 거절(듣는 쪽 없음)이면 거짓. 그 밖의 실패는 지우지 않도록 참으로 본다.</summary>
+    /// <summary>붙어 볼 때 기다리는 시간. 살아 있는 다리는 바로 받으므로 짧게 둔다.</summary>
+    private const int ProbeMilliseconds = 200;
+
+    /// <summary>
+    /// 소켓에 붙어 본다(다리와 같은 <see cref="NamedPipeClientStream"/>: 절대 경로면 그 소켓). 붙으면 참(바로 끊는다), 시한 안에 못 붙으면
+    /// 듣는 쪽이 없는 것으로 보고 거짓. 권한 거부처럼 판단할 수 없는 실패는 지우지 않도록 참으로 본다.
+    /// 소켓 API 를 직접 쓰지 않는 까닭: 제품 코드는 통신 라이브러리를 참조하지 않는다(SafetyCrossTests).
+    /// </summary>
     public static bool IsListening(string path)
     {
         try
         {
-            using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-            socket.Connect(new UnixDomainSocketEndPoint(path));
+            using var client = new NamedPipeClientStream(".", path, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
+            client.Connect(ProbeMilliseconds);
             return true;
         }
-        catch (SocketException ex) when (ex.SocketErrorCode is SocketError.ConnectionRefused or SocketError.AddressNotAvailable)
+        catch (TimeoutException)
         {
             return false;
         }
-        catch (SocketException)
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (System.Net.Sockets.SocketException)
+        {
+            return false; // 거절(듣는 쪽 없음). 형식은 System.Net.Primitives 에 있다.
+        }
+        catch (UnauthorizedAccessException)
         {
             return true;
         }
