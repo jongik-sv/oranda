@@ -1,0 +1,1 @@
+SAMPLE 스키마에서 2026년 10월(ORDERED_AT 기준) 주문 건수를 고객 이름별로 세어 건수가 많은 순으로 보여 주는 SQL 을 만들어. 그 SQL 을 Oranda 의 새 SQL 탭에 열고, 그 탭을 실행한 다음, 전체 결과 행을 {WORK}/orders-by-customer.xlsx 파일로 저장해. 끝나면 저장한 파일 경로와 행 수를 한 줄로 말해.

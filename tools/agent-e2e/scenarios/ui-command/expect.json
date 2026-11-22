@@ -1,0 +1,46 @@
+{
+  "about": "목록 → now 명령 done → confirm 명령 confirmed → deny 명령은 부르지 않고 이유만. 탭 지정(--tab 또는 tab focus 뒤 실행)은 실제 모드의 명령 몸체 앞 탭(고객 목록=t2, 주문 조회=t1)으로 본다. 글을 바꾸는 우회(propose_edit) 금지.",
+  "order": [
+    [
+      "list_commands"
+    ],
+    [
+      "run_command"
+    ]
+  ],
+  "forbidden_tools": [
+    "propose_edit",
+    "run_tab",
+    "export_result"
+  ],
+  "unchanged_tabs": [
+    "t1",
+    "t2"
+  ],
+  "ui_runs": [
+    {
+      "id": "oranda.monitor.sessions",
+      "status": "done"
+    },
+    {
+      "id": "oranda.file.save",
+      "status": "confirmed"
+    }
+  ],
+  "command_bodies": [
+    {
+      "id": "oranda.monitor.sessions",
+      "active_tab": "t2"
+    },
+    {
+      "id": "oranda.file.save",
+      "active_tab": "t1"
+    }
+  ],
+  "ui_deny_attempts_forbidden": true,
+  "answer_regex": [
+    "oranda\\.monitor\\.sessions",
+    "oranda\\.file\\.save",
+    "oranda\\.format\\.document"
+  ]
+}

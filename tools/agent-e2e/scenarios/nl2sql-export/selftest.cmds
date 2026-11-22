@@ -1,0 +1,9 @@
+"$C" obj describe SAMPLE.ORDERS
+"$C" tab new --title orders --conn dev-sample - <<< "SELECT c.name, COUNT(*) AS order_count FROM SAMPLE.ORDERS o JOIN SAMPLE.CUSTOMERS c ON c.customer_id = o.customer_id GROUP BY c.name ORDER BY order_count DESC" | tee "$WORK/../newtab.json"
+"$C" tab run --tab "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["tab_id"])' "$WORK/../newtab.json")"
+"$C" result get --tab "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["tab_id"])' "$WORK/../newtab.json")" --limit 2
+"$C" result export --tab "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["tab_id"])' "$WORK/../newtab.json")" --format xlsx --out relative.xlsx
+"$C" result export --tab "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["tab_id"])' "$WORK/../newtab.json")" --format xlsx --out "$WORK/orders-by-customer.xlsx"
+"$C" result export --tab "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["tab_id"])' "$WORK/../newtab.json")" --format xlsx --out "$WORK/orders-by-customer.xlsx"
+"$C" tab new --title bad --conn dev-sample - <<< "SELECT * FROM SAMPLE.ORDERS FOR UPDATE" | tee "$WORK/../bad.json"
+"$C" tab run --tab "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["tab_id"])' "$WORK/../bad.json")"

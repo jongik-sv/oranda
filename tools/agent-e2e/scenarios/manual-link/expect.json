@@ -1,0 +1,10 @@
+{
+  "about": "답에 내보내기 쪽 주소가 있고, 답의 매뉴얼 주소가 모두 실제 쪽(site/src/content/docs)이다. 앱 호출은 없어도 된다. 실제 docs 가 있으면(fake_docs=False) `orandactl docs` 를 불러야 한다.",
+  "order": [],
+  "min_calls": 0,
+  "forbidden_tools": ["propose_edit", "new_tab", "run_tab", "export_result", "run_command", "save_tab"],
+  "unchanged_tabs": ["t1", "t2"],
+  "answer_regex": ["https://jongik-sv\\.github\\.io/oranda/transfer/data-transfer/?"],
+  "answer_urls_valid": true,
+  "uses_docs_cmd": true
+}

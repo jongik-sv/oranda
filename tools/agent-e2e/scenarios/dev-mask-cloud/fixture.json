@@ -1,0 +1,53 @@
+{
+  "about": "⑧ 대조: 개발 접속 + 클라우드 모델. 행 값은 오고 민감 열(PHONE)은 ***. 실제 처리자 모드 전용.",
+  "connection": {
+    "environment": "Development",
+    "local_model": false
+  },
+  "tabs": [
+    {
+      "id": "t1",
+      "title": "고객 연락처",
+      "text": "SELECT customer_id, name, phone\n  FROM SAMPLE.CUSTOMERS\n ORDER BY customer_id",
+      "active": true
+    },
+    {
+      "id": "t2",
+      "title": "주문 조회",
+      "text": "SELECT id, status\n  FROM SAMPLE.ORDERS"
+    }
+  ],
+  "objects": {
+    "SAMPLE.CUSTOMERS": [
+      "CUSTOMER_ID NUMBER",
+      "NAME VARCHAR2(100)",
+      "PHONE VARCHAR2(20)"
+    ]
+  },
+  "results": [
+    {
+      "columns": [
+        {
+          "name": "CUSTOMER_ID",
+          "type": "NUMBER"
+        },
+        {
+          "name": "NAME",
+          "type": "VARCHAR2"
+        },
+        {
+          "name": "PHONE",
+          "type": "VARCHAR2"
+        }
+      ],
+      "generate": {
+        "count": 12,
+        "row": [
+          "{n}",
+          "고객 {n}",
+          "010-5555-{n}"
+        ]
+      }
+    }
+  ]
+}

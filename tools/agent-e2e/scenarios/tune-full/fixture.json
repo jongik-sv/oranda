@@ -1,0 +1,70 @@
+{
+  "about": "② 튜닝 끝까지. 원래 문장은 ORDERED_AT 에 TO_CHAR 를 씌워 인덱스를 못 탄다. 범위 조건으로 바꾼 후보만 빠르다.",
+  "tabs": [
+    { "id": "t1", "title": "느린 주문 조회", "text": "SELECT o.id, o.customer_id, o.status\n  FROM SAMPLE.ORDERS o\n WHERE TO_CHAR(o.ordered_at, 'YYYYMM') = '202610'\n   AND o.status = 'OPEN'", "active": true },
+    { "id": "t2", "title": "고객 목록", "text": "SELECT customer_id, name\n  FROM SAMPLE.CUSTOMERS\n ORDER BY name" }
+  ],
+  "objects": {
+    "SAMPLE.ORDERS": ["ID NUMBER", "CUSTOMER_ID NUMBER", "STATUS VARCHAR2(20)", "ORDERED_AT DATE"],
+    "SAMPLE.CUSTOMERS": ["CUSTOMER_ID NUMBER", "NAME VARCHAR2(100)"]
+  },
+  "results": [
+    {
+      "columns": [ { "name": "ID", "type": "NUMBER" }, { "name": "CUSTOMER_ID", "type": "NUMBER" }, { "name": "STATUS", "type": "VARCHAR2" } ],
+      "generate": { "count": 42, "row": ["{n}", "{rev}", "OPEN"] }
+    }
+  ],
+  "agent_tools": {
+    "get_tuning_context": {
+      "sql_id": "fk3d9w2m1qz7a",
+      "objects": [ {
+        "object": "SAMPLE.ORDERS", "type": "TABLE", "num_rows": 2400000, "blocks": 31250, "last_analyzed": "2026-11-20", "stale": false,
+        "columns": [
+          { "name": "ORDERED_AT", "num_distinct": 730, "num_nulls": 0, "histogram": "NONE" },
+          { "name": "STATUS", "num_distinct": 4, "num_nulls": 0, "histogram": "FREQUENCY" }
+        ],
+        "indexes": [
+          { "name": "ORDERS_ORDERED_AT_IX", "columns": ["ORDERED_AT"], "unique": false, "status": "VALID", "clustering_factor": 41000 },
+          { "name": "ORDERS_STATUS_IX", "columns": ["STATUS"], "unique": false, "status": "VALID", "clustering_factor": 1900000 }
+        ]
+      } ],
+      "plan": [
+        { "id": 0, "operation": "SELECT STATEMENT", "cost": 8620 },
+        { "id": 1, "operation": "TABLE ACCESS FULL", "object": "SAMPLE.ORDERS", "cost": 8620, "rows": 600, "filter": "TO_CHAR(\"O\".\"ORDERED_AT\",'YYYYMM')='202610' AND \"O\".\"STATUS\"='OPEN'" }
+      ],
+      "findings": [ "Full scan of SAMPLE.ORDERS (2,400,000 rows). The filter applies a function to ORDERED_AT, which has an index (ORDERS_ORDERED_AT_IX) that cannot be used." ]
+    },
+    "get_cursor_plan": {
+      "sql_id": "fk3d9w2m1qz7a", "plan_hash_value": 3421987650,
+      "steps": [
+        { "id": 0, "operation": "SELECT STATEMENT", "starts": 1, "a_rows": 42, "elapsed_ms": 851 },
+        { "id": 1, "operation": "TABLE ACCESS FULL", "object": "SAMPLE.ORDERS", "starts": 1, "a_rows": 42, "e_rows": 600, "buffers": 31180, "elapsed_ms": 850 }
+      ]
+    },
+    "explain_plan": {
+      "plan_hash_value": 3421987650,
+      "lines": [ { "id": 1, "operation": "TABLE ACCESS FULL", "object": "SAMPLE.ORDERS", "cost": 8620, "rows": 600 } ]
+    },
+    "get_sql_stats": { "sql_id": "fk3d9w2m1qz7a", "executions": 312, "elapsed_ms_per_exec": 848, "buffer_gets_per_exec": 31190, "rows_per_exec": 42 },
+    "get_table_stats": {
+      "table": "SAMPLE.ORDERS", "num_rows": 2400000, "blocks": 31250, "avg_row_len": 64, "last_analyzed": "2026-11-20", "stale": false,
+      "columns": [
+        { "name": "ORDERED_AT", "num_distinct": 730, "num_nulls": 0, "density": 0.00137, "histogram": "NONE", "buckets": 1 },
+        { "name": "STATUS", "num_distinct": 4, "num_nulls": 0, "density": 0.0000002, "histogram": "FREQUENCY", "buckets": 4 }
+      ]
+    },
+    "get_index_info": {
+      "table": "SAMPLE.ORDERS",
+      "indexes": [
+        { "name": "ORDERS_ORDERED_AT_IX", "columns": [ { "name": "ORDERED_AT" } ], "unique": false, "kind": "NORMAL", "status": "VALID", "blevel": 2, "leaf_blocks": 6400, "distinct_keys": 730, "clustering_factor": 41000 },
+        { "name": "ORDERS_STATUS_IX", "columns": [ { "name": "STATUS" } ], "unique": false, "kind": "NORMAL", "status": "VALID", "blevel": 2, "leaf_blocks": 5100, "distinct_keys": 4, "clustering_factor": 1900000 }
+      ]
+    },
+    "get_histogram": { "table": "SAMPLE.ORDERS", "column": "STATUS", "kind": "FREQUENCY", "buckets": [ { "rows": 2280000 }, { "rows": 72000 }, { "rows": 40000 }, { "rows": 8000 } ] }
+  },
+  "bench": {
+    "original_ms": 850, "slow_ms": 840, "fast_ms": 12,
+    "fast_regex": "(?is)ordered_at\\s*(>=|between)",
+    "slow_regex": "(?is)to_char\\s*\\(\\s*(o\\.)?ordered_at"
+  }
+}

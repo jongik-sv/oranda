@@ -1,0 +1,28 @@
+{
+  "about": "개발 탭 실행 → get_result 행 값 보임, PHONE 은 ***(원래 값은 LLM 이 받은 글 어디에도 없음).",
+  "real_only": true,
+  "order": [
+    [
+      "run_tab"
+    ],
+    [
+      "get_result"
+    ]
+  ],
+  "forbidden_tools": [
+    "propose_edit",
+    "export_result",
+    "run_command"
+  ],
+  "unchanged_tabs": [
+    "t1",
+    "t2"
+  ],
+  "answer_regex": [
+    "고객 0001",
+    "\\*\\*\\*"
+  ],
+  "transcript_not_regex": [
+    "010-5555-000[1-3]"
+  ]
+}

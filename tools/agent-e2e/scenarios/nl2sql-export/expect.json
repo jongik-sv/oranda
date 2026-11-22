@@ -1,0 +1,15 @@
+{
+  "about": "도구 순서 = 메타 조회 → 새 탭 → 그 탭 실행 → 내보내기. 행은 LLM 에 안 감(get_result 는 써도 됨).",
+  "order": [
+    ["describe_object", "find_objects", "list_schemas", "resolve_names"],
+    ["new_tab"],
+    ["run_tab"],
+    ["export_result"]
+  ],
+  "forbidden_tools": ["propose_edit", "save_tab", "run_command"],
+  "unchanged_tabs": ["t1", "t2"],
+  "new_tab_regex": "(?is)select.+sample\\.orders",
+  "run_new_tab": true,
+  "artifacts": [ { "path": "{WORK}/orders-by-customer.xlsx", "xlsx_rows": 137 } ],
+  "answer_regex": ["orders-by-customer\\.xlsx", "137"]
+}

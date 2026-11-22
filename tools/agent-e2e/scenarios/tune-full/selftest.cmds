@@ -1,0 +1,7 @@
+"$C" tabs
+"$C" tab get --tab t1
+"$C" tune context - <<< "SELECT o.id, o.customer_id, o.status FROM SAMPLE.ORDERS o WHERE TO_CHAR(o.ordered_at, 'YYYYMM') = '202610' AND o.status = 'OPEN'"
+"$C" tune index SAMPLE.ORDERS
+"$C" tune bench - <<< '[{"label":"orig","sql":"SELECT o.id FROM SAMPLE.ORDERS o WHERE TO_CHAR(o.ordered_at, '"'"'YYYYMM'"'"') = '"'"'202610'"'"'"},{"label":"range","sql":"SELECT o.id FROM SAMPLE.ORDERS o WHERE o.ordered_at >= DATE '"'"'2026-10-01'"'"' AND o.ordered_at < DATE '"'"'2026-11-01'"'"'"}]'
+"$C" tab new --title tuned - <<< "SELECT o.id FROM SAMPLE.ORDERS o WHERE o.ordered_at >= DATE '2026-10-01' AND o.ordered_at < DATE '2026-11-01' AND o.status = 'OPEN'"
+"$C" query - <<< "DELETE FROM SAMPLE.ORDERS"

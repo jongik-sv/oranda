@@ -1,0 +1,8 @@
+{
+  "about": "tune_start 를 t1 로 부르고(직접 튜닝 도구·벤치·새 탭 금지), 답에 창 이름. 실제 모드면 띄울 때 앞 탭 = t1·접속 있음.",
+  "order": [ ["tune_start"] ],
+  "forbidden_tools": ["propose_edit", "benchmark_queries", "new_tab", "run_tab", "export_result", "run_command"],
+  "unchanged_tabs": ["t1", "t2"],
+  "tune_start_tab": "t1",
+  "answer_regex": ["AI 대화|AI 튜닝"]
+}

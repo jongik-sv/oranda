@@ -1,0 +1,7 @@
+{
+  "about": "⑤ tune_start: 앞 탭은 t2. tune_start --tab t1 이 t1 을 앞으로 낸 뒤 앱 안 튜닝을 띄우는지(실제 모드 tune_launch 의 active_tab·connection). AiTuningLauncher 자체는 앱 창이 필요해 실앱 확인.",
+  "tabs": [
+    { "id": "t1", "title": "느린 주문 조회", "text": "SELECT o.id, o.customer_id, o.status\n  FROM SAMPLE.ORDERS o\n WHERE TO_CHAR(o.ordered_at, 'YYYYMM') = '202610'\n   AND o.status = 'OPEN'" },
+    { "id": "t2", "title": "고객 목록", "text": "SELECT customer_id, name\n  FROM SAMPLE.CUSTOMERS\n ORDER BY name", "active": true }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "about": "① nl2sql → 새 탭 → 실행 → 전체 행 xlsx. 결과는 137행(그리드 첫 페이지 50행 + more). 표 이름은 SAMPLE.* 만.",
+  "tabs": [
+    { "id": "t1", "title": "주문 조회", "text": "SELECT id, customer_id, status\n  FROM SAMPLE.ORDERS\n WHERE id = 1", "active": true },
+    { "id": "t2", "title": "고객 목록", "text": "SELECT customer_id, name\n  FROM SAMPLE.CUSTOMERS\n ORDER BY name" }
+  ],
+  "objects": {
+    "SAMPLE.ORDERS": ["ID NUMBER", "CUSTOMER_ID NUMBER", "STATUS VARCHAR2(20)", "ORDERED_AT DATE"],
+    "SAMPLE.CUSTOMERS": ["CUSTOMER_ID NUMBER", "NAME VARCHAR2(100)"]
+  },
+  "results": [
+    {
+      "match": "(?is)CUSTOMERS.*ORDERS|ORDERS.*CUSTOMERS",
+      "columns": [ { "name": "NAME", "type": "VARCHAR2" }, { "name": "ORDER_COUNT", "type": "NUMBER" } ],
+      "generate": { "count": 137, "row": ["고객 {n}", "{rev}"] }
+    },
+    {
+      "columns": [ { "name": "ID", "type": "NUMBER" } ],
+      "rows": [ ["1"] ]
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+"$C" tabs
+"$C" tune start --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')"

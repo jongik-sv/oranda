@@ -4,6 +4,8 @@
 #   --allow : CLI 의 셸 허락을 orandactl 하나로만 미리 준다(claude = --allowedTools "Bash(<orandactl>:*)", codex = danger-full-access, agy = 없음).
 # linux·macOS(bash 3.2: 빈 배열은 ${a[@]+"${a[@]}"} 로 편다).
 #             빼면 CLI 기본 허락 방식 그대로 돌려 「스킬만으로 되는가」를 본다.
+# SCENARIO=<이름> : scenarios/<이름>/ 의 과제(task.txt, {WORK} = 작업 폴더)·준비 데이터(fixture.json)·기대 판정(expect.json)을 쓴다.
+#             없으면 1단계 고정 과제(문법 틀린 SQL 고치기).
 # 결과: <작업 폴더>/{log.jsonl, transcript.*, verdict.txt}. 사용자 실제 HOME·설정은 건드리지 않는다(인증 파일만 읽어서 복사).
 set -euo pipefail
 
@@ -20,7 +22,16 @@ task='Oranda 편집기 탭 목록을 보고 문법이 틀린 SQL 을 찾아, 고
 [[ -f "$host_dll" ]] || dotnet build "$repo/tools/agent-e2e/FakeHost" -c Debug -v q
 
 mkdir -p "$out"
+out="$(cd "$out" && pwd)"
 home="$out/home"; data="$out/data"; work="$out/work"
+scenario_dir=""
+host_scenario=()
+if [[ -n "${SCENARIO:-}" ]]; then
+  scenario_dir="$repo/tools/agent-e2e/scenarios/$SCENARIO"
+  [[ -f "$scenario_dir/task.txt" ]] || { echo "모르는 시나리오: $SCENARIO" >&2; exit 2; }
+  task="$(python3 -I -c 'import sys; print(open(sys.argv[1], encoding="utf-8").read().strip().replace("{WORK}", sys.argv[2]))' "$scenario_dir/task.txt" "$work")"
+  host_scenario=(--scenario "$scenario_dir/fixture.json")
+fi
 rm -f "$out/ready" "$out/log.jsonl"
 mkdir -p "$home" "$data" "$work"
 
@@ -46,7 +57,7 @@ case "$cli" in
     ;;
 esac
 
-dotnet "$host_dll" --data "$data" --log "$out/log.jsonl" --home "$home" --orandactl "$ctl" --ready "$out/ready" --max-seconds 900 ${REAL_EDITOR:+--real-editor} &
+dotnet "$host_dll" --data "$data" --log "$out/log.jsonl" --home "$home" --orandactl "$ctl" --ready "$out/ready" --max-seconds 900 ${REAL_EDITOR:+--real-editor} ${host_scenario[@]+"${host_scenario[@]}"} &
 host_pid=$!
 trap 'kill -TERM $host_pid 2>/dev/null || true' EXIT
 for _ in $(seq 1 60); do [[ -f "$out/ready" ]] && break; sleep 0.5; done
@@ -77,6 +88,24 @@ if [[ -n "${SKILL_DROP_LINE:-}" ]]; then
   done
 fi
 
+# 실험: 설치된 스킬 사본(세 곳) 끝에 글 한 덩어리를 붙인다(예: SKILL_APPEND='Pass JSON bodies with printf ... |').
+if [[ -n "${SKILL_APPEND:-}" ]]; then
+  for skill in "$home/.claude/skills/oranda/SKILL.md" "$home/.agents/skills/oranda/SKILL.md" "$home/.gemini/config/skills/oranda/SKILL.md"; do
+    [[ -f "$skill" ]] && printf '\n%s\n' "$SKILL_APPEND" >> "$skill"
+  done
+fi
+
+# 가짜 docs: 시나리오 실행인데 orandactl 에 로컬 `docs` 명령이 아직 없으면(S2 머지 전) site 머리말로 만든 매뉴얼 장 목록을 스킬 사본 끝에 붙인다.
+# FAKE_DOCS=0 이면 붙이지 않는다. 붙였는지는 <작업 폴더>/fake_docs 로 남긴다(판정이 표에 적는다).
+rm -f "$out/fake_docs"
+if [[ -n "$scenario_dir" && "${FAKE_DOCS:-1}" != 0 ]] && ! "$ctl" docs export > /dev/null 2>&1; then
+  python3 -I "$repo/tools/agent-e2e/manual_index.py" "$repo" > "$out/manual-index.md"
+  for skill in "$home/.claude/skills/oranda/SKILL.md" "$home/.agents/skills/oranda/SKILL.md" "$home/.gemini/config/skills/oranda/SKILL.md"; do
+    [[ -f "$skill" ]] && cat "$out/manual-index.md" >> "$skill"
+  done
+  touch "$out/fake_docs"
+fi
+
 # 실험(설계 §10-6, 결정 E-13): 설치된 Claude 스킬 머리말 둘째 줄에 allowed-tools 를 넣어 본다(가짜 HOME 의 사본만 고친다).
 if [[ -n "${SKILL_ALLOWED_TOOLS:-}" ]]; then
   python3 -I -c 'import sys; p, v = sys.argv[1], sys.argv[2]; l = open(p, encoding="utf-8").read().split("\n"); l.insert(2, "allowed-tools: " + v); open(p, "w", encoding="utf-8").write("\n".join(l))' \
@@ -103,7 +132,8 @@ case "$cli" in
     # opencode 2.x 는 탭들이 공유 백그라운드 서비스(실제 HOME)를 쓴다 → 있으면 --standalone 으로 자기 서버를 띄운다.
     oc_extra=()
     "$oc_bin" run --help 2>&1 | grep -q -- --standalone && oc_extra=(--standalone)
-    (cd "$work" && "${env_common[@]}" "$oc_bin" run ${oc_extra[@]+"${oc_extra[@]}"} ${OPENCODE_MODEL:+--model "$OPENCODE_MODEL"} --format json "$task") > "$out/transcript.jsonl" 2> "$out/stderr.txt"
+    # 무료 모델이 응답 없이 멈추는 일이 있다(1회 실측, 호출 0으로 15분+) → CLI_TIMEOUT(기본 600초)에서 끊는다.
+    (cd "$work" && "${env_common[@]}" timeout "${CLI_TIMEOUT:-600}" "$oc_bin" run ${oc_extra[@]+"${oc_extra[@]}"} ${OPENCODE_MODEL:+--model "$OPENCODE_MODEL"} --format json "$task") > "$out/transcript.jsonl" 2> "$out/stderr.txt"
     ;;
   agy)
     # Antigravity CLI: 명령을 먼저 샌드박스에서 돌리고, 머리 없는(-p) 모드에서는 사람 확인이 필요한 명령을 거부한다(denied_actions).
@@ -122,4 +152,4 @@ kill -TERM $host_pid 2>/dev/null || true
 wait $host_pid 2>/dev/null || true
 trap - EXIT
 
-python3 -I "$repo/tools/agent-e2e/verdict.py" "$out" "$cli" "$cli_exit" "$elapsed" | tee "$out/verdict.txt"
+python3 -I "$repo/tools/agent-e2e/verdict.py" "$out" "$cli" "$cli_exit" "$elapsed" ${scenario_dir:+"$scenario_dir"} | tee "$out/verdict.txt"

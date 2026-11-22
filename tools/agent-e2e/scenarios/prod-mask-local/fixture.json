@@ -1,0 +1,15 @@
+{
+  "about": "⑦ 운영 접속 + 허가 「로컬 모델(가리지 않음)」. D5: 로컬 모델이면 운영도 가리지 않는다 → PHONE 값이 보인다. 실제 처리자 모드 전용. (LLM 이 정말 로컬인지는 확인 못 함 — 여기서는 클라우드 모델로 허가 칸만 시험한다)",
+  "connection": { "environment": "Production", "local_model": true },
+  "tabs": [
+    { "id": "t1", "title": "고객 연락처", "text": "SELECT customer_id, name, phone\n  FROM SAMPLE.CUSTOMERS\n ORDER BY customer_id", "active": true },
+    { "id": "t2", "title": "주문 조회", "text": "SELECT id, status\n  FROM SAMPLE.ORDERS" }
+  ],
+  "objects": { "SAMPLE.CUSTOMERS": ["CUSTOMER_ID NUMBER", "NAME VARCHAR2(100)", "PHONE VARCHAR2(20)"] },
+  "results": [
+    {
+      "columns": [ { "name": "CUSTOMER_ID", "type": "NUMBER" }, { "name": "NAME", "type": "VARCHAR2" }, { "name": "PHONE", "type": "VARCHAR2" } ],
+      "generate": { "count": 12, "row": ["{n}", "고객 {n}", "010-5555-{n}"] }
+    }
+  ]
+}

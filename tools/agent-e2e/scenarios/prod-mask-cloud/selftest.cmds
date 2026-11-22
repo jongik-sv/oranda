@@ -1,0 +1,2 @@
+"$C" tab run --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')"
+"$C" result get --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')" --limit 3

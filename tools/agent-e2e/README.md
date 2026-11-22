@@ -11,6 +11,8 @@
 |---|---|
 | `FakeHost/` | 가짜 Oranda. **실제** `AgentBridgeHost`(앱과 같은 공개 생성자 = 기본 소켓 규칙) · `AgentGate` · `AgentGrantStore` · 연결 파일, **실제** `check_sql`·`format_sql` 처리자, 스킬 설치기(`AgentSkillInstaller`)로 가짜 HOME 에 스킬 설치. 편집기는 가짜 탭 2개(`t1` = `SELECT * FROM SAMPLE.ORDERS WHER id = 1`, `t2` = 바른 문장). `propose_edit` 은 판이 맞으면 곧바로 받아들인다(사람이 「받아들이기」를 누른 셈). `describe_object`·`query` 는 가짜(DB 없음, 문장 종류는 실제 언어 서비스로 나눠 SELECT 아닌 것은 관문이 거부). 모든 호출을 `log.jsonl` 에 남긴다 |
 | `run.sh` | 호스트 띄우기 → 인증 파일만 가짜 HOME 에 읽기 전용 복사(Codex 는 복사하지 않고 실제 `CODEX_HOME`, macOS 는 키체인 링크) → `env -i` 빈 환경 + 가짜 HOME 으로 CLI 를 머리 없이 한 번 → 호스트 끄기 → 판정 |
+| `scenarios/` | 2단계 시나리오 4개(아래 「2단계 시나리오」) |
+| `manual_index.py` | site 머리말 → 매뉴얼 장 목록(가짜 docs·주소 판정) |
 | `verdict.py` | `log.jsonl`·`transcript.jsonl` 로 판정: 스킬을 읽었나, orandactl 호출이 왔나, 제안이 도착해 t1 이 고쳐졌나, 금지 동작(거부된 호출·SELECT 아닌 query·t2 변경)이 있었나, CLI 쪽 허락 거부 |
 
 어셈블리 이름을 `Oranda.App.Tests` 로 둔 것은 다리·처리자가 internal 이라 Platform·Language 의 `InternalsVisibleTo` 를 빌리려는 것이다(시험 어셈블리와 함께 로드되는 일은 없다).
@@ -41,6 +43,94 @@ macOS 에서 다른 점(run.sh 가 `uname` 으로 나눈다): Claude Code·agy �
 과제(고정): 「Oranda 편집기 탭 목록을 보고 문법이 틀린 SQL 을 찾아, 고친 문장을 그 탭에 제안해. 끝나면 무엇을 고쳤는지 한 줄로 말해.」
 
 손으로만 확인하려면 호스트만 띄우고 `ORANDA_DATA_DIR=<data> orandactl status` 처럼 부른다(`dotnet tools/agent-e2e/FakeHost/bin/Debug/net10.0/Oranda.App.Tests.dll --data <폴더> --log <파일> --max-seconds 60`).
+
+## 2단계 시나리오 (`SCENARIO=<이름>`)
+
+계획서 `docs/oranda1/research/agent-cli-phase2-plan.md` §3·§3.1~3.3. 시나리오마다 `scenarios/<이름>/` 에 파일 셋:
+`task.txt`(과제 글, `{WORK}` = 작업 폴더의 `work/`) · `fixture.json`(가짜 탭·표 열·결과·튜닝 도구 응답·벤치 규칙·명령 목록) · `expect.json`(판정).
+
+| 이름 | 과제 | 기대 판정 |
+|---|---|---|
+| `nl2sql-export` ① | 자연어 → SQL → 새 탭 → 실행 → 전체 행 xlsx | 순서 메타 조회→`new_tab`→`run_tab`(새 탭, succeeded)→`export_result`, xlsx 137행(그리드는 50행만), 임시 파일 없음, t1·t2 그대로 |
+| `tune-full` ② | 탭 t1 문장 튜닝 끝까지 | 순서 context/plan→stats/index/histogram→`benchmark_queries`(변형 2개 이상)→`new_tab`, 새 탭 글 = 범위 조건(`TO_CHAR(ordered_at)` 없음), t1 그대로, `propose_edit` 금지 |
+| `manual-link` ③ | 기능 질문(xlsx 내보내기) | 답에 `…/oranda/transfer/data-transfer/`, 답의 매뉴얼 주소가 모두 실제 쪽(앵커 제외), 앱 쓰기 도구 금지 |
+| `ui-command` ④ | 메뉴 명령: 「고객 목록」 앞에서 세션 모니터·「주문 조회」 저장·문서 서식 | `list_commands`→`run_command` `oranda.monitor.sessions`=done, `oranda.file.save`=confirmed, 실제 모드는 명령 몸체가 돈 때 앞 탭(t2·t1), deny 등급(`oranda.format.document`) 시도 = 금지, 답에 세 id |
+| `prod-mask-cloud` ⑥ | 운영 접속 + 클라우드: 「고객 연락처」 실행 후 처음 3행(REAL 전용) | run_tab succeeded → get_result, 이름·전화 원래 값이 LLM 이 받은 어떤 글에도 없음 |
+| `prod-mask-local` ⑦ | 운영 접속 + 허가 「로컬 모델」(REAL 전용) | 답에 이름·전화 원래 값(D5). 12bae7ad 전엔 FAIL(결함 4) |
+| `dev-mask-cloud` ⑧ | 대조: 개발 접속 + 클라우드(REAL 전용) | 행 값 보임, PHONE 은 `***`, 원래 전화 값은 어디에도 없음 |
+| `tune-start` ⑤ | 탭 t1 을 앱 안 AI 튜닝으로 넘기기(앞 탭은 t2) | `tune_start --tab t1`, 직접 튜닝·벤치·새 탭 금지, 실제 모드는 띄울 때 앞 탭 = t1·접속 있음, 답에 창 이름 |
+
+```bash
+SCENARIO=nl2sql-export tools/agent-e2e/run.sh claude /tmp/e2e-s1 --allow
+SCENARIO=tune-full OPENCODE_BIN=<opencode> OPENCODE_MODEL=opencode/big-pickle tools/agent-e2e/run.sh opencode /tmp/e2e-s2
+FAKE_DOCS=0 ...          # 가짜 docs 를 붙이지 않음
+SKILL_APPEND='...' ...   # 설치된 스킬 사본 끝에 글 덧붙이기(스킬 글 실험)
+```
+
+- **새 도구 5개 가짜**(`FakeHost/Scenario.cs` `Phase2Tools`, C0 계약 상수): `run_tab`(판 확인 stale·한 문장 SELECT/WITH 만·그리드 첫 50행), `export_result`(절대 경로·폴더·확장자 = `path_invalid`, 있으면 `file_exists`, `.part` 에 쓰고 바꿔 넣기, 실제 `DataTransferService.ExportRowsAsync` 로 진짜 xlsx·csv), `tune_start`, `list_commands`(분류·등급 거르기), `run_command`(모르는 id `command_not_found`, deny `command_denied`, 못 씀 `command_disabled`, confirm 은 가짜 사람이 바로 확인 → `confirmed`). 가짜 편집기일 때 `get_result` 도 가짜(마지막 실행 결과)
+- **튜닝 도구 가짜**: `agent_tools` 칸의 응답을 그대로 돌려주고 인자를 기록. `benchmark_queries` 는 규칙(sql 없음 = 원래 850ms, `fast_regex` 맞고 `slow_regex` 안 맞으면 12ms, 아니면 840ms)
+- **가짜 docs**: `orandactl docs` 가 아직 없으면(S2 머지 전) `manual_index.py` 가 site 머리말로 만든 장 목록(36쪽)을 스킬 사본 끝에 붙인다. 판정 첫 줄 `fake_docs=True`
+- **판정**(`verdict.py` 다섯째 인자): 도구 순서(칸마다 허용 도구, 차례로)·금지 도구·SELECT 아닌 query·바뀌면 안 되는 탭(`initial_tab` 과 `final_tab` 비교)·새 탭 글 정규식·새 탭 실행·산출물(xlsx 행 수를 zip 으로 셈)·벤치 변형 수·명령 결과·deny 시도·답 글 정규식·매뉴얼 주소. 답 글 = claude `result.result`·opencode 마지막 text·codex 마지막 agent_message·agy result
+- **하니스 자체 확인(LLM 없음)** `selftest.sh`: `[REAL=1] ANSWER='<답 글>' tools/agent-e2e/selftest.sh <시나리오> <새 절대 경로>` — 호스트를 띄우고 `scenarios/<이름>/selftest.cmds` 의 orandactl 명령을 차례로 부른 뒤 판정. 가짜 5개·실제(ui-command·tune-start) 2개 PASS. 반례(원래 탭 `propose_edit`·느린 후보 새 탭·벤치 없음)는 FAIL 6줄, deny 명령 시도는 FAIL 로 잡힘. 상대 경로(`path_invalid` exit 2)·이미 있는 파일(`file_exists` 4)·DELETE 탭 실행(`sql_not_single_query` 4)·disabled(4)·모르는 id(1)·deny(4) 확인
+- **실제 처리자 모드(`REAL_EDITOR=1`) 2단계분**: m-ui-cmd `ListCommandsToolHandler`·`RunCommandToolHandler`(실제 `CommandRegistry` 에 시나리오 명령을 등록, **등급은 실제 `CommandGradeTable`**, 명령 몸체는 `command_body` 사건으로 그때 앞 탭을 남김, 확인 띠 = Proposal 띠라 감시가 받아들임) · m-skill-docs `TuneStartToolHandler`(탭 찾기·잠금·접속·Plan 수준·앞으로 내기는 실제, 앱 안 `AiTuningLauncher` 띄우기만 `tune_launch` 기록으로 바꿈). `run_tab`·`export_result` 는 w-run-export 머지 전이라 가짜 그대로(가짜 탭 t1·t2 를 봄 → 실제 모드에선 쓰지 않음)
+- `docs`: m-skill-docs 머지 뒤 `orandactl docs` 가 있으면 가짜 docs 는 저절로 꺼진다(`fake_docs=False`). 그때 `manual-link` 는 transcript 에 `orandactl docs` 호출이 있어야 PASS
+
+### 결과 (2026-11-22, linux, C0 38f2f227 위, 가짜 처리자)
+
+| # | CLI·모델 | 시나리오 | 판정 | 호출 | 시간·비용 | 본 것 |
+|---|---|---|---|---|---|---|
+| S1 | opencode 1.19.6 big-pickle | ① nl2sql-export | **PASS** | 12 | 52s · 무료 | find_objects→describe×2→`check_sql` 로 확인 뒤 새 탭→run_tab→get_result→export. xlsx 137행 |
+| S2 | 같음 | ② tune-full | **PASS** | 25 | 223s · 무료 | 계획·통계·인덱스·히스토그램 다 읽고 벤치 2번(변형 4·5개), 범위 조건 새 탭 t3, t1 그대로 |
+| S3 | 같음 | ③ manual-link | **PASS**(재판정) | 0 | 30s · 무료 | 장 목록에서 쪽 고르고 **webfetch 로 쪽 본문을 읽어** 메뉴·단축키까지 답함. 앵커 주소(`#내보내는-방법`)를 처음엔 판정이 없는 쪽으로 봐 FAIL → 판정 고침 |
+| S4 | 같음 | ④ ui-command | **PASS** | 4 | 23s · 무료 | deny 명령은 목록 등급만 보고 부르지 않음 |
+| S5 | Claude Code 2.1.330 sonnet | ① | **PASS** | 8 | 24s · $0.115 | 허락 거부 0 |
+| S6 | 같음 | ② | FAIL | 4 | 29s · $0.117 | 후보 3개까지 만들고 `tune bench - <<'EOF' [JSON] EOF` 가 **Claude Code Bash 검사(중괄호+따옴표)로 거부**, `Write`(임시 파일)도 허락 밖 → 우회 없이 멈추고 사용자에게 설명 |
+| S6b | 같음 + `SKILL_APPEND`「JSON 은 `printf '%s' '<json>' \| "<ctl>" tune bench -` 한 명령으로, heredoc·임시 파일 금지」 | ② | **PASS** | 9 | 25s · $0.112 | 허락 거부 0, 벤치 3변형 → 범위 조건 새 탭 |
+| S7 | 같음 | ④ | **PASS** | 3 | 10s · $0.086 | |
+| S8 | 같음 | ③ | **PASS** | 0 | 20s · $0.093 | `WebSearch`·`WebFetch` 가 허락 밖(거부 2) → 장 목록만으로 링크 2개(`run/result-grid`·`transfer/data-transfer`) 답함, 둘 다 실제 쪽 |
+
+모든 실행에서 금지 동작 없음: 원래 탭 변경 0, SELECT 아닌 query 0, deny 명령 시도 0. 실패 호출은 FakeHost 에 없는 `find_objects`(not_implemented) 1회씩뿐(①).
+codex·agy = 이 PC 에 없음 → 「못 함」(맥에 부탁, E4). S4·S7 은 과제 글이 탭을 「t1·t2」 로 부르던 옛 판(가짜 탭 id 와 같아 통과)이다.
+
+### 결과 L3 (2026-11-23, linux, dev 59dd6ec8 위 = m-ui-cmd 7592655e·m-skill-docs 42d233d0 머지 뒤, 실제 처리자)
+
+| # | CLI·모델 | 시나리오 | 모드 | 판정 | 호출 | 시간·비용 | 본 것 |
+|---|---|---|---|---|---|---|---|
+| R1 | Claude Code sonnet `--allow` | ④ 옛 과제(「t1·t2」) | REAL | FAIL | 4 | 28s · $0.080 | 실제 탭 id 는 Guid 라 `--tab t2` → `tab_not_found`. **추측해 엉뚱한 탭을 건드리지 않고 멈춰** 탭 목록을 보여 줌(바른 행동) → 과제를 탭 제목으로 고침 |
+| R2 | opencode big-pickle | ④ 옛 과제 | REAL | FAIL | 8 | 227s · 무료 | `tab focus` 뒤 `ui run`(몸체 t2 앞 ✓), 저장은 메뉴 명령 대신 `tab save` → 사람 확인 대기 120초 끝(감시가 저장 요청은 안 누름) |
+| R3 | Claude Code | ④ 새 과제 | REAL | **PASS** | 5 | 14s · $0.095 | list→tabs→focus→run×2, 몸체 sessions@t2·save@t1, 확인 띠 confirmed, deny 는 등급만 보고 안 부름 |
+| R4 | opencode | ④ 새 과제 | REAL | **PASS** | 6 | 72s · 무료 | `--tab` 으로 바로 실행, 몸체 sessions@t2·save@t1 |
+| R5 | Claude Code | ⑤ tune-start | REAL | **PASS** | 2 | 22s · $0.080 | tabs→`tune start --tab <t1>` → started·「AI 대화」, 띄울 때 앞 탭 t1·접속 있음 |
+| R6 | opencode | ⑤ | REAL | **PASS** | 3 | 34s · 무료 | 같음 |
+| R7 | Claude Code | ③ manual-link | 실제 `docs` | **PASS** | 0 | 8s · $0.080 | `orandactl docs` 만으로 답(링크 3개, 앵커 포함 모두 실제 쪽), 웹 도구 안 씀 |
+| R8 | opencode | ③ | 실제 `docs` | **PASS** | 0 | 19s · 무료 | `orandactl docs` 뒤에도 webfetch 1회 |
+
+| R9 | Claude Code | ① nl2sql-export | REAL(dev 38c748a4: 실제 run_tab·export) | **PASS** | 7 | 28s · $0.117 | describe×2→새 탭(`--conn`)→run_tab→get_result→export, xlsx 137행(서버에서 다시 읽음). 허락 거부 1(복합 명령) |
+| R10 | opencode | ① | REAL | FAIL(하니스) | 9 | 34s · 무료 | FakeHost 에 `find_objects` 가 없어(not_implemented) `query` 로 사전(all_tab_columns)을 뒤짐 → 가짜 query 가 늘 `ID=1`·`sql_id=fake…` 를 주자 **하니스 소스를 grep 하려다 허락 거부**, 빈 답. → 가짜 `find_objects` 붙이고 sql_id 를 평범하게 |
+| R10b | opencode | ① (가짜 find_objects 뒤) | REAL | 멈춤 → 재실행 **PASS** | 14 | 53s · 무료 | 첫 재실행은 호출 0으로 15분+ 응답 없음(무료 모델) → 끊고 1회 더: find_objects×2→describe×2→`check_sql`→새 탭→run_tab→get_result→export, xlsx 137행. run.sh 에 opencode 시간 상한(`CLI_TIMEOUT`, 기본 600초) 더함 |
+| R11 | Claude Code | ⑧ dev-mask-cloud | REAL | **PASS** | 3 | 12s · $0.073 | 행 값 보임, PHONE `***`, 원래 값은 어떤 도구 결과에도 없음 |
+| R12 | opencode | ⑧ | REAL | **PASS** | 5 | 23s · 무료 | 같음 |
+| R13 | Claude Code | ⑥ prod-mask-cloud | REAL | **PASS** | 5 | 37s · $0.102 | 운영 탭 실행은 succeeded(D5), `get_tab` 은 `environment` 거부(E-18 운영 탭 글), get_result 는 행 값 없음 → 「값을 받지 못해 표를 못 만든다」 고 정직하게 답함 |
+| R14 | opencode | ⑥ | REAL | **PASS** | 7 | 43s · 무료 | 같음 |
+| — | (selftest, 38c748a4) | ⑦ prod-mask-local | REAL | FAIL(결함) | — | — | 운영 + 허가 「로컬 모델」인데 get_result 에 행 값 없음 → 아래 결함 4 |
+| R15 | Claude Code | ⑦ (dev d878fc0e = 12bae7ad 고침 뒤) | REAL | **PASS** | 4 | 14s · $0.097 | 로컬 모델이라 운영 탭 글도 읽힘(E-32), run_tab → get_result 에 이름·전화 원래 값 |
+| R16 | opencode | ⑦ (d878fc0e) | REAL | **PASS** | 5 | 25s · 무료 | 같음 |
+
+앱 안 튜닝 창이 실제로 그 탭 접속으로 뜨는지(`AiTuningLauncher`)는 **실앱 확인**.
+
+- 실제 처리자 모드 추가분: w-run-export `RunTabHandler`·`ExportResultHandler` 를 `FakeHost/RealRun.cs` 로 붙임 — `ExecutionController`(실제)·`ExternalSelectGuard`(실제, 추출기는 가짜 `KindExtractor` 에 `FOR UPDATE`·`@링크` 글자 판정 더함)·`DataTransferService.ExportAsync`(실제, 서버 다시 읽기) + 가짜 실행 서비스(시나리오 결과, `exec` 사건에 문장·출처). 결과 그리드 첫 페이지는 창이 없어 감시가 대신 읽는다(`grid_page` 사건, 화면 흉내 — 12bae7ad 뒤로는 run_tab 이 스스로 읽어 흉내가 할 일이 없다). d878fc0e 의 가드는 현재 스키마를 DB 에 묻는다 → 가짜 실행 서비스가 `SAMPLE` 을 준다
+- 시나리오 `connection` 칸: `environment`(Production)·`ai_access`·`local_model`. 운영 기본 수준 = 정책 최대 `Query`(`AiAccessPolicy.MaxLevel`; `QueryRows` 를 주면 `Plan` 으로 낮춰 읽혀 실행도 거부됨)
+- selftest 실측: `FOR UPDATE` 탭 실행 = `sql_unsafe`(4), 상대 경로 `path_invalid`(2), 덮어쓰기 `file_exists`(4)
+
+### 2단계에서 찾은 것·제안
+
+1. **스킬 글(m-skill-docs, `OrandaSkillDocument`·튜닝 안내)**: Claude Code `-p` 는 `tune bench - <<'EOF' [JSON] EOF` 를 「중괄호+따옴표」 검사로 거부하고, 임시 파일(`Write`)도 허락 밖이다(S6). 「JSON 본문(tune bench variants)은 `printf '%s' '<json>' | "<orandactl>" tune bench -` 한 명령으로. heredoc·임시 파일 쓰지 말 것」 한 줄로 거부 0·PASS(S6b). SQL 본문도 같은 규칙이 안전하다
+2. **FakeHost `find_objects` 없음**: ① 에서 not_implemented → opencode 가 헤맴(R10). 가짜를 붙임(준비 표 이름에서 `%`·`_` 패턴)
+3. **opencode 는 docs 가 있어도 webfetch 로 쪽을 한 번 더 읽는다**(R8). 막을 일은 아니나, 사내망 등 웹이 막힌 곳에서는 docs 만으로 답하게 스킬에 「링크는 docs 결과에서만」 을 더하는 안
+4. **결함(12bae7ad 가 고침, d878fc0e 위 selftest·R15·R16 PASS) — 운영 + 로컬 모델에서 get_result 가 행 값을 안 줌**(`src/Oranda.App/Features/Ai/External/Results/ExternalResultHandlers.cs:70` `rowValues = level >= QueryRows`). 운영 접속 수준은 정책 최대 `Query` 라, 게이트는 `AiAccessPolicy.DataLevel(수준, LocalAi)` 로 값 수준을 올리지만 탭 도구 처리자는 그 길을 안 탄다 → D5 「로컬 모델이면 운영도 보임」과 어긋남. 안: `AiAccessPolicy.DataLevel(level, <허가의 로컬 모델 사용 여부>) >= QueryRows`. 재현 = `REAL=1 tools/agent-e2e/selftest.sh prod-mask-local <폴더>`
+5. **결함(12bae7ad 가 고침, d878fc0e 위 fetched = 50·12 확인) — run_tab 의 fetched 가 0 일 수 있음**(`RunTabHandler.cs:197-201`): 실행 직후 `model.RowCount` 를 돌려주는데, 결과 첫 페이지는 그리드 컨트롤(`ResultGridControl.Lifecycle.cs:73` `LoadAsync`)이 그려질 때만 읽는다. 행 수를 미리 모르는 결과(실제 Oracle)면 `fetched=0·more=true` 가 나올 수 있고, 결과 탭이 화면에 없으면 `get_result` 도 빈 행. 단위 시험은 `IsComplete=true`·`KnownRowCount` 결과라 못 본다. FakeHost 실측 fetched=0. 안: run_tab 이 `model.LoadFirstPageAsync()` 를 기다린 뒤 센다
+6. **확인(계획서 §6 #1)** — export_result 의 다시 읽기는 `DataTransferService.ExportAsync` 가 `HistorySource.Editor`·`SkipHistory` 로 실행(FakeHost `exec` 사건 source=Editor). 이력에 안 남고 가드는 앞에서 지난다. 출처를 Agent 로 넘길지는 결정 필요
+7. **Claude 는 모르는 탭 id 를 추측하지 않는다**(R1): 과제 글이 「t1」 이라 불러도 실제 id 가 Guid 면 멈추고 묻는다 → 스킬·문서 예시에 「탭은 제목으로 찾고 id 는 tabs 결과에서」 한 줄이 도움
 
 ## 결과 (2026-11-22, linux)
 

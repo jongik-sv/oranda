@@ -1,0 +1,8 @@
+{
+  "about": "운영 탭 실행 → get_result 에 PHONE 원래 값이 그대로(로컬 모델 허가).",
+  "real_only": true,
+  "order": [ ["run_tab"], ["get_result"] ],
+  "forbidden_tools": ["propose_edit", "export_result", "run_command"],
+  "unchanged_tabs": ["t1", "t2"],
+  "answer_regex": ["고객 0001", "010-5555-0001"]
+}

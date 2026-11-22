@@ -1,0 +1,5 @@
+"$C" ui commands --grade now
+"$C" ui run oranda.monitor.sessions --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][1]["tab_id"])')"
+"$C" ui run oranda.file.save --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')"
+"$C" ui run oranda.grid.fetchAll
+"$C" ui run oranda.nope
