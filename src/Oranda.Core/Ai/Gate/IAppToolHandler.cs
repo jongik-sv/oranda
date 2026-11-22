@@ -80,23 +80,18 @@ public static class AppToolArgs
             return fallback;
         }
 
-        int number;
-        if (node is JsonValue value && value.TryGetValue<int>(out var i))
-        {
-            number = i;
-        }
-        else if (node is JsonValue d && d.TryGetValue<double>(out var f) && Math.Floor(f) == f && f >= int.MinValue && f <= int.MaxValue)
-        {
-            number = (int)f;
-        }
-        else
+        // 파이프 JSON(JsonElement)이든 처리자가 C# 값으로 만든 노드(long·int·double·decimal)든 같은 글자 꼴로 읽는다.
+        if (node is not JsonValue value
+            || value.GetValueKind() != System.Text.Json.JsonValueKind.Number
+            || !decimal.TryParse(value.ToJsonString(), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out var number)
+            || decimal.Truncate(number) != number)
         {
             throw new AppToolArgumentException(name, "must be an integer");
         }
 
         return number < min || number > max
             ? throw new AppToolArgumentException(name, $"is out of range ({min.ToString(CultureInfo.InvariantCulture)}..{max.ToString(CultureInfo.InvariantCulture)})")
-            : number;
+            : (int)number;
     }
 
     /// <summary>참/거짓 인자. 없으면 <paramref name="fallback"/>.</summary>

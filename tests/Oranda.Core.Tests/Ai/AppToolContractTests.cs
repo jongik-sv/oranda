@@ -379,6 +379,37 @@ public class AppToolContractTests
     }
 
     [Fact]
+    public void Number_reads_values_built_in_code_as_well_as_parsed_json()
+    {
+        // 처리자끼리 부를 때는 C# 값으로 노드를 만든다(long·double·decimal). 파이프 JSON 은 JsonElement 다.
+        var args = new JsonObject
+        {
+            ["l"] = 7L,
+            ["i"] = 8,
+            ["d"] = 9.0,
+            ["m"] = 10.0m,
+            ["s"] = (short)11,
+            ["big"] = 5_000_000_000L,
+            ["frac"] = 1.5,
+            ["text"] = "12",
+        };
+        args["e"] = JsonNode.Parse("""{"v":13}""")!["v"]!.DeepClone();
+        args["exp"] = JsonNode.Parse("""{"v":1.4e1}""")!["v"]!.DeepClone();
+
+        Assert.Equal(7, AppToolArgs.Number(args, "l", 0));
+        Assert.Equal(8, AppToolArgs.Number(args, "i", 0));
+        Assert.Equal(9, AppToolArgs.Number(args, "d", 0));
+        Assert.Equal(10, AppToolArgs.Number(args, "m", 0));
+        Assert.Equal(11, AppToolArgs.Number(args, "s", 0));
+        Assert.Equal(13, AppToolArgs.Number(args, "e", 0));
+        Assert.Equal(14, AppToolArgs.Number(args, "exp", 0));
+        Assert.Contains("out of range", Assert.Throws<AppToolArgumentException>(() => AppToolArgs.Number(args, "big", 0)).Message, StringComparison.Ordinal);
+        Assert.Contains("must be an integer", Assert.Throws<AppToolArgumentException>(() => AppToolArgs.Number(args, "frac", 0)).Message, StringComparison.Ordinal);
+        Assert.Contains("must be an integer", Assert.Throws<AppToolArgumentException>(() => AppToolArgs.Number(args, "text", 0)).Message, StringComparison.Ordinal);
+        Assert.Throws<AppToolArgumentException>(() => AppToolArgs.Number(args, "l", 0, max: 5));
+    }
+
+    [Fact]
     public async Task Guard_turns_argument_errors_into_invalid_arguments_and_keeps_other_results()
     {
         var bad = await AppToolOutputs.Guard(() => ValueTask.FromResult(AppToolOutputs.Deny("x", AppToolArgs.RequiredText([], AppFields.Tab))));
