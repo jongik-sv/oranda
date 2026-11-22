@@ -41,8 +41,6 @@ public static class OrandaSkillDocument
         b.Append('`').Append(OrandaSkillCommands.Name).Append("` below means this program: `").Append(ctl).Append("`.\n");
         b.Append("It is not on PATH. Always run it by that full path, for example `").Append(ctl).Append(" status`")
             .Append(" (in PowerShell: `& ").Append(ctl).Append(" status`).\n");
-        b.Append("Tell Oranda who you are: set the environment variable `ORANDA_CLIENT` to your CLI name for each command, for example `ORANDA_CLIENT=Codex ")
-            .Append(ctl).Append(" status` (in PowerShell: `$env:ORANDA_CLIENT=\"Codex\"; & ").Append(ctl).Append(" status`). Oranda shows this name to the user.\n");
         b.Append("Output is one JSON object on stdout. Pass SQL on stdin with `-` or with `--file <path>`; do not put SQL in a quoted argument.\n\n");
 
         b.Append("Exit codes: 0 ok (a rejected or stale proposal is still 0; read `status`), 1 tool failed, 2 usage error, ")

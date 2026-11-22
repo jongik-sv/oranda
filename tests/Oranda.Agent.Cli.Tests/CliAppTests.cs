@@ -187,6 +187,39 @@ public sealed class CliAppTests : IDisposable
         Assert.Equal(["Claude Code", "codex"], _cli.Bridge.Calls.Select(c => c.Client.Name));
     }
 
+    [Theory]
+    // 셸 안 실측값(2026-11-22, linux·mac): Codex = CODEX_THREAD_ID, opencode = OPENCODE=1·OPENCODE_SESSION_ID, agy = ANTIGRAVITY_CONVERSATION_ID.
+    [InlineData("CODEX_THREAD_ID", "019a-thread", "Codex")]
+    [InlineData("OPENCODE", "1", "opencode")]
+    [InlineData("OPENCODE_SESSION_ID", "ses_1", "opencode")]
+    [InlineData("ANTIGRAVITY_CONVERSATION_ID", "c-1", "Antigravity")]
+    [InlineData("OPENCODE", "0", "orandactl")]
+    [InlineData("CODEX_THREAD_ID", "", "orandactl")]
+    public async Task Client_name_is_detected_from_the_cli_shell(string variable, string value, string expected)
+    {
+        _cli[variable] = value;
+
+        await _cli.RunAsync("tabs");
+
+        Assert.Equal(expected, Assert.Single(_cli.Bridge.Calls).Client.Name);
+    }
+
+    [Fact]
+    public async Task Client_name_order_is_oranda_client_claude_codex_opencode_antigravity()
+    {
+        _cli["ANTIGRAVITY_CONVERSATION_ID"] = "c-1";
+        _cli["OPENCODE"] = "1";
+        await _cli.RunAsync("tabs");
+        _cli["CODEX_THREAD_ID"] = "t";
+        await _cli.RunAsync("tabs");
+        _cli["CLAUDECODE"] = "1";
+        await _cli.RunAsync("tabs");
+        _cli["ORANDA_CLIENT"] = "내 도구";
+        await _cli.RunAsync("tabs");
+
+        Assert.Equal(["opencode", "Codex", "Claude Code", "내 도구"], _cli.Bridge.Calls.Select(c => c.Client.Name));
+    }
+
     [Fact]
     public async Task Mcp_from_outside_finds_the_endpoint_file_and_is_named_oranda()
     {

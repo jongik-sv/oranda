@@ -90,6 +90,17 @@ internal static class CliApp
 
     private static async Task<int> WriteErrorAsync(CliHost host, bool text, string code, string message, JsonObject? details)
     {
+        if (code == AgentErrorCodes.SandboxBlocked)
+        {
+            if (host.GetEnvironmentVariable("CODEX_SANDBOX_NETWORK_DISABLED") == "1")
+            {
+                message += CliText.CodexNetworkHint;
+            }
+
+            // CLI 들은 stderr 의 이 글을 보고 샌드박스 밖에서 다시 돌린다(맥 agy 실측).
+            await host.Error.WriteLineAsync("orandactl: Operation not permitted (sandbox)").ConfigureAwait(false);
+        }
+
         if (text)
         {
             await host.Error.WriteLineAsync(ErrorLine(code, message)).ConfigureAwait(false);

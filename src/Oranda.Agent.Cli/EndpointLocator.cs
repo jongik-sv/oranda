@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using Oranda.Core.Ai.Protocol;
 using Oranda.Core.Storage;
@@ -39,32 +40,59 @@ internal sealed class EndpointLocator(string dataDirectory, Func<int, bool> isAl
     /// <summary>읽을 수 있는 연결 파일 전부(pid 순). 죽은 pid·만료 파일도 상태와 함께 준다.</summary>
     public IReadOnlyList<EndpointCandidate> Scan()
     {
-        if (!Directory.Exists(AgentsDirectory))
-        {
-            return [];
-        }
-
+        // Directory.Exists 는 권한이 없어도 거짓이라 먼저 묻지 않는다. 폴더가 없으면 연결 파일이 없는 것,
+        // 읽기가 거부되면 CLI 샌드박스다(맥 agy 실측: agents 폴더 읽기 EPERM).
         string[] paths;
         try
         {
             paths = Directory.GetFiles(AgentsDirectory, "*.json");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (DirectoryNotFoundException)
+        {
+            return [];
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new BridgeException(AgentErrorCodes.SandboxBlocked, CliText.SandboxBlocked);
+        }
+        catch (IOException)
         {
             return [];
         }
 
         var at = now();
         var found = new List<EndpointCandidate>();
+        var blocked = false;
         foreach (var path in paths)
         {
             var pid = AppDataLocation.PidFromEndpointFileName(Path.GetFileName(path));
-            if (pid is null || Read(path) is not { } file || file.Pid != pid)
+            if (pid is null)
+            {
+                continue;
+            }
+
+            AgentEndpointFile? file;
+            try
+            {
+                file = Read(path);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                blocked = true;
+                continue;
+            }
+
+            if (file is null || file.Pid != pid)
             {
                 continue;
             }
 
             found.Add(new EndpointCandidate(file, isAlive(file.Pid), file.IsExpired(at)));
+        }
+
+        if (blocked && found.Count == 0)
+        {
+            throw new BridgeException(AgentErrorCodes.SandboxBlocked, CliText.SandboxBlocked);
         }
 
         found.Sort((a, b) => a.File.Pid.CompareTo(b.File.Pid));
@@ -110,9 +138,23 @@ internal sealed class EndpointLocator(string dataDirectory, Func<int, bool> isAl
         throw new BridgeException(AgentErrorCodes.NoEndpoint, CliText.NoEndpoint);
     }
 
-    /// <summary>pid 가 살아 있는가(지금 프로세스 표).</summary>
+    /// <summary>
+    /// pid 가 살아 있는가. Unix 는 <c>kill(pid, 0)</c>: 성공·EPERM(남의 프로세스이거나 샌드박스가 막음)은 살아 있음, ESRCH 만 죽음.
+    /// 프로세스 표 읽기(ps)를 막는 샌드박스(맥 agy 실측)에서도 살아 있는 창을 죽었다고 보지 않는다. Windows 는 프로세스 표.
+    /// </summary>
     public static bool IsProcessAlive(int pid)
     {
+        if (pid <= 0)
+        {
+            return false;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            const int Esrch = 3;
+            return Kill(pid, 0) == 0 || Marshal.GetLastPInvokeError() != Esrch;
+        }
+
         try
         {
             using var process = System.Diagnostics.Process.GetProcessById(pid);
@@ -123,6 +165,9 @@ internal sealed class EndpointLocator(string dataDirectory, Func<int, bool> isAl
             return false;
         }
     }
+
+    [DllImport("libc", EntryPoint = "kill", SetLastError = true)]
+    private static extern int Kill(int pid, int signal);
 
     private static bool Matches(EndpointCandidate candidate, string instance)
     {
@@ -143,9 +188,9 @@ internal sealed class EndpointLocator(string dataDirectory, Func<int, bool> isAl
         {
             return AgentEndpointFile.TryParse(File.ReadAllText(path));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (IOException)
         {
-            return null;
+            return null; // 읽는 사이 지워졌다 등. 권한 거부(UnauthorizedAccessException)는 부르는 쪽이 샌드박스로 본다.
         }
     }
 }

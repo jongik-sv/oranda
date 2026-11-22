@@ -54,7 +54,7 @@ orandactl query --conn <접속 별칭> - < new.sql
 ```
 
 - 결과는 JSON 한 개입니다. `--text` 를 붙이면 사람이 읽는 글로 나옵니다.
-- 명령 앞에 `ORANDA_CLIENT=<CLI 이름>` 을 주면 그 이름이 상태 표시줄과 연결 창에 보입니다. Claude Code 안에서는 주지 않아도 「Claude Code」로 보입니다.
+- 상태 표시줄과 연결 창에는 부른 CLI 이름(Claude Code·Codex·opencode·Antigravity)이 보입니다. `orandactl` 이 CLI 가 셸에 넣는 표식으로 알아내므로 따로 줄 것은 없습니다. 다른 이름으로 보이게 하려면 환경 변수 `ORANDA_CLIENT` 를 정해 둡니다(명령 앞에 붙이면 Claude Code 의 실행 허락 규칙과 맞지 않으니 셸 설정에 둡니다).
 - Oranda 창이 여럿 연결돼 있으면 `--instance <pid>` 로 고릅니다. `orandactl status --all` 이 창 목록을 보입니다.
 
 ### CLI 별 실행 허락

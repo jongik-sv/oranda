@@ -85,6 +85,10 @@ internal static class StaleSockets
         {
             return false;
         }
+        catch (System.Net.Sockets.SocketException ex) when (ex.SocketErrorCode == System.Net.Sockets.SocketError.AccessDenied)
+        {
+            return true; // EACCES/EPERM(소켓 파일 권한·샌드박스): 듣는지 알 수 없으니 지우지 않는다(linux 실측).
+        }
         catch (System.Net.Sockets.SocketException)
         {
             return false; // 거절(듣는 쪽 없음). 형식은 System.Net.Primitives 에 있다.

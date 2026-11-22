@@ -1,4 +1,4 @@
-using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using Oranda.Platform.Ai.Bridge;
 using Oranda.Testing;
 
@@ -57,11 +57,8 @@ public sealed class StaleSocketsTests : IDisposable
 
         var path = Path.Combine(Run, "agent.sock");
 
-        // 비정상 종료 흉내: 묶기만 하고 닫는다(파일이 남는다).
-        using (var dead = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified))
-        {
-            dead.Bind(new UnixDomainSocketEndPoint(path));
-        }
+        // 비정상 종료 흉내: 묶기만 하고 닫는다(파일이 남는다). .NET Socket 은 닫을 때 묶은 파일을 지우므로(linux 실측) libc 로 직접 한다.
+        LeftOverSocket.Create(path);
 
         Assert.True(File.Exists(path));
         Assert.False(StaleSockets.IsListening(path));
@@ -72,5 +69,79 @@ public sealed class StaleSocketsTests : IDisposable
         Assert.True(StaleSockets.IsListening(path)); // 살아 있는 창의 소켓은 지우지 않는다
         Assert.Equal(0, StaleSockets.Clean(path));
         Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public void Left_over_socket_is_removed_by_clean()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var path = Path.Combine(Run, "agent-4242.sock");
+        LeftOverSocket.Create(path);
+
+        Assert.Equal(1, StaleSockets.Clean(Path.Combine(Run, "agent.sock")));
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void Socket_that_refuses_us_for_permission_is_kept_because_we_cannot_tell()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // connect 는 소켓 파일의 쓰기 권한이 필요하다. 000 이면 EACCES — 듣는지 알 수 없으니 지우지 않는다.
+        var path = Path.Combine(Run, "agent.sock");
+        LeftOverSocket.Create(path);
+        File.SetUnixFileMode(path, UnixFileMode.None);
+
+        Assert.True(StaleSockets.IsListening(path));
+        Assert.Equal(0, StaleSockets.Clean(path));
+        Assert.True(File.Exists(path));
+    }
+
+    /// <summary>libc 로 Unix 소켓을 묶고 닫아 파일만 남긴다(죽은 앱이 남긴 소켓).</summary>
+    private static class LeftOverSocket
+    {
+        public static void Create(string path)
+        {
+            var fd = SocketFd(1 /* AF_UNIX */, 1 /* SOCK_STREAM */, 0);
+            Assert.True(fd >= 0, "socket() failed: " + Marshal.GetLastPInvokeError());
+            try
+            {
+                // sockaddr_un: Linux = sa_family(2바이트) + path[108], macOS = sun_len(1) + sun_family(1) + path[104].
+                var bytes = System.Text.Encoding.UTF8.GetBytes(path);
+                var address = new byte[110];
+                if (OperatingSystem.IsMacOS())
+                {
+                    address[0] = (byte)address.Length;
+                    address[1] = 1;
+                }
+                else
+                {
+                    address[0] = 1;
+                }
+
+                bytes.CopyTo(address, 2);
+                Assert.True(Bind(fd, address, address.Length) == 0, "bind() failed: " + Marshal.GetLastPInvokeError());
+            }
+            finally
+            {
+                _ = Close(fd);
+            }
+        }
+
+        [DllImport("libc", EntryPoint = "socket", SetLastError = true)]
+        private static extern int SocketFd(int domain, int type, int protocol);
+
+        [DllImport("libc", EntryPoint = "bind", SetLastError = true)]
+        private static extern int Bind(int fd, byte[] address, int length);
+
+        [DllImport("libc", EntryPoint = "close", SetLastError = true)]
+        private static extern int Close(int fd);
     }
 }

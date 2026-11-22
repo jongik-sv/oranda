@@ -18,6 +18,15 @@ internal static class CliText
 
     public const string PipeRequired = "--pipe <name> is required on this system.";
 
+    /// <summary>샌드박스 거부. 「Operation not permitted」 는 agy 등이 샌드박스 밖 재시도 신호로 읽는 글이라 꼭 넣는다.</summary>
+    public const string SandboxBlocked =
+        "Operation not permitted: this shell's sandbox blocked orandactl from reaching Oranda (reading its connection file or the socket). "
+        + "Oranda may be running. Run orandactl outside the sandbox, or allow it in the CLI's sandbox settings.";
+
+    /// <summary>Codex 의 workspace-write 샌드박스(네트워크 꺼짐) 안일 때 덧붙인다.</summary>
+    public const string CodexNetworkHint =
+        " In Codex, set sandbox_workspace_write.network_access=true (config.toml) or run with a sandbox that allows network access.";
+
     public const string SocketPathTooLong =
         "The socket path is longer than this system allows. Set ORANDA_DATA_DIR to a shorter folder and reconnect.";
 

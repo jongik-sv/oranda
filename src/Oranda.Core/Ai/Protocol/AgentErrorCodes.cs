@@ -35,6 +35,12 @@ public static class AgentErrorCodes
     /// <summary>다리 응답을 읽지 못한 그 밖의 통신 오류.</summary>
     public const string BridgeError = "bridge_error";
 
+    /// <summary>
+    /// CLI 의 샌드박스가 연결 파일 읽기·소켓 연결을 막았다(EPERM/EACCES, 2026-11-22 Codex·agy 실측). 앱이 꺼진 것이 아니다 —
+    /// 샌드박스 밖에서 다시 부르거나 CLI 설정에서 허락해야 한다.
+    /// </summary>
+    public const string SandboxBlocked = "sandbox_blocked";
+
     // ---- 창을 고르지 못함 (종료 코드 5) ----
 
     /// <summary>살아 있는 연결 파일이 여럿이다. <c>--instance</c> 나 <c>ORANDA_INSTANCE</c> 로 고른다. 결과에 후보 목록(pid·label·started_at).</summary>
@@ -125,7 +131,7 @@ public static class AgentErrorCodes
     /// <summary>위 목록 전부(시험·문서용).</summary>
     public static IReadOnlyList<string> All { get; } =
     [
-        NotRunning, NoEndpoint, RunInvalid, GrantExpired, RunRevoked, RunRequired, HelloRequired, ShuttingDown, UnsupportedProtocol, BridgeError,
+        NotRunning, NoEndpoint, RunInvalid, GrantExpired, RunRevoked, RunRequired, HelloRequired, ShuttingDown, UnsupportedProtocol, BridgeError, SandboxBlocked,
         MultipleInstances, InstanceNotFound,
         Usage, UnknownTool, InvalidArguments,
         Connection, ConnectionRequired, Level, Environment, Scope, SqlIdScope, SqlNotSingleQuery, SqlSchemaUnresolved, SqlUnsafe, NoStatement,
@@ -159,7 +165,7 @@ public static class AgentCliExit
         null => ToolFailed,
         AgentErrorCodes.NotRunning or AgentErrorCodes.NoEndpoint or AgentErrorCodes.RunInvalid or AgentErrorCodes.GrantExpired
             or AgentErrorCodes.RunRevoked or AgentErrorCodes.RunRequired or AgentErrorCodes.HelloRequired or AgentErrorCodes.ShuttingDown
-            or AgentErrorCodes.UnsupportedProtocol or AgentErrorCodes.BridgeError => Unreachable,
+            or AgentErrorCodes.UnsupportedProtocol or AgentErrorCodes.BridgeError or AgentErrorCodes.SandboxBlocked => Unreachable,
         AgentErrorCodes.MultipleInstances or AgentErrorCodes.InstanceNotFound => InstanceChoice,
         AgentErrorCodes.Usage or AgentErrorCodes.UnknownTool or AgentErrorCodes.InvalidArguments => Usage,
         AgentErrorCodes.Connection or AgentErrorCodes.ConnectionRequired or AgentErrorCodes.Level or AgentErrorCodes.Environment

@@ -68,12 +68,14 @@ public sealed class OrandaSkillDocumentTests
     }
 
     [Fact]
-    public void Body_asks_the_cli_to_name_itself_with_oranda_client_in_bash_and_powershell()
+    public void Body_does_not_ask_for_an_oranda_client_prefix_because_it_breaks_the_allow_rule()
     {
+        // X2 실측(2026-11-22): 「ORANDA_CLIENT=… "<ctl>" …」 처럼 앞에 변수를 붙이면 Claude Code 의 Bash("<ctl>":*) 허락과 맞지 않아 거부된다.
+        // orandactl 이 CLI 표식 변수(CLAUDECODE·CODEX_THREAD_ID·OPENCODE·ANTIGRAVITY_CONVERSATION_ID)로 스스로 이름을 정한다.
         var text = OrandaSkillDocument.Render(Ctl);
 
-        Assert.Contains("ORANDA_CLIENT=Codex \"/opt/Oranda/orandactl\" status", text, StringComparison.Ordinal);
-        Assert.Contains("$env:ORANDA_CLIENT=\"Codex\"; & \"/opt/Oranda/orandactl\" status", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("ORANDA_CLIENT", text, StringComparison.Ordinal);
+        Assert.Contains("own command", text, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -86,6 +86,12 @@ internal sealed class PipeBridgeClient(string pipeName, string runToken) : IBrid
         {
             await pipe.ConnectAsync((int)ConnectTimeout.TotalMilliseconds, cancellationToken).ConfigureAwait(false);
         }
+        catch (System.Net.Sockets.SocketException ex) when (ex.SocketErrorCode == System.Net.Sockets.SocketError.AccessDenied)
+        {
+            // connect 의 EPERM/EACCES: 소켓은 있는데 샌드박스(Codex read-only·workspace-write 실측)나 폴더 권한이 막았다. 앱이 꺼진 것이 아니다.
+            await pipe.DisposeAsync().ConfigureAwait(false);
+            throw new BridgeException(AgentErrorCodes.SandboxBlocked, CliText.SandboxBlocked);
+        }
         catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
         {
             await pipe.DisposeAsync().ConfigureAwait(false);

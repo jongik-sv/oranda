@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    X2 손 도구: 실제 다리·관문·허가 저장소 + 실제 언어 처리자 + 가짜 편집기 탭으로 「실행 중인 Oranda」 흉내를 낸다.
+    Oranda.sln 에 넣지 않는다(자동 시험 묶음 밖). 다리·처리자가 internal 이라 어셈블리 이름을 Oranda.App.Tests 로 두어
+    Platform·Language 의 InternalsVisibleTo 를 빌린다(시험 어셈블리와 함께 로드되는 일은 없다).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Oranda.App.Tests</AssemblyName>
+    <RootNamespace>Oranda.AgentE2e</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Oranda.Core/Oranda.Core.csproj" />
+    <ProjectReference Include="../../../src/Oranda.Language/Oranda.Language.csproj" />
+    <ProjectReference Include="../../../src/Oranda.Platform/Oranda.Platform.csproj" />
+    <!-- real-editor 모드: 실제 편집기 처리자(C)와 SqlEditorHost. 앱 창은 띄우지 않는다. -->
+    <ProjectReference Include="../../../src/Oranda.App/Oranda.App.csproj" />
+    <ProjectReference Include="../../../tests/Oranda.Testing/Oranda.Testing.csproj" />
+  </ItemGroup>
+</Project>

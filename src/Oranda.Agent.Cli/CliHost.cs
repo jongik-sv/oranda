@@ -65,18 +65,25 @@ internal sealed class CliHost
 
     /// <summary>
     /// hello 에 낼 클라이언트 이름(상태 표시줄 띠·감사에 보인다). <c>ORANDA_CLIENT</c> 가 있으면 그 값,
-    /// Claude Code 안이면(<c>CLAUDECODE=1</c>) <c>Claude Code</c>, 아니면 <c>orandactl</c>.
+    /// 그다음 CLI 가 셸에 넣는 표식(2026-11-22 linux·mac 실측) 순서: <c>CLAUDECODE=1</c> → Claude Code, <c>CODEX_THREAD_ID</c> → Codex,
+    /// <c>OPENCODE_SESSION_ID</c> 또는 <c>OPENCODE=1</c> → opencode, <c>ANTIGRAVITY_CONVERSATION_ID</c> → Antigravity, 아니면 <c>orandactl</c>.
     /// </summary>
     public AgentClientInfo Client()
     {
         var name = GetEnvironmentVariable("ORANDA_CLIENT");
         if (string.IsNullOrWhiteSpace(name))
         {
-            name = GetEnvironmentVariable("CLAUDECODE") == "1" ? "Claude Code" : "orandactl";
+            name = GetEnvironmentVariable("CLAUDECODE") == "1" ? "Claude Code"
+                : Has("CODEX_THREAD_ID") ? "Codex"
+                : Has("OPENCODE_SESSION_ID") || GetEnvironmentVariable("OPENCODE") == "1" ? "opencode"
+                : Has("ANTIGRAVITY_CONVERSATION_ID") ? "Antigravity"
+                : "orandactl";
         }
 
         return new AgentClientInfo(name.Trim(), Version);
     }
+
+    private bool Has(string variable) => !string.IsNullOrWhiteSpace(GetEnvironmentVariable(variable));
 
     /// <summary>데이터 폴더의 연결 파일 찾기.</summary>
     public EndpointLocator Locator() =>
