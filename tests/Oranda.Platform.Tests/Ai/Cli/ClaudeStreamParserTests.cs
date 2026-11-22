@@ -56,6 +56,35 @@ public class ClaudeStreamParserTests
         Assert.Empty(new ClaudeStreamParser().Parse(line));
     }
 
+    [Fact]
+    public void Logged_out_run_marks_the_error_result_as_not_logged_in()
+    {
+        // 2.1.330 실측(ai-setup-claude-measure.md): assistant 줄 맨 위 error = authentication_failed, result 는 is_error true·subtype success.
+        var result = Assert.IsType<ClaudeResult>(ParseFixture("not-logged-in.jsonl")[^1]);
+
+        Assert.True(result.IsError);
+        Assert.True(result.NotLoggedIn);
+        Assert.Equal("Not logged in · Please run /login", result.Text);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login"}""", true)]
+    [InlineData("""{"type":"result","subtype":"success","is_error":true,"result":"API Error: 500 overloaded"}""", false)]
+    [InlineData("""{"type":"result","subtype":"success","is_error":false,"result":"Not logged in 이라는 글을 설명해 줘"}""", false)]
+    public void Not_logged_in_falls_back_to_the_error_result_text(string line, bool expected)
+        => Assert.Equal(expected, Assert.IsType<ClaudeResult>(Assert.Single(new ClaudeStreamParser().Parse(line))).NotLoggedIn);
+
+    [Fact]
+    public void Other_api_errors_on_the_assistant_line_are_not_not_logged_in()
+    {
+        var parser = new ClaudeStreamParser();
+        parser.Parse("""{"type":"assistant","message":{"content":[{"type":"text","text":"Rate limited"}]},"error":"rate_limit","is_api_error_message":true}""");
+
+        var result = Assert.IsType<ClaudeResult>(Assert.Single(parser.Parse("""{"type":"result","subtype":"success","is_error":true,"result":"Rate limited"}""")));
+
+        Assert.False(result.NotLoggedIn);
+    }
+
     private static List<ClaudeStreamEvent> ParseFixture(string name)
     {
         var parser = new ClaudeStreamParser();

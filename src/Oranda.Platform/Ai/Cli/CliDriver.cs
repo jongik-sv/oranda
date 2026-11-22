@@ -3,6 +3,7 @@ using System.Text.Json;
 using Oranda.Core.Ai.Contracts;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Profiles;
+using Oranda.Core.Ai.Setup;
 using Oranda.Core.Composition;
 using Oranda.Core.Settings;
 using Oranda.Core.Storage;
@@ -22,6 +23,7 @@ namespace Oranda.Platform.Ai.Cli;
 internal sealed class CliDriver : IAiDriver
 {
     private const int MaxArgumentSummaryChars = 4000;
+
 
     private static readonly AiDriverCapabilities DriverCapabilities =
         new(Skills: false, Tools: true, Resume: true, LocalOnly: false, Streaming: false);
@@ -319,7 +321,8 @@ internal sealed class CliDriver : IAiDriver
             case ClaudeResult result:
                 if (result.IsError)
                 {
-                    events.Add(new AiError(string.IsNullOrWhiteSpace(result.Text) ? "claude 실행 오류" : result.Text, "cli_error"));
+                    // 로그인 안 됨은 따로 알린다: 화면이 「로그인」 안내와 AI 연결 도우미를 보일 수 있게.
+                    events.Add(new AiError(string.IsNullOrWhiteSpace(result.Text) ? "claude 실행 오류" : result.Text, result.NotLoggedIn ? AiSetupErrorCodes.CliNotLoggedIn : "cli_error"));
                     break;
                 }
 

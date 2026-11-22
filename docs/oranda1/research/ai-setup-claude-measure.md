@@ -73,3 +73,102 @@
 ### 계약에 미치는 것
 
 - 계약 고침 없음. `IClaudeSetupService` 결과 모양 그대로 쓸 수 있다(판 = `--version` 첫 줄 숫자, 상태 = `auth status --json` 의 `loggedIn`, `StatusSupported` = 2.1.330 에서 참, 설치 = 숨은 창 + 줄 단위 출력 + 끝난 뒤 다시 찾기).
+
+## Linux
+
+### 조건
+
+- PC: Ubuntu(커널 6.8), 화면 없음(`DISPLAY`·`WAYLAND_DISPLAY` 없앰), claude **2.1.330**(네이티브 설치판, `~/.local/bin/claude` → `~/.local/share/claude/versions/2.1.330` 심볼릭 링크)
+- 사용자 실제 HOME·`~/.claude` 를 건드리지 않음: 임시 폴더 `T` 를 만들고
+  `HOME=$T CLAUDE_CONFIG_DIR=$T/.claude ANTHROPIC_API_KEY= ANTHROPIC_AUTH_TOKEN=` (+ `CLAUDECODE`·`CLAUDE_CODE_ENTRYPOINT`·`CLAUDE_CODE_OAUTH_TOKEN` 제거)로만 실행
+- 실제 로그인 안 함(주소를 열지 않음, 몇 초 뒤 끊음). 설치 명령 실행 안 함(스크립트는 파일로 받아 읽기만)
+- 브라우저 호출 여부 = `BROWSER` 를 「불렸다는 표시만 남기고 실패하는」 가짜 스크립트로 바꿔 확인
+
+### 1. 판·로그인 상태
+
+| 명령 | 출력 | 종료 코드 |
+|---|---|---|
+| `claude --version` | `2.1.330 (Claude Code)` (한 줄, `<판> (Claude Code)`) | 0 |
+| `claude auth status` (기본 = JSON) | 아래 JSON | **미로그인 1** / 로그인 0 |
+| `claude auth status --json` | 기본과 같음 | 같음 |
+| `claude auth status --text` | `Not logged in. Run claude auth login to authenticate.` | 1 |
+
+미로그인 JSON(경로는 `$T` 로 줄임):
+
+```json
+{
+  "loggedIn": false,
+  "authMethod": "none",
+  "apiProvider": "firstParty",
+  "analyticsDisabled": false,
+  "projectsDirectory": "$T/.claude/projects",
+  "configDirectory": "$T/.claude",
+  "loginExpiresAt": null,
+  "consoleProfileSignInOffered": true
+}
+```
+
+로그인된 쪽 모양(로그인 없이 바이너리 문자열에서 확인 — 실제 값은 못 봄):
+
+- 종료 코드 = `process.exit(loggedIn ? 0 : 1)`
+- `authMethod` 값: `none`·`claude.ai`(구독 로그인)·`oauth_token`·`api_key`·`api_key_helper`·`third_party`
+- `authMethod == "claude.ai"` 일 때 덧붙는 칸: `email`·`orgId`·`orgName`·`subscriptionType`·`storedClaudeAiLogin`(true)·`planTier`
+- Console 로그인 쪽도 `email`·`orgId`·`orgName` 이 붙음. 조직 로그인이 설정돼 있으면 `organizationSignInOrgId`
+- 칸은 판마다 늘어남(`consoleProfileSignInOffered` 처럼) → **모르는 칸은 무시하고 `loggedIn`(bool) 만 판단에 씀**. 화면에 계정을 보이려면 `email` 이 있을 때만(없으면 「로그인됨」 만)
+
+### 2. `claude auth login` (화면·TTY 없음, 표준 입력 닫음, `timeout 15`)
+
+표준 출력(표준 오류는 비어 있음, 주소의 고유 값은 `…`):
+
+```
+Opening browser to sign in…
+If the browser didn't open, visit:
+ESC]8;;https://claude.ai/oauth/authorize?…BEL https://claude.ai/oauth/authorize?…ESC]8;;BEL
+Paste code here if prompted > 
+```
+
+- 주소는 **표준 출력 3번째 줄**. 터미널 링크 꾸밈(OSC 8: `ESC ] 8 ; ; <주소> BEL <보이는 글> ESC ] 8 ; ; BEL`)으로 감싸여 같은 주소가 두 번 나옴 → 읽는 쪽은 `https://` 로 시작해 `BEL`(0x07)·`ESC`·공백 전까지를 잘라 씀. 마지막 줄 `Paste code here if prompted > ` 는 줄바꿈이 없음(줄 단위로 읽으면 끝에 가서야 나옴 — 주소 줄은 그 전에 옴)
+- 갈래별 주소 모양:
+  - 기본·`--claudeai`: `https://claude.ai/oauth/authorize?<짧은 불투명 값>` (쿼리가 한 덩어리)
+  - `--sso`: `https://claude.ai/oauth/authorize?login_method=…`
+  - `--console`: `https://platform.claude.com/oauth/authorize?code=…&client_id=…&response_type=…&redirect_uri=…&scope=…&code_challenge=…&code_challenge_method=…&state=…` (`redirect_uri` = `https://platform.claude.com/oauth/code/callback`)
+- **브라우저를 스스로 엶**: 네 갈래 모두 시작 직후 `BROWSER` 를 1번 부름. `BROWSER` 가 없으면 `xdg-open` 을 쓰는 것으로 보임(화면 없는 PC 에선 실패해도 조용히 넘어가고 같은 출력)
+- **이 PC 안에서 끝나는 길이 있음**: 시작하면 `127.0.0.1:<임의 포트>` 에서 듣기 시작함(브라우저가 로그인 뒤 이 주소로 돌아오면 붙여 넣기 없이 끝남). 다른 PC 의 브라우저에서 열면 화면에 코드가 나오고 `Paste code here` 에 붙여 넣는 길
+- 붙여 넣기 대기: 표준 입력이 닫혀도(EOF) 끝나지 않고 계속 기다림 → 15초 시간 초과(종료 124)로 끊김. 잘못된 모양의 글을 넣으면 표준 오류에 `That doesn't look like the full code. Copy all of it, including the # in the middle.` 를 찍고 계속 기다림
+- 끊기: `SIGTERM` 에 0.3초 안에 끝남(종료 143), 남는 자식 프로세스·듣는 포트 없음
+- 「로그인이 끝났다」 는 표준 출력으로 기다리지 않고 `claude auth status` 를 몇 초마다 다시 읽는 쪽이 확실함(끝난 뒤 출력은 로그인 없이 확인 못 함)
+
+### 3. 그 밖의 하위 명령 (도움말만)
+
+- `claude setup-token` — 「Set up a long-lived authentication token (requires Claude subscription)」. 오래 가는 열쇠를 만들어 화면에 보여 주는 길 → 도우미에서는 쓰지 않음(열쇠를 직원이 다루게 됨)
+- `claude install [target] [--force]` — 네이티브 판 설치(`stable`·`latest`·판 번호). 설치 스크립트가 내려받은 뒤 이걸 부름
+- `claude doctor` — 설치 상태 점검(현재 폴더 설정 파일을 읽음). 진단 글 보조로만 쓸 만함, 필수 아님
+- `claude update` — 새 판 확인·설치
+
+### 4. 미로그인 상태의 `claude -p` (Oranda 인자 모양)
+
+`ClaudeCliArguments.Build` 와 같은 모양(`-p --mcp-config <빈 설정> --strict-mcp-config --allowedTools mcp__orandactl --setting-sources project --tools "" --output-format stream-json --input-format stream-json --verbose --disallowedTools WebFetch WebSearch Bash`, 표준 입력 = stream-json 한 줄 「OK 라고만 답하세요」):
+
+- 0.7초 만에 **종료 1**, 표준 오류 비어 있음, 네트워크 요청 없이 끝남(`duration_api_ms: 0`)
+- 줄 3개:
+  1. `{"type":"system","subtype":"init",…,"apiKeySource":"none",…}` — 시작 정보는 평소처럼 옴
+  2. `{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"Not logged in · Please run /login"}],…},"error":"authentication_failed","is_api_error_message":true,…}`
+  3. `{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","api_error_status":null,"result":"Not logged in · Please run /login",…}`
+- `--output-format text` = 표준 출력 `Not logged in · Please run /login`, 종료 1. `json` = 위 3번 줄과 같은 결과 한 줄
+- 주의: `result.subtype` 은 `success` 인데 `is_error` 가 true. 지금 파서는 `is_error` 를 보므로 `cli_error` 로 끝남
+- **판단 근거(L3)**: `assistant` 줄의 맨 위 칸 `"error":"authentication_failed"` → 오류 코드 `cli_not_logged_in`. 글(`Not logged in`)은 판·언어가 바뀌면 달라질 수 있어 보조로만(`result` 글이 `Not logged in` 으로 시작할 때도 같은 코드)
+
+### 5. 설치 스크립트 (`curl -fsSL https://claude.ai/install.sh`, 파일로 받아 읽기만)
+
+- 261줄 bash. 인자 `[stable|latest|VERSION]`. `sudo` 로 돌리면 거절(종료 1)
+- 진행: `$HOME/.claude/downloads` 에 받아 체크섬 확인 → 표준 출력 `Setting up Claude Code...` → `claude install` 실행 → 성공 시 빈 줄·`✅ Installation complete!`·빈 줄, 종료 0
+- 실패 글(모두 표준 오류, 종료 1): `Either curl or wget is required but neither is installed`, `Unsupported operating system: …`, `Unsupported architecture: …`, `Failed to get a valid version from downloads.claude.ai (got unexpected content).`(+ 지역 안내 줄), `Platform … not found in manifest`, `Download failed`, `Checksum verification failed`. `claude install` 이 시그널로 죽으면 `Installation was killed before it could finish (exit code N).`(137 = 메모리 부족 안내 한 줄 더)
+- 설치 위치 = `~/.local/bin/claude`(기존 `ClaudeExecutable.KnownDirectories` 에 있음) → 설치 직후 PATH 가 옛 값이어도 찾힘
+- 진행 표시는 줄 몇 개뿐(내려받기 퍼센트 없음) → 진행 막대는 「끝날 때까지 움직이는 막대」 + 받은 줄 로그가 맞음
+
+### 결론
+
+- **자동 확인 가능.** 로그인 시작 = `claude auth login` 을 뒤에서 띄우고 표준 출력에서 주소를 읽음(복사용). 브라우저는 claude 가 스스로 엶. 끝남 확인 = `claude auth status --json` 을 몇 초마다 읽어 `loggedIn == true`(종료 0). 「로그인 끝났어요」 단추는 예비로 둠(자동 확인 실패·다른 PC 브라우저 대비)
+- 끊기 = 프로세스 트리 끝냄(SIGTERM 으로 깔끔히 끝남). 표준 입력이 닫혀도 스스로 끝나지 않으므로 도우미가 단계를 떠날 때 반드시 끊어야 함
+- 미로그인 연결 시험 = `assistant` 줄 `error: "authentication_failed"` 로 바로 구분됨 → `cli_not_logged_in`
+- 다른 PC 브라우저에서 로그인하는 경우(붙여 넣기 코드)는 도우미 범위 밖으로 둠: 같은 PC 브라우저가 기본

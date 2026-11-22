@@ -21,6 +21,7 @@ internal sealed record ClaudeToolResult(string CallId, int Size, bool IsError) :
 
 internal sealed record ClaudePermissionDenied(string ToolName, string Message) : ClaudeStreamEvent;
 
+/// <param name="NotLoggedIn">로그인이 안 돼 끝난 오류 결과다(assistant 줄 <c>error: authentication_failed</c> 또는 결과 글 「Not logged in」).</param>
 internal sealed record ClaudeResult(
     bool IsError,
     string? SessionId,
@@ -29,7 +30,8 @@ internal sealed record ClaudeResult(
     decimal? CostUsd,
     long InputTokens,
     long OutputTokens,
-    IReadOnlyList<string> PermissionDenials) : ClaudeStreamEvent;
+    IReadOnlyList<string> PermissionDenials,
+    bool NotLoggedIn = false) : ClaudeStreamEvent;
 
 /// <summary>
 /// stream-json 줄을 한 줄씩 읽는다. 사용자에게 보일 도구 호출이 아닌 ToolSearch·StructuredOutput(합성 도구)과
@@ -40,6 +42,9 @@ internal sealed class ClaudeStreamParser
     private static readonly HashSet<string> HiddenTools = new(StringComparer.Ordinal) { "ToolSearch", "StructuredOutput" };
 
     private readonly HashSet<string> _hiddenCallIds = new(StringComparer.Ordinal);
+
+    // assistant 줄이 「로그인 안 됨」 API 오류를 알렸다(실측 2.1.330: 맨 위 칸 error = authentication_failed).
+    private bool _authenticationFailed;
 
     public IReadOnlyList<ClaudeStreamEvent> Parse(string line)
     {
@@ -68,6 +73,7 @@ internal sealed class ClaudeStreamParser
                 ParseSystem(root, events);
                 break;
             case "assistant":
+                _authenticationFailed |= GetString(root, "error") == "authentication_failed";
                 ParseAssistant(root, events);
                 break;
             case "user":
@@ -141,7 +147,7 @@ internal sealed class ClaudeStreamParser
         }
     }
 
-    private static ClaudeResult ParseResult(JsonElement root)
+    private ClaudeResult ParseResult(JsonElement root)
     {
         JsonElement? structured = root.TryGetProperty("structured_output", out var so) && so.ValueKind == JsonValueKind.Object
             ? so.Clone()
@@ -166,7 +172,11 @@ internal sealed class ClaudeStreamParser
         var isError = (root.TryGetProperty("is_error", out var e) && e.ValueKind == JsonValueKind.True)
             || GetString(root, "subtype") is { } subtype && subtype != "success";
 
-        return new ClaudeResult(isError, GetString(root, "session_id"), GetString(root, "result"), structured, cost, input, output, denials);
+        var text = GetString(root, "result");
+
+        // 글은 판·언어에 따라 바뀔 수 있어 보조로만 본다(오류 결과일 때만).
+        var notLoggedIn = isError && (_authenticationFailed || text?.StartsWith("Not logged in", StringComparison.OrdinalIgnoreCase) == true);
+        return new ClaudeResult(isError, GetString(root, "session_id"), text, structured, cost, input, output, denials, notLoggedIn);
     }
 
     private static List<ClaudeMcpServer> ReadMcpServers(JsonElement root)

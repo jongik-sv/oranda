@@ -132,6 +132,38 @@ public sealed class CliDriverTests : IDisposable
     }
 
     [Fact]
+    public async Task Logged_out_claude_ends_with_the_not_logged_in_code()
+    {
+        _launcher.Lines =
+        [
+            """{"type":"system","subtype":"init","session_id":"s1","mcp_servers":[{"name":"orandactl","status":"connected"}],"tools":["mcp__orandactl__x"]}""",
+            """{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"Not logged in · Please run /login"}]},"error":"authentication_failed","is_api_error_message":true}""",
+            """{"type":"result","subtype":"success","is_error":true,"session_id":"s1","terminal_reason":"api_error","result":"Not logged in · Please run /login"}""",
+        ];
+        _launcher.ExitCode = 1;
+
+        var events = await RunAsync(NewDriver(), Request());
+
+        var error = Assert.IsType<AiError>(events[^1]);
+        Assert.Equal("cli_not_logged_in", error.Code);
+        Assert.Equal("Not logged in · Please run /login", error.Message);
+    }
+
+    [Fact]
+    public async Task Other_error_results_keep_the_cli_error_code()
+    {
+        _launcher.Lines =
+        [
+            """{"type":"system","subtype":"init","session_id":"s1","mcp_servers":[{"name":"orandactl","status":"connected"}],"tools":["mcp__orandactl__x"]}""",
+            """{"type":"result","subtype":"success","is_error":true,"session_id":"s1","result":"API Error: 500"}""",
+        ];
+
+        var events = await RunAsync(NewDriver(), Request());
+
+        Assert.Equal("cli_error", Assert.IsType<AiError>(events[^1]).Code);
+    }
+
+    [Fact]
     public async Task Effort_falls_back_to_the_settings_value_when_the_request_has_none()
     {
         _launcher.Lines =
