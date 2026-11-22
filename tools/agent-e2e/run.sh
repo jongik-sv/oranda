@@ -5,7 +5,7 @@
 # linux·macOS(bash 3.2: 빈 배열은 ${a[@]+"${a[@]}"} 로 편다).
 #             빼면 CLI 기본 허락 방식 그대로 돌려 「스킬만으로 되는가」를 본다.
 # SCENARIO=<이름> : scenarios/<이름>/ 의 과제(task.txt, {WORK} = 작업 폴더)·준비 데이터(fixture.json)·기대 판정(expect.json)을 쓴다.
-#             없으면 1단계 고정 과제(문법 틀린 SQL 고치기).
+#             / 로 시작하면 그 폴더를 시나리오로 쓴다. 없으면 1단계 고정 과제(문법 틀린 SQL 고치기).
 # 결과: <작업 폴더>/{log.jsonl, transcript.*, verdict.txt}. 사용자 실제 HOME·설정은 건드리지 않는다(인증 파일만 읽어서 복사).
 set -euo pipefail
 
@@ -27,7 +27,8 @@ home="$out/home"; data="$out/data"; work="$out/work"
 scenario_dir=""
 host_scenario=()
 if [[ -n "${SCENARIO:-}" ]]; then
-  scenario_dir="$repo/tools/agent-e2e/scenarios/$SCENARIO"
+  # 이름이면 scenarios/<이름>, / 로 시작하면 그 폴더(저장소 밖 임시 시나리오).
+  if [[ "$SCENARIO" == /* ]]; then scenario_dir="$SCENARIO"; else scenario_dir="$repo/tools/agent-e2e/scenarios/$SCENARIO"; fi
   [[ -f "$scenario_dir/task.txt" ]] || { echo "모르는 시나리오: $SCENARIO" >&2; exit 2; }
   task="$(python3 -I -c 'import sys; print(open(sys.argv[1], encoding="utf-8").read().strip().replace("{WORK}", sys.argv[2]))' "$scenario_dir/task.txt" "$work")"
   host_scenario=(--scenario "$scenario_dir/fixture.json")

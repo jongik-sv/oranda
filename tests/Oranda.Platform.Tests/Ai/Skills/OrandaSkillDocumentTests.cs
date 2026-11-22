@@ -10,7 +10,7 @@ public sealed class OrandaSkillDocumentTests
     private static readonly string[] TuningSteps =
     [
         "`orandactl tune context", "`orandactl tune plan", "`orandactl tune stats", "`orandactl tune index", "`orandactl tune histogram",
-        "`orandactl sql check", "`orandactl tune bench", "`orandactl tab new", "Report in one line",
+        "`orandactl sql check", "| orandactl tune bench", "`orandactl tab new", "Report in one line",
     ];
 
     [Fact]
@@ -140,6 +140,23 @@ public sealed class OrandaSkillDocumentTests
         Assert.All(Oranda.Core.Ai.Manual.OrandaManual.All, e => Assert.Contains(e.Url, pages, StringComparison.Ordinal));
         Assert.Contains("https://jongik-sv.github.io/oranda/ai/external-agents/", pages, StringComparison.Ordinal);
         Assert.DoesNotContain(Oranda.Core.Ai.Manual.OrandaManual.All[0].Description, pages, StringComparison.Ordinal); // E-28: 설명은 docs 에서만
+    }
+
+    [Fact]
+    public void Guides_keep_json_on_one_piped_command_find_tabs_by_title_and_take_links_only_from_docs()
+    {
+        // 2단계 실측(tools/agent-e2e S6·R1·R8): heredoc JSON 은 Claude Code 가 거부, 탭 id 를 추측하면 멈춤, opencode 는 docs 뒤에도 웹을 읽음.
+        var text = OrandaSkillDocument.Render(Ctl);
+        var tuning = Section(text, OrandaSkillGuides.TuningHeading);
+        Assert.Contains("`printf '%s' '[{\"label\":\"original\",\"sql\":…},{\"label\":\"c1\",\"sql\":…}]' | orandactl tune bench --conn <alias> --repeat 3 -`", tuning, StringComparison.Ordinal);
+        Assert.Contains("no heredoc and no temporary file for JSON", tuning, StringComparison.Ordinal);
+        Assert.DoesNotContain("variants.json", text, StringComparison.Ordinal);
+
+        Assert.Contains("Find a tab by its title in `orandactl tabs` and use the `tab_id` from that output", Section(text, OrandaSkillGuides.RunHeading), StringComparison.Ordinal);
+
+        var docs = Section(text, OrandaSkillGuides.DocsHeading);
+        Assert.Contains("Give manual links only from `orandactl docs` output", docs, StringComparison.Ordinal);
+        Assert.Contains("not from a web search", docs, StringComparison.Ordinal);
     }
 
     [Fact]

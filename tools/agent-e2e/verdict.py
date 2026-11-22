@@ -14,6 +14,8 @@ import importlib.util
 import json
 import re
 import sys
+
+sys.dont_write_bytecode = True  # manual_index.py 를 불러도 __pycache__ 를 남기지 않는다
 from pathlib import Path
 
 out = Path(sys.argv[1])
@@ -91,7 +93,9 @@ def judge_scenario(sdir: Path, log, calls, denials, cost, turns) -> int:
     new_tabs = [e for e in log if e.get("kind") == "new_tab"]
     if "new_tab_regex" in expect:
         rx, not_rx = re.compile(expect["new_tab_regex"]), re.compile(expect.get("new_tab_not_regex", r"$^"))
-        good = [e for e in new_tabs if rx.search(e.get("text", "")) and not not_rx.search(e.get("text", ""))]
+        # SQL 주석(-- … 줄, /* */)은 빼고 본다: 스킬이 새 탭 맨 앞에 「무엇을 왜 바꿨나」 주석을 쓰게 한다.
+        code = [re.sub(r"--[^\n]*|/\*(?!\+).*?\*/", "", e.get("text", ""), flags=re.S) for e in new_tabs]
+        good = [c for c in code if rx.search(c) and not not_rx.search(c)]
         if not good:
             problems.append(f"새 탭 글이 기대와 다름(새 탭 {len(new_tabs)}개)")
     runs = [e for e in log if e.get("kind") == "run_tab"]

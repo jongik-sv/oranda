@@ -118,6 +118,16 @@ codex·agy = 이 PC 에 없음 → 「못 함」(맥에 부탁, E4). S4·S7 은 
 
 앱 안 튜닝 창이 실제로 그 탭 접속으로 뜨는지(`AiTuningLauncher`)는 **실앱 확인**.
 
+### K1 재확인 (2026-11-23, 0c3bd120 위 + 스킬 글 3줄: bench JSON 은 printf 파이프·탭은 제목으로 찾기·링크는 docs 결과에서만)
+
+| # | CLI | 시나리오 | 판정 | 호출 | 시간·비용 | 본 것 |
+|---|---|---|---|---|---|---|
+| K1-S6 | Claude Code sonnet `--allow`, **SKILL_APPEND 없이** | ② tune-full | **PASS** | 5 | 비용 $0.117 | `printf … \| orandactl tune bench -` 로 허락 거부 0(S6 은 heredoc 거부로 FAIL). 문맥 한 번에 통계·인덱스를 다 읽고 bench 3변형 → 새 탭(맨 앞 주석에 이유). 판정 고침: 새 탭 글의 SQL 주석은 빼고 보고, 문맥 도구 하나로 통계 단계를 채운다(S6b·S2 도 새 판정으로 PASS) |
+| K1-R1 | 같음, 옛 과제(「t1·t2」) 임시 시나리오 | ④ | FAIL(뜻대로) | 2 | 비용 약 $0.09 | 새 규칙대로 **`--tab t2` 를 헛부르지 않고** 탭 목록만 본 뒤 「t1·t2 가 어느 탭인지 모른다」 며 멈춤(R1 은 `tab_not_found` 2회). 새 과제(제목)로는 PASS(12s · $0.096) |
+| K1-R8 | 같음 | ③ manual-link | **PASS** | 0 | 11s · $0.076 | 허락 거부 0·웹 도구 시도 0(가짜 docs 였던 S8 은 WebSearch·WebFetch 시도 거부 2), 링크 3개 모두 docs 결과의 실제 쪽 |
+
+- run.sh: `SCENARIO=/절대/경로` 면 저장소 밖 시나리오 폴더를 쓴다(임시 과제 실험용)
+
 - 실제 처리자 모드 추가분: w-run-export `RunTabHandler`·`ExportResultHandler` 를 `FakeHost/RealRun.cs` 로 붙임 — `ExecutionController`(실제)·`ExternalSelectGuard`(실제, 추출기는 가짜 `KindExtractor` 에 `FOR UPDATE`·`@링크` 글자 판정 더함)·`DataTransferService.ExportAsync`(실제, 서버 다시 읽기) + 가짜 실행 서비스(시나리오 결과, `exec` 사건에 문장·출처). 결과 그리드 첫 페이지는 창이 없어 감시가 대신 읽는다(`grid_page` 사건, 화면 흉내 — 12bae7ad 뒤로는 run_tab 이 스스로 읽어 흉내가 할 일이 없다). d878fc0e 의 가드는 현재 스키마를 DB 에 묻는다 → 가짜 실행 서비스가 `SAMPLE` 을 준다
 - 시나리오 `connection` 칸: `environment`(Production)·`ai_access`·`local_model`. 운영 기본 수준 = 정책 최대 `Query`(`AiAccessPolicy.MaxLevel`; `QueryRows` 를 주면 `Plan` 으로 낮춰 읽혀 실행도 거부됨)
 - selftest 실측: `FOR UPDATE` 탭 실행 = `sql_unsafe`(4), 상대 경로 `path_invalid`(2), 덮어쓰기 `file_exists`(4)

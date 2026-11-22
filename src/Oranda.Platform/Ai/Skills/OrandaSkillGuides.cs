@@ -34,6 +34,7 @@ public static class OrandaSkillGuides
         "The manual is in Korean. Search with Korean words from the page titles below (for example `orandactl docs 실행 계획`); "
             + "if nothing matches, try fewer words or `orandactl docs` for every page.",
         "If the manual does not cover it, say so instead of inventing menu paths.",
+        "Give manual links only from `orandactl docs` output, not from a web search or from memory.",
     ];
 
     /// <summary>
@@ -41,6 +42,7 @@ public static class OrandaSkillGuides
     /// </summary>
     public static IReadOnlyList<string> Run { get; } =
     [
+        "- Find a tab by its title in `orandactl tabs` and use the `tab_id` from that output; do not guess ids from names the user gives (such as t1).",
         "- `orandactl tab run --tab <id> --base-version <version>` runs the tab's one SELECT/WITH in the user's result grid, like the user pressing F5. "
             + "Pass the `version` from `tab get` or `tab new`; `stale` means the user changed the tab, so read it again first. "
             + "A tab with several statements needs `--range statement` (the statement at the caret). "
@@ -104,8 +106,9 @@ public static class OrandaSkillGuides
             + "`orandactl tune index <table> --conn <alias>` and, for filter columns with skewed values, `orandactl tune histogram <table> <column> --conn <alias>`.",
         "5. Write up to 4 candidate SELECTs (rewrite, join order, hints, using an existing index). Each must return the same rows as the original. "
             + "Check each with `orandactl sql check --conn <alias> -`.",
-        "6. Measure the original and the candidates together: `orandactl tune bench --conn <alias> --repeat 3 - < variants.json` "
-            + "with `[{\"label\":\"original\",\"sql\":…},{\"label\":\"c1\",\"sql\":…}]` (at most 5 statements, repeat at most 5). "
+        "6. Measure the original and the candidates together in one command that pipes the JSON from printf: "
+            + "`printf '%s' '[{\"label\":\"original\",\"sql\":…},{\"label\":\"c1\",\"sql\":…}]' | orandactl tune bench --conn <alias> --repeat 3 -` "
+            + "(at most 5 statements, repeat at most 5; no heredoc and no temporary file for JSON, some CLIs refuse them). "
             + "Drop a candidate whose `rows` differs from the original. Prefer the lowest `logical_reads`, then `elapsed_ms`. "
             + "An entry with `substituted` was not run (Oranda showed cursor statistics instead); it cannot win on measured numbers.",
         "7. Put the best statement in a new tab: `orandactl tab new --title \"Tuned: <short name>\" --conn <alias> - < best.sql`. "

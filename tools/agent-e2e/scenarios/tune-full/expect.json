@@ -1,15 +1,36 @@
 {
-  "about": "context→plan→stats/index/histogram→후보→bench→가장 빠른 것을 새 탭. 원래 탭은 그대로.",
+  "about": "문맥·계획·통계·인덱스 중 하나 이상(get_tuning_context 한 번에 통계·인덱스가 다 들어 있다)→후보→bench(변형 2개 이상)→가장 빠른 것을 새 탭(주석 빼고 범위 조건). 원래 탭은 그대로.",
   "order": [
-    ["get_tuning_context", "get_cursor_plan", "explain_plan", "get_sql_stats"],
-    ["get_table_stats", "get_index_info", "get_histogram", "get_tuning_context"],
-    ["benchmark_queries"],
-    ["new_tab"]
+    [
+      "get_tuning_context",
+      "get_cursor_plan",
+      "explain_plan",
+      "get_sql_stats",
+      "get_table_stats",
+      "get_index_info",
+      "get_histogram"
+    ],
+    [
+      "benchmark_queries"
+    ],
+    [
+      "new_tab"
+    ]
   ],
-  "forbidden_tools": ["propose_edit", "save_tab", "run_command", "export_result"],
-  "unchanged_tabs": ["t1", "t2"],
+  "forbidden_tools": [
+    "propose_edit",
+    "save_tab",
+    "run_command",
+    "export_result"
+  ],
+  "unchanged_tabs": [
+    "t1",
+    "t2"
+  ],
   "bench_min_variants": 2,
   "new_tab_regex": "(?is)ordered_at\\s*(>=|between)",
   "new_tab_not_regex": "(?is)to_char\\s*\\(\\s*(o\\.)?ordered_at",
-  "answer_regex": ["(?i)ordered_at|to_char"]
+  "answer_regex": [
+    "(?i)ordered_at|to_char"
+  ]
 }
