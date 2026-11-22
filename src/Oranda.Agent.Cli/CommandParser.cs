@@ -24,6 +24,9 @@ internal enum CommandKind
 
     /// <summary>MCP stdio 서버(<c>mcp</c>).</summary>
     Mcp,
+
+    /// <summary>매뉴얼 링크(<c>docs</c>, <see cref="DocsCommand"/>). 앱에 붙지 않는다.</summary>
+    Docs,
 }
 
 /// <summary>모든 명령에 쓰는 옵션.</summary>
@@ -93,6 +96,8 @@ internal static class CommandParser
                 return new ParsedCommand(CommandKind.StatusAll, globals);
             case "call":
                 return ParseCall(rest, globals, readFile, readStdin);
+            case DocsCommand.Name:
+                return DocsCommand.Parse(rest, globals);
         }
 
         var spec = CommandTable.Find(rest, out var used)
@@ -123,6 +128,7 @@ internal static class CommandParser
         text.AppendLine("  orandactl call <tool> (--json J | --file F | -)   -> any tool");
         text.AppendLine("  orandactl tools   -> tool names, descriptions and schemas");
         text.AppendLine("  orandactl mcp [--pipe P] [--instance I]   -> MCP stdio server");
+        text.AppendLine($"  orandactl {DocsCommand.Name} {DocsCommand.Usage}   -> links to the Oranda manual (no app call)");
         text.AppendLine();
         text.AppendLine("Exit codes: 0 ok (a rejected or stale proposal is ok), 1 tool failed, 2 usage, 3 Oranda unreachable or expired, 4 denied, 5 window not chosen.");
         return text.ToString();

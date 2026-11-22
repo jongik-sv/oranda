@@ -253,12 +253,13 @@ public class AppToolContract2Tests
     // ---- 매뉴얼 색인 껍데기 ----
 
     [Fact]
-    public void Manual_index_is_an_empty_shell_with_the_site_base()
+    public void Manual_index_uses_the_site_base()
     {
+        // 표는 m-skill-docs(S1)가 site 에서 만들어 채운다. site 와 맞는지는 Agent.Cli.Tests 의 ManualIndexTests 가 본다.
         Assert.Equal("https://jongik-sv.github.io/oranda", OrandaManual.BaseUrl);
-        Assert.Empty(OrandaManual.All); // 표는 m-skill-docs(S1)가 채운다
-        Assert.Empty(OrandaManual.Search("execution plan"));
-        Assert.Empty(OrandaManual.Search(null));
+        Assert.NotEmpty(OrandaManual.All);
+        Assert.All(OrandaManual.All, e => Assert.StartsWith(OrandaManual.BaseUrl + "/", e.Url, StringComparison.Ordinal));
+        Assert.Equal(10, OrandaManual.Search(null).Count);
     }
 
     [Fact]

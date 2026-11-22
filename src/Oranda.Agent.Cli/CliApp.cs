@@ -34,6 +34,9 @@ internal static class CliApp
                     return AgentCliExit.Success;
                 case CommandKind.Mcp:
                     return await RunMcpAsync(command.Globals, host, cancellationToken).ConfigureAwait(false);
+                case CommandKind.Docs:
+                    await WriteAsync(host, text, DocsCommand.Run(command.Arguments)).ConfigureAwait(false);
+                    return AgentCliExit.Success;
             }
 
             await using var bridge = Bridge(command.Globals, host);
