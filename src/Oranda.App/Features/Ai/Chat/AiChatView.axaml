@@ -206,6 +206,10 @@
                    TextWrapping="Wrap" Opacity="0.7" FontSize="{DynamicResource OrandaFontSizeSmall}" />
         <TextBlock x:Name="UnavailableHint" Text="{Binding UnavailableReason}" IsVisible="{Binding HasUnavailableReason}" TextWrapping="Wrap"
                    Foreground="{DynamicResource OrandaWarningForegroundBrush}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+        <!-- AI 모델 「선택 안 함」 이면 원인 줄 아래에 도우미 단추(AI 연결 도우미). -->
+        <Button x:Name="UnavailableSetupButton" Classes="accent" HorizontalAlignment="Left" Content="{Binding SetupButtonText}"
+                IsVisible="{Binding ShowsSetupForUnavailable}" Command="{Binding OpenSetupCommand}" CommandParameter="{x:Null}"
+                AutomationProperties.Name="{Binding SetupButtonText}" />
         <!-- 붙인 이미지: 축소 이미지와 ✕(빼기). 한 줄에 여러 장이 들어가고 넘치면 가로로 스크롤한다. -->
         <ScrollViewer x:Name="AttachmentScroll" IsVisible="{Binding HasAttachments}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
           <ItemsControl x:Name="AttachmentList" ItemsSource="{Binding Attachments}" AutomationProperties.Name="붙인 이미지">
@@ -384,6 +388,18 @@
             <!-- 이 턴에 답한 모델(가벼운 일 모델을 정했을 때만): 답 머리에 작게. -->
             <TextBlock x:Name="TurnModelText" Text="{Binding Label}" Opacity="0.6" Margin="0,0,0,4"
                        FontFamily="{DynamicResource OrandaCodeFontFamily}" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+          </DataTemplate>
+          <DataTemplate x:DataType="vm:ChatSetupEntry">
+            <!-- AI 실패 띠: AI 를 아직 연결하지 않아 못 보냈다. 안내 + 도우미 단추. -->
+            <Border x:Name="SetupBand" BorderThickness="4,1,1,1" CornerRadius="6" Padding="10,8" Margin="0,0,0,12"
+                    BorderBrush="{DynamicResource OrandaButtonAccentBrush}">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" />
+                <Button x:Name="SetupBandButton" Classes="accent" HorizontalAlignment="Left" Content="{Binding ButtonText}"
+                        Command="{Binding $parent[ItemsControl].((vm:AiChatViewModel)DataContext).OpenSetupCommand}" CommandParameter="{Binding}"
+                        AutomationProperties.Name="{Binding ButtonText}" />
+              </StackPanel>
+            </Border>
           </DataTemplate>
           <DataTemplate x:DataType="vm:ChatAssistantEntry">
             <!-- AI 글: Markdown 부분 집합으로 그린다. 글 선택·복사가 된다(SelectableTextBlock). -->

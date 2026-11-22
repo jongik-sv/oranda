@@ -8,6 +8,8 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oranda.App.Features.Ai.Report;
+using Oranda.App.Features.AiSetup.Contract;
+using Oranda.App.Features.AiSetup.Entry;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
 using Oranda.Core.Ai.Contracts;
@@ -148,6 +150,41 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
 
     public bool HasUnavailableReason => UnavailableReason is not null;
 
+    /// <summary>
+    /// 도우미를 연다(실패 띠 단추, 까닭 → 열었으면 true). 기본 = 앱의 <see cref="IAiSetupLauncher"/>(없으면 아무것도 안 함). 시험이 바꾼다.
+    /// </summary>
+    internal Func<Oranda.Core.Ai.Setup.AiSetupErrorKind?, Task<bool>> OpenSetup { get; set; } =
+        reason => AiSetupOpener.OpenFromAppAsync(AiSetupEntry.FailureBand, reason);
+
+    /// <summary>지금 설정의 실행 대상 종류(실패 띠 판단). 설정을 모르면 null.</summary>
+    private AiActiveKind? ActiveKind => SettingsProvider() is { } settings ? AiActiveProfile.Find(settings).Kind : null;
+
+    /// <summary>입력칸 위 원인 줄 옆에 「AI 연결 도우미 열기」 를 보인다(AI 모델 「선택 안 함」).</summary>
+    public bool ShowsSetupForUnavailable => HasUnavailableReason && AiSetupOffer.ShouldOffer(errorCode: null, ActiveKind);
+
+    /// <summary>실패 띠·원인 줄의 단추 글.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822", Justification = "화면 바인딩은 인스턴스 속성을 본다.")]
+    public string SetupButtonText => AiSetupEntryText.OpenButton(AiSetupText.CurrentIsEnglish);
+
+    /// <summary>
+    /// 오류 코드가 도우미로 풀 수 있는 것이면(<see cref="AiSetupOffer.ShouldOffer"/>) 대화 끝에 실패 띠 한 줄을 더한다. 더했으면 true.
+    /// </summary>
+    public bool OfferSetup(string? errorCode)
+    {
+        if (!AiSetupOffer.ShouldOffer(errorCode, ActiveKind))
+        {
+            return false;
+        }
+
+        var english = AiSetupText.CurrentIsEnglish;
+        Entries.Add(new ChatSetupEntry(AiSetupEntryText.BandHint(english), AiSetupEntryText.OpenButton(english), AiSetupOffer.ReasonFor(errorCode)));
+        return true;
+    }
+
+    /// <summary>실패 띠·원인 줄의 「AI 연결 도우미 열기」.</summary>
+    [RelayCommand]
+    private async Task OpenSetupAsync(ChatSetupEntry? entry) => await OpenSetup(entry?.Reason).ConfigureAwait(true);
+
     /// <summary>입력칸 위 안내: 일반 대화 시작 전(줄이 하나도 없음)이고 AI 를 쓸 수 없는 원인도 없을 때 보인다.</summary>
     public bool ShowStartHint => !IsTuning && Entries.Count == 0 && !HasUnavailableReason;
 
@@ -194,6 +231,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
         OnPropertyChanged(nameof(CanAttach));
         OnPropertyChanged(nameof(UnavailableReason));
         OnPropertyChanged(nameof(HasUnavailableReason));
+        OnPropertyChanged(nameof(ShowsSetupForUnavailable));
         OnPropertyChanged(nameof(ShowStartHint));
         SendCommand.NotifyCanExecuteChanged();
     }
@@ -563,6 +601,7 @@ public sealed partial class AiChatViewModel : ToolPanelViewModelBase
             case AiError error:
                 _turnFailed = true;
                 AddAssistantText("오류: " + AiErrorText.Describe(error));
+                OfferSetup(error.Code);
                 EndTurn();
                 break;
         }

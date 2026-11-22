@@ -386,7 +386,7 @@ public sealed class AiTuningLauncher(IServiceProvider services)
             await ReloadAiSettingsAsync(CancellationToken.None).ConfigureAwait(true);
             if (chat.UnavailableReason is { } reason)
             {
-                chat.AddAssistantText("오류: " + reason);
+                chat.AddAssistantText("오류: " + reason); // 「선택 안 함」 이면 입력칸 위 원인 줄에 도우미 단추가 이미 있다
                 chat.RestoreFollowUp(followUp);
                 return;
             }

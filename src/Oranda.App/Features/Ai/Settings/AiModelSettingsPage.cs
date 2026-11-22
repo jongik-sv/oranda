@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.AiSetup.Contract;
+using Oranda.App.Features.AiSetup.Entry;
 using Oranda.Core.Ai.Profiles;
 using Oranda.Core.Settings;
 
@@ -445,6 +447,16 @@ public sealed partial class AiModelSettingsPage : ObservableObject
             Light = _light,
         };
     }
+
+    /// <summary>「AI 연결 도우미 열기」 링크 글.</summary>
+    public string SetupLinkText => AiSetupEntryText.OpenButton(Services?.Text?.Language == "en");
+
+    /// <summary>도우미를 연다(기본 = 앱의 런처, 없으면 아무것도 안 함). 시험이 바꾼다.</summary>
+    internal Func<System.Threading.Tasks.Task<bool>> OpenSetup { get; set; } = () => AiSetupOpener.OpenFromAppAsync(AiSetupEntry.Menu, reason: null);
+
+    /// <summary>「AI 연결 도우미 열기」: 단추만 눌러 따라 하는 연결 창(도구 메뉴와 같은 창).</summary>
+    [RelayCommand]
+    private async System.Threading.Tasks.Task OpenSetupAsync() => await OpenSetup().ConfigureAwait(true);
 
     [RelayCommand]
     private void SelectNone() => IsNone = true;

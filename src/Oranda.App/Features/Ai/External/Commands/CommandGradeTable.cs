@@ -358,6 +358,7 @@ public static class CommandGradeTable
         "oranda.ai.explainPlan",
         "oranda.ai.explainSql",
         "oranda.ai.fixError",
+        "oranda.ai.setup.open", // 「oranda.ai.」 앞머리 규칙으로 거부(에이전트가 연결 도우미를 열지 않게)
         "oranda.ai.tune",
         "oranda.ai.tuneStatement",
 

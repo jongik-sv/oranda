@@ -47,6 +47,7 @@ namespace Oranda.App.Tests.Features.Roles
             "ChangeBundleNotices", // 반영 묶음 알림: DBMS 다름 메시지·탭 제목 건수(설계 9.3, T9)
             "TableDraftStartup", // 새 테이블 작업 저장: 종료 때 써 두기·시작 때 되살리기(설계 18.7, T16d)
             "RollbackMaintenance", // RB-22: 되돌리기 기록은 기능·역할과 상관없이 남아 정리도 늘 돈다
+            "AiSetupFirstRunPrompt", // AI 연결 도우미 첫 실행 묻기: 공통 네임스페이스, aiTuning 은 작업 안에서 본다(ai-onboard-1123)
             "AiContextKeys", "AgentBridgeStartup",
         ];
 

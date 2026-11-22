@@ -103,6 +103,12 @@ public sealed record ChatModelEntry(string Label) : ChatEntry;
 public sealed record ChatAssistantEntry(string Text) : ChatEntry;
 
 /// <summary>
+/// AI 실패 띠(AI 를 아직 연결하지 않아 못 보냈을 때): 안내 한 줄 + 「AI 연결 도우미 열기」 단추. 보일지는 <c>AiSetupOffer.ShouldOffer</c> 가 정한다.
+/// </summary>
+/// <param name="Reason">도우미에 넘길 까닭(로그인 안 됨 등). 「선택 안 함」 은 null.</param>
+public sealed record ChatSetupEntry(string Hint, string ButtonText, Oranda.Core.Ai.Setup.AiSetupErrorKind? Reason) : ChatEntry;
+
+/// <summary>
 /// 도구 카드: 도구 이름, 응답 크기, 게이트 판단(허용·거절·실행 중 등). 한 줄 제목·핵심 인자·거부/실패 사유 문장은 <see cref="ToolCardText"/> 표에서 만든다.
 /// <see cref="Arguments"/> 는 드라이버의 인자 요약(LLM 이 보낸 글 그대로라 리터럴은 이미 <c>:vN</c> 으로 가려져 있다), <see cref="Note"/> 는 게이트 사유 코드.
 /// </summary>

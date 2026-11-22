@@ -4,6 +4,7 @@
     {"id": "oranda.ai.explainPlan", "page": "ai/commands"},
     {"id": "oranda.ai.explainSql", "page": "ai/commands"},
     {"id": "oranda.ai.fixError", "page": "ai/commands"},
+    {"id": "oranda.ai.setup.open", "page": "ai/setup"},
     {"id": "oranda.ai.tune", "page": "ai/commands"},
     {"id": "oranda.ai.tuneStatement", "page": "ai/commands"},
     {"id": "oranda.conn.changePassword", "page": "connect/manage"},
@@ -410,6 +411,7 @@
   ],
   "dialogSources": [
     {"id": "Features/Ai/Settings/AiConfirmDialog.cs", "page": "ai/commands"},
+    {"id": "Features/AiSetup/Entry/AiSetupFirstRunPrompt.cs", "page": "ai/setup"},
     {"id": "Features/DataCopy/DataCopyDialogs.cs", "page": "transfer/data-copy"},
     {"id": "Features/Execution/AvaloniaExecutionDialogs.cs", "page": "run/execute"},
     {"id": "Features/LockMonitor/LockKillDialog.cs", "page": "tools/monitor"},

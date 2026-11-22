@@ -4,7 +4,11 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.AiSetup.Contract;
+using Oranda.App.Features.AiSetup.Entry;
 using Oranda.Core.Ai.Contracts;
+using Oranda.Core.Ai.Profiles;
+using Oranda.Core.Ai.Setup;
 
 namespace Oranda.App.Features.Ai.Kit;
 
@@ -140,6 +144,34 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
 
     /// <summary>시계(시험이 바꾼다).</summary>
     internal Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
+
+    /// <summary>도우미를 연다(실패 띠 단추). 기본 = 앱의 런처(없으면 아무것도 안 함).</summary>
+    internal Func<AiSetupErrorKind?, Task<bool>> OpenSetup { get; init; } = reason => AiSetupOpener.OpenFromAppAsync(AiSetupEntry.FailureBand, reason);
+
+    /// <summary>그 등급의 실행 대상 종류(실패 띠 판단, 가벼운 일 모델이면 그 대상). 기본 = 앱 설정.</summary>
+    internal Func<AiTier, AiActiveKind?> ActiveKind { get; init; } = AiSetupOpener.CurrentActiveKind;
+
+    /// <summary>「AI 연결 도우미 열기」 를 보인다(AI 를 아직 연결하지 않아 못 보냈을 때, <see cref="AiSetupOffer"/>).</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(OpenSetupCommand))]
+    private bool _showsSetup;
+
+    private AiSetupErrorKind? _setupReason;
+
+    /// <summary>도우미 단추 글.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822", Justification = "화면 바인딩은 인스턴스 속성을 본다.")]
+    public string SetupButtonText => AiSetupEntryText.OpenButton(AiSetupText.CurrentIsEnglish);
+
+    [RelayCommand(CanExecute = nameof(ShowsSetup))]
+    private async Task OpenSetupAsync() => await OpenSetup(_setupReason).ConfigureAwait(true);
+
+    // 실패·거부 뒤 도우미 단추를 보일지 정한다(오류 코드, 또는 「모델 선택 안 함」 거부 글).
+    private void DecideSetup(string? errorCode, bool notConfigured, AiTier tier = AiTier.Main)
+    {
+        var kind = notConfigured ? AiActiveKind.None : ActiveKind(tier);
+        _setupReason = AiSetupOffer.ReasonFor(errorCode);
+        ShowsSetup = AiSetupOffer.ShouldOffer(errorCode, kind);
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsVisible), nameof(HasAnswer), nameof(IsDone), nameof(IsFailed), nameof(ShowsRawText), nameof(HasParts), nameof(CanContinueVisible), nameof(ShowsAccept))]
@@ -329,6 +361,7 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
         Answer = null;
         LastResult = null;
         ShowsRetryOnMain = false;
+        ShowsSetup = false;
         IsAccepted = false;
         State = AiStripState.Running;
         RefreshProgress();
@@ -348,6 +381,11 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
 
             if (preparation.Request is not { } request)
             {
+                if (preparation.RefusalText == AiEntryRule.NotConfiguredText)
+                {
+                    DecideSetup(errorCode: null, notConfigured: true);
+                }
+
                 Finish(AiStripState.Refused, preparation.RefusalText ?? CancelledText);
                 return;
             }
@@ -367,6 +405,7 @@ public sealed partial class AiInlineStripViewModel : ObservableObject
             if (!result.Succeeded)
             {
                 ShowsRetryOnMain = _canRetryOnMain && result.RetryOnMain;
+                DecideSetup(result.ErrorCode, notConfigured: false, request.Run.Route.Tier);
                 Finish(AiStripState.Failed, "오류: " + result.Error);
                 return;
             }

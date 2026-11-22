@@ -293,7 +293,7 @@ public sealed class RoleSurfaceMatrixTests
             Assert.Equal(a.TopMenus, b.TopMenus);
             Assert.Equal(a.StatusTypes.Order(), b.StatusTypes.Order());
             Assert.Equal(a.StartupTasks.Order(), b.StartupTasks.Order());
-            Assert.Equal(17, a.StartupTasks.Count); // + TableDraftStartup(T16d) + 반영 묶음 자동 넣기 ChangeBundleRecorder·알림 ChangeBundleNotices(2026-11-17)
+            Assert.Equal(18, a.StartupTasks.Count); // + AI 연결 도우미 첫 실행 묻기 AiSetupFirstRunPrompt(공통, ai-onboard-1123) + TableDraftStartup(T16d) + 반영 묶음 자동 넣기 ChangeBundleRecorder·알림 ChangeBundleNotices(2026-11-17)
             Assert.Equal(10, a.TopMenus.Count); // 「모니터」 가 없다
             Assert.True(a.RegistryCommands.Count < ShellTestHelpers.AppContributions.Commands.Count);
         }
@@ -314,14 +314,14 @@ public sealed class RoleSurfaceMatrixTests
         Assert.Equal(OptInItems.Without(all.Panels).Count(), s.RegistryPanels.Count);
         Assert.Equal(11, s.TopMenus.Count);
         Assert.Equal(11, s.StatusTypes.Count); // + 외부 에이전트 띠(agent-cli 2026-11-22)
-        Assert.Equal(22, s.StartupTasks.Count); // + TableDraftStartup(T16d) + 반영 묶음 자동 넣기 ChangeBundleRecorder·알림 ChangeBundleNotices(2026-11-17)
+        Assert.Equal(23, s.StartupTasks.Count); // + AiSetupFirstRunPrompt(공통, ai-onboard-1123) + TableDraftStartup(T16d) + 반영 묶음 자동 넣기 ChangeBundleRecorder·알림 ChangeBundleNotices(2026-11-17)
         Assert.Equal(OptInItems.StartupTaskNames.Order(StringComparer.Ordinal), s.SkippedTasks.Order(StringComparer.Ordinal));
         Assert.Equal(PrdMatrix.AllFeatures.Order(), s.GateEnabled.Order());
         Assert.False(s.GateReadOnlyRole);
         Assert.Equal(PrdMatrix.AllTasks.Order(), s.StartupTasks.Order());
 
         // 조사 0절의 숫자(명령 281·도구 창 33·상태 칸 10·시작 작업 14) + WP-07 이 더한 것(기능 Role 고르기 명령 1개) + 도움말 「새 기능」(oranda.help.releaseNotes, eab3889) 1개 + 튜닝 「튜닝 추천」(oranda.tuning.recommend, TSK-14-17) 1개. 시작 작업은 그 뒤 공통 2개를 더해 16(PrdMatrix.AllTasks). 도구 창 33 = 개발 빌드 전용 포함.
-        Assert.Equal(313, all.Commands.Count); // + 외부 에이전트 연결(oranda.agent.external.connect, agent-cli 2026-11-22) // + 통계 수집 실행(oranda.schema.gatherStats·oranda.tuning.gatherStats, SG-1) 2개 // + 만들던 새 테이블(oranda.schema.resumeNewTable, T16d) 1개 // + 새 테이블·이 구조로 새 테이블(oranda.schema.newTable·newTableLike, 테이블 편집기 T8) 2개 // + 테이블 편집 켜기·끄기(oranda.tableEdit.toggle, 팔레트) 1개 // + 반영 묶음 창 열기(oranda.view.changeBundle, 2026-11-17) 1개 // + 이 행 상태로 되돌리기(oranda.grid.flashback.restoreRow, fb-w1) 1개 // + 이 실행 전과 비교(oranda.rollback.compare, 메뉴 없음, RB-32) 1개 + 원복 스크립트 열기·원복 실행(oranda.rollback.openScript·runScript, 메뉴 없음) 2개(되돌리기 지점 RB-43) ·+ 명세+본문 컴파일(oranda.plsql.compileSpecAndBody, PKG1) 1개 + 메타데이터 캐시 초기화(oranda.schema.resetMetadataCache) 1개 + 실행하고 실제 계획(oranda.plan.runActual) 1개 + AI 튜닝 명령 5개(aiTuning 기본 켬) + 도움말 「사용자 문서」(oranda.help.docs, F1) 1개 + 결과 그리드 열 필터 켜기/끄기·정렬 3개(oranda.grid.toggleColumnFilter·sortAscending·sortDescending·clearSort) 4개 + 줄 단위 IN 목록 복사(oranda.grid.copyAsInListLines) 1개 + 데이터 복사(oranda.tools.dataCopy·oranda.schema.addToDataCopy) 2개  + 드라이버 설정 열기(oranda.settings.openDrivers) 1개
+        Assert.Equal(314, all.Commands.Count); // + AI 연결 도우미(oranda.ai.setup.open, ai-onboard-1123) + 외부 에이전트 연결(oranda.agent.external.connect, agent-cli 2026-11-22) // + 통계 수집 실행(oranda.schema.gatherStats·oranda.tuning.gatherStats, SG-1) 2개 // + 만들던 새 테이블(oranda.schema.resumeNewTable, T16d) 1개 // + 새 테이블·이 구조로 새 테이블(oranda.schema.newTable·newTableLike, 테이블 편집기 T8) 2개 // + 테이블 편집 켜기·끄기(oranda.tableEdit.toggle, 팔레트) 1개 // + 반영 묶음 창 열기(oranda.view.changeBundle, 2026-11-17) 1개 // + 이 행 상태로 되돌리기(oranda.grid.flashback.restoreRow, fb-w1) 1개 // + 이 실행 전과 비교(oranda.rollback.compare, 메뉴 없음, RB-32) 1개 + 원복 스크립트 열기·원복 실행(oranda.rollback.openScript·runScript, 메뉴 없음) 2개(되돌리기 지점 RB-43) ·+ 명세+본문 컴파일(oranda.plsql.compileSpecAndBody, PKG1) 1개 + 메타데이터 캐시 초기화(oranda.schema.resetMetadataCache) 1개 + 실행하고 실제 계획(oranda.plan.runActual) 1개 + AI 튜닝 명령 5개(aiTuning 기본 켬) + 도움말 「사용자 문서」(oranda.help.docs, F1) 1개 + 결과 그리드 열 필터 켜기/끄기·정렬 3개(oranda.grid.toggleColumnFilter·sortAscending·sortDescending·clearSort) 4개 + 줄 단위 IN 목록 복사(oranda.grid.copyAsInListLines) 1개 + 데이터 복사(oranda.tools.dataCopy·oranda.schema.addToDataCopy) 2개  + 드라이버 설정 열기(oranda.settings.openDrivers) 1개
     });
 
     private static RoleSurface? _baseline;

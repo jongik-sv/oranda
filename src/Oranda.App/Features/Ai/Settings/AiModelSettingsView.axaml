@@ -38,6 +38,9 @@
     <StackPanel Spacing="3">
       <TextBlock Text="AI 모델" FontWeight="SemiBold" />
       <TextBlock Text="AI 튜닝과 대화에 사용할 모델을 선택합니다." Classes="dim" FontSize="{DynamicResource OrandaFontSizeSmall}" />
+      <!-- 처음 연결하는 사람용: 단추만 눌러 따라 하는 AI 연결 도우미(도구 메뉴와 같은 창). -->
+      <HyperlinkButton x:Name="SetupLink" Padding="0" Content="{Binding SetupLinkText}" Command="{Binding OpenSetupCommand}"
+                       AutomationProperties.Name="{Binding SetupLinkText}" />
     </StackPanel>
 
     <Border BorderBrush="{DynamicResource OrandaSeparatorBrush}" BorderThickness="1" CornerRadius="8" Padding="14">

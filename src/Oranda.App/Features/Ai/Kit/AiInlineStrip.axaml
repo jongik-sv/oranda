@@ -22,6 +22,8 @@
           <Button x:Name="StripAccept" Classes="accent" Content="받아들이기" Command="{Binding AcceptCommand}" IsVisible="{Binding ShowsAccept}"
                   ToolTip.Tip="편집기에 제안으로 넣습니다(바뀌는 곳을 보고 적용합니다. 실행하지 않습니다)" AutomationProperties.Name="받아들이기" />
           <Button x:Name="StripDiscard" Classes="tool" Content="버리기" Command="{Binding DiscardCommand}" IsVisible="{Binding ShowsAccept}" AutomationProperties.Name="버리기" />
+          <Button x:Name="StripSetup" Classes="accent" Content="{Binding SetupButtonText}" Command="{Binding OpenSetupCommand}" IsVisible="{Binding ShowsSetup}"
+                  AutomationProperties.Name="{Binding SetupButtonText}" />
           <Button x:Name="StripStop" Classes="tool" Content="멈춤" Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}" AutomationProperties.Name="멈춤" />
           <Button x:Name="StripRetryMain" Classes="tool" Content="주 모델로 다시 보내기" Command="{Binding RetryOnMainCommand}" IsVisible="{Binding ShowsRetryOnMain}"
                   ToolTip.Tip="가벼운 일 모델이 실패했습니다. 주 모델로 다시 보냅니다(보내는 곳을 다시 확인합니다)" AutomationProperties.Name="주 모델로 다시 보내기" />

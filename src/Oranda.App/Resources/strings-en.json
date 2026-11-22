@@ -1137,5 +1137,6 @@
   "AgentBar.close": "Close",
   "AgentBar.compareTitle": "Proposal from {0}",
   "AgentBar.notApplied": "Not applied. Accept again or discard it.",
-  "AgentBar.notSaved": "Not saved."
+  "AgentBar.notSaved": "Not saved.",
+  "Cmd.oranda.ai.setup.open": "AI Setup Assistant…"
 }

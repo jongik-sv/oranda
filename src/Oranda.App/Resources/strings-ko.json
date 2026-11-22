@@ -1137,5 +1137,6 @@
   "AgentBar.close": "닫기",
   "AgentBar.compareTitle": "{0} 의 제안",
   "AgentBar.notApplied": "넣지 않았습니다. 다시 받아들이거나 버리세요.",
-  "AgentBar.notSaved": "저장하지 않았습니다."
+  "AgentBar.notSaved": "저장하지 않았습니다.",
+  "Cmd.oranda.ai.setup.open": "AI 연결 도우미…"
 }

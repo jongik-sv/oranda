@@ -172,6 +172,7 @@ internal static class PrdMatrix
         "NavigationWiring", "PlsqlWorkspacePersistence", "RecentFilesStartup", "ResultGridSettingsStartup", "SqlEditorDockWiring",
         "UpdateStartup", "HistoryRecorder", "ChangeJournalRecorder", "ChangeBundleRecorder", "ChangeBundleNotices", "PlSqlWarmUpTask",
         "SessionsAutoShow", "MetadataCachePruner", "RollbackMaintenance",
+        "AiSetupFirstRunPrompt", // 공통: AI 연결 도우미 첫 실행 묻기(조건 안에서 aiTuning 을 본다, ai-onboard-1123)
         "TableDraftStartup", // tableEditor: 새 테이블 작업 저장(2026-11-17 T16d)
         "AiContextKeys", "AgentBridgeStartup", // aiTuning(2026-10-29 기본 켬)
     ];
