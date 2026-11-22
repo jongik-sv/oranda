@@ -328,9 +328,9 @@ public sealed class Oracle11gTests : IAsyncLifetime
                 continue;
             }
 
-            // 틀 문장(K5)은 보내지 않는다: 이 훑기가 채우는 자리(@PFX@·@SEGMENTS@·@LONGNAME@) 말고 다른 @KEY@ 가 남으면 앱이 표·조건·리터럴을 끼워 넣는 틀이다.
+            // 틀 문장(K5)은 보내지 않는다: 이 훑기가 채우는 자리(@PFX@·@SEGMENTS@·@LONGNAME@·app.user_fn_* 의 @PAIRS@) 말고 다른 @KEY@ 가 남으면 앱이 표·조건·리터럴을 끼워 넣는 틀이다.
             // 자리마다 뜻이 달라(@TABLE@ = 표 이름 또는 따옴표 리터럴) 빈 값으로는 구문이 맞지 않는다(ORA-00933·ORA-00903).
-            var templateKeys = TemplateKeys(Fill(query.Sql, "dba"));
+            var templateKeys = TemplateKeys(Fill(query.Sql, "dba", id));
             if (templateKeys.Count > 0)
             {
                 skippedForTemplate.Add($"{query.Header.Path} [{string.Join(' ', templateKeys)}]");
@@ -339,7 +339,7 @@ public sealed class Oracle11gTests : IAsyncLifetime
 
             foreach (var prefix in new[] { "dba", "all" })
             {
-                var sql = Fill(query.Sql, prefix);
+                var sql = Fill(query.Sql, prefix, id);
                 try
                 {
                     await ParseOnlyAsync(raw, sql);
@@ -404,11 +404,28 @@ public sealed class Oracle11gTests : IAsyncLifetime
         Assert.True(problems.Count == 0, $"문제 {problems.Count}개:{Environment.NewLine}{string.Join(Environment.NewLine, problems)}");
     }
 
-    /// <summary>이 훑기가 채우는 자리: 사전 뷰 앞머리·세그먼트 뷰·Java 긴 이름.</summary>
-    private static string Fill(string sql, string prefix) =>
-        sql.Replace("@PFX@", prefix, StringComparison.Ordinal)
-           .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal)
-           .Replace("@LONGNAME@", "DBMS_JAVA.LONGNAME(j.object_name)", StringComparison.Ordinal);
+    /// <summary>
+    /// app.user_fn_* 의 <c>@PAIRS@</c> 에 넣는 (소유자, 이름) 조건의 이름 열. UserFunctionSafetyChecker 가 글마다 같은 열로 만든다.
+    /// </summary>
+    private static readonly Dictionary<string, string> UserFnNameColumns = new(StringComparer.Ordinal)
+    {
+        ["app.user_fn_objects"] = "object_name",
+        ["app.user_fn_dependencies"] = "name",
+        ["app.user_fn_synonyms"] = "synonym_name",
+        ["app.user_fn_targets"] = "object_name",
+        ["app.user_fn_source"] = "name",
+    };
+
+    /// <summary>이 훑기가 채우는 자리: 사전 뷰 앞머리·세그먼트 뷰·Java 긴 이름·사용자 함수 확인의 (소유자, 이름) 조건(제품과 같은 꼴 두 쌍).</summary>
+    private static string Fill(string sql, string prefix, string id)
+    {
+        var filled = sql.Replace("@PFX@", prefix, StringComparison.Ordinal)
+                        .Replace("@SEGMENTS@", "dba_segments", StringComparison.Ordinal)
+                        .Replace("@LONGNAME@", "DBMS_JAVA.LONGNAME(j.object_name)", StringComparison.Ordinal);
+        return UserFnNameColumns.TryGetValue(id, out var nameColumn)
+            ? filled.Replace("@PAIRS@", $"(owner = 'SYS' AND {nameColumn} = 'DUAL') OR (owner = 'SYS' AND {nameColumn} = 'DBMS_OUTPUT')", StringComparison.Ordinal)
+            : filled;
+    }
 
     /// <summary>주석 줄을 뗀 본문에 남은 <c>@KEY@</c> 자리(이름 순, 겹치지 않게).</summary>
     private static List<string> TemplateKeys(string sql)
