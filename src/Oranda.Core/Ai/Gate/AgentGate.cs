@@ -270,7 +270,9 @@ public sealed partial class AgentGate : IAgentGate, IAgentExternalGate
         }
 
         var production = session.Profile.Environment == ConnectionEnvironment.Production;
-        if (tool.DevTestOnly && production)
+
+        // 외부 허가 하위 세션만 운영 실행을 허가 정책에 묻는다(D5, AgentGrantPolicy.ExecutesIn). 내장 AI 실행은 그대로 운영 거부(E-23).
+        if (tool.DevTestOnly && production && !(session.Run.External && AgentGrantPolicy.ExecutesIn(session.Profile.Environment)))
         {
             return Deny("environment", "This tool is not available on production connections.");
         }
@@ -411,7 +413,7 @@ public sealed partial class AgentGate : IAgentGate, IAgentExternalGate
         return new GateOutcome(
             new AgentCallToolResult(false, text),
             removed > 0 ? AiToolJudgement.Masked : AiToolJudgement.Allowed,
-            removed > 0 ? (reason is null ? "masked" : "masked, " + reason) : reason);
+            WithNotes(removed > 0 ? (reason is null ? "masked" : "masked, " + reason) : reason, output));
     }
 
     private AgentAuditEntry BuildAuditEntry(

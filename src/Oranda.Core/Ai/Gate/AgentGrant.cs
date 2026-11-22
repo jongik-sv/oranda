@@ -203,16 +203,16 @@ public static class AgentGrantPolicy
 {
     /// <summary>
     /// D5: 운영 접속에서도 <c>query</c>·<c>run_tab</c>·<c>export_result</c>·계획 도구를 쓴다(외부 상한 운영 = QueryRows).
-    /// C0 는 꺼 둔다(지금 동작 그대로). 켜는 일 = m-gate-prod(G3).
+    /// 켬(D5 확정, m-gate-prod G3). 끄면(false) 운영 = Metadata 상한으로 돌아가고 다른 코드는 바꾸지 않는다(§3.2 되돌리기).
     /// const 가 아닌 까닭: 시험·처리자의 <c>if</c> 에 넣어도 CS0162(도달 못 하는 코드)가 -warnaserror 빌드를 깨지 않게.
     /// </summary>
-    public static readonly bool ProductionRuns;
+    public static readonly bool ProductionRuns = true;
 
     /// <summary>
     /// D5: 「로컬 모델」 허가면 운영 접속도 가리지 않는다(민감 열·리터럴·운영 탭 글). 꺼져 있으면 로컬 모델은 개발·시험에서만 가림을 푼다.
-    /// C0 는 꺼 둔다. 켜는 일 = m-gate-prod(G3). const 가 아닌 까닭은 <see cref="ProductionRuns"/> 와 같다.
+    /// 켬(D5 확정, m-gate-prod G3). 끄면 운영은 로컬 모델이어도 가린다. const 가 아닌 까닭은 <see cref="ProductionRuns"/> 와 같다.
     /// </summary>
-    public static readonly bool LocalModelCoversProduction;
+    public static readonly bool LocalModelCoversProduction = true;
 
     /// <summary>기본 기한 8시간(E-4). 「연장」 한 번도 같은 길이.</summary>
     public static readonly TimeSpan DefaultLifetime = TimeSpan.FromHours(8);

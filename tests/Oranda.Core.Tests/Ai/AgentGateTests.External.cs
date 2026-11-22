@@ -19,10 +19,15 @@ public partial class AgentGateTests
     private sealed class ExternalFixture
     {
         public ExternalFixture(params ConnectionProfile[] profiles)
+            : this(false, profiles)
+        {
+        }
+
+        public ExternalFixture(bool localModel, params ConnectionProfile[] profiles)
         {
             Store.AttachWriter(new NullWriter());
             Issue = Store.Create(new AgentGrantRequest(
-                [.. profiles.Select(p => new AgentGrantTarget(p, AgentGrantPolicy.DefaultCap(p.Environment)))], null));
+                [.. profiles.Select(p => new AgentGrantTarget(p, AgentGrantPolicy.DefaultCap(p.Environment)))], null, LocalModel: localModel));
             foreach (var name in new[] { AppToolNames.Query, AppToolNames.FindObjects, AppToolNames.GetDdl })
             {
                 Handlers[name] = new FakeHandler(name);
@@ -91,21 +96,153 @@ public partial class AgentGateTests
     }
 
     [Fact]
-    public async Task Production_is_capped_at_metadata_for_external_grants()
+    public async Task Production_runs_select_only_when_the_policy_allows_it()
     {
+        // D5(G2): 운영 실행은 AgentGrantPolicy.ExecutesIn 한 곳이 정한다. 스위치를 끄면 옛 동작(Metadata 상한)으로 돌아간다.
         var fx = new ExternalFixture(ExtPrd());
-        AssertDenied(await fx.Call(AgentToolNames.GetTableStats, """{"table":"TB_ORDER"}"""), AgentErrorCodes.Level);
-        AssertDenied(await fx.Call(AppToolNames.Query, """{"sql":"SELECT 1 FROM TB_ORDER"}"""), AgentErrorCodes.Level);
-        var ddl = await fx.Call(AppToolNames.GetDdl, """{"object":"TB_ORDER"}""");
-        Assert.False(ddl.Result.IsError, ddl.Result.Text); // 메타데이터는 된다(결과의 SQL 글은 가림)
-
         var names = fx.Gate.ListTools(fx.Store.Find(fx.Issue.Grant.GrantId)!).Select(t => t.Name).ToList();
         Assert.Contains(AgentToolNames.DescribeObject, names);
         Assert.Contains(AppToolNames.GetDdl, names);
         Assert.Contains(AppToolNames.ListTabs, names);
-        Assert.DoesNotContain(AppToolNames.Query, names);
-        Assert.DoesNotContain(AgentToolNames.GetCursorPlan, names);
+        var ddl = await fx.Call(AppToolNames.GetDdl, """{"object":"TB_ORDER"}""");
+        Assert.False(ddl.Result.IsError, ddl.Result.Text); // 메타데이터는 언제나 된다(결과의 SQL 글은 가림)
+
+        var query = await fx.Call(AppToolNames.Query, """{"sql":"SELECT 1 FROM TB_ORDER"}""");
+        var stats = await fx.Call(AgentToolNames.GetTableStats, """{"table":"TB_ORDER"}""");
+        if (AgentGrantPolicy.ProductionRuns)
+        {
+            Assert.False(query.Result.IsError, query.Result.Text);
+            Assert.True(Assert.Single(fx.Handlers[AppToolNames.Query].Calls).MayExecuteSql);
+            Assert.False(stats.Result.IsError, stats.Result.Text); // 운영 수준 Query ≥ Plan
+            Assert.Contains(AppToolNames.Query, names);
+            Assert.Contains(AgentToolNames.GetTableStats, names);
+        }
+        else
+        {
+            AssertDenied(query, AgentErrorCodes.Level);
+            AssertDenied(stats, AgentErrorCodes.Level);
+            Assert.DoesNotContain(AppToolNames.Query, names);
+            Assert.DoesNotContain(AgentToolNames.GetCursorPlan, names);
+        }
     }
+
+    [Fact]
+    public async Task Production_query_with_a_cloud_model_masks_row_values_and_literals_and_audits_the_row_count()
+    {
+        var fx = new ExternalFixture(ExtPrd());
+        fx.Handlers[AppToolNames.Query].Respond = _ => AgentToolOutput.Ok(QueryRows()) with { RowCount = 2 };
+
+        var response = await fx.Call(AppToolNames.Query, """{"sql":"SELECT ID FROM TB_ORDER WHERE ST = 'A'"}""", client: "codex");
+        if (!AgentGrantPolicy.ProductionRuns)
+        {
+            AssertDenied(response, AgentErrorCodes.Level);
+            return;
+        }
+
+        Assert.False(response.Result.IsError, response.Result.Text);
+        var result = JsonNode.Parse(response.Result.Text)!;
+        Assert.Null(result["row_values"]); // 운영 Query 수준 = 행 값 없음
+        Assert.Equal(2, (int)result["row_count"]!);
+        var call = Assert.Single(fx.Handlers[AppToolNames.Query].Calls);
+        Assert.False(call.Session.Context.LocalAi);
+        Assert.NotNull(call.Session.Run.Literals); // 클라우드 모델 운영은 리터럴 가림
+
+        var audit = fx.Inner.Audit.Entries[^1];
+        Assert.Equal("codex", audit.Client);
+        Assert.Equal("prd-erp", audit.ProfileName);
+        Assert.EndsWith("rows=2", audit.Reason, StringComparison.Ordinal);
+        Assert.Contains("masked", audit.Reason, StringComparison.Ordinal);
+        Assert.Contains("literals=masked", audit.Arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("'A'", audit.Arguments, StringComparison.Ordinal); // 문장 글은 길이만
+    }
+
+    [Fact]
+    public async Task Production_query_with_the_local_model_shows_row_values_when_the_cover_switch_is_on()
+    {
+        var fx = new ExternalFixture(true, ExtPrd());
+        fx.Handlers[AppToolNames.Query].Respond = _ => AgentToolOutput.Ok(QueryRows()) with { RowCount = 2 };
+
+        var response = await fx.Call(AppToolNames.Query, """{"sql":"SELECT ID FROM TB_ORDER"}""", client: "opencode");
+        if (!AgentGrantPolicy.ProductionRuns)
+        {
+            AssertDenied(response, AgentErrorCodes.Level);
+            return;
+        }
+
+        Assert.False(response.Result.IsError, response.Result.Text);
+        var result = JsonNode.Parse(response.Result.Text)!;
+        var call = Assert.Single(fx.Handlers[AppToolNames.Query].Calls);
+        var audit = fx.Inner.Audit.Entries[^1];
+        if (AgentGrantPolicy.LocalModelCoversProduction)
+        {
+            Assert.NotNull(result["row_values"]); // 로컬 모델 = 운영도 모두 보임
+            Assert.True(call.Session.Context.LocalAi);
+            Assert.Null(call.Session.Run.Literals);
+            Assert.Equal("rows=2", audit.Reason);
+            Assert.Contains("data=local_ai", audit.Arguments, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Null(result["row_values"]);
+            Assert.False(call.Session.Context.LocalAi);
+        }
+    }
+
+    [Fact]
+    public async Task Development_query_with_the_local_model_is_local_and_with_a_cloud_model_is_not()
+    {
+        var local = new ExternalFixture(true, ExtDev());
+        await local.Call(AppToolNames.Query, """{"sql":"SELECT ID FROM TB_ORDER"}""");
+        Assert.True(Assert.Single(local.Handlers[AppToolNames.Query].Calls).Session.Context.LocalAi);
+
+        var cloud = new ExternalFixture(ExtDev());
+        await cloud.Call(AppToolNames.Query, """{"sql":"SELECT ID FROM TB_ORDER"}""");
+        Assert.False(Assert.Single(cloud.Handlers[AppToolNames.Query].Calls).Session.Context.LocalAi);
+    }
+
+    [Fact]
+    public async Task App_tool_row_count_goes_into_the_audit_reason()
+    {
+        var fx = new ExternalFixture(ExtDev());
+        fx.App(AppToolNames.ListTabs).Respond = _ => AppToolOutputs.OkWithRows(new JsonObject { ["ok"] = true }, 7);
+
+        var response = await fx.Call(AppToolNames.ListTabs);
+
+        Assert.False(response.Result.IsError, response.Result.Text);
+        Assert.Equal("rows=7", fx.Inner.Audit.Entries[^1].Reason);
+    }
+
+    [Theory]
+    [InlineData(null, null, null, null)]
+    [InlineData("masked", null, null, "masked")]
+    [InlineData(null, 0L, null, "rows=0")]
+    [InlineData("masked", 12L, null, "masked, rows=12")]
+    [InlineData(null, null, "grade=confirm,status=confirmed", "grade=confirm,status=confirmed")]
+    [InlineData("masked", 3L, " grade=now,status=done ", "masked, rows=3, grade=now,status=done")]
+    [InlineData(null, null, "  ", null)]
+    public void Row_count_and_audit_note_are_appended_to_the_reason(string? reason, long? rows, string? note, string? expected)
+    {
+        var output = AgentToolOutput.Ok(new JsonObject()) with { RowCount = rows, AuditNote = note };
+        Assert.Equal(expected, AgentGate.WithNotes(reason, output));
+    }
+
+    [Fact]
+    public async Task App_tool_audit_note_goes_into_the_audit_reason()
+    {
+        var fx = new ExternalFixture(ExtDev());
+        fx.App(AppToolNames.ListTabs).Respond = _ => AgentToolOutput.Ok(new JsonObject { ["ok"] = true }) with { AuditNote = "grade=confirm,status=confirmed" };
+
+        await fx.Call(AppToolNames.ListTabs);
+
+        Assert.Equal("grade=confirm,status=confirmed", fx.Inner.Audit.Entries[^1].Reason);
+    }
+
+    private static JsonObject QueryRows() => new()
+    {
+        ["columns"] = new JsonArray(new JsonObject { ["name"] = "ID", ["type"] = "NUMBER" }),
+        ["row_values"] = new JsonArray(new JsonArray(1), new JsonArray(2)),
+        ["row_count"] = 2,
+    };
 
     [Fact]
     public async Task Query_runs_one_checked_select_and_refuses_unverifiable_functions()

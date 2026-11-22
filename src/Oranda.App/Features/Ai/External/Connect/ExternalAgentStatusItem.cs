@@ -84,6 +84,9 @@ public sealed class ExternalAgentStatusViewModel : ViewModelBase, IStatusBarItem
 
     public bool IsConnected => _link?.Current is not null;
 
+    /// <summary>허가에 운영 접속이 들어 있다: 띠를 경고색으로 그리고 글에 「운영 포함」을 넣는다(§3.2).</summary>
+    public bool IncludesProduction => _link?.Current?.Production == true;
+
     public bool SkillReinstallNeeded => _skillReinstallNeeded;
 
     public bool IsVisible => IsConnected || SkillReinstallNeeded;
@@ -101,6 +104,10 @@ public sealed class ExternalAgentStatusViewModel : ViewModelBase, IStatusBarItem
             }
 
             var parts = new List<string> { UiText.Get("AgentLink.status.connected", "에이전트 연결됨") };
+            if (state.Production)
+            {
+                parts.Add(ExternalAgentText.StatusProduction);
+            }
             if (state.Clients.Count > 0)
             {
                 parts.Add(string.Join(", ", state.Clients));
@@ -309,6 +316,7 @@ public sealed class ExternalAgentStatusViewModel : ViewModelBase, IStatusBarItem
         }
 
         OnPropertyChanged(nameof(IsConnected));
+        OnPropertyChanged(nameof(IncludesProduction));
         OnPropertyChanged(nameof(SkillReinstallNeeded));
         OnPropertyChanged(nameof(IsVisible));
         OnPropertyChanged(nameof(CanExtend));

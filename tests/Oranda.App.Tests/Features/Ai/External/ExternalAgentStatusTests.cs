@@ -218,6 +218,41 @@ public sealed class ExternalAgentStatusTests
         }
     });
 
+    [Fact]
+    public Task Production_in_the_grant_turns_the_band_to_the_warning_colour_and_says_so() => HeadlessHost.Run(() =>
+    {
+        var (vm, link, time) = Create();
+        var view = new ExternalAgentStatusView { DataContext = vm, Height = 22 };
+        var window = new Window { Width = 640, Height = 120, Content = view };
+        try
+        {
+            window.Show();
+            link.Connect(["Codex"], Start.AddHours(8));
+            HeadlessHost.Settle(window);
+            Assert.False(vm.IncludesProduction);
+            Assert.DoesNotContain("운영 포함", vm.Text, StringComparison.Ordinal);
+            Assert.Equal("OrandaEnvDevelopmentBrush", view.DotBrushKey);
+
+            link.Connect(["Codex"], Start.AddHours(8), production: true);
+            HeadlessHost.Settle(window);
+            Assert.True(vm.IncludesProduction);
+            Assert.StartsWith("에이전트 연결됨 · 운영 포함 · Codex", vm.Text, StringComparison.Ordinal);
+            Assert.Equal("OrandaEnvProductionBrush", view.DotBrushKey);
+
+            // 만료 임박이어도 운영 색이 앞선다(「N분 남음」·「연장」은 그대로).
+            time.Advance(TimeSpan.FromHours(8) - TimeSpan.FromMinutes(5));
+            link.Connect(["Codex"], Start.AddHours(8), production: true);
+            HeadlessHost.Settle(window);
+            Assert.True(vm.CanExtend);
+            Assert.Equal("OrandaEnvProductionBrush", view.DotBrushKey);
+        }
+        finally
+        {
+            window.Close();
+            vm.Dispose();
+        }
+    });
+
     [Theory]
     [InlineData(5, "5초 전")]
     [InlineData(59, "59초 전")]
@@ -279,9 +314,9 @@ public sealed class ExternalAgentStatusTests
 
         public event EventHandler<ExternalAgentCall>? CallCompleted;
 
-        public void Connect(IReadOnlyList<string> clients, DateTimeOffset? expiresAt)
+        public void Connect(IReadOnlyList<string> clients, DateTimeOffset? expiresAt, bool production = false)
         {
-            Current = new ExternalAgentLinkState(clients, expiresAt);
+            Current = new ExternalAgentLinkState(clients, expiresAt, production);
             Changed?.Invoke(this, EventArgs.Empty);
         }
 

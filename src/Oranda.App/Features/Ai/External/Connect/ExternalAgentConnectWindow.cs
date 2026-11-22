@@ -52,8 +52,10 @@ public sealed class ExternalAgentConnectWindow : Window
         var empty = Caption(ExternalAgentText.T("저장된 접속이 없습니다. 접속 없이 연결하면 편집기 도구만 씁니다.", "No saved connections. Without one, only editor tools work."));
         empty.IsVisible = vm.Rows.Count == 0;
 
-        var queryRows = Check(ExternalAgentText.T("조회 허용 — 고른 개발·시험 접속의 AI 허용 수준을 「조회 + 행 값」으로 올려 저장", "Allow queries — raise the chosen development/test connections to \"Query + rows\" and save it"),
-            nameof(ExternalAgentConnectViewModel.AllowQueryRows));
+        var queryRows = Check(ExternalAgentConnectViewModel.AllowQueriesText, nameof(ExternalAgentConnectViewModel.AllowQueryRows));
+        var localModel = Check(ExternalAgentConnectViewModel.LocalModelText, nameof(ExternalAgentConnectViewModel.LocalModel));
+        var localModelWarning = Warning(ExternalAgentConnectViewModel.LocalModelWarningText, nameof(ExternalAgentConnectViewModel.ShowsLocalModelWarning));
+        localModelWarning.Margin = new Thickness(28, -6, 0, 0);
         var expire = Check(ExternalAgentText.T("8시간 뒤 끊기", "Disconnect after 8 hours"), nameof(ExternalAgentConnectViewModel.ExpireIn8Hours));
         var unbound = Check(ExternalAgentText.T("접속 없는 탭의 글 읽기 허용", "Allow reading tabs without a connection"), nameof(ExternalAgentConnectViewModel.AllowUnboundTabText));
 
@@ -81,11 +83,12 @@ public sealed class ExternalAgentConnectWindow : Window
                     intro,
                     statusRow,
                     new TextBlock { Text = ExternalAgentText.T("쓸 접속", "Connections to use"), FontWeight = FontWeight.SemiBold },
-                    Caption(ExternalAgentText.T("개발은 기본으로 고릅니다. 운영은 메타데이터만 쓰고, 고르려면 접속 이름을 다시 입력합니다.",
-                        "Development is chosen by default. Production gives metadata only and needs its name typed again.")),
+                    Caption(ExternalAgentConnectViewModel.ConnectionsCaption),
                     empty,
                     rows,
                     queryRows,
+                    localModel,
+                    localModelWarning,
                     expire,
                     unbound,
                     error,
@@ -109,6 +112,15 @@ public sealed class ExternalAgentConnectWindow : Window
         var check = new CheckBox { Content = row.Alias, IsEnabled = row.Usable, MinWidth = 180 };
         check.Bind(Avalonia.Controls.Primitives.ToggleButton.IsCheckedProperty, new Binding(nameof(ExternalAgentConnectionRow.IsChecked)) { Mode = BindingMode.TwoWay });
         var env = new TextBlock { Text = row.EnvironmentText, VerticalAlignment = VerticalAlignment.Center, MinWidth = 60 };
+        if (row.IsProductionMarked)
+        {
+            // 운영 행 빨간 표시(§3.2): 환경 글을 운영 색·굵게.
+            env.Classes.Add(ProductionClass);
+            env.FontWeight = FontWeight.SemiBold;
+            env.Bind(TextBlock.ForegroundProperty, env.GetResourceObservable(DangerBrush));
+            check.Classes.Add(ProductionClass);
+        }
+
         var level = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
         if (row.Usable)
         {
@@ -124,7 +136,25 @@ public sealed class ExternalAgentConnectWindow : Window
         confirm.Bind(TextBox.TextProperty, new Binding(nameof(ExternalAgentConnectionRow.ConfirmName)) { Mode = BindingMode.TwoWay });
         confirm.Bind(IsVisibleProperty, new Binding(nameof(ExternalAgentConnectionRow.NeedsConfirmation)));
         Avalonia.Automation.AutomationProperties.SetName(confirm, row.ConfirmPlaceholder);
-        return new StackPanel { Spacing = 4, DataContext = row, Children = { line, confirm } };
+        var runs = Warning(ExternalAgentConnectionRow.RunWarningText, nameof(ExternalAgentConnectionRow.ShowsRunWarning));
+        var unmasked = Warning(ExternalAgentConnectionRow.UnmaskedWarningText, nameof(ExternalAgentConnectionRow.ShowsUnmaskedWarning));
+        runs.Margin = unmasked.Margin = new Thickness(24, 0, 0, 0);
+        return new StackPanel { Spacing = 4, DataContext = row, Children = { line, runs, unmasked, confirm } };
+    }
+
+    /// <summary>운영 행·경고 글에 붙이는 클래스(시험이 빨간 표시를 찾는다).</summary>
+    internal const string ProductionClass = "agent-production";
+
+    private const string DangerBrush = "OrandaDangerForegroundBrush";
+
+    /// <summary>빨간 경고 한 줄. <paramref name="visiblePath"/> 가 참일 때만 보인다.</summary>
+    private static TextBlock Warning(string text, string visiblePath)
+    {
+        var block = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontWeight = FontWeight.SemiBold };
+        block.Classes.Add(ProductionClass);
+        block.Bind(TextBlock.ForegroundProperty, block.GetResourceObservable(DangerBrush));
+        block.Bind(IsVisibleProperty, new Binding(visiblePath));
+        return block;
     }
 
     private static CheckBox Check(string text, string path)

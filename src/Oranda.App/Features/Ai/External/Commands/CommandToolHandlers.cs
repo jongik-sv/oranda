@@ -187,11 +187,14 @@ internal sealed class RunCommandToolHandler(IServiceProvider services) : Command
             return Refused(result);
         }
 
+        // 성공 호출의 등급·결과는 감사 사유에도 남긴다(G5: rows=N 과 같은 통로, 감사 스키마 그대로).
+        var status = StatusName(result.Status);
+        var grade = result.Grade.ToWire();
         return AgentToolOutput.Ok(new JsonObject
         {
-            ["status"] = StatusName(result.Status),
-            ["grade"] = result.Grade.ToWire(),
-        });
+            ["status"] = status,
+            ["grade"] = grade,
+        }) with { AuditNote = "grade=" + grade + ",status=" + status };
     }
 
     /// <summary>운영 접속에서 데이터 SELECT 를 띄워도 되는가(시험이 바꾼다). 기본 = <see cref="AgentGrantPolicy.MayExecute"/>.</summary>

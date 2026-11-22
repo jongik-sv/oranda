@@ -135,9 +135,9 @@ public class AppToolContract2Tests
     [Fact]
     public void Switches_start_off_in_the_contract_lane()
     {
-        // C0 는 동작을 바꾸지 않는다. m-gate-prod(G3)가 두 값을 켜며 이 시험을 바꾼다.
-        Assert.False(AgentGrantPolicy.ProductionRuns);
-        Assert.False(AgentGrantPolicy.LocalModelCoversProduction);
+        // C0 는 꺼 둔 채 들어왔고 m-gate-prod(G3)가 D5 확정대로 두 값을 켰다. 이름은 계약 레인 그대로 둔다.
+        Assert.True(AgentGrantPolicy.ProductionRuns);
+        Assert.True(AgentGrantPolicy.LocalModelCoversProduction);
     }
 
     [Fact]

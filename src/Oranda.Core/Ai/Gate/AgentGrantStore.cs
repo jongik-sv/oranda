@@ -303,22 +303,25 @@ public sealed class AgentGrantStore : IAgentGrants, IAgentGrantSessions, IDispos
 
     /// <summary>
     /// 하위 세션 하나: 실행 id = <c>허가 id:접속 별칭</c>, 시작 문장 없음, 보낼 범위 = 그 접속 전체(E-17), 수준 = 허가의 수준.
-    /// 운영 접속은 결과의 SQL 글을 가리도록 빈 리터럴 사전을 둔다(DDL·소스·이력 글의 값이 밖으로 나가지 않게).
+    /// 「로컬 AI」 = <see cref="AgentGrantPolicy.UsesLocalModel"/>(허가의 로컬 모델 + 환경·스위치). 게이트의 Db 조회 가림·<c>DataLevel</c> 이 이 값을 읽는다.
+    /// 리터럴을 가려야 하면(<see cref="AgentGrantPolicy.MasksLiterals"/> = 운영이고 로컬 모델이 아님) 결과의 SQL 글을 가리도록 빈 리터럴 사전을 둔다
+    /// (DDL·소스·이력 글의 값이 밖으로 나가지 않게).
     /// </summary>
     private static AgentSession NewSession(Entry entry, AgentGrantTarget target, string? client)
     {
         var profile = target.Profile;
         var level = AgentGrantPolicy.LevelFor(profile, target.Cap);
-        var production = profile.Environment == ConnectionEnvironment.Production;
+        var localAi = AgentGrantPolicy.UsesLocalModel(entry.View, profile.Environment);
+        var masksLiterals = AgentGrantPolicy.MasksLiterals(entry.View, profile.Environment);
         var scope = new AgentRunScope(
             entry.Id + ":" + profile.Name,
             profile,
-            new AiContext(profile.Name, profile.Environment, level),
+            new AiContext(profile.Name, profile.Environment, level, LocalAi: localAi),
             new AgentSendScope(true, []))
         {
             External = true,
-            Literals = production ? new LiteralVault() : null,
-            MaskLiteralsRequired = production,
+            Literals = masksLiterals ? new LiteralVault() : null,
+            MaskLiteralsRequired = masksLiterals,
         };
         return new AgentSession(scope) { Client = client };
     }

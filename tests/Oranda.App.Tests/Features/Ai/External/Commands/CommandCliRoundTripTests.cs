@@ -24,6 +24,7 @@ public sealed class CommandCliRoundTripTests
         Assert.True(run.ExitCode == 0, run.ToString());
         Assert.Equal("done", (string?)run.Json["status"]);
         Assert.Equal(1, f.Handlers[CommandIds.History].Runs);
+        Assert.Contains(rig.Audit.Entries, e => e.Tool == "run_command" && e.Reason == "grade=" + (string?)run.Json["grade"] + ",status=done"); // G5 감사 사유
 
         var denied = await rig.RunAsync(["ui", "run", CommandIds.Commit]);
         Assert.Equal(4, denied.ExitCode);

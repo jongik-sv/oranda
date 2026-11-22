@@ -21,6 +21,9 @@ public class AgentGrantStoreTests
     private static AgentGrantRequest Request(TimeSpan? lifetime = null, params ConnectionProfile[] profiles) =>
         new([.. profiles.Select(p => new AgentGrantTarget(p, AgentGrantPolicy.DefaultCap(p.Environment)))], lifetime ?? AgentGrantPolicy.DefaultLifetime, Label: "기본");
 
+    /// <summary>운영 접속(기본 수준 Query)의 외부 수준: 운영 실행 스위치가 켜져 있으면 Query, 끄면 Metadata 상한.</summary>
+    private static AiAccessLevel ProductionLevel => AgentGrantPolicy.ProductionRuns ? AiAccessLevel.Query : AiAccessLevel.Metadata;
+
     private static (AgentGrantStore Store, FakeWriter Writer, ManualTimeProvider Time) NewStore(IEventBus? events = null)
     {
         var time = new ManualTimeProvider();
@@ -43,7 +46,7 @@ public class AgentGrantStoreTests
         Assert.Same(issue, Assert.Single(writer.Published));
         Assert.Equal("기본", issue.Grant.Label);
         Assert.Equal(AiAccessLevel.QueryRows, issue.Grant.FindConnection(DevId)!.Level);
-        Assert.Equal(AiAccessLevel.Metadata, issue.Grant.FindConnection(PrdId)!.Level); // 운영 상한
+        Assert.Equal(ProductionLevel, issue.Grant.FindConnection(PrdId)!.Level); // 운영 상한(D5 스위치)
         Assert.Equal(issue.Grant, store.Resolve(issue.Token));
         Assert.Null(store.Resolve("other"));
         Assert.Null(store.Resolve(string.Empty));
@@ -162,9 +165,11 @@ public class AgentGrantStoreTests
         Assert.Null(claude.Run.Literals);
 
         var prod = store.SessionFor(id, PrdId, "codex")!;
-        Assert.Equal(AiAccessLevel.Metadata, prod.Level);
-        Assert.NotNull(prod.Run.Literals); // 운영은 결과의 SQL 글을 가린다
+        Assert.Equal(ProductionLevel, prod.Level);
+        Assert.NotNull(prod.Run.Literals); // 클라우드 모델 운영은 결과의 SQL 글을 가린다
         Assert.True(prod.Run.MaskLiteralsRequired);
+        Assert.False(prod.Context.LocalAi);
+        Assert.False(claude.Context.LocalAi);
 
         Assert.Null(store.SessionFor(id, Guid.NewGuid(), "codex"));
         Assert.Null(store.SessionFor("ext-other", DevId, "codex"));

@@ -62,6 +62,9 @@ public sealed class ExternalAgentConnectTests
         }
     }
 
+    /// <summary>운영 접속(기본 수준 Query)의 허가 수준: 운영 실행 스위치(D5)가 켜져 있으면 Query, 끄면 Metadata.</summary>
+    private static AiAccessLevel ProductionLevel => AgentGrantPolicy.ProductionRuns ? AiAccessLevel.Query : AiAccessLevel.Metadata;
+
     private static ExternalAgentConnectionRow Row(ExternalAgentConnectViewModel vm, string alias) => vm.Rows.Single(r => r.Alias == alias);
 
     [Fact]
@@ -74,8 +77,11 @@ public sealed class ExternalAgentConnectTests
         Assert.True(Row(vm, "dev-a").IsChecked);
         Assert.False(Row(vm, "test-a").IsChecked);
         Assert.False(Row(vm, "prd-a").IsChecked);
-        Assert.Equal("메타데이터만", Row(vm, "prd-a").LevelText);
-        Assert.Equal(AiAccessLevel.Metadata, Row(vm, "prd-a").ExternalLevel);
+        var prd = Row(vm, "prd-a");
+        Assert.Equal(ExternalAgentConnectionRow.LevelName(prd.ExternalLevel), prd.LevelText);
+        Assert.Equal(AgentGrantPolicy.LevelFor(prd.Profile, AgentGrantPolicy.DefaultCap(ConnectionEnvironment.Production)), prd.ExternalLevel);
+        Assert.True(prd.IsProductionMarked);
+        Assert.False(Row(vm, "dev-a").IsProductionMarked);
         Assert.False(Row(vm, "prd-off").Usable);
         Assert.False(vm.IsConnected);
         Assert.True(vm.CanConnect);
@@ -100,7 +106,143 @@ public sealed class ExternalAgentConnectTests
 
         Assert.True(await vm.ConnectAsync());
         var grant = Assert.Single(h.Grants.Active);
-        Assert.Equal(AiAccessLevel.Metadata, grant.FindConnection("prd-a")!.Level);
+        Assert.Equal(ProductionLevel, grant.FindConnection("prd-a")!.Level);
+    }
+
+    [Fact]
+    public async Task Production_run_warning_follows_the_policy_cap()
+    {
+        var h = new Harness();
+        using var vm = h.Create();
+        await vm.LoadAsync();
+        var prd = Row(vm, "prd-a");
+
+        // 운영 기본 수준은 Query. 스위치가 켜져 있으면(상한 ≥ Query) 「LLM 이 SELECT 를 자동 실행합니다」, 끄면 Metadata 라 숨는다(§3.2 되돌리기).
+        Assert.Equal(ExternalAgentConnectPolicy.ProductionRuns, prd.ExternalLevel >= AiAccessLevel.Query);
+        Assert.Equal(ExternalAgentConnectPolicy.ProductionRuns, prd.ShowsRunWarning);
+        Assert.False(Row(vm, "dev-a").ShowsRunWarning);
+        Assert.False(Row(vm, "prd-off").ShowsRunWarning);
+        Assert.Equal("운영 접속 — LLM 이 SELECT 를 자동 실행합니다", ExternalAgentConnectionRow.RunWarningText);
+        Assert.Equal(
+            ExternalAgentConnectPolicy.ProductionRuns ? "개발은 기본으로 고릅니다. 운영은 기본으로 고르지 않고, 고르려면 접속 이름을 다시 입력합니다." : "개발은 기본으로 고릅니다. 운영은 메타데이터만 쓰고, 고르려면 접속 이름을 다시 입력합니다.",
+            ExternalAgentConnectViewModel.ConnectionsCaption);
+    }
+
+    [Fact]
+    public async Task Local_model_is_off_by_default_and_warns_and_adds_a_production_line_when_both_are_chosen()
+    {
+        var h = new Harness();
+        using var vm = h.Create();
+        await vm.LoadAsync();
+        var prd = Row(vm, "prd-a");
+
+        Assert.False(vm.LocalModel);
+        Assert.False(vm.ShowsLocalModelWarning);
+
+        vm.LocalModel = true;
+        Assert.True(vm.ShowsLocalModelWarning);
+        Assert.False(prd.ShowsUnmaskedWarning); // 운영을 고르지 않았다
+        Assert.False(vm.ShowsProductionUnmasked);
+        Assert.False(vm.IncludesProduction);
+
+        prd.IsChecked = true;
+        Assert.True(vm.IncludesProduction);
+        Assert.Equal(ExternalAgentConnectPolicy.LocalModelCoversProduction, prd.ShowsUnmaskedWarning);
+        Assert.Equal(ExternalAgentConnectPolicy.LocalModelCoversProduction, vm.ShowsProductionUnmasked);
+        Assert.False(Row(vm, "dev-a").ShowsUnmaskedWarning);
+        Assert.True(prd.NeedsConfirmation); // 로컬 모델이어도 이름 다시 입력은 그대로(SAFE-08)
+
+        vm.LocalModel = false;
+        Assert.False(prd.ShowsUnmaskedWarning);
+        Assert.False(vm.ShowsLocalModelWarning);
+        Assert.Equal("운영 값이 가리지 않고 나갑니다", ExternalAgentConnectionRow.UnmaskedWarningText);
+    }
+
+    [Fact]
+    public async Task Local_model_goes_into_the_grant_and_is_off_unless_checked()
+    {
+        var h = new Harness();
+        using var vm = h.Create();
+        await vm.LoadAsync();
+
+        await vm.ConnectAsync();
+        Assert.False(Assert.Single(h.Grants.Active).LocalModel);
+
+        vm.LocalModel = true;
+        await vm.ConnectAsync();
+        var grant = Assert.Single(h.Grants.Active);
+        Assert.True(grant.LocalModel);
+        Assert.False(grant.MasksSensitive(grant.FindConnection("dev-a")!.ProfileId)); // 개발 + 로컬 모델 = 가리지 않음
+    }
+
+    [Fact]
+    public async Task Allow_queries_raises_production_to_query_not_query_rows_and_only_after_the_name_is_typed()
+    {
+        var h = new Harness();
+        h.Profiles.Add(Profile("prd-plan", ConnectionEnvironment.Production, AiAccessLevel.Plan));
+        using var vm = h.Create();
+        await vm.LoadAsync();
+        var prd = Row(vm, "prd-plan");
+        prd.IsChecked = true;
+        vm.AllowQueryRows = true;
+
+        // 이름을 다시 입력하지 않으면 「연결」도 저장도 없다.
+        Assert.False(vm.CanConnect);
+        Assert.False(await vm.ConnectAsync());
+        Assert.Empty(h.Saved);
+        Assert.Empty(h.Grants.Active);
+
+        prd.ConfirmName = "prd-plan";
+        Assert.True(await vm.ConnectAsync());
+
+        var savedProduction = h.Saved.Where(p => p.Environment == ConnectionEnvironment.Production).ToList();
+        if (ExternalAgentConnectPolicy.ProductionRuns)
+        {
+            // 운영 최대는 Query. QueryRows 를 쓰면 Plan 으로 읽혀 오히려 내려간다.
+            var saved = Assert.Single(savedProduction);
+            Assert.Equal(AiAccessLevel.Query, saved.AiAccess);
+            Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.Effective(saved));
+            Assert.Equal(AiAccessLevel.Query, Assert.Single(h.Grants.Active).FindConnection("prd-plan")!.Level);
+        }
+        else
+        {
+            Assert.Empty(savedProduction);
+            Assert.Equal(AiAccessLevel.Metadata, Assert.Single(h.Grants.Active).FindConnection("prd-plan")!.Level);
+        }
+    }
+
+    [Fact]
+    public async Task Expected_level_shows_what_allow_queries_will_give_before_connecting()
+    {
+        var h = new Harness();
+        using var vm = h.Create();
+        await vm.LoadAsync();
+        var dev = Row(vm, "dev-a");
+        Assert.Equal(AiAccessLevel.Plan, dev.ExpectedLevel);
+
+        vm.AllowQueryRows = true;
+        Assert.Equal(AiAccessLevel.QueryRows, dev.ExpectedLevel);
+        Assert.Equal("조회 + 행 값", dev.LevelText);
+
+        vm.AllowQueryRows = false;
+        Assert.Equal(AiAccessLevel.Plan, dev.ExpectedLevel);
+    }
+
+    [Fact]
+    public void Link_state_says_when_the_grant_includes_production()
+    {
+        var grants = Store();
+        var services = new ServiceContainer();
+        services.AddInstance<IAgentGrants>(grants);
+        using var link = new ExternalAgentLink(services);
+        link.Bind();
+
+        grants.Create(new AgentGrantRequest([new AgentGrantTarget(Profile("dev-a", ConnectionEnvironment.Development), AiAccessLevel.QueryRows)], null));
+        Assert.False(link.Current!.Production);
+
+        var prd = Profile("prd-a", ConnectionEnvironment.Production);
+        grants.Create(new AgentGrantRequest([new AgentGrantTarget(prd, AgentGrantPolicy.DefaultCap(prd.Environment))], null));
+        Assert.True(link.Current!.Production);
     }
 
     [Fact]
@@ -161,7 +303,7 @@ public sealed class ExternalAgentConnectTests
         Assert.All(h.Saved, p => Assert.Equal(AiAccessLevel.QueryRows, p.AiAccess));
         var grant = Assert.Single(h.Grants.Active);
         Assert.Equal(AiAccessLevel.QueryRows, grant.FindConnection("dev-a")!.Level);
-        Assert.Equal(AiAccessLevel.Metadata, grant.FindConnection("prd-a")!.Level);
+        Assert.Equal(ProductionLevel, grant.FindConnection("prd-a")!.Level);
     }
 
     [Fact]
@@ -363,6 +505,22 @@ public sealed class ExternalAgentConnectTests
             confirm.Text = "prd-a";
             HeadlessHost.Settle(window);
             Assert.True(connect.IsEnabled);
+
+            // 운영 행 빨간 표시, 「로컬 모델」 체크와 경고.
+            Assert.Contains(ExternalAgentConnectWindow.ProductionClass, prd.Classes);
+            Assert.DoesNotContain(ExternalAgentConnectWindow.ProductionClass, checks.Single(c => (c.Content as string) == "dev-a").Classes);
+            var local = checks.Single(c => c.Content is TextBlock { Text: "로컬 모델(가리지 않음)" });
+            Assert.False(local.IsChecked);
+            Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text?.StartsWith("민감 열·리터럴", StringComparison.Ordinal) == true);
+            local.IsChecked = true;
+            HeadlessHost.Settle(window);
+            Assert.True(vm.LocalModel);
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text?.StartsWith("민감 열·리터럴", StringComparison.Ordinal) == true);
+            var runWarning = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == ExternalAgentConnectionRow.RunWarningText && t.DataContext == Row(vm, "prd-a"));
+            Assert.Equal(ExternalAgentConnectPolicy.ProductionRuns, runWarning.IsEffectivelyVisible);
+            Assert.Contains(ExternalAgentConnectWindow.ProductionClass, runWarning.Classes);
+            local.IsChecked = false;
+            HeadlessHost.Settle(window);
 
             connect.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await HeadlessHost.WaitUntil(() => vm.IsConnected);

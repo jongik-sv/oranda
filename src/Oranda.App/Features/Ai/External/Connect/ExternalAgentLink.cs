@@ -3,6 +3,7 @@ using System.Linq;
 using Oranda.App.Shell.Composition;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 
 namespace Oranda.App.Features.Ai.External.Connect;
 
@@ -26,7 +27,9 @@ public sealed class ExternalAgentLink(IServiceProvider services) : IExternalAgen
     public event EventHandler<ExternalAgentCall>? CallCompleted;
 
     public ExternalAgentLinkState? Current =>
-        Grant() is { } grant ? new ExternalAgentLinkState(grant.Clients, grant.ExpiresAt) : null;
+        Grant() is { } grant
+            ? new ExternalAgentLinkState(grant.Clients, grant.ExpiresAt, grant.Connections.Any(c => c.Environment == ConnectionEnvironment.Production))
+            : null;
 
     /// <summary>허가 저장소와 관문에 잇는다(한 번만). 연결 창이 허가를 만들기 전에 부른다. 저장소가 없으면 아무 일도 하지 않는다.</summary>
     public void Bind()

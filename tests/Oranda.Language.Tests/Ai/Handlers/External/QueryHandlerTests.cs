@@ -118,10 +118,11 @@ public class QueryHandlerTests
         var plan = await Handler().ExecuteAsync(ExternalFakes.Db(Sql("SELECT * FROM emp"), AiAccessLevel.Plan), CancellationToken.None);
         var ro = await Handler().ExecuteAsync(ExternalFakes.Db(Sql("SELECT * FROM emp"), readOnlyExecution: true), CancellationToken.None);
 
-        Assert.Equal("environment", prod.ErrorCode);
+        // 운영: D5 스위치(AgentGrantPolicy.ProductionRuns)를 켜면 실행되고, 끄면 environment 로 거부.
+        Assert.Equal(AgentGrantPolicy.ProductionRuns ? null : "environment", prod.ErrorCode);
         Assert.Equal("level", plan.ErrorCode);
         Assert.Equal("sql_unsafe", ro.ErrorCode);
-        Assert.Empty(_exec.Calls);
+        Assert.Equal(AgentGrantPolicy.ProductionRuns ? 1 : 0, _exec.Calls.Count);
     }
 
     [Fact]

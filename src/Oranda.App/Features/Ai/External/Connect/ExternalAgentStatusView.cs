@@ -53,6 +53,9 @@ public sealed class ExternalAgentStatusView : UserControl
         };
     }
 
+    /// <summary>점에 쓴 색 리소스 키(시험용).</summary>
+    internal string? DotBrushKey { get; private set; }
+
     /// <summary>마지막으로 띄운 자세히 보기(시험용).</summary>
     internal Flyout? DetailsFlyout { get; private set; }
 
@@ -166,12 +169,25 @@ public sealed class ExternalAgentStatusView : UserControl
         Avalonia.Automation.AutomationProperties.SetName(_disconnect, ExternalAgentStatusViewModel.DisconnectText);
         ToolTip.SetTip(this, _vm?.ToolTip);
         Avalonia.Automation.AutomationProperties.SetName(this, text);
+        // 운영이 허가에 들면 만료 임박보다 앞서 운영 색(§3.2). 만료 임박은 「N분 남음」 글과 「연장」 단추로 여전히 보인다.
         var brush = _vm switch
         {
+            { IsConnected: true, IncludesProduction: true } => "OrandaEnvProductionBrush",
             { IsConnected: true, CanExtend: true } => "OrandaUncommittedBrush",
             { IsConnected: true } => "OrandaEnvDevelopmentBrush",
             _ => "OrandaButtonDisabledForegroundBrush",
         };
         _dot.Bind(Border.BackgroundProperty, _dot.GetResourceObservable(brush));
+        DotBrushKey = brush;
+        if (_vm is { IsConnected: true, IncludesProduction: true })
+        {
+            _text.Bind(TextBlock.ForegroundProperty, _text.GetResourceObservable("OrandaDangerForegroundBrush"));
+            _text.FontWeight = FontWeight.SemiBold;
+        }
+        else
+        {
+            _text.ClearValue(TextBlock.ForegroundProperty);
+            _text.FontWeight = FontWeight.Normal;
+        }
     }
 }

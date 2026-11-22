@@ -204,10 +204,14 @@ public sealed partial class AgentGate
                 return (Deny(AgentErrorCodes.Level, $"The access level of this connection ({connection.Level}) does not allow this tool."), connection);
             }
 
-            if (tool.DevTestOnly && connection.Environment == ConnectionEnvironment.Production)
+            // 운영 갈래(D5, E-22): 실행 도구(DevTestOnly = query)는 허가 정책이 그 환경의 실행을 허용할 때만. 내장 AI 경로(AgentGate.cs)는 그대로(E-23).
+            if (tool.DevTestOnly && !AgentGrantPolicy.ExecutesIn(connection.Environment))
             {
                 return (Deny(AgentErrorCodes.Environment, "This tool is not available on production connections."), connection);
             }
+
+            // 「로컬 모델」 허가가 이 접속을 덮으면(UsesLocalModel) 감사 인자 요약에 data=local_ai 를 남긴다(가리지 않고 나간 호출).
+            state.LocalAi = AgentGrantPolicy.UsesLocalModel(grant, connection.Environment);
         }
 
         var handlers = AppHandlerMap();
@@ -247,9 +251,11 @@ public sealed partial class AgentGate
         var removed = 0;
         if (connection is not null)
         {
-            // 접속이 정해진 호출은 그 수준으로 행 값 칸을 가린다. 탭이 접속을 정하는 도구는 처리자가 판단했다.
-            removed = MaskRowValues(ref result, tool.Name, connection.Level, state.Clean, localAi: false);
-            if (connection.Level < AiAccessLevel.QueryRows && !IsMaskableShape(result))
+            // 접속이 정해진 호출은 값 수준으로 행 값 칸을 가린다. 탭이 접속을 정하는 도구는 처리자가 판단했다.
+            // 값 수준 = AiAccessPolicy.DataLevel(수준, 로컬 모델): 클라우드 모델 운영(Query)은 행 값을 지우고, 로컬 모델이면 행 값까지 보인다(D4·D5).
+            var dataLevel = AiAccessPolicy.DataLevel(connection.Level, state.LocalAi);
+            removed = MaskRowValues(ref result, tool.Name, dataLevel, state.Clean, state.LocalAi);
+            if (dataLevel < AiAccessLevel.QueryRows && !IsMaskableShape(result))
             {
                 return (Deny(AgentErrorCodes.UnsafeResult, "The tool result has a shape whose row values cannot be masked; it was withheld."), connection);
             }
@@ -266,7 +272,33 @@ public sealed partial class AgentGate
         return (new GateOutcome(
             new AgentCallToolResult(false, serialized),
             removed > 0 ? AiToolJudgement.Masked : AiToolJudgement.Allowed,
-            removed > 0 ? "masked" : null), connection);
+            WithNotes(removed > 0 ? "masked" : null, output)), connection);
+    }
+
+    /// <summary>
+    /// 성공 호출의 감사 사유에 처리자 글을 붙인다(G5, 계획서 §3.2): 행 수(<see cref="AgentToolOutput.RowCount"/>, <c>query</c>·<c>run_tab</c>·<c>export_result</c>)는
+    /// <c>rows=N</c>, 그다음 <see cref="AgentToolOutput.AuditNote"/>(예: <c>grade=confirm,status=confirmed</c>). 쉼표로 잇는다(<c>masked, rows=N</c>). 둘 다 없으면 사유 그대로.
+    /// 운영 외부 호출은 판단과 관계없이 모두 감사에 남고(<see cref="FinishExternalAsync"/>), 내보낸 경로는 인자 요약(<c>out=</c>)에 남는다.
+    /// </summary>
+    internal static string? WithNotes(string? reason, AgentToolOutput output)
+    {
+        var parts = new List<string>(3);
+        if (reason is not null)
+        {
+            parts.Add(reason);
+        }
+
+        if (output.RowCount is { } rows)
+        {
+            parts.Add(AgentToolOutput.RowsNote(rows));
+        }
+
+        if (!string.IsNullOrWhiteSpace(output.AuditNote))
+        {
+            parts.Add(output.AuditNote.Trim());
+        }
+
+        return parts.Count == 0 ? null : string.Join(", ", parts);
     }
 
     /// <summary>외부 호출의 감사 한 줄과 사건. 실행 id 는 <c>허가 id[:접속]</c>.</summary>
@@ -354,7 +386,7 @@ public sealed partial class AgentGate
         {
             if (connection.Level != AiAccessLevel.Off
                 && connection.Level >= tool.MinimumLevel
-                && !(tool.DevTestOnly && connection.Environment == ConnectionEnvironment.Production)
+                && !(tool.DevTestOnly && !AgentGrantPolicy.ExecutesIn(connection.Environment))
                 && !(tool.RequiresExplainPlanSetting && !connection.ExplainPlanAllowed))
             {
                 return true;

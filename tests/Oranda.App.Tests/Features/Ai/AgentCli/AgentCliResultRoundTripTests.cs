@@ -56,7 +56,9 @@ public sealed class AgentCliResultRoundTripTests
         Assert.Equal("A5 rig", (string?)status.Json["label"]);
         Assert.Equal(Environment.ProcessId, (int)status.Json["pid"]!);
         Assert.Contains("codex", status.Json["clients"]!.AsArray().Select(c => (string?)c));
-        Assert.Equal(["QueryRows", "Query", "Metadata"], status.Json["connections"]!.AsArray().Select(c => (string?)c!["level"])); // 운영은 외부 상한 Metadata
+        // 운영 = 접속 최대 Query(D5 실행 스위치를 끄면 외부 상한 Metadata).
+        var prdLevel = Oranda.Core.Ai.Gate.AgentGrantPolicy.ProductionRuns ? "Query" : "Metadata";
+        Assert.Equal(["QueryRows", "Query", prdLevel], status.Json["connections"]!.AsArray().Select(c => (string?)c!["level"]));
         Assert.DoesNotContain("h/s", status.Stdout, StringComparison.Ordinal);
 
         // conn list

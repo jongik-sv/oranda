@@ -95,6 +95,12 @@ public sealed record AgentToolOutput
     /// </summary>
     public long? RowCount { get; init; }
 
+    /// <summary>
+    /// 성공 호출의 감사 사유에 덧붙일 짧은 글(G5, 예: <c>run_command</c> 의 <c>grade=confirm,status=confirmed</c>). null 이면 없음.
+    /// 게이트가 <c>rows=N</c> 뒤에 붙인다. 값·탭 글·경로처럼 밖으로 나가면 안 되는 것은 넣지 않는다(감사 스키마는 그대로).
+    /// </summary>
+    public string? AuditNote { get; init; }
+
     public bool IsError => ErrorMessage is not null;
 
     /// <summary>감사 사유에 남기는 행 수 글(<c>rows=N</c>).</summary>

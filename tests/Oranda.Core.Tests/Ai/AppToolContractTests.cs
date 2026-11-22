@@ -317,7 +317,8 @@ public class AppToolContractTests
 
         Assert.Equal(AiAccessLevel.Plan, AgentGrantPolicy.LevelFor(dev, AgentGrantPolicy.DefaultCap(dev.Environment))); // 개발 기본 Plan
         Assert.Equal(AiAccessLevel.QueryRows, AgentGrantPolicy.LevelFor(devRows, AiAccessLevel.QueryRows));
-        Assert.Equal(AiAccessLevel.Metadata, AgentGrantPolicy.LevelFor(prd, AiAccessLevel.QueryRows)); // 운영은 상한을 넘겨도 Metadata
+        // 운영: 실행 스위치(D5)를 끄면 상한을 넘겨도 Metadata, 켜면 접속 최대(Query)까지.
+        Assert.Equal(AgentGrantPolicy.ProductionRuns ? AiAccessLevel.Query : AiAccessLevel.Metadata, AgentGrantPolicy.LevelFor(prd, AiAccessLevel.QueryRows));
         Assert.Equal(AiAccessLevel.Off, AgentGrantPolicy.LevelFor(prd with { AiAccess = AiAccessLevel.Off }, AiAccessLevel.Metadata));
         Assert.Equal(AiAccessLevel.Metadata, AgentGrantPolicy.LevelFor(devRows, AiAccessLevel.Metadata));
         Assert.True(AgentGrantPolicy.CheckedByDefault(ConnectionEnvironment.Development));

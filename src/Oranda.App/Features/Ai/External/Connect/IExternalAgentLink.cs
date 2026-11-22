@@ -28,7 +28,8 @@ public interface IExternalAgentLink
 
 /// <summary>연결 상태. <paramref name="ExpiresAt"/> 가 null 이면 앱을 끌 때까지.</summary>
 /// <param name="Clients">hello 로 붙은 클라이언트 이름(붙은 순서).</param>
-public sealed record ExternalAgentLinkState(IReadOnlyList<string> Clients, DateTimeOffset? ExpiresAt);
+/// <param name="Production">허가에 운영 접속이 들어 있다(띠를 경고색으로, §3.2).</param>
+public sealed record ExternalAgentLinkState(IReadOnlyList<string> Clients, DateTimeOffset? ExpiresAt, bool Production = false);
 
 /// <summary>도구 호출 한 건(시각은 띠가 받은 때로 찍는다).</summary>
 /// <param name="Size">돌려준 글 길이(자).</param>

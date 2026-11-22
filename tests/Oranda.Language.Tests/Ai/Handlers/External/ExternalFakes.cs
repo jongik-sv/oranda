@@ -47,7 +47,7 @@ internal static class ExternalFakes
         var run = new AgentRunScope("g1:dev-erp", profile, new AiContext("dev-erp", env, level, CurrentSchema: currentSchema));
         return new AgentToolInvocation(
             new AgentSession(run), db ?? new FakeSession(profile), level, args, resolved.ToDictionary(r => r.Arg, r => r.Obj),
-            MayExecuteSql: level >= AiAccessLevel.Query && env != ConnectionEnvironment.Production,
+            MayExecuteSql: level >= AiAccessLevel.Query && AgentGrantPolicy.ExecutesIn(env),
             ReadOnlyExecution: readOnlyExecution);
     }
 
