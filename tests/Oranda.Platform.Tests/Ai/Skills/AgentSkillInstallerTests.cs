@@ -161,6 +161,42 @@ public sealed class AgentSkillInstallerTests : IDisposable
     }
 
     [Fact]
+    public void A_client_is_present_when_its_config_folder_exists()
+    {
+        Directory.CreateDirectory(Path.Combine(_home, ".codex"));
+
+        var installer = Installer();
+
+        Assert.True(installer.IsClientPresent(AgentSkillTarget.Agents));
+        Assert.False(installer.IsClientPresent(AgentSkillTarget.Claude));
+        Assert.False(installer.IsClientPresent(AgentSkillTarget.Gemini));
+    }
+
+    [Theory]
+    [InlineData("/private/var/folders/x/AppTranslocation/1A2B/d/Oranda.app/Contents/MacOS/orandactl", true)]
+    [InlineData("/Applications/Oranda.app/Contents/MacOS/orandactl", false)]
+    [InlineData(@"C:\Program Files\Oranda\orandactl.exe", false)]
+    [InlineData("/home/u/AppTranslocationNotes/orandactl", false)]
+    public void Translocated_paths_are_recognised(string path, bool translocated)
+    {
+        Assert.Equal(translocated, AgentSkillInstaller.IsTranslocated(path));
+    }
+
+    [Fact]
+    public void A_translocated_app_refuses_to_install_and_asks_no_reinstall()
+    {
+        Installer().Install(AgentSkillTargets.All);
+        var moved = Installer("/private/var/folders/x/AppTranslocation/1A2B/d/Oranda.app/Contents/MacOS/orandactl");
+
+        var results = moved.Install(AgentSkillTargets.All);
+
+        Assert.All(results, r => Assert.Equal(AgentSkillInstallOutcome.Failed, r.Outcome));
+        Assert.All(results, r => Assert.Contains("응용 프로그램 폴더", r.Message, StringComparison.Ordinal));
+        Assert.DoesNotContain("AppTranslocation", File.ReadAllText(SkillFile(".claude", "skills")), StringComparison.Ordinal);
+        Assert.False(moved.NeedsReinstall());
+    }
+
+    [Fact]
     public void Inspect_lists_the_full_path_of_each_target()
     {
         var paths = Installer().Inspect().ToDictionary(s => s.Target, s => s.FilePath);

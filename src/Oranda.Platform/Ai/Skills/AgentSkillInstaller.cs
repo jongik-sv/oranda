@@ -56,6 +56,9 @@ public interface IAgentSkillInstaller
 
     /// <summary>Oranda 가 쓴 스킬이 하나라도 있고 그 본문이 지금과 다르면 true(「다시 설치」 안내).</summary>
     bool NeedsReinstall();
+
+    /// <summary>그 대상을 읽는 CLI 의 설정 폴더가 홈에 있는가(설치 창의 기본 체크). 프로그램을 실행하지 않는다.</summary>
+    bool IsClientPresent(AgentSkillTarget target);
 }
 
 /// <summary>
@@ -90,11 +93,27 @@ public sealed class AgentSkillInstaller : IAgentSkillInstaller
         return [.. AgentSkillTargets.All.Select(t => new AgentSkillStatus(t, FilePath(t), StateOf(FilePath(t), expected)))];
     }
 
-    public bool NeedsReinstall() => Inspect().Any(s => s.State == AgentSkillState.Outdated);
+    /// <summary>
+    /// macOS 가 격리 실행한 앱(<c>/AppTranslocation/</c> 아래 임시 사본)인가. 그 경로는 재시동마다 바뀌어 스킬에 적으면 곧 낡는다.
+    /// 이 경우 설치를 거부하고, 「다시 설치」 안내도 띄우지 않는다(눌러도 거부되므로).
+    /// </summary>
+    public static bool IsTranslocated(string orandactlPath) =>
+        orandactlPath.Contains("/AppTranslocation/", StringComparison.Ordinal);
+
+    /// <summary>격리 실행일 때 설치 결과에 적는 안내.</summary>
+    public const string TranslocatedMessage =
+        "Oranda 가 macOS 임시 위치(AppTranslocation)에서 실행 중입니다. 앱을 응용 프로그램 폴더로 옮겨 다시 연 뒤 설치하세요.";
+
+    public bool NeedsReinstall() => !IsTranslocated(OrandactlPath) && Inspect().Any(s => s.State == AgentSkillState.Outdated);
 
     public IReadOnlyList<AgentSkillInstallResult> Install(IEnumerable<AgentSkillTarget> targets, bool overwriteForeign = false)
     {
         ArgumentNullException.ThrowIfNull(targets);
+        if (IsTranslocated(OrandactlPath))
+        {
+            return [.. targets.Distinct().Select(t => new AgentSkillInstallResult(t, FilePath(t), AgentSkillInstallOutcome.Failed, TranslocatedMessage))];
+        }
+
         var expected = OrandaSkillDocument.Render(OrandactlPath);
         var results = new List<AgentSkillInstallResult>();
         foreach (var target in targets.Distinct())
@@ -164,6 +183,8 @@ public sealed class AgentSkillInstaller : IAgentSkillInstaller
 
         return results;
     }
+
+    public bool IsClientPresent(AgentSkillTarget target) => AgentSkillTargets.ClientFolders(_home, target).Any(Directory.Exists);
 
     private string FilePath(AgentSkillTarget target)
         => Path.Combine(AgentSkillTargets.SkillsDirectory(_home, target), OrandaSkillDocument.SkillName, OrandaSkillDocument.FileName);

@@ -1,5 +1,6 @@
 {
   "commands": [
+    {"id": "oranda.agent.external.connect", "page": "ai/external-agents"},
     {"id": "oranda.ai.explainPlan", "page": "ai/commands"},
     {"id": "oranda.ai.explainSql", "page": "ai/commands"},
     {"id": "oranda.ai.fixError", "page": "ai/commands"},
@@ -366,6 +367,8 @@
     {"id": "oranda.status.update", "page": "install/update"}
   ],
   "dialogs": [
+    {"id": "ExternalAgentConnectWindow", "page": "ai/external-agents"},
+    {"id": "AgentSkillInstallWindow", "page": "ai/external-agents"},
     {"id": "AiImageWarningDialog", "page": "ai/chat"},
     {"id": "AiProfileManagerWindow", "page": "ai/models"},
     {"id": "AiTextWarningDialog", "page": "ai/chat"},

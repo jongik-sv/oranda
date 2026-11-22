@@ -119,6 +119,11 @@ internal sealed class OpencodeDriver : ISystemCliAiDriver
             ["OPENCODE_DISABLE_PROJECT_CONFIG"] = "1",
             ["OPENCODE_CONFIG_PROJECT_DISABLE"] = "1",
             ["OPENCODE_DISABLE_CLAUDE_CODE"] = "1",
+            // 사용자 전역 스킬(~/.claude/skills·~/.agents/skills, 외부 에이전트용 oranda 스킬 포함)을 읽지 않는다.
+            // 1.19.6 에서 위 변수들만으로는 ~/.agents/skills 가 그대로 보이는 것을 `opencode debug skill` 로 확인했다(agent-cli §10-5).
+            ["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1",
+            // ~/.claude/skills 전용 끄기 변수도 함께 준다(x-e2e 결함 지적).
+            ["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1",
         };
 
     public async IAsyncEnumerable<AiEvent> RunAsync(AiRequest request, [EnumeratorCancellation] CancellationToken ct)

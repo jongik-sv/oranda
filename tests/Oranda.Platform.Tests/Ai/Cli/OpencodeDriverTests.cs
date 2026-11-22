@@ -466,6 +466,8 @@ public sealed class OpencodeDriverTests : IDisposable
         Assert.Equal("1", environment["OPENCODE_DISABLE_PROJECT_CONFIG"]);
         Assert.Equal("1", environment["OPENCODE_CONFIG_PROJECT_DISABLE"]);
         Assert.Equal("1", environment["OPENCODE_DISABLE_CLAUDE_CODE"]);
+        Assert.Equal("1", environment["OPENCODE_DISABLE_EXTERNAL_SKILLS"]); // 전역 oranda 스킬이 내장 실행에 섞이지 않게(agent-cli §10-5)
+        Assert.Equal("1", environment["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"]);
     }
 
     [Fact]

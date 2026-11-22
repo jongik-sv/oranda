@@ -30,6 +30,15 @@ public static class AgentSkillTargets
         _ => throw new ArgumentOutOfRangeException(nameof(target), target, null),
     };
 
+    /// <summary>그 대상을 읽는 CLI 의 설정 폴더들(하나라도 있으면 그 CLI 를 쓰는 것으로 본다).</summary>
+    public static IReadOnlyList<string> ClientFolders(string home, AgentSkillTarget target) => target switch
+    {
+        AgentSkillTarget.Claude => [Path.Combine(home, ".claude")],
+        AgentSkillTarget.Agents => [Path.Combine(home, ".codex"), Path.Combine(home, ".agents"), Path.Combine(home, ".config", "opencode")],
+        AgentSkillTarget.Gemini => [Path.Combine(home, ".gemini")],
+        _ => throw new ArgumentOutOfRangeException(nameof(target), target, null),
+    };
+
     /// <summary>화면에 보일 CLI 이름들.</summary>
     public static string ClientNames(AgentSkillTarget target) => target switch
     {

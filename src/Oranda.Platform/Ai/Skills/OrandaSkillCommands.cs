@@ -5,7 +5,8 @@ public sealed record OrandaSkillCommand(string Usage, string Description);
 
 /// <summary>
 /// 스킬 본문에 넣는 <c>orandactl</c> 명령과 예시. 설계서(agent-cli-control-2026-11-22) §4.2 표·§5.4 흐름을 옮겼다.
-/// 명령 이름이 바뀌면 이 파일만 고친다(레인 B 의 하위 명령 해석이 같은 표를 따른다).
+/// 명령 이름이 바뀌면 이 파일만 고친다. 사용법 글은 <c>orandactl</c> 의 명령 표(<c>src/Oranda.Agent.Cli/CommandTable.cs</c>)와 같게 둔다
+/// (Platform 은 그 프로젝트를 참조하지 않으므로 손으로 맞춘다).
 /// 사용법의 앞머리는 언제나 <see cref="Name"/> 이고, 본문 첫머리에서 이 이름이 어느 절대 경로인지 알려 준다.
 /// </summary>
 public static class OrandaSkillCommands
@@ -18,17 +19,17 @@ public static class OrandaSkillCommands
     [
         new("orandactl status [--all]", "window, connections and their levels; --all lists every running Oranda window"),
         new("orandactl conn list", "connections you may use (alias, environment, dbms, level, read_only)"),
-        new("orandactl tabs", "editor tabs (tab_id, title, connection, version, dirty, read_only, locked)"),
-        new("orandactl tab get [--tab <id>] [--scope document|selection|statement] [--max-chars N]", "read a tab; no --tab = the active tab. Keep the returned version"),
+        new("orandactl tabs [--workspace W]", "editor tabs (tab_id, title, connection, version, dirty, read_only, locked)"),
+        new("orandactl tab get [--tab ID] [--scope document|selection|statement] [--max-chars N]", "read a tab; no --tab = the active tab. Keep the returned version"),
         new("orandactl tab new [--title T] [--conn A] (--file F | -)", "open a new tab with your SQL (never overwrites anything)"),
-        new("orandactl tab propose --tab <id> --base-version N [--range document|selection|statement|caret|S:L] [--title T] [--reason R] [--wait 120] (--file F | -)", "propose a change to an existing tab; the user accepts or rejects it. status = pending|accepted|modified|rejected|stale|timeout"),
-        new("orandactl tab proposal <id>", "state of an earlier proposal"),
-        new("orandactl tab focus --tab <id> [--line L] [--range S:L]", "show a tab and place to the user"),
-        new("orandactl tab save --tab <id>", "ask the user to save the tab to its file"),
-        new("orandactl tab binds --tab <id>", "bind variables of a tab"),
-        new("orandactl sql check [--conn A] (--file F | - | --tab <id>)", "parse and lint SQL without the database (statements, diagnostics with line/col, binds)"),
-        new("orandactl sql format [--profile P] (--file F | - | --tab <id>)", "formatted text; does not change the tab"),
-        new("orandactl obj find <pattern> [--conn A] [--type T] [--owner O] [--limit N]", "find objects by name (% and _ wildcards)"),
+        new("orandactl tab propose --tab ID --base-version N [--range document|selection|statement|caret|S:L] [--title T] [--reason R] [--wait 120] (--file F | -)", "propose a change to an existing tab; the user accepts or rejects it. status = pending|accepted|modified|rejected|stale|timeout"),
+        new("orandactl tab proposal <proposal_id>", "state of an earlier proposal"),
+        new("orandactl tab focus --tab ID [--line L] [--range S:L]", "show a tab and place to the user"),
+        new("orandactl tab save --tab ID", "ask the user to save the tab to its file"),
+        new("orandactl tab binds --tab ID", "bind variables of a tab"),
+        new("orandactl sql check [--conn A] [--no-lint] (--file F | - | --tab ID)", "parse and lint SQL without the database (statements, diagnostics with line/col, binds)"),
+        new("orandactl sql format [--profile P] [--scope document|selection|statement] (--file F | - | --tab ID)", "formatted text; does not change the tab"),
+        new("orandactl obj find <pattern> [--conn A] [--type T[,T]] [--owner O] [--limit N]", "find objects by name (% and _ wildcards)"),
         new("orandactl obj schemas [--conn A]", "schema names"),
         new("orandactl obj describe <name> [--conn A] [--parts columns,keys,indexes]", "columns, keys and indexes of a table or view"),
         new("orandactl obj ddl <name> [--conn A]", "DDL of an object"),
@@ -38,10 +39,19 @@ public static class OrandaSkillCommands
         new("orandactl obj deps <name> [--conn A]", "objects that depend on this object"),
         new("orandactl obj reveal <name> [--conn A] [--open]", "select the object in the schema browser"),
         new("orandactl query [--conn A] [--max-rows 50] [--timeout 30] [--binds-json J] (--file F | -)", "run one SELECT (max 200 rows, 60 s)"),
-        new("orandactl result get --tab <id> [--index 0] [--offset 0] [--limit 50]", "rows already fetched in a tab's result grid"),
-        new("orandactl error [--tab <id>]", "last error of a tab (code, message, line, col)"),
-        new("orandactl history [--conn A] [--limit 20] [--source editor|agent]", "recent executions"),
-        new("orandactl tune context|plan|explain|stats|index|histogram|sqlstats|bench|awr-history|awr-plan ...", "tuning tools (plans, statistics, benchmarks)"),
+        new("orandactl result get --tab ID [--index 0] [--offset 0] [--limit 50]", "rows already fetched in a tab's result grid"),
+        new("orandactl error [--tab ID]", "last error of a tab or the window (code, message, line, col)"),
+        new("orandactl history [--conn A] [--limit 20] [--source editor|agent|...] [--since ISO8601]", "recent executions"),
+        new("orandactl tune context [--conn A] [--sql-id ID] [--budget N] [--file F | -]", "tuning context of a statement"),
+        new("orandactl tune plan <sql_id> [--child N] [--conn A]", "cursor plan from the shared pool"),
+        new("orandactl tune explain [--conn A] (--file F | -)", "EXPLAIN PLAN of a statement"),
+        new("orandactl tune stats <table> [--columns C[,C]] [--conn A]", "table and column statistics"),
+        new("orandactl tune index <table> [--conn A]", "indexes of a table"),
+        new("orandactl tune histogram <table> <column> [--conn A]", "column histogram"),
+        new("orandactl tune sqlstats <sql_id> [--conn A]", "execution statistics of a cursor"),
+        new("orandactl tune bench [--conn A] [--repeat N] (--file F | -)", "benchmark SELECT variants; JSON body [{\"label\":…,\"sql\":…}] or {\"variants\":[…]}"),
+        new("orandactl tune awr-history <sql_id> [--conn A]", "plan history from AWR"),
+        new("orandactl tune awr-plan <sql_id> <plan_hash_value> [--conn A]", "one plan from AWR"),
         new("orandactl call <tool> (--json J | -)", "call any tool by name with JSON arguments"),
         new("orandactl tools", "tool names, descriptions and input schemas"),
     ];

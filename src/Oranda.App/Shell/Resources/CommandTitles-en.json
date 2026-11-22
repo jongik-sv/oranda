@@ -313,5 +313,6 @@
   "Cmd.oranda.tuning.tuningAdvisorScript": "Tuning Advisor Script",
   "Cmd.oranda.tuning.baselineScript": "Baseline Fix Script (DBMS_SPM)",
   "Cmd.oranda.plsql.compileSpecAndBody": "Compile Spec and Body",
-  "Cmd.oranda.view.changeBundle": "Change Bundle"
+  "Cmd.oranda.view.changeBundle": "Change Bundle",
+  "Cmd.oranda.agent.external.connect": "External Agent Connection…"
 }

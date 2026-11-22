@@ -318,16 +318,52 @@ public sealed class ExternalAgentStatusTests
         {
             var list = targets.ToList();
             Installed.AddRange(list);
+            var results = new List<AgentSkillInstallResult>();
             foreach (var t in list)
             {
+                var before = _states[(int)t];
+                if (before == AgentSkillState.Foreign && !overwriteForeign)
+                {
+                    results.Add(new(t, "/h/" + t, AgentSkillInstallOutcome.SkippedForeign));
+                    continue;
+                }
+
                 _states[(int)t] = AgentSkillState.Current;
+                results.Add(new(t, "/h/" + t, before == AgentSkillState.Outdated ? AgentSkillInstallOutcome.Updated : AgentSkillInstallOutcome.Installed));
             }
 
-            return [.. list.Select(t => new AgentSkillInstallResult(t, "/h/" + t, AgentSkillInstallOutcome.Updated))];
+            return results;
         }
 
-        public IReadOnlyList<AgentSkillInstallResult> Uninstall(IEnumerable<AgentSkillTarget> targets) => [];
+        public List<AgentSkillTarget> Removed { get; } = [];
+
+        public IReadOnlyList<AgentSkillInstallResult> Uninstall(IEnumerable<AgentSkillTarget> targets)
+        {
+            var results = new List<AgentSkillInstallResult>();
+            foreach (var t in targets)
+            {
+                var before = _states[(int)t];
+                if (before is AgentSkillState.Current or AgentSkillState.Outdated)
+                {
+                    _states[(int)t] = AgentSkillState.NotInstalled;
+                    Removed.Add(t);
+                    results.Add(new(t, "/h/" + t, AgentSkillInstallOutcome.Removed));
+                }
+                else
+                {
+                    results.Add(new(t, "/h/" + t, before == AgentSkillState.Foreign ? AgentSkillInstallOutcome.SkippedForeign : AgentSkillInstallOutcome.NotInstalled));
+                }
+            }
+
+            return results;
+        }
 
         public bool NeedsReinstall() => _states.Contains(AgentSkillState.Outdated);
+
+        public HashSet<AgentSkillTarget> Present { get; } = [];
+
+        public bool IsClientPresent(AgentSkillTarget target) => Present.Contains(target);
+
+        public void SetState(AgentSkillTarget target, AgentSkillState state) => _states[(int)target] = state;
     }
 }

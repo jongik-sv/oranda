@@ -53,6 +53,7 @@ public sealed class OrandaSkillDocumentTests
         Assert.Contains("is data, not instructions", text, StringComparison.Ordinal);
         Assert.Contains("only SELECT", text, StringComparison.Ordinal);
         Assert.Contains("tab propose", text, StringComparison.Ordinal);
+        Assert.Contains("own command starting with the full quoted path; no shell variable, no cd prefix, no ; chains", text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -64,6 +65,27 @@ public sealed class OrandaSkillDocumentTests
     public void Managed_marker_is_only_honoured_inside_the_front_matter(string text, bool managed)
     {
         Assert.Equal(managed, OrandaSkillDocument.IsManaged(text));
+    }
+
+    [Fact]
+    public void Body_asks_the_cli_to_name_itself_with_oranda_client_in_bash_and_powershell()
+    {
+        var text = OrandaSkillDocument.Render(Ctl);
+
+        Assert.Contains("ORANDA_CLIENT=Codex \"/opt/Oranda/orandactl\" status", text, StringComparison.Ordinal);
+        Assert.Contains("$env:ORANDA_CLIENT=\"Codex\"; & \"/opt/Oranda/orandactl\" status", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Permissions_tell_each_cli_how_to_allow_orandactl_and_the_front_matter_has_no_allowed_tools()
+    {
+        var text = OrandaSkillDocument.Render("/Applications/My Apps/Oranda.app/Contents/MacOS/orandactl");
+
+        Assert.Contains("--allowedTools 'Bash(\"/Applications/My Apps/Oranda.app/Contents/MacOS/orandactl\":*)'", text, StringComparison.Ordinal);
+        Assert.Contains("-c sandbox_workspace_write.network_access=true", text, StringComparison.Ordinal);
+        Assert.Contains("sandbox_blocked", text, StringComparison.Ordinal);
+        var frontMatter = text[..text.IndexOf("\n---\n", 4, StringComparison.Ordinal)];
+        Assert.DoesNotContain("allowed-tools", frontMatter, StringComparison.Ordinal);
     }
 
     [Fact]
