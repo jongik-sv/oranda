@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Oranda.Core.Ai.Contracts;
+using Oranda.Core.Ai.Setup;
 using Oranda.Core.Execution;
 
 namespace Oranda.Core.Settings;
@@ -353,6 +354,14 @@ public sealed record AiSettings
     public AiLightSettings? Light { get; init; }
 
     /// <summary>
+    /// AI 연결 도우미의 기억(첫 실행 묻기 닫음·이어 하기). 키가 없는 옛 파일·null·객체가 아닌 값 = 기본값, 모르는 갈래·단계 = 없음(처음부터).
+    /// </summary>
+    [JsonConverter(typeof(TolerantAiSetupSettingsConverter))]
+    public AiSetupSettings Setup { get => _setup; init => _setup = value ?? new(); }
+
+    private readonly AiSetupSettings _setup = new();
+
+    /// <summary>
     /// 등급에 맞는 실행 대상 설정. <see cref="AiTier.Light"/> 이고 <see cref="Light"/> 가 대상을 골랐을 때만 주 모델 칸(프로필 id·시스템 CLI id·모델·노력)을 가벼운 일 모델 값으로 바꾼 사본을 돌려준다.
     /// 그 밖에는 이 객체 그대로다. 사본의 <see cref="Light"/> 는 null 이고, 나머지 칸(가림·프로필 목록·실행 파일 경로 등)은 그대로 둔다.
     /// </summary>
@@ -381,9 +390,26 @@ public sealed record AiSettings
         && string.Equals(SystemCliId, other.SystemCliId, StringComparison.Ordinal)
         && Profiles.SequenceEqual(other.Profiles)
         && CustomClis.SequenceEqual(other.CustomClis)
-        && Equals(Light, other.Light);
+        && Equals(Light, other.Light)
+        && Setup == other.Setup;
 
-    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds, JoinSyntax, CustomClis.Count, Light));
+    public override int GetHashCode() => HashCode.Combine(Driver, Model, Effort, ExecutablePath, MaskLiterals, ActiveProfileId, Profiles.Count, HashCode.Combine(SystemCliId, BenchmarkTimeoutSeconds, JoinSyntax, CustomClis.Count, Light, Setup));
+}
+
+/// <summary>AI 연결 도우미 설정 칸(<c>ai.setup</c>). 화면은 도우미 창·첫 실행 묻기만 바꾼다.</summary>
+public sealed record AiSetupSettings
+{
+    /// <summary>첫 실행 「AI 를 연결할까요?」 를 닫았다(도우미 열기·나중에 둘 다). 참이면 다시 묻지 않는다.</summary>
+    public bool FirstRunPromptClosed { get; init; }
+
+    /// <summary>마지막으로 고른 갈래(이어 하기). null = 고르기 전.</summary>
+    public AiSetupPath? LastPath { get; init; }
+
+    /// <summary>마지막에 있던 단계(이어 하기). null = 처음부터. 되살리기는 <see cref="AiSetupFlow.Restore"/>.</summary>
+    public AiSetupStepId? LastStep { get; init; }
+
+    /// <summary>갈래 B 에서 만든 프로필 id(이어 하기). null = 없음. 목록에 없는 id 면 단계가 다시 만들게 한다.</summary>
+    public Guid? LastProfileId { get; init; }
 }
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>

@@ -126,6 +126,10 @@ public static partial class OrandaManual
         {
             Headings = ["AI 기능이 하는 일", "쓸 수 있는 모델", "AI가 받는 정보", "접속의 AI 허용 수준", "값 가림", "로컬 AI", "운영 접속에서의 제한", "알아 둘 위험", "문제가 생길 때"],
         },
+        new("AI 연결 도우미", "단추만 눌러 따라 하면 회사 Claude 계정이나 회사 AI 서버로 Oranda 에 AI 를 연결하는 도우미를 안내합니다.", "https://jongik-sv.github.io/oranda/ai/setup/", "ai")
+        {
+            Headings = [],
+        },
         new("AI 모델 설정", "AI 튜닝과 대화에 쓸 주 모델과 가벼운 일 모델을 고르고, LLM 프로필, 시스템 CLI, 기타 CLI를 설정하는 방법을 안내합니다.", "https://jongik-sv.github.io/oranda/ai/models/", "ai")
         {
             Headings = ["설정 창의 AI 모델 탭", "주 모델과 가벼운 일 모델", "LLM 프로필", "시스템 CLI", "기타 CLI", "조인 문법", "운영 벤치마크 제한 시간", "문제가 생길 때"],
