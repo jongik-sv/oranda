@@ -156,8 +156,10 @@ public sealed class ExternalResultHandlerTests
         var (host, tab, _) = await TabWithResultAsync(Dev);
         var handler = new GetResultHandler() { Host = host };
 
-        var json = Ok(await handler.ExecuteAsync(Call(Grant(), TabArgs(tab)), CancellationToken.None));
+        var output = await handler.ExecuteAsync(Call(Grant(), TabArgs(tab)), CancellationToken.None);
+        var json = Ok(output);
 
+        Assert.Equal(Dev, output.ProfileId); // 탭 접속을 감사에 알린다(게이트가 접속·data=local_ai 로 적는다)
         Assert.Equal(["ORDER_ID", "CUST_PHONE", "STATUS"], json["columns"]!.AsArray().Select(c => c!["name"]!.GetValue<string>()));
         Assert.Equal("NUMBER", json["columns"]![0]!["type"]!.GetValue<string>());
         var rows = json[AgentFields.RowValues]!.AsArray();
@@ -218,7 +220,9 @@ public sealed class ExternalResultHandlerTests
     {
         var (devHost, devTab, _) = await TabWithResultAsync(Dev);
         var handler = new GetResultHandler() { Host = devHost };
-        Denied(await handler.ExecuteAsync(Call(Grant(AiAccessLevel.Plan), TabArgs(devTab)), CancellationToken.None), AgentErrorCodes.Level);
+        var low = await handler.ExecuteAsync(Call(Grant(AiAccessLevel.Plan), TabArgs(devTab)), CancellationToken.None);
+        Denied(low, AgentErrorCodes.Level);
+        Assert.Equal(Dev, low.ProfileId); // 탭을 찾은 뒤의 거부도 그 접속의 호출
 
         var (prodHost, prodTab, _) = await TabWithResultAsync(Prod);
         handler.Host = prodHost;
@@ -228,7 +232,9 @@ public sealed class ExternalResultHandlerTests
         handler.Host = outHost;
         Denied(await handler.ExecuteAsync(Call(Grant(), TabArgs(outTab)), CancellationToken.None), AgentErrorCodes.Locked);
 
-        Denied(await handler.ExecuteAsync(Call(Grant(), new JsonObject { ["tab"] = Guid.NewGuid().ToString("D") }), CancellationToken.None), AgentErrorCodes.TabNotFound);
+        var missing = await handler.ExecuteAsync(Call(Grant(), new JsonObject { ["tab"] = Guid.NewGuid().ToString("D") }), CancellationToken.None);
+        Denied(missing, AgentErrorCodes.TabNotFound);
+        Assert.Null(missing.ProfileId);
         Denied(await handler.ExecuteAsync(Call(Grant(), new JsonObject { ["tab"] = "not-a-tab" }), CancellationToken.None), AgentErrorCodes.TabNotFound);
         Denied(await handler.ExecuteAsync(Call(Grant(), TabArgs(devTab, limit: 500)), CancellationToken.None), AgentErrorCodes.InvalidArguments);
     });

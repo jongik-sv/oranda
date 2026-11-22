@@ -43,6 +43,7 @@ public sealed class GetResultHandler : IAppToolHandler
         return await ExternalToolSupport.OnUiAsync(() => Read(invocation.Grant, tabId, index, offset, limit)).ConfigureAwait(false);
     });
 
+    /// <summary>탭을 찾았으면 그 탭 접속을 결과에 적는다(감사 줄의 접속·<c>data=local_ai</c>, 허가 안인지는 게이트가 다시 본다).</summary>
     private AgentToolOutput Read(AgentGrantView grant, string tabId, int index, int offset, int limit)
     {
         if (ExternalToolSupport.FindTab(Host ?? SqlEditorHost.Current, tabId) is not { } tab)
@@ -50,6 +51,12 @@ public sealed class GetResultHandler : IAppToolHandler
             return AppToolOutputs.TabNotFound(tabId);
         }
 
+        var output = Read(grant, tab, index, offset, limit);
+        return tab.ConnectionProfileId is { } id ? output with { ProfileId = id } : output;
+    }
+
+    private static AgentToolOutput Read(AgentGrantView grant, SqlEditorViewModel tab, int index, int offset, int limit)
+    {
         var profileId = tab.ConnectionProfileId;
         if (grant.IsLocked(profileId))
         {

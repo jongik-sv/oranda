@@ -91,12 +91,12 @@ public sealed class ExportResultHandler(IServiceProvider services) : IAppToolHan
     private static async Task<AgentToolOutput> ExportAsync(ExternalRunParts parts, Request request, CancellationToken ct)
     {
         var target = ExternalRunSupport.Resolve(parts.Host, request.Invocation.Grant, request.TabId);
-        if (target.Denial is { } denial)
-        {
-            return denial;
-        }
+        var output = target.Denial ?? await ExportFromAsync(parts, request, target.Tab!, ct).ConfigureAwait(true);
+        return ExternalRunSupport.WithProfile(output, target.Tab);
+    }
 
-        var tab = target.Tab!;
+    private static async Task<AgentToolOutput> ExportFromAsync(ExternalRunParts parts, Request request, SqlEditorViewModel tab, CancellationToken ct)
+    {
         var controller = parts.Controller;
         if (parts.MissingConnection(tab) is not null || controller.SessionFor(tab) is not { } session)
         {

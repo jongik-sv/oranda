@@ -176,7 +176,7 @@ public sealed partial class AgentGate
     /// </summary>
     private static string? SummarizeArguments(CallState state)
     {
-        if (state.Clean.Count == 0 && !state.LiteralMasking && !state.LocalAi && state.UserFunctionCount == 0 && state.FirstSubstitution is null)
+        if (state.Clean.Count == 0 && !state.LiteralMasking && !state.LocalAi && !state.ReportedOutsideGrant && state.UserFunctionCount == 0 && state.FirstSubstitution is null)
         {
             return null;
         }
@@ -186,6 +186,11 @@ public sealed partial class AgentGate
         if (state.LocalAi)
         {
             parts.Add("data=local_ai");
+        }
+
+        if (state.ReportedOutsideGrant)
+        {
+            parts.Add("connection=outside_grant");
         }
 
         if (state.UserFunctionCount > 0)

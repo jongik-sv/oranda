@@ -115,6 +115,7 @@ public sealed class RunTabHandlerTests
         Assert.NotNull(result["elapsed_ms"]);
         Assert.Null(result["row_values"]); // 행은 돌려주지 않는다(get_result 로 읽는다)
         Assert.Equal(3, output.RowCount);
+        Assert.Equal(env.Rig.Profile.Id, output.ProfileId); // 탭 접속을 감사에 알린다(게이트가 접속·data=local_ai 로 적는다)
 
         Assert.Equal("SELECT n FROM sample_orders", Assert.Single(env.Rig.Exec.Statements).Text);
         Assert.Equal(HistorySource.Agent, Assert.Single(env.Rig.Exec.SingleOptions)!.Source);
@@ -173,6 +174,7 @@ public sealed class RunTabHandlerTests
         var output = await env.RunAsync();
 
         Assert.Equal(code, output.ErrorCode);
+        Assert.Equal(env.Rig.Profile.Id, output.ProfileId); // 탭을 찾은 뒤의 거부도 그 접속의 호출
         Assert.Empty(env.Rig.Exec.Statements);
         Assert.Null(env.Tab.AgentBar);
     });
@@ -207,18 +209,24 @@ public sealed class RunTabHandlerTests
 
         using var locked = new Env();
         locked.Grant = new AgentGrantView("g1", [], DateTimeOffset.UnixEpoch, null, ["Claude Code"]);
-        Assert.Equal("locked", (await locked.RunAsync()).ErrorCode);
+        var lockedOutput = await locked.RunAsync();
+        Assert.Equal("locked", lockedOutput.ErrorCode);
+        Assert.Equal(locked.Rig.Profile.Id, lockedOutput.ProfileId); // 허가 밖인지는 게이트가 다시 본다(그 접속으로 적지 않는다)
 
         using var bare = new Env();
         bare.Tab.ConnectionProfileId = null;
-        Assert.Equal("connection_required", (await bare.RunAsync()).ErrorCode);
+        var bareOutput = await bare.RunAsync();
+        Assert.Equal("connection_required", bareOutput.ErrorCode);
+        Assert.Null(bareOutput.ProfileId);
 
         using var closed = new Env();
         closed.Parts = new ExternalRunParts { Host = closed.Rig.Host, Controller = closed.Rig.Controller, Guard = closed.Guard, MissingConnection = _ => closed.Rig.Profile.Id };
         var handler = new RunTabHandler(new NoServices()) { Parts = closed.Parts };
         Assert.Equal("connection", (await handler.ExecuteAsync(closed.Call(closed.Args()), CancellationToken.None)).ErrorCode);
 
-        Assert.Equal("tab_not_found", (await low.Run.ExecuteAsync(low.Call(new JsonObject { ["tab"] = Guid.NewGuid().ToString() }), CancellationToken.None)).ErrorCode);
+        var missing = await low.Run.ExecuteAsync(low.Call(new JsonObject { ["tab"] = Guid.NewGuid().ToString() }), CancellationToken.None);
+        Assert.Equal("tab_not_found", missing.ErrorCode);
+        Assert.Null(missing.ProfileId);
     });
 
     [Fact]

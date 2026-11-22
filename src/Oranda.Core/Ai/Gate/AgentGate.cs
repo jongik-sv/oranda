@@ -721,6 +721,9 @@ public sealed partial class AgentGate : IAgentGate, IAgentExternalGate
         /// <summary>이 호출은 「로컬 AI」 실행이다(값을 가리지 않는다, D-045). 감사 기록의 인자 요약에 <c>data=local_ai</c> 로 남는다.</summary>
         public bool LocalAi { get; set; }
 
+        /// <summary>앱 도구 처리자가 알린 접속(<see cref="AgentToolOutput.ProfileId"/>)이 허가 밖이었다. 감사 인자 요약에 <c>connection=outside_grant</c> 로 남는다.</summary>
+        public bool ReportedOutsideGrant { get; set; }
+
         /// <summary>되돌리기 전, LLM 이 보낸 <c>sql</c> 인자(가린 글)의 길이. 감사 요약이 쓴다. 되돌리지 않았으면 null.</summary>
         public int? MaskedSqlLength { get; set; }
 

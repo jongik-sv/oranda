@@ -152,7 +152,8 @@ internal sealed class GetTabToolHandler(ExternalEditorService service) : EditorT
         }
 
         json["binds"] = new JsonArray([.. tab.Binds.Select(b => (JsonNode?)JsonValue.Create(b))]);
-        return Task.FromResult(AgentToolOutput.Ok(json));
+        // 탭 접속을 감사에 알린다(접속·data=local_ai). 거부(잠김·글 읽기 불가)는 서비스가 탭을 돌려주지 않아 알리지 않는다.
+        return Task.FromResult(AgentToolOutput.Ok(json) with { ProfileId = tab.ConnectionProfileId });
     }
 }
 

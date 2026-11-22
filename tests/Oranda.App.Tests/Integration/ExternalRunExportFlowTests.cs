@@ -278,7 +278,8 @@ public sealed class ExternalRunExportFlowTests(ItDb db) : IClassFixture<ItDb>
 
     /// <summary>
     /// R6 클라우드 허가(로컬 모델 아님)·운영 라벨: <c>query</c> 는 실행되지만 행 값이 오지 않고, <c>run_tab</c> 결과를 <c>get_result</c> 로 읽어도 행 값이 없으며,
-    /// 실패 글은 <c>***</c>, 운영 탭 글(<c>get_tab</c>)은 거부. 감사: 문장 리터럴이 남지 않고 run_tab 사유에 <c>rows=N</c>.
+    /// 실패 글은 <c>***</c>, 운영 탭 글(<c>get_tab</c>)은 거부. 감사: 문장 리터럴이 남지 않고 run_tab 사유에 <c>rows=N</c>,
+    /// 탭 도구(run_tab·get_result) 감사 줄에 탭의 접속(ProfileId)이 남고 <c>data=local_ai</c> 는 없다.
     /// </summary>
     [ItDbFact]
     public Task Production_cloud_grant_runs_selects_but_withholds_values_masks_errors_refuses_tab_text_and_audits_rows() => Ui.Run(async () =>
@@ -316,9 +317,14 @@ public sealed class ExternalRunExportFlowTests(ItDb db) : IClassFixture<ItDb>
         Assert.DoesNotContain("data=local_ai", queryAudit.Arguments ?? string.Empty, StringComparison.Ordinal);
         Assert.Contains("rows=1", queryAudit.Reason ?? string.Empty, StringComparison.Ordinal);
         Assert.Contains(audit, e => e.Tool == AppToolNames.RunTab && (e.Reason ?? string.Empty).Contains("rows=1", StringComparison.Ordinal));
+        Assert.All(audit.Where(e => e.Tool is AppToolNames.RunTab or AppToolNames.GetResult), e =>
+        {
+            Assert.Equal(prod.Profile.Id, e.ProfileId); // 처리자가 알린 탭 접속
+            Assert.DoesNotContain("data=local_ai", e.Arguments ?? string.Empty, StringComparison.Ordinal);
+        });
     });
 
-    /// <summary>R6 로컬 모델 허가·운영 라벨: 행 값·민감 열 원래 값·탭 글(리터럴 포함)·실패 글이 보이고, <c>query</c> 감사 인자 요약에 <c>data=local_ai</c>(탭 도구는 아래 감사 틈).</summary>
+    /// <summary>R6 로컬 모델 허가·운영 라벨: 행 값·민감 열 원래 값·탭 글(리터럴 포함)·실패 글이 보이고, <c>query</c> 와 탭 도구(run_tab·get_result·get_tab) 감사에 <c>data=local_ai</c>·탭 접속.</summary>
     [ItDbFact]
     public Task Production_local_model_grant_shows_values_literals_and_tab_text_and_audits_local_ai() => Ui.Run(async () =>
     {
@@ -349,13 +355,16 @@ public sealed class ExternalRunExportFlowTests(ItDb db) : IClassFixture<ItDb>
         var audit = prod.Audit.Entries;
         Assert.Contains("data=local_ai", Assert.Single(audit, e => e.Tool == AppToolNames.Query).Arguments ?? string.Empty, StringComparison.Ordinal);
 
-        // 감사 틈(현재 동작 고정, w-it-p2 보고): 탭이 접속을 정하는 앱 도구(run_tab·get_result·get_tab)는 게이트가 접속을 모른다(connection 인자 없음).
-        // 그래서 감사 줄에 접속(ProfileId)과 data=local_ai 가 없다 — 운영 외부 호출을 접속으로 거를 수 없다. 행 수(rows=N)는 남는다.
-        // 고치면(처리자가 쓴 접속을 게이트에 알림) 아래 두 줄을 Equal(profile.Id)·Contains("data=local_ai") 로 바꾼다.
+        // 탭이 접속을 정하는 앱 도구(run_tab·get_result·get_tab)는 connection 인자가 없다. 처리자가 쓴 탭 접속을 알리고(AgentToolOutput.ProfileId)
+        // 게이트가 허가 안 접속이면 감사 줄의 접속과 data=local_ai 로 적는다(전 w-it-p2 감사 틈) — 운영 외부 호출을 접속으로 거를 수 있다.
         var runAudit = audit.First(e => e.Tool == AppToolNames.RunTab);
-        Assert.Null(runAudit.ProfileId);
-        Assert.DoesNotContain("data=local_ai", runAudit.Arguments ?? string.Empty, StringComparison.Ordinal);
         Assert.Contains("rows=1", runAudit.Reason ?? string.Empty, StringComparison.Ordinal);
+        Assert.All(audit.Where(e => e.Tool is AppToolNames.RunTab or AppToolNames.GetResult or AppToolNames.GetTab), e =>
+        {
+            Assert.Equal(prod.Profile.Id, e.ProfileId);
+            Assert.Contains("data=local_ai", e.Arguments ?? string.Empty, StringComparison.Ordinal);
+        });
+        Assert.Equal(4, audit.Count(e => e.Tool is AppToolNames.RunTab or AppToolNames.GetResult or AppToolNames.GetTab)); // run_tab 둘(성공·실패)·get_result·get_tab
     });
 
     private static JsonNode Ok(AgentGateResponse response)

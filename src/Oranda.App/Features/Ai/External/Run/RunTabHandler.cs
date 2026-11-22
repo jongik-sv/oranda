@@ -67,12 +67,12 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
     private static async Task<AgentToolOutput> RunAsync(ExternalRunParts parts, Request request, CancellationToken ct)
     {
         var target = ExternalRunSupport.Resolve(parts.Host, request.Invocation.Grant, request.TabId);
-        if (target.Denial is { } denial)
-        {
-            return denial;
-        }
+        var output = target.Denial ?? await RunOnAsync(parts, request, target.Tab!, ct).ConfigureAwait(true);
+        return ExternalRunSupport.WithProfile(output, target.Tab);
+    }
 
-        var tab = target.Tab!;
+    private static async Task<AgentToolOutput> RunOnAsync(ExternalRunParts parts, Request request, SqlEditorViewModel tab, CancellationToken ct)
+    {
         if (request.BaseVersion is { } expected && expected != tab.Version)
         {
             return AgentToolOutput.Ok(new JsonObject { ["status"] = AppToolValues.RunStatus.Stale, ["version"] = tab.Version });

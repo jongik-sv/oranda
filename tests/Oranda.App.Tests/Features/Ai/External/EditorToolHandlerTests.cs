@@ -108,6 +108,7 @@ public class EditorToolHandlerTests
         Assert.Equal(1, (int)dev.Result["caret"]!["line"]!);
         Assert.Equal("query", (string)dev.Result["statement"]!["kind"]!);
         Assert.Equal("id", (string)dev.Result["binds"]![0]!);
+        Assert.Equal(rig.DevTab.ConnectionProfileId, dev.ProfileId); // 탭 접속을 감사에 알린다(게이트가 접속·data=local_ai 로 적는다)
 
         Assert.Equal(AgentErrorCodes.Environment, (await Rig.Call(handler, Args(("tab", rig.ProdTab.TabId.ToString())))).ErrorCode);
         Assert.Equal(AgentErrorCodes.Locked, (await Rig.Call(handler, Args(("tab", rig.OtherTab.TabId.ToString())))).ErrorCode);

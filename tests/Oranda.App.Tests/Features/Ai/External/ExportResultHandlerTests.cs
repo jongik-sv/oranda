@@ -102,6 +102,7 @@ public sealed class ExportResultHandlerTests : IDisposable
         Assert.Equal(1234, result["rows"]!.GetValue<long>());
         Assert.Equal(new FileInfo(path).Length, result["bytes"]!.GetValue<long>());
         Assert.Equal(1234, output.RowCount);
+        Assert.Equal(env.Rig.Profile.Id, output.ProfileId); // 탭 접속을 감사에 알린다
         Assert.Equal("N\na\nb\nc\n", await File.ReadAllTextAsync(path));
         Assert.Empty(Leftovers());
 
@@ -160,7 +161,9 @@ public sealed class ExportResultHandlerTests : IDisposable
         using var _ = env;
         var path = Path.Combine(_folder, "orders.csv");
 
-        Assert.Equal("no_result", (await export.ExecuteAsync(env.Call(Args(env, "csv", path, index: 5)), CancellationToken.None)).ErrorCode);
+        var none = await export.ExecuteAsync(env.Call(Args(env, "csv", path, index: 5)), CancellationToken.None);
+        Assert.Equal("no_result", none.ErrorCode);
+        Assert.Equal(env.Rig.Profile.Id, none.ProfileId); // 탭을 찾은 뒤의 거부도 그 접속의 호출
         env.Guard.Refusal = ExternalSelectRefusal.Unsafe;
         Assert.Equal("sql_unsafe", (await export.ExecuteAsync(env.Call(Args(env, "csv", path)), CancellationToken.None)).ErrorCode);
         env.Guard.Refusal = ExternalSelectRefusal.SchemaUnknown; // 세션의 현재 스키마를 못 읽었다: 닫힌 쪽

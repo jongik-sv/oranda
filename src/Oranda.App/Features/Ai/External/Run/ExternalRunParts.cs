@@ -109,6 +109,13 @@ internal static class ExternalRunSupport
         return new(tab, connection, null);
     }
 
+    /// <summary>
+    /// 탭 접속을 결과에 적는다(<see cref="AgentToolOutput.ProfileId"/>, 감사 줄의 접속·<c>data=local_ai</c>). 탭을 찾은 뒤의 거부·실패도 그 접속의 호출이라 함께 적는다.
+    /// 허가 안인지는 게이트가 다시 본다(허가 밖이면 그 접속으로 적지 않는다). 탭이 없거나 접속 없는 탭이면 그대로.
+    /// </summary>
+    public static AgentToolOutput WithProfile(AgentToolOutput output, SqlEditorViewModel? tab) =>
+        tab?.ConnectionProfileId is { } profileId ? output with { ProfileId = profileId } : output;
+
     /// <summary>가드 거부를 도구 글로(<c>run_tab</c>·<c>export_result</c> 말투).</summary>
     public static AgentToolOutput Refusal(ExternalSelectCheck check) => AppToolOutputs.Deny(check.Code ?? AgentErrorCodes.SqlUnsafe, check.Refusal switch
     {

@@ -101,6 +101,14 @@ public sealed record AgentToolOutput
     /// </summary>
     public string? AuditNote { get; init; }
 
+    /// <summary>
+    /// 처리자가 실제로 쓴 접속의 프로필 id(탭이 접속을 정하는 앱 도구 — <c>run_tab</c>·<c>export_result</c>·<c>get_result</c>·<c>get_tab</c>). null 이면 알리지 않음.
+    /// 호출에 접속(<c>connection</c> 인자)이 없을 때만 게이트가 감사 줄의 접속(ProfileId·별칭·수준)과 <c>data=local_ai</c> 에 쓴다.
+    /// 허가 밖 프로필이면 그 접속으로 적지 않고 인자 요약에 <c>connection=outside_grant</c> 만 남긴다. 결과 가림에는 쓰지 않는다(처리자가 이미 판단했다).
+    /// 실패 결과에도 적어도 된다(탭을 찾은 뒤의 거부·실패도 그 접속의 호출이다).
+    /// </summary>
+    public Guid? ProfileId { get; init; }
+
     public bool IsError => ErrorMessage is not null;
 
     /// <summary>감사 사유에 남기는 행 수 글(<c>rows=N</c>).</summary>

@@ -240,11 +240,13 @@ public sealed partial class AgentGate
             return (Fail(AgentErrorCodes.ToolFailed, "The tool returned no result."), connection);
         }
 
+        // 감사에 적을 접속: 호출이 정한 접속, 없으면 처리자가 알린 접속(탭이 접속을 정하는 도구). 가림은 호출이 정한 접속에서만 한다(아래).
+        var audited = connection ?? Reported(grant, output, state);
         if (output.IsError)
         {
             var code = output.ErrorCode ?? AgentErrorCodes.ToolFailed;
             var text = output.AppWritten ? SanitizeError(output.ErrorMessage!) : FailedGenericText;
-            return (AgentCliExit.For(code) == AgentCliExit.Denied ? Deny(code, text) : Fail(code, text), connection);
+            return (AgentCliExit.For(code) == AgentCliExit.Denied ? Deny(code, text) : Fail(code, text), audited);
         }
 
         var result = output.Result?.DeepClone() ?? new JsonObject();
@@ -266,13 +268,34 @@ public sealed partial class AgentGate
         {
             return (Fail(
                 AgentErrorCodes.ResultTooLarge,
-                $"The result is too large ({serialized.Length} characters, limit {MaxResultChars}); narrow the request, for example a smaller range or limit."), connection);
+                $"The result is too large ({serialized.Length} characters, limit {MaxResultChars}); narrow the request, for example a smaller range or limit."), audited);
         }
 
         return (new GateOutcome(
             new AgentCallToolResult(false, serialized),
             removed > 0 ? AiToolJudgement.Masked : AiToolJudgement.Allowed,
-            WithNotes(removed > 0 ? "masked" : null, output)), connection);
+            WithNotes(removed > 0 ? "masked" : null, output)), audited);
+    }
+
+    /// <summary>
+    /// 처리자가 알린 접속(<see cref="AgentToolOutput.ProfileId"/>)을 허가 안 접속으로 바꾼다. 허가 안이면 그 접속의 「로컬 모델」 여부를 감사 요약(<c>data=local_ai</c>)에 싣는다.
+    /// 허가 밖 프로필은 믿지 않는다 — 그 접속으로 적지 않고(null) <c>connection=outside_grant</c> 만 남긴다.
+    /// </summary>
+    private static AgentGrantConnection? Reported(AgentGrantView grant, AgentToolOutput output, CallState state)
+    {
+        if (output.ProfileId is not { } profileId)
+        {
+            return null;
+        }
+
+        if (grant.FindConnection(profileId) is not { } reported)
+        {
+            state.ReportedOutsideGrant = true;
+            return null;
+        }
+
+        state.LocalAi = AgentGrantPolicy.UsesLocalModel(grant, reported.Environment);
+        return reported;
     }
 
     /// <summary>

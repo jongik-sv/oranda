@@ -49,7 +49,8 @@ public partial class AgentGateTests
         public Dictionary<string, FakeHandler> Handlers => Inner.Handlers;
 
         public List<FakeAppHandler> AppHandlerList { get; } =
-            [new(AppToolNames.ListTabs), new(AppToolNames.NewTab), new(AppToolNames.RevealObject), new(AppToolNames.GetHistory), new(AppToolNames.CheckSql)];
+            [new(AppToolNames.ListTabs), new(AppToolNames.NewTab), new(AppToolNames.RevealObject), new(AppToolNames.GetHistory), new(AppToolNames.CheckSql),
+             new(AppToolNames.RunTab), new(AppToolNames.GetResult), new(AppToolNames.GetTab)];
 
         public FakeAppHandler App(string name) => AppHandlerList.Single(h => h.ToolName == name);
 
