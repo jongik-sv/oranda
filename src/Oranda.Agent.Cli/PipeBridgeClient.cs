@@ -7,14 +7,13 @@ using static Oranda.Core.Ai.Protocol.AgentRpc;
 namespace Oranda.Agent.Cli;
 
 /// <summary>
-/// 현재 사용자 전용 명명 파이프로 앱(AgentBridgeHost)에 JSON-RPC 요청을 보낸다. 연결 직후 <c>oranda.hello</c> 로
-/// 환경 변수 <c>ORANDA_RUN_TOKEN</c> 의 실행 토큰을 내고, 이후 <c>oranda.listTools</c>·<c>oranda.callTool</c> 을 차례로 보낸다.
+/// 현재 사용자 전용 명명 파이프(Windows) 또는 Unix 도메인 소켓(macOS·Linux, 이름이 절대 경로)으로 앱(AgentBridgeHost)에 JSON-RPC 요청을 보낸다.
+/// 연결 직후 <c>oranda.hello</c> 로 토큰(내장 실행 = <c>ORANDA_RUN_TOKEN</c>, 외부 연결 = 연결 파일의 토큰)을 내고,
+/// 이후 <c>oranda.listTools</c>·<c>oranda.callTool</c> 을 차례로 보낸다.
 /// 연결이 끊기면 다음 요청에서 다시 맺고 hello 를 다시 한다(토큰은 앱이 폐기하기 전까지 유효하다).
 /// </summary>
 internal sealed class PipeBridgeClient(string pipeName, string runToken) : IBridgeClient
 {
-    private const string NotRunningText = "Oranda 앱이 실행 중이 아니거나 AI 튜닝 연결이 열려 있지 않습니다.";
-
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(2);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -26,7 +25,7 @@ internal sealed class PipeBridgeClient(string pipeName, string runToken) : IBrid
     {
         var result = await RequestAsync(client, Methods.ListTools, null, cancellationToken).ConfigureAwait(false);
         var tools = result.Deserialize(AgentRpcJsonContext.Default.AgentListToolsResult)
-            ?? throw new BridgeException("listTools 응답을 읽지 못했습니다.");
+            ?? throw new BridgeException(CliText.BadResponse);
         return tools.Tools;
     }
 
@@ -35,7 +34,7 @@ internal sealed class PipeBridgeClient(string pipeName, string runToken) : IBrid
         var parameters = ToNode(new AgentCallToolParams(name, arguments), AgentRpcJsonContext.Default.AgentCallToolParams);
         var result = await RequestAsync(client, Methods.CallTool, parameters, cancellationToken).ConfigureAwait(false);
         return result.Deserialize(AgentRpcJsonContext.Default.AgentCallToolResult)
-            ?? throw new BridgeException("callTool 응답을 읽지 못했습니다.");
+            ?? throw new BridgeException(CliText.BadResponse);
     }
 
     public ValueTask DisposeAsync()
@@ -44,16 +43,6 @@ internal sealed class PipeBridgeClient(string pipeName, string runToken) : IBrid
         _gate.Dispose();
         return ValueTask.CompletedTask;
     }
-
-    private static string CodeOf(int code) => code switch
-    {
-        ErrorCodes.TokenInvalid => "oranda_run_invalid",
-        ErrorCodes.RunRequired => "run_required",
-        ErrorCodes.HelloRequired => "hello_required",
-        ErrorCodes.ShuttingDown => "oranda_shutting_down",
-        ErrorCodes.UnsupportedProtocol => "unsupported_protocol",
-        _ => "bridge_error",
-    };
 
     private async Task<JsonNode> RequestAsync(AgentClientInfo client, string method, JsonNode? parameters, CancellationToken cancellationToken)
     {
@@ -69,7 +58,7 @@ internal sealed class PipeBridgeClient(string pipeName, string runToken) : IBrid
             {
                 // 끊긴 연결은 버린다. 다음 요청이 다시 맺는다.
                 Reset();
-                throw new BridgeException(BridgeException.NotRunning, NotRunningText);
+                throw new BridgeException(BridgeException.NotRunning, CliText.NotRunning);
             }
             catch (OperationCanceledException)
             {
@@ -91,15 +80,22 @@ internal sealed class PipeBridgeClient(string pipeName, string runToken) : IBrid
             return existing;
         }
 
+        // Unix 는 CurrentUserOnly 가 소켓 상대(서버)의 uid 가 나와 같은지 본다. 다른 사용자의 서버면 UnauthorizedAccessException.
         var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         try
         {
             await pipe.ConnectAsync((int)ConnectTimeout.TotalMilliseconds, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
         {
             await pipe.DisposeAsync().ConfigureAwait(false);
-            throw new BridgeException(BridgeException.NotRunning, NotRunningText);
+            throw new BridgeException(BridgeException.NotRunning, CliText.NotRunning);
+        }
+        catch (ArgumentException)
+        {
+            // 소켓 경로가 sun_path 한도(Linux 108·macOS 104바이트)를 넘었다. 앱은 이 경로로 열 수 없으므로 붙을 곳이 없다.
+            await pipe.DisposeAsync().ConfigureAwait(false);
+            throw new BridgeException(AgentErrorCodes.BridgeError, CliText.SocketPathTooLong);
         }
 
         var channel = new AgentRpcChannel(pipe);
@@ -133,7 +129,7 @@ internal sealed class PipeBridgeClient(string pipeName, string runToken) : IBrid
 
             if (message.Error is { } error)
             {
-                throw new BridgeException(CodeOf(error.Code), error.Message);
+                throw new BridgeException(ErrorCodes.ToErrorCode(error.Code), error.Message);
             }
 
             return message.Result ?? new JsonObject();

@@ -3,8 +3,8 @@ using System.Xml.Linq;
 namespace Oranda.Architecture.Tests;
 
 /// <summary>
-/// orandactl(Oranda.Agent.Cli)은 외부 AI 가 띄우는 가벼운 MCP 서버다. 앱·UI·Oracle 드라이버를 끌어오지 않고
-/// Core 만 참조해야 한다. 컴파일러가 쓰지 않는 참조를 지우므로 csproj 를 직접 읽는다.
+/// orandactl(Oranda.Agent.Cli)은 밖의 LLM CLI 가 셸로 부르는 하위 명령 + MCP stdio 서버다. 앱·UI·Oracle 드라이버를 끌어오지 않고
+/// Core 만 참조해야 한다(연결 파일·경로·오류 코드도 Core 의 계약을 쓴다). 컴파일러가 쓰지 않는 참조를 지우므로 csproj 를 직접 읽는다.
 /// </summary>
 public class AgentCliReferenceTests
 {
@@ -40,6 +40,16 @@ public class AgentCliReferenceTests
             .ToList();
 
         Assert.True(violations.Count == 0, $"금지된 패키지: {string.Join(", ", violations)}");
+    }
+
+    [Fact]
+    public void Agent_cli_packages_are_only_the_mcp_sdk()
+    {
+        var document = XDocument.Load(Path.Combine(FindRepositoryRoot(), ProjectPath));
+
+        var packages = document.Descendants("PackageReference").Select(p => (string?)p.Attribute("Include") ?? string.Empty).ToList();
+
+        Assert.Equal(["ModelContextProtocol.Core"], packages);
     }
 
     private static string FindRepositoryRoot()

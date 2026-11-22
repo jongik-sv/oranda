@@ -13,11 +13,14 @@ namespace Oranda.Agent.Cli;
 /// </summary>
 internal static class McpServerHost
 {
-    public static async Task<int> RunAsync(IBridgeClient bridge, CancellationToken cancellationToken)
+    /// <param name="bridge">앱 통로.</param>
+    /// <param name="serverName">MCP 서버 이름. 밖에서 붙으면 <c>oranda</c>(E-20), 내장 실행은 <c>orandactl</c>.</param>
+    /// <param name="cancellationToken">끝내기.</param>
+    public static async Task<int> RunAsync(IBridgeClient bridge, string serverName, CancellationToken cancellationToken)
     {
         var options = new McpServerOptions
         {
-            ServerInfo = new Implementation { Name = "orandactl", Version = "0.1.0" },
+            ServerInfo = new Implementation { Name = serverName, Version = CliHost.Version },
             Handlers = new McpServerHandlers
             {
                 ListToolsHandler = async (context, token) => new ListToolsResult
@@ -37,13 +40,14 @@ internal static class McpServerHost
                     }
                     catch (BridgeException ex)
                     {
-                        return Text(true, $"{ex.Code}: {ex.Message}");
+                        // 하위 명령과 같은 오류 모양(계약 §4).
+                        return Text(true, CliOutput.Json(new JsonObject { ["error"] = ex.Message, ["code"] = ex.Code }));
                     }
                 },
             },
         };
 
-        await using var transport = new StdioServerTransport("orandactl");
+        await using var transport = new StdioServerTransport(serverName);
         await using var server = McpServer.Create(transport, options);
         try
         {
