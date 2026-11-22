@@ -197,6 +197,23 @@ public sealed class ExternalResultHandlerTests
     });
 
     [Fact]
+    public Task A_local_model_grant_gets_row_values_and_unmasked_columns_on_a_production_query_level_tab() => HeadlessHost.Run(async () =>
+    {
+        // 운영 실효 수준은 Query 가 최대다. 로컬 모델 허가는 게이트와 같은 DataLevel 로 행 값까지 본다(D4·D5, w-it-p2 IT 가 찾은 빠짐).
+        var (host, tab, _) = await TabWithResultAsync(Prod);
+        var handler = new GetResultHandler() { Host = host };
+        AgentGrantView ProdGrant(bool local) => new(
+            "g1", [new AgentGrantConnection(Prod, "prd", ConnectionEnvironment.Production, Dbms.Oracle, AiAccessLevel.Query)],
+            DateTimeOffset.UnixEpoch, null, ["Claude Code"]) { LocalModel = local };
+
+        var local = Ok(await handler.ExecuteAsync(Call(ProdGrant(local: true), TabArgs(tab)), CancellationToken.None));
+        var cloud = Ok(await handler.ExecuteAsync(Call(ProdGrant(local: false), TabArgs(tab)), CancellationToken.None));
+
+        Assert.NotEqual(AppToolValues.Masked, local[AgentFields.RowValues]!.AsArray()[0]![1]!.GetValue<string>());
+        Assert.Null(cloud[AgentFields.RowValues]);
+    });
+
+    [Fact]
     public Task Result_is_refused_below_query_on_production_outside_the_grant_and_for_unknown_tabs() => HeadlessHost.Run(async () =>
     {
         var (devHost, devTab, _) = await TabWithResultAsync(Dev);

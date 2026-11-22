@@ -67,7 +67,8 @@ public sealed class GetResultHandler : IAppToolHandler
             return AppToolOutputs.Deny(AgentErrorCodes.NoResult, "This tab has no result grid at that index. Run the statement in Oranda first.");
         }
 
-        var rowValues = level >= AiAccessLevel.QueryRows;
+        // 값 수준 = 게이트와 같은 DataLevel(로컬 모델이면 운영 Query 수준에서도 행 값, D4·D5). 전에는 수준만 봐 운영 로컬 모델에 행 값이 없었다(w-it-p2 실측).
+        var rowValues = AiAccessPolicy.DataLevel(level, !grant.MasksSensitive(profileId)) >= AiAccessLevel.QueryRows;
         var columns = model.Columns;
         var masked = columns.Select(c => grant.MasksSensitive(profileId) && SensitiveColumns.IsSensitive(c.Name)).ToArray();
         var rows = new JsonArray();

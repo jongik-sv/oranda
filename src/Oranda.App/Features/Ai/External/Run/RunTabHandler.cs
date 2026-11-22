@@ -179,6 +179,7 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
         var item = results?.Tabs.LastOrDefault(t => ReferenceEquals(t.Statement, statement));
         var json = new JsonObject { ["fetched"] = 0L, ["more"] = false }; // 실패·취소도 같은 모양(행 수 0)
         long fetched = 0;
+        Exception? fetchError = null;
         string status;
         if (item is null)
         {
@@ -196,13 +197,14 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
             json["statement_kind"] = statement.Kind.ToString().ToLowerInvariant();
             if (item.Pane?.Model is { } model)
             {
+                fetchError = await FirstPageAsync(model, ct).ConfigureAwait(true);
                 fetched = model.RowCount;
                 json["fetched"] = fetched;
                 json["more"] = !model.Source.IsComplete;
             }
 
             status = !ok ? AppToolValues.RunStatus.Canceled
-                : item.IsError ? AppToolValues.RunStatus.Failed
+                : item.IsError || fetchError is not null ? AppToolValues.RunStatus.Failed
                 : AppToolValues.RunStatus.Succeeded;
         }
 
@@ -210,7 +212,7 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
         json["elapsed_ms"] = item?.Elapsed is { } elapsed ? (long)elapsed.TotalMilliseconds : clock.ElapsedMilliseconds;
         if (status == AppToolValues.RunStatus.Failed)
         {
-            json["error"] = Error(controller.State, tab, request.Invocation.Grant, item);
+            json["error"] = Error(controller.State, tab, request.Invocation.Grant, item, fetchError);
         }
 
         var more = json["more"] is JsonValue m && m.GetValue<bool>();
@@ -224,14 +226,32 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
         return AppToolOutputs.OkWithRows(json, fetched);
     }
 
+    /// <summary>
+    /// 그리드가 아직 첫 쪽을 읽지 않았으면 읽는다(사람 화면은 그릴 때 읽는다 — 처리자는 그리기 전에 행 수를 보므로 0 으로 보였다, w-it-p2 실측).
+    /// 페이지 캐시라 이미 읽은 쪽은 다시 묻지 않는다. 첫 쪽 읽기에서 난 DB 오류(예: 값 변환 ORA-01722)는 실패로 돌려준다.
+    /// </summary>
+    private static async Task<Exception?> FirstPageAsync(Oranda.App.Features.ResultGrid.ResultGridModel model, CancellationToken ct)
+    {
+        try
+        {
+            await model.LoadFirstPageAsync(ct).ConfigureAwait(true);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            return ex;
+        }
+    }
+
     /// <summary>실패한 실행의 오류(번호 + 글). 운영처럼 리터럴을 가리는 접속은 글을 <c>***</c> 로.</summary>
-    private static JsonObject Error(ExecutionState state, SqlEditorViewModel tab, AgentGrantView grant, ResultTabItem? item)
+    private static JsonObject Error(ExecutionState state, SqlEditorViewModel tab, AgentGrantView grant, ResultTabItem? item, Exception? fetchError)
     {
         var error = state.LastErrorTab == tab.TabId ? state.LastError : null;
-        var message = error?.Message ?? item?.Message ?? "The statement failed.";
+        var message = error?.Message ?? fetchError?.Message ?? item?.Message ?? "The statement failed.";
+        var code = !string.IsNullOrEmpty(error?.Code) ? error!.Code : Language.Errors.DbErrorClassification.CodeOf(fetchError);
         return new JsonObject
         {
-            ["code"] = string.IsNullOrEmpty(error?.Code) ? null : error!.Code,
+            ["code"] = string.IsNullOrEmpty(code) ? null : code,
             ["message"] = grant.MasksLiterals(tab.ConnectionProfileId) ? AppToolValues.Masked : message,
         };
     }
