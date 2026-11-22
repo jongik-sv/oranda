@@ -33,6 +33,9 @@ internal sealed class QueryHandler(
     /// <summary>행 값 글 예산(글자). 열 이름·형식·나머지 칸을 더해도 게이트 한도(80,000자) 안에 들도록 둔다.</summary>
     internal const int MaxRowChars = 60_000;
 
+    // 생성자 모양은 그대로 둔다(시험·IT 가 직접 만든다). query 는 사용자 함수를 확인하지 않으므로 확인기 없이 만든다.
+    private readonly ExternalSelectGuard _guard = new(language, extractor, userFunctions: null);
+
     public override string ToolName => AppToolNames.Query;
 
     protected override IReadOnlyList<string> SqlIdsOf(JsonNode result) =>
@@ -56,18 +59,12 @@ internal sealed class QueryHandler(
             throw new ExternalToolException(AgentErrorCodes.Level, ExternalToolText.QueryNotAllowed);
         }
 
-        if (inv.ReadOnlyExecution || inv.Substitutions?.Any(r => r is not null) == true)
+        if (ExternalSelectGuard.GateFlagsUserFunction(inv))
         {
             throw new ExternalToolException(AgentErrorCodes.SqlUnsafe, ExternalToolText.QueryUserFunction);
         }
 
-        var statements = language.Split(sql, SplitOptions.Default);
-        if (statements.Count != 1 || statements[0] is not { Kind: StatementKind.Query, IsClassificationUncertain: false } stmt)
-        {
-            throw new ExternalToolException(AgentErrorCodes.SqlNotSingleQuery, ExternalToolText.QuerySingleSelect);
-        }
-
-        await CheckStatementAsync(inv, sql, ct).ConfigureAwait(false);
+        var stmt = await CheckStatementAsync(inv, sql, ct).ConfigureAwait(false);
 
         var missing = stmt.BindNames.Where(n => !given.ContainsKey(n)).ToList();
         if (missing.Count > 0)
@@ -184,40 +181,14 @@ internal sealed class QueryHandler(
     }
 
     /// <summary>
-    /// 처리자 쪽 문장 검사(게이트 검사의 이중 방어): 한 문장 SELECT, 잠금 절·DB 링크·금지 호출·사용자 함수 없음,
-    /// 그리고 현재 스키마와 접속 사용자에서 같은 객체로 풀린다(실행은 접속 사용자 스키마에서 한다).
+    /// 처리자 쪽 문장 검사(게이트 검사의 이중 방어, <see cref="IExternalSelectGuard"/>): 한 문장 SELECT, 잠금 절·DB 링크·금지 호출·사용자 함수 없음,
+    /// 그리고 현재 스키마와 접속 사용자에서 같은 객체로 풀린다(실행은 접속 사용자 스키마에서 한다). 사용자 함수는 확인 없이 모두 거부한다.
     /// </summary>
-    private async Task CheckStatementAsync(AgentToolInvocation inv, string sql, CancellationToken ct)
+    private async Task<SqlStatement> CheckStatementAsync(AgentToolInvocation inv, string sql, CancellationToken ct)
     {
-        var schema = DefaultSchema(inv);
-        var info = await extractor.AnalyzeAsync(inv.Db, sql, schema, ct).ConfigureAwait(false);
-        if (info.StatementCount != 1 || info.Kind != StatementKind.Query)
-        {
-            throw new ExternalToolException(AgentErrorCodes.SqlNotSingleQuery, ExternalToolText.QuerySingleSelect);
-        }
-
-        if (info.HasLockingClause || info.HasRemoteReference || info.HasForbiddenCall)
-        {
-            throw new ExternalToolException(AgentErrorCodes.SqlUnsafe, ExternalToolText.QuerySingleSelect);
-        }
-
-        if (info.CallsUserFunction)
-        {
-            throw new ExternalToolException(AgentErrorCodes.SqlUnsafe, ExternalToolText.QueryUserFunction);
-        }
-
-        if (schema is null || string.Equals(schema, inv.Session.Profile.User, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        var viaUser = await extractor.AnalyzeAsync(inv.Db, sql, null, ct).ConfigureAwait(false);
-        var a = info.Objects.Select(o => o.Key).Order(StringComparer.Ordinal);
-        var b = viaUser.Objects.Select(o => o.Key).Order(StringComparer.Ordinal);
-        if (!a.SequenceEqual(b, StringComparer.Ordinal))
-        {
-            throw new ExternalToolException(AgentErrorCodes.SqlSchemaUnresolved, ExternalToolText.QuerySchemaMismatch);
-        }
+        var options = new ExternalSelectOptions { DefaultSchema = DefaultSchema(inv), ExecutingSchema = inv.Session.Profile.User };
+        var check = await _guard.CheckAsync(inv.Db, sql, options, ct).ConfigureAwait(false);
+        return check.Statement ?? throw new ExternalToolException(check.Code!, check.Message!);
     }
 
     /// <summary>실행한 글의 sql_id: 공유 풀에 이 실행 범위 스키마가 파싱한 커서가 보일 때만(벤치마크와 같은 규칙). V$SQL 을 볼 수 없으면 null.</summary>

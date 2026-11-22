@@ -69,8 +69,15 @@ public sealed partial class ExecutionController
     /// <summary>
     /// 이미 만들어 둔 문장과 바인드 값을 그대로 실행한다(MyBatis 「시나리오 값으로 실행」). 탭 글을 나누거나 「바인드 변수」 목록을 거치지 않고,
     /// 접속 확인·전용 세션·정책 관문·취소·결과 표시는 <see cref="RunAsync"/> 의 한 문장 실행과 같은 경로를 쓴다.
+    /// <paramref name="source"/> 는 이력·정책 규칙의 실행 출처(기본 편집기). 밖의 에이전트 탭 실행(<c>run_tab</c>)은 <see cref="HistorySource.Agent"/> 를 넘겨
+    /// 정책 규칙 0(에이전트 출처 = 조회만)을 받는다.
     /// </summary>
-    public async Task<bool> RunPreparedAsync(SqlEditorViewModel tab, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds, CancellationToken ct = default)
+    public Task<bool> RunPreparedAsync(SqlEditorViewModel tab, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds, CancellationToken ct = default) =>
+        RunPreparedAsync(tab, stmt, binds, HistorySource.Editor, ct);
+
+    /// <inheritdoc cref="RunPreparedAsync(SqlEditorViewModel, SqlStatement, IReadOnlyDictionary{string, BindValue}, CancellationToken)"/>
+    public async Task<bool> RunPreparedAsync(
+        SqlEditorViewModel tab, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds, HistorySource source, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(stmt);
@@ -96,7 +103,7 @@ public sealed partial class ExecutionController
         {
             var exec = _d.Execution();
             result = await Task.Run(
-                () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = HistorySource.Editor, Binds = binds }, token), // Binds = 이력의 바인드 값
+                () => exec.ExecuteAsync(session, stmt, binds, new ExecutionOptions { Source = source, Binds = binds }, token), // Binds = 이력의 바인드 값
                 CancellationToken.None).ConfigureAwait(true);
             await AfterStatementAsync(tab, session, stmt, result, token).ConfigureAwait(true);
         }, ct, results).ConfigureAwait(true);

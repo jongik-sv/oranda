@@ -195,9 +195,9 @@ public sealed partial class ExternalEditorService
 
         if (HasChangeStatement(text))
         {
-            BarOf(tab).Enqueue(new AgentBarItem(AgentBarItemKind.Notice, ExternalEditorText.ChangeStatementNotice)
+            BarOf(tab).Enqueue(new AgentBarItem(AgentBarItemKind.Notice, () => ExternalEditorText.ChangeStatementNotice)
             {
-                Detail = ExternalEditorText.NewTabHeadline(ClientName(client)),
+                DetailSource = () => ExternalEditorText.NewTabHeadline(ClientName(client)), // 이름이 없으면 「외부 에이전트」 도 지금 언어로
             });
         }
 

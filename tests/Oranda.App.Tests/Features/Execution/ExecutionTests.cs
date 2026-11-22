@@ -80,10 +80,14 @@ internal sealed class FakeExecution : IExecutionService
 
     public ExecutionOptions? LastOptions { get; private set; }
 
+    /// <summary>한 문장 실행(<see cref="ExecuteAsync"/>)이 받은 선택 사항(출처 확인용).</summary>
+    public List<ExecutionOptions?> SingleOptions { get; } = [];
+
     public Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds, ExecutionOptions? options, CancellationToken ct)
     {
         Statements.Add(stmt);
         LastBinds = binds;
+        SingleOptions.Add(options);
         return Handler(stmt, ct);
     }
 

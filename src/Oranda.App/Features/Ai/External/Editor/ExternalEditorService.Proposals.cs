@@ -1,3 +1,4 @@
+using AvaloniaEdit.Document;
 using Oranda.App.Features.SqlEditor;
 using Oranda.Core.Extensibility;
 using Oranda.Core.Text;
@@ -67,9 +68,10 @@ public sealed partial class ExternalEditorService
         }
 
         var proposal = Remember(new Proposal(request, tab.TabId, range, client));
+        proposal.Track(tab.Document, follow: request.Range.Kind != ExternalRangeKind.Document);
         Watch(tab);
-        var headline = ExternalEditorText.ProposalHeadline(client) + (string.IsNullOrWhiteSpace(request.Title) ? string.Empty : " · " + request.Title.Trim());
-        proposal.Item = new AgentBarItem(AgentBarItemKind.Proposal, headline)
+        var title = string.IsNullOrWhiteSpace(request.Title) ? string.Empty : " · " + request.Title.Trim();
+        proposal.Item = new AgentBarItem(AgentBarItemKind.Proposal, () => ExternalEditorText.ProposalHeadline(ClientName(request.Client)) + title)
         {
             Detail = request.Reason?.Trim() ?? string.Empty,
             Compare = () => CompareAsync(proposal),
@@ -136,7 +138,7 @@ public sealed partial class ExternalEditorService
 
         Watch(tab);
         var request = new SaveRequest(tab);
-        request.Item = new AgentBarItem(AgentBarItemKind.Save, ExternalEditorText.SaveHeadline(ClientName(client)))
+        request.Item = new AgentBarItem(AgentBarItemKind.Save, () => ExternalEditorText.SaveHeadline(ClientName(client)))
         {
             Detail = tab.Title,
             Accept = async () =>
@@ -187,11 +189,12 @@ public sealed partial class ExternalEditorService
         }
 
         var edit = new TextEdit(proposal.Range, proposal.Request.NewText) { Description = CompareTitle(proposal) };
+        // 범위를 따라온 제안은 따라온 판을 기준으로 넣는다(사람이 범위 밖을 고쳤어도 받아들일 수 있게).
         EditProposalOutcome outcome;
         _applying = proposal; // 넣을 때 글이 바뀌는 알림이 이 제안을 어긋남으로 만들지 않게
         try
         {
-            outcome = await new EditorContext { Host = Host }.ProposeToTabAsync(tab, edit, proposal.Request.BaseVersion, CancellationToken.None).ConfigureAwait(true);
+            outcome = await new EditorContext { Host = Host }.ProposeToTabAsync(tab, edit, proposal.BasedOn, CancellationToken.None).ConfigureAwait(true);
         }
         finally
         {
@@ -294,9 +297,17 @@ public sealed partial class ExternalEditorService
             return;
         }
 
-        // 범위를 따라가지 않는다(다음 회차): 기준 판과 달라진 제안은 모두 어긋남이다.
-        foreach (var proposal in PendingOf(tab.TabId).Where(p => !ReferenceEquals(p, _applying) && p.Request.BaseVersion != tab.Version))
+        // 범위를 따라간다: 바꿀 글이 그대로면(앞뒤에서 고쳤으면) 범위를 옮기고, 그 글이 바뀌었거나 지워졌으면 어긋남이다.
+        // 문서 전체 제안은 따라가지 않는다(어디를 고쳐도 에이전트가 본 문서가 아니다).
+        foreach (var proposal in PendingOf(tab.TabId).Where(p => !ReferenceEquals(p, _applying) && p.BasedOn != tab.Version))
         {
+            if (proposal.Follow(tab.Document) is { } moved)
+            {
+                proposal.Range = moved;
+                proposal.BasedOn = tab.Version;
+                continue;
+            }
+
             Finish(proposal, ExternalProposalStatus.Stale, tab.Version);
         }
     }
@@ -364,7 +375,15 @@ public sealed partial class ExternalEditorService
 
         public Guid TabId { get; } = tabId;
 
-        public TextRange Range { get; } = range;
+        /// <summary>지금 바꿀 범위. 따라가는 제안은 사람이 범위 밖을 고치면 옮겨진다.</summary>
+        public TextRange Range { get; set; } = range;
+
+        /// <summary><see cref="Range"/> 가 맞는 탭 판(처음 = 요청의 기준 판).</summary>
+        public long BasedOn { get; set; } = request.BaseVersion;
+
+        private TextAnchor? _start;
+        private TextAnchor? _end;
+        private string? _before;
 
         public string Client { get; } = client;
 
@@ -377,6 +396,43 @@ public sealed partial class ExternalEditorService
         public AgentBarItem? Item { get; set; }
 
         public TaskCompletionSource Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>
+        /// 범위 끝에 닻을 박는다(<paramref name="follow"/> 가 거짓이면 따라가지 않는다). 닻은 줄어드는 쪽: 시작 닻은 그 자리에 넣은 글 뒤로, 끝 닻은 앞에 남아
+        /// 경계에서 친 글이 바꿀 범위에 끼지 않는다. 길이 0 범위는 닻 하나(그 자리에 친 글 앞).
+        /// </summary>
+        public void Track(TextDocument document, bool follow)
+        {
+            if (!follow)
+            {
+                return;
+            }
+
+            _before = document.GetText(Range.Start, Range.Length);
+            _start = document.CreateAnchor(Range.Start);
+            if (Range.Length == 0)
+            {
+                _start.MovementType = AnchorMovementType.BeforeInsertion;
+                _end = _start;
+                return;
+            }
+
+            _start.MovementType = AnchorMovementType.AfterInsertion;
+            _end = document.CreateAnchor(Range.End);
+            _end.MovementType = AnchorMovementType.BeforeInsertion;
+        }
+
+        /// <summary>닻 사이 글이 제안 때 글과 같으면 지금 범위, 아니면(따라가지 않음·지워짐·글 바뀜) null.</summary>
+        public TextRange? Follow(TextDocument document)
+        {
+            if (_start is not { IsDeleted: false } start || _end is not { IsDeleted: false } end || end.Offset < start.Offset)
+            {
+                return null;
+            }
+
+            var range = new TextRange(start.Offset, end.Offset - start.Offset);
+            return range.IsWithin(document.TextLength) && string.Equals(document.GetText(range.Start, range.Length), _before, StringComparison.Ordinal) ? range : null;
+        }
 
         public ExternalProposalView View => new(Id, Status) { Version = Version, FinalText = FinalText };
     }

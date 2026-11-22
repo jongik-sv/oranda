@@ -152,6 +152,84 @@ public class ExternalEditorServiceTests
     }
 
     [Fact]
+    public async Task Typing_outside_a_range_proposal_moves_the_range_and_accepting_still_replaces_the_same_text()
+    {
+        var (service, _, dialogs, tab) = Create();
+        var start = Original.IndexOf("SELECT 1", StringComparison.Ordinal);
+        var view = Propose(service, tab, "SELECT 2 FROM dual;", ExternalRange.Of(start, "SELECT 1 FROM dual;".Length));
+
+        tab.Document.Insert(0, "-- 앞에 쓴 주석\n");                      // 범위 앞
+        tab.Document.Insert(tab.Document.TextLength, "\n-- 뒤");          // 범위 뒤(끝 경계에 바로 붙음)
+        Assert.Equal(ExternalProposalStatus.Pending, service.GetProposal(view.ProposalId).Value!.Status);
+        Assert.True(tab.AgentBar!.IsVisible);
+
+        await tab.AgentBar.CompareCommand.ExecuteAsync(null);
+        Assert.Equal("SELECT 1 FROM dual;", dialogs.Comparisons.Single().Before);
+
+        await tab.AgentBar.AcceptCommand.ExecuteAsync(null);
+
+        Assert.Equal(ExternalProposalStatus.Accepted, service.GetProposal(view.ProposalId).Value!.Status);
+        Assert.Equal("-- 앞에 쓴 주석\nSELECT * FROM sample_orders WHERE status = 'A';\nSELECT 2 FROM dual;\n-- 뒤", tab.Text);
+    }
+
+    [Fact]
+    public async Task Typing_at_the_start_edge_is_not_swallowed_by_the_range()
+    {
+        var (service, _, _, tab) = Create();
+        var start = Original.IndexOf("SELECT 1", StringComparison.Ordinal);
+        Propose(service, tab, "SELECT 2 FROM dual;", ExternalRange.Of(start, "SELECT 1 FROM dual;".Length));
+
+        tab.Document.Insert(start, "/* x */ ");
+        await tab.AgentBar!.AcceptCommand.ExecuteAsync(null);
+
+        Assert.EndsWith("\n/* x */ SELECT 2 FROM dual;", tab.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Editing_inside_a_range_proposal_makes_it_stale()
+    {
+        var (service, _, _, tab) = Create();
+        var start = Original.IndexOf("SELECT 1", StringComparison.Ordinal);
+        var view = Propose(service, tab, "SELECT 2 FROM dual;", ExternalRange.Of(start, "SELECT 1 FROM dual;".Length));
+        var waiting = service.WaitAsync(view.ProposalId, TimeSpan.FromSeconds(30), CancellationToken.None);
+
+        tab.Document.Replace(start + "SELECT ".Length, 1, "9");
+        Assert.Contains("SELECT 9 FROM dual;", tab.Text, StringComparison.Ordinal);
+        Assert.False(tab.AgentBar!.IsVisible);
+
+        var done = (await waiting).Value!;
+        Assert.Equal(ExternalProposalStatus.Stale, done.Status);
+    }
+
+    [Fact]
+    public void Deleting_text_that_holds_the_range_makes_it_stale()
+    {
+        var (service, _, _, tab) = Create();
+        var start = Original.IndexOf("SELECT 1", StringComparison.Ordinal);
+        var view = Propose(service, tab, "SELECT 2 FROM dual;", ExternalRange.Of(start, 6));
+
+        tab.Document.Remove(start - 1, tab.Document.TextLength - start + 1);
+
+        Assert.Equal(ExternalProposalStatus.Stale, service.GetProposal(view.ProposalId).Value!.Status);
+    }
+
+    [Fact]
+    public async Task Accepting_one_range_proposal_moves_a_queued_one_on_other_text()
+    {
+        var (service, _, _, tab) = Create();
+        var second = Original.IndexOf("SELECT 1", StringComparison.Ordinal);
+        Propose(service, tab, "SELECT a, b FROM sample_orders WHERE status = 'A';", ExternalRange.Of(0, second - 1));
+        var queued = Propose(service, tab, "SELECT 2 FROM dual;", ExternalRange.Of(second, "SELECT 1 FROM dual;".Length));
+
+        await tab.AgentBar!.AcceptCommand.ExecuteAsync(null);
+        Assert.Equal(ExternalProposalStatus.Pending, service.GetProposal(queued.ProposalId).Value!.Status);
+        await tab.AgentBar.AcceptCommand.ExecuteAsync(null);
+
+        Assert.Equal(ExternalProposalStatus.Accepted, service.GetProposal(queued.ProposalId).Value!.Status);
+        Assert.Equal("SELECT a, b FROM sample_orders WHERE status = 'A';\nSELECT 2 FROM dual;", tab.Text);
+    }
+
+    [Fact]
     public async Task Proposals_queue_one_per_tab_and_the_next_shows_after_the_first_is_discarded()
     {
         var (service, _, _, tab) = Create();

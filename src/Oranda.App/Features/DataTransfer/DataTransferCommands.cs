@@ -126,6 +126,38 @@ public static class DataTransferCommands
             && await Oranda.App.Features.Execution.ExecutionCommands.Resolve(container).ConfirmConnectionUncommittedAsync(session, ct).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// 탭과 결과 번호로 내보내기 대상을 만든다(밖의 에이전트 <c>export_result</c>, 계획 agent-cli-phase2 §6 #2 — 보고 있는 결과가 아니라 정한 결과).
+    /// <paramref name="index"/> 가 음수면 그리드가 있는 마지막 결과. 그 결과의 문장·실행 때 바인드(없으면 탭의 바인드 목록)·그리드 화면 열 순서를 쓴다.
+    /// 그리드가 없거나 문장을 모르면 null. UI 스레드에서 부른다.
+    /// </summary>
+    internal static ExportSource? ForResult(SqlEditorViewModel tab, int index, ISession session)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(session);
+        if (tab.ResultPane is not Oranda.App.Features.Execution.ResultTabsViewModel results)
+        {
+            return null;
+        }
+
+        var item = index < 0
+            ? results.Tabs.LastOrDefault(t => t.Pane?.Model is not null)
+            : index < results.Tabs.Count ? results.Tabs[index] : null;
+        if (item is not { Pane: { Model: { } model } pane, Statement: { } statement })
+        {
+            return null;
+        }
+
+        var bound = ExportBinds.Resolve(statement, pane.RerunBinds(), tab.Binds);
+        return new ExportSource(session, statement, bound.Binds)
+        {
+            BindProblem = bound.Problem,
+            Columns = model.Columns,
+            ColumnOrder = model.ColumnsInDisplayOrder(),
+            SuggestedFileName = item.Title,
+        };
+    }
+
     internal static ISession? ResolveSession(IServiceProvider services)
     {
         var manager = services.GetService(typeof(ISessionManager)) as ISessionManager;

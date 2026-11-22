@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oranda.App.Features.Localization;
 
 namespace Oranda.App.Features.Ai.External.Editor;
 
@@ -18,16 +19,42 @@ public enum AgentBarItemKind
 
 /// <summary>
 /// 띠에 줄 서는 항목 하나. 단추가 하는 일은 만든 쪽(<see cref="ExternalEditorService"/>)이 넘긴다.
+/// 화면 글자(앱 언어를 따르는 글)는 만드는 함수로 받아 읽을 때마다 지금 언어로 만든다. 에이전트가 보낸 글(제목·까닭)은 그대로 둔다.
 /// </summary>
-public sealed class AgentBarItem(AgentBarItemKind kind, string headline)
+public sealed class AgentBarItem
 {
-    public AgentBarItemKind Kind { get; } = kind;
+    private readonly Func<string> _headline;
 
-    /// <summary>머리 글(「Claude Code 가 편집을 제안했습니다」).</summary>
-    public string Headline { get; } = headline;
+    /// <summary>머리 글을 고정 글로.</summary>
+    public AgentBarItem(AgentBarItemKind kind, string headline)
+        : this(kind, () => headline)
+    {
+        ArgumentNullException.ThrowIfNull(headline);
+    }
 
-    /// <summary>제목·까닭 한 줄. 없으면 빈 글.</summary>
-    public string Detail { get; init; } = string.Empty;
+    /// <summary>머리 글을 지금 언어로 만드는 함수로(언어를 바꾸면 띠가 다시 부른다).</summary>
+    public AgentBarItem(AgentBarItemKind kind, Func<string> headline)
+    {
+        Kind = kind;
+        _headline = headline ?? throw new ArgumentNullException(nameof(headline));
+    }
+
+    public AgentBarItemKind Kind { get; }
+
+    /// <summary>머리 글(「Claude Code 가 편집을 제안했습니다」). 지금 언어로.</summary>
+    public string Headline => _headline();
+
+    /// <summary>제목·까닭 한 줄(고정 글). 없으면 빈 글. <see cref="DetailSource"/> 가 있으면 그것이 앞선다.</summary>
+    public string Detail
+    {
+        get => DetailSource?.Invoke() ?? _detail;
+        init => _detail = value ?? string.Empty;
+    }
+
+    /// <summary>둘째 줄을 지금 언어로 만드는 함수(화면 글자일 때).</summary>
+    public Func<string>? DetailSource { get; init; }
+
+    private readonly string _detail = string.Empty;
 
     /// <summary>「비교 보기」(보기만). 제안 항목만.</summary>
     public Func<Task>? Compare { get; init; }
@@ -37,6 +64,12 @@ public sealed class AgentBarItem(AgentBarItemKind kind, string headline)
 
     /// <summary>「버리기」·「무시」·「닫기」.</summary>
     public Action? Discard { get; init; }
+
+    /// <summary>「받아들이기」 단추 글을 바꾼다(「폴더 열기」 등, 지금 언어로). 없으면 종류의 기본 글.</summary>
+    public Func<string>? AcceptText { get; init; }
+
+    /// <summary>「버리기」 단추 글을 바꾼다(「취소」 등, 지금 언어로). 없으면 종류의 기본 글.</summary>
+    public Func<string>? DiscardText { get; init; }
 }
 
 /// <summary>
@@ -46,7 +79,14 @@ public sealed class AgentBarItem(AgentBarItemKind kind, string headline)
 public sealed partial class AgentEditorBarViewModel : ObservableObject
 {
     private readonly List<AgentBarItem> _items = [];
+    private readonly EventHandler _languageHandler;
     private bool _busy;
+    private bool _watching;
+
+    public AgentEditorBarViewModel()
+    {
+        _languageHandler = (_, _) => OnLanguageChanged();
+    }
 
     /// <summary>보이는 항목(맨 앞). 없으면 null.</summary>
     public AgentBarItem? Current => _items.Count > 0 ? _items[0] : null;
@@ -71,9 +111,9 @@ public sealed partial class AgentEditorBarViewModel : ObservableObject
 
     public bool ShowsAccept => Current is { Accept: not null };
 
-    public string AcceptLabel => Current?.Kind == AgentBarItemKind.Save ? ExternalEditorText.Save : ExternalEditorText.Accept;
+    public string AcceptLabel => Current?.AcceptText?.Invoke() ?? (Current?.Kind == AgentBarItemKind.Save ? ExternalEditorText.Save : ExternalEditorText.Accept);
 
-    public string DiscardLabel => Current?.Kind switch
+    public string DiscardLabel => Current?.DiscardText?.Invoke() ?? Current?.Kind switch
     {
         AgentBarItemKind.Save => ExternalEditorText.Ignore,
         AgentBarItemKind.Notice => ExternalEditorText.Close,
@@ -106,12 +146,23 @@ public sealed partial class AgentEditorBarViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>
+    /// 앱 언어가 바뀌었다: 머리 글·대기 수·단추 글을 지금 언어로 다시 알린다. 항목이 있는 동안만 언어를 듣는다
+    /// (띠는 탭마다 있고 글자 입구는 앱 내내 살아 있으므로, 늘 들으면 닫힌 탭의 띠가 남는다).
+    /// </summary>
+    internal void OnLanguageChanged() => Refresh();
+
+    /// <summary>보이는 항목의 글이 바뀌었다(진행 행 수 등): 다시 그린다. UI 스레드에서.</summary>
+    public void Refresh() => Changed(headChanged: false);
+
     private void Changed(bool headChanged)
     {
         if (headChanged)
         {
             StatusText = string.Empty;
         }
+
+        WatchLanguage(_items.Count > 0);
 
         OnPropertyChanged(nameof(Current));
         OnPropertyChanged(nameof(Items));
@@ -128,6 +179,24 @@ public sealed partial class AgentEditorBarViewModel : ObservableObject
         CompareCommand.NotifyCanExecuteChanged();
         AcceptCommand.NotifyCanExecuteChanged();
         DiscardCommand.NotifyCanExecuteChanged();
+    }
+
+    private void WatchLanguage(bool watch)
+    {
+        if (watch == _watching)
+        {
+            return;
+        }
+
+        if (watch)
+        {
+            _watching = UiText.WatchLanguage(_languageHandler); // 글자 입구가 아직 없으면(시험 등) 듣지 않는다
+        }
+        else
+        {
+            UiText.UnwatchLanguage(_languageHandler);
+            _watching = false;
+        }
     }
 
     private bool CanCompare() => ShowsCompare && !_busy;
