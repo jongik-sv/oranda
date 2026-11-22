@@ -3,9 +3,11 @@ using Oranda.App.Features.Ai.External.Commands;
 using Oranda.App.Features.Ai.External.Editor;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
+using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Protocol;
 using Oranda.Core.Ai.Schemas;
+using Oranda.Core.Connection;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Tests.Features.Ai.External.Commands;
@@ -246,5 +248,80 @@ public sealed class CommandToolHandlerTests
         Assert.Equal(
             AppToolValues.CommandStatus.All.Order(StringComparer.Ordinal),
             Enum.GetValues<CommandRunStatus>().Select(RunCommandToolHandler.StatusName).Order(StringComparer.Ordinal));
+    }
+
+    // ---- 허가·운영 (조정 R1) ----
+
+    private static readonly Guid DevProfile = Guid.NewGuid();
+    private static readonly Guid ProdProfile = Guid.NewGuid();
+
+    private static readonly AgentGrantView Granted = new(
+        "g2",
+        [
+            new AgentGrantConnection(DevProfile, "dev-erp", ConnectionEnvironment.Development, Dbms.Oracle, AiAccessLevel.Query),
+            new AgentGrantConnection(ProdProfile, "prod-erp", ConnectionEnvironment.Production, Dbms.Oracle, AiAccessLevel.QueryRows),
+        ],
+        DateTimeOffset.Now,
+        DateTimeOffset.Now.AddHours(1),
+        ["Claude Code"]);
+
+    private const string FetchAll = "oranda.grid.fetchAll"; // 데이터 SELECT
+    private const string SchemaRefresh = "oranda.schema.refresh"; // 접속 메타데이터
+    private const string NewEditor = "oranda.file.newSqlEditor"; // 접속과 상관없음
+
+    private static CommandFixture Scoped(out SqlEditorViewModel dev, out SqlEditorViewModel prod, out SqlEditorViewModel outside)
+    {
+        var f = new CommandFixture();
+        f.Add(FetchAll);
+        f.Add(SchemaRefresh);
+        f.Add(NewEditor);
+        dev = f.Host.NewDocument();
+        dev.ConnectionProfileId = DevProfile;
+        prod = f.Host.NewDocument();
+        prod.ConnectionProfileId = ProdProfile;
+        outside = f.Host.NewDocument();
+        outside.ConnectionProfileId = Guid.NewGuid();
+        f.Host.Active = dev;
+        return f;
+    }
+
+    private static AppToolInvocation GrantedCall(string id, SqlEditorViewModel tab) =>
+        new(Granted, "Claude Code", new JsonObject { [AppFields.Id] = id, [AppFields.Tab] = tab.TabId.ToString() });
+
+    [Theory]
+    [InlineData(FetchAll)]
+    [InlineData(SchemaRefresh)]
+    public async Task A_tab_outside_the_grant_is_denied_for_commands_that_use_its_connection(string id)
+    {
+        var f = Scoped(out var dev, out _, out var outside);
+
+        Denied(await f.Run().ExecuteAsync(GrantedCall(id, outside), CancellationToken.None), AgentErrorCodes.CommandDenied);
+        Assert.Equal(0, f.Handlers[id].Runs);
+        Assert.Same(dev, f.Host.Active); // 거부는 탭을 움직이지 않는다
+
+        f.Host.Active = outside; // tab 없이 활성 탭이 허가 밖이어도 같다
+        Denied(await f.Run().ExecuteAsync(Call(new JsonObject { [AppFields.Id] = id }) with { Grant = Granted }, CancellationToken.None), AgentErrorCodes.CommandDenied);
+    }
+
+    [Fact]
+    public async Task Production_data_reads_follow_the_execute_policy_and_development_does_not()
+    {
+        var f = Scoped(out var dev, out var prod, out _);
+
+        Assert.Equal("done", (string?)Ok(await f.Run(mayExecute: _ => true).ExecuteAsync(GrantedCall(FetchAll, prod), CancellationToken.None))["status"]);
+        Denied(await f.Run(mayExecute: _ => false).ExecuteAsync(GrantedCall(FetchAll, prod), CancellationToken.None), AgentErrorCodes.CommandDenied);
+        Assert.Equal("done", (string?)Ok(await f.Run(mayExecute: _ => false).ExecuteAsync(GrantedCall(FetchAll, dev), CancellationToken.None))["status"]);
+        Assert.Equal("done", (string?)Ok(await f.Run(mayExecute: _ => false).ExecuteAsync(GrantedCall(SchemaRefresh, prod), CancellationToken.None))["status"]);
+        Assert.Equal(3, f.Handlers[FetchAll].Runs + f.Handlers[SchemaRefresh].Runs);
+    }
+
+    [Fact]
+    public async Task Commands_that_do_not_use_the_connection_run_on_any_tab()
+    {
+        var f = Scoped(out _, out _, out var outside);
+
+        Assert.Equal("done", (string?)Ok(await f.Run(mayExecute: _ => false).ExecuteAsync(GrantedCall(NewEditor, outside), CancellationToken.None))["status"]);
+        Assert.Equal("done", (string?)Ok(await f.Run().ExecuteAsync(GrantedCall(History, outside), CancellationToken.None))["status"]);
+        Assert.Equal(1, f.Handlers[NewEditor].Runs);
     }
 }

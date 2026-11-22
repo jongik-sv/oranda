@@ -24,6 +24,10 @@ internal static class CommandsText
 
     public const string Disabled = "The command is not available right now (its menu item is greyed out). Check enabled in list_commands.";
 
+    public const string OutsideGrant = "The tab's connection is not in this external connection's grant. Use a tab on an allowed connection (list_connections).";
+
+    public const string ProductionReadRefused = "This command reads data on a production connection, which this grant does not allow to run statements.";
+
     public const string NoTabForConfirm = "This command needs the user's confirmation on a SQL tab's agent bar. Open a SQL tab or give tab.";
 
     public const string NotAvailable = "Commands are not available (the app shell is not ready).";

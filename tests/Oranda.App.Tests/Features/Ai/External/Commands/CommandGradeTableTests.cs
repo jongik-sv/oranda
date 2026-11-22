@@ -185,6 +185,19 @@ public class CommandGradeTableTests
             $"now={counts.GetValueOrDefault(CommandGrade.Now)} confirm={counts.GetValueOrDefault(CommandGrade.Confirm)} deny={counts.GetValueOrDefault(CommandGrade.Deny)}");
     }
 
+    [Fact]
+    public void Connection_scopes_name_only_known_runnable_commands()
+    {
+        Assert.Empty(CommandGradeTable.ConnectionCommands.Intersect(CommandGradeTable.DataReadCommands));
+        Assert.All(CommandGradeTable.ConnectionCommands, id => Assert.NotEqual(CommandGrade.Deny, CommandGradeTable.Grade(id)));
+        Assert.All(CommandGradeTable.DataReadCommands, id => Assert.Equal(CommandGrade.Now, CommandGradeTable.Grade(id)));
+        Assert.Equal((35, 38), (CommandGradeTable.ConnectionCommands.Count, CommandGradeTable.DataReadCommands.Count));
+        Assert.Equal(CommandScope.DataRead, CommandGradeTable.Scope("oranda.grid.fetchAll"));
+        Assert.Equal(CommandScope.Connection, CommandGradeTable.Scope("oranda.schema.refresh"));
+        Assert.Equal(CommandScope.None, CommandGradeTable.Scope("oranda.file.newSqlEditor"));
+        Assert.Equal(CommandScope.None, CommandGradeTable.Scope("oranda.view.fromExtension"));
+    }
+
     [Theory]
     [InlineData(CommandGrade.Now, "now")]
     [InlineData(CommandGrade.Confirm, "confirm")]

@@ -61,7 +61,7 @@ internal sealed class CommandFixture
 
     public ListCommandsToolHandler List() => new(new EmptyServices()) { Shell = () => Shell, OnUiThread = body => body() };
 
-    public RunCommandToolHandler Run(TimeSpan? confirmWait = null) => new(new EmptyServices())
+    public RunCommandToolHandler Run(TimeSpan? confirmWait = null, Func<Oranda.Core.Ai.Gate.AgentGrantConnection, bool>? mayExecute = null) => new(new EmptyServices())
     {
         Shell = () => Shell,
         OnUiThread = body => body(),
@@ -69,6 +69,7 @@ internal sealed class CommandFixture
         Settle = () => Task.CompletedTask,
         ConfirmWait = confirmWait ?? TimeSpan.FromSeconds(30),
         StartWait = TimeSpan.FromMilliseconds(200),
+        MayExecute = mayExecute ?? (_ => true),
     };
 }
 

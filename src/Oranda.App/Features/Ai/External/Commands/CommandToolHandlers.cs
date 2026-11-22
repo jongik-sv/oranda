@@ -13,6 +13,7 @@ using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Protocol;
 using Oranda.Core.Ai.Schemas;
 using Oranda.Core.Composition;
+using Oranda.Core.Connection;
 using Oranda.Core.Shell;
 
 namespace Oranda.App.Features.Ai.External.Commands;
@@ -110,7 +111,8 @@ internal sealed class ListCommandsToolHandler(IServiceProvider services) : Comma
 
 /// <summary>
 /// <c>run_command</c>(2단계 계획 U3): 등급표로 거르고(거부·모르는 id 는 실행하지 않음), <c>tab</c> 이면 그 탭을 앞으로 가져온 뒤
-/// 메뉴와 같은 길로 실행한다. 「띠 한 번」 은 대상 탭(<c>tab</c>, 없으면 활성 SQL 탭)의 에이전트 띠에서 사람이 받아들여야 실행한다.
+/// 메뉴와 같은 길로 실행한다. 탭 접속을 쓰는 명령(<see cref="CommandGradeTable.Scope"/>)은 그 접속이 허가 밖이면 거부하고,
+/// 데이터 SELECT 를 띄우는 명령은 운영 접속이면 <see cref="AgentGrantPolicy.MayExecute"/> 를 따른다. 「띠 한 번」 은 대상 탭(<c>tab</c>, 없으면 활성 SQL 탭)의 에이전트 띠에서 사람이 받아들여야 실행한다.
 /// </summary>
 [OrandaService(typeof(IAppToolHandler))]
 internal sealed class RunCommandToolHandler(IServiceProvider services) : CommandToolHandler(services)
@@ -144,7 +146,7 @@ internal sealed class RunCommandToolHandler(IServiceProvider services) : Command
         }
 
         var host = Editors();
-        SqlEditorViewModel? tab = null;
+        SqlEditorViewModel? tab;
         if (tabText is not null)
         {
             if (ExternalToolSupport.FindTab(host, tabText.Trim()) is not { } found)
@@ -153,14 +155,23 @@ internal sealed class RunCommandToolHandler(IServiceProvider services) : Command
             }
 
             tab = found;
-            if (!ReferenceEquals(host.Active, found))
-            {
-                host.Active = found;
-                await Settle().ConfigureAwait(true);
-            }
+        }
+        else
+        {
+            tab = host.Active;
         }
 
-        tab ??= host.Active;
+        // 탭 접속을 쓰는 명령은 그 접속이 이 허가 안이어야 한다. 데이터 SELECT 를 띄우는 명령은 운영이면 실행 정책도 본다. 탭을 움직이기 전에 본다.
+        if (Scoped(invocation.Grant, check.Command!.Id, tab) is { } scopeRefusal)
+        {
+            return scopeRefusal;
+        }
+
+        if (tab is not null && !ReferenceEquals(host.Active, tab))
+        {
+            host.Active = tab;
+            await Settle().ConfigureAwait(true);
+        }
         if (check.Grade == CommandGrade.Confirm && tab is null)
         {
             return AppToolOutputs.Deny(AgentErrorCodes.TabNotFound, CommandsText.NoTabForConfirm);
@@ -181,6 +192,27 @@ internal sealed class RunCommandToolHandler(IServiceProvider services) : Command
             ["status"] = StatusName(result.Status),
             ["grade"] = result.Grade.ToWire(),
         });
+    }
+
+    /// <summary>운영 접속에서 데이터 SELECT 를 띄워도 되는가(시험이 바꾼다). 기본 = <see cref="AgentGrantPolicy.MayExecute"/>.</summary>
+    internal Func<AgentGrantConnection, bool> MayExecute { get; init; } = AgentGrantPolicy.MayExecute;
+
+    private AgentToolOutput? Scoped(AgentGrantView grant, string id, SqlEditorViewModel? tab)
+    {
+        var scope = CommandGradeTable.Scope(id);
+        if (scope == CommandScope.None || tab?.ConnectionProfileId is not { } profileId)
+        {
+            return null; // 접속과 상관없는 명령, 또는 접속 없는 탭(활성 조건이 거른다)
+        }
+
+        if (grant.FindConnection(profileId) is not { } connection)
+        {
+            return AppToolOutputs.Deny(AgentErrorCodes.CommandDenied, CommandsText.OutsideGrant);
+        }
+
+        return scope == CommandScope.DataRead && connection.Environment == ConnectionEnvironment.Production && !MayExecute(connection)
+            ? AppToolOutputs.Deny(AgentErrorCodes.CommandDenied, CommandsText.ProductionReadRefused)
+            : null;
     }
 
     internal static string StatusName(CommandRunStatus status) => status switch

@@ -18,6 +18,19 @@ public enum CommandGrade
     Deny,
 }
 
+/// <summary>명령이 대상 탭(<c>tab</c>, 없으면 활성 탭)의 접속을 쓰는 정도. <c>run_command</c> 가 허가를 볼지 정한다.</summary>
+public enum CommandScope
+{
+    /// <summary>접속과 상관없는 화면 명령(새 탭·보기·창·설정 창 등). 허가를 보지 않는다.</summary>
+    None,
+
+    /// <summary>탭 접속의 메타데이터·세션을 쓴다. 탭 접속이 허가 안이어야 한다.</summary>
+    Connection,
+
+    /// <summary>탭 접속에 데이터 SELECT 를 띄운다. 허가 안이어야 하고, 운영이면 <c>AgentGrantPolicy.MayExecute</c> 도 참이어야 한다.</summary>
+    DataRead,
+}
+
 /// <summary>등급 ↔ 계약 글(<see cref="AppToolValues.CommandGrades"/>).</summary>
 public static class CommandGradeNames
 {

@@ -250,6 +250,104 @@ public static class CommandGradeTable
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>
+    /// 대상 탭(<c>tab</c>, 없으면 활성 탭)의 접속을 쓰는 명령(바로·띠 한 번 가운데, 데이터 SELECT 는 <see cref="DataReadCommands"/>).
+    /// 탭 접속이 이 허가 밖이면 거부한다. 여기에도 <see cref="DataReadCommands"/> 에도 없는 명령은 접속과 상관없는 화면 명령이다.
+    /// </summary>
+    internal static readonly FrozenSet<string> ConnectionCommands = new[]
+    {
+        "oranda.conn.disconnect",
+        "oranda.conn.reconnect",
+        "oranda.db.ddlExtract",
+        "oranda.exec.cancel",
+        "oranda.file.newDedicatedSqlEditor",
+        "oranda.grid.export", // 대화상자에서 사람이 고르면 서버에서 다시 읽는다
+        "oranda.grid.exportExcel",
+        "oranda.journal.showForObject",
+        "oranda.monitor.locks.exportCsv",
+        "oranda.nav.describeObject",
+        "oranda.nav.goToDefinition",
+        "oranda.nav.quickOpenObject",
+        "oranda.plan.displayCursorOptions",
+        "oranda.plsql.addToWorkspace",
+        "oranda.plsql.openSource",
+        "oranda.plsql.showServerDiff",
+        "oranda.schema.editFilters",
+        "oranda.schema.filter",
+        "oranda.schema.newSqlWithSelect",
+        "oranda.schema.newTable",
+        "oranda.schema.newTableLike",
+        "oranda.schema.objectSearch",
+        "oranda.schema.openDetail",
+        "oranda.schema.refresh",
+        "oranda.schema.resetMetadataCache",
+        "oranda.schema.resumeNewTable",
+        "oranda.schema.reveal",
+        "oranda.schema.showDdl",
+        "oranda.schema.tableSpec",
+        "oranda.tools.tableSpec",
+        "oranda.tuning.baselineScript",
+        "oranda.tuning.gatherStatsScript",
+        "oranda.tuning.indexCandidates",
+        "oranda.tuning.rewriteCandidates",
+        "oranda.tuning.tuningAdvisorScript",
+    }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 바로 등급 가운데 DB 에 데이터 SELECT(결과 다시 읽기·플래시백·V$ 모니터·튜닝 읽기 화면)를 띄우는 명령.
+    /// 탭 접속이 허가 안이어야 하고, 운영 접속이면 <c>AgentGrantPolicy.MayExecute</c> 도 참이어야 한다(결과는 사람 화면에만 보인다).
+    /// </summary>
+    internal static readonly FrozenSet<string> DataReadCommands = new[]
+    {
+        "oranda.db.info",
+        "oranda.grid.countRows",
+        "oranda.grid.fetchAll",
+        "oranda.grid.filterByValue",
+        "oranda.grid.filterExcludeValue",
+        "oranda.grid.filterNullRows",
+        "oranda.grid.flashback.asOf",
+        "oranda.grid.flashback.history",
+        "oranda.grid.followForeignKey",
+        "oranda.grid.showReferencingRows",
+        "oranda.monitor.blockingTree",
+        "oranda.monitor.locks",
+        "oranda.monitor.locks.goToSession",
+        "oranda.monitor.locks.refresh",
+        "oranda.monitor.locks.showDdlLocks",
+        "oranda.monitor.locks.showHistory",
+        "oranda.monitor.locks.showLockedRow",
+        "oranda.monitor.locks.showSql",
+        "oranda.monitor.locks.toggleAutoRefresh",
+        "oranda.monitor.refresh",
+        "oranda.monitor.sessionDetail",
+        "oranda.monitor.sessions",
+        "oranda.monitor.sql",
+        "oranda.monitor.sqlSearch",
+        "oranda.monitor.sqlShowBinds",
+        "oranda.monitor.sqlShowPlan",
+        "oranda.monitor.toggleAutoRefresh",
+        "oranda.monitor.toggleDelta",
+        "oranda.schema.tableStats",
+        "oranda.tuning.ashWaits",
+        "oranda.tuning.assistant",
+        "oranda.tuning.awrHistory",
+        "oranda.tuning.childCursors",
+        "oranda.tuning.planControls",
+        "oranda.tuning.recommend",
+        "oranda.tuning.report",
+        "oranda.tuning.stats",
+        "oranda.tuning.traceViewer",
+    }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>명령이 대상 탭 접속을 어떻게 쓰나. 표가 모르는 id 는 <see cref="CommandScope.None"/>(어차피 거부).</summary>
+    public static CommandScope Scope(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        return DataReadCommands.Contains(id) ? CommandScope.DataRead
+            : ConnectionCommands.Contains(id) ? CommandScope.Connection
+            : CommandScope.None;
+    }
+
+    /// <summary>
     /// 표가 아는 명령 id 전체(앱이 특성으로 등록하는 정식 id). 여기에 없는 id 는 무조건 거부다.
     /// 빠짐 시험이 앱 스캔 결과와 양쪽으로 맞춘다: 새 명령이 생기면 여기 넣고 예외·규칙으로 등급을 정한다.
     /// </summary>
