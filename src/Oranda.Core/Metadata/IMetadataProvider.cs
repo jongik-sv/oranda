@@ -114,6 +114,12 @@ public interface IMetadataProvider
     /// 세션이 바쁘면 보통 명령처럼 차례를 기다린다. 기본 구현은 할 일이 없다: 바뀐 것 없음.
     /// </summary>
     Task<ObjectListChange> ResetObjectListCacheAsync(ISession s, CancellationToken ct) => Task.FromResult(ObjectListChange.None);
+
+    /// <summary>
+    /// 객체들의 상세 캐시(테이블 정보 등)만 비운다. 목록·트리는 그대로(통계 수집 뒤: DDL 시각은 그대로인데 사전 값이 바뀌었다).
+    /// 다음 상세 읽기는 서버를 다시 읽는다. 기본 구현은 캐시가 없어 할 일이 없다.
+    /// </summary>
+    Task ForgetObjectDetailsAsync(ISession s, IReadOnlyList<DbObjectRef> objects, CancellationToken ct) => Task.CompletedTask;
 }
 
 /// <summary>

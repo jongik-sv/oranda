@@ -8,6 +8,7 @@ using Dock.Model.Core;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.DedicatedSession;
 using Oranda.App.Features.Execution;
+using Oranda.App.Features.ObjectDetail;
 using Oranda.App.Features.SchemaBrowser;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Features.TableSpec;
@@ -16,6 +17,7 @@ using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Docking;
 using Oranda.Core.Events;
 using Oranda.Core.Execution;
+using Oranda.Core.Metadata;
 using Oranda.Core.Sessions;
 using Oranda.Core.Shell;
 
@@ -36,7 +38,7 @@ public static class GatherStatsCommands
 /// <summary>
 /// 「통계 수집…」: 확인 창(<see cref="GatherStatsDialog"/>)을 띄워 같은 접속의 전용 세션에서 <c>DBMS_STATS.GATHER_TABLE_STATS</c> 를 실행한다.
 /// 스키마 브라우저 트리는 하나만 고를 수 있어 고른 테이블 하나가 대상이다. 「테이블」 목록 폴더(소유자 전체)에서는 켜지지 않는다(실수 방지).
-/// 끝나면 열 통계 요약 캐시와 열린 「통계 보기」를 새로 읽는다(<see cref="GatherStatsRefresh"/>).
+/// 끝나면 그 테이블의 상세 캐시를 비우고 열 통계 요약·열린 「통계 보기」·테이블 창을 새로 읽는다(<see cref="GatherStatsRefresh"/>).
 /// </summary>
 [OrandaCommand(GatherStatsCommands.SchemaId, CommandCategory.Database, When = "schemaFocus",
     Enablement = "tableObjectSelected && hasSession && !noImplTuning && !readOnlySession", Icon = "refresh",
@@ -92,20 +94,43 @@ public sealed class GatherStatsCommandHandler : ICommandHandler
         var profile = session.Profile;
         var vm = new GatherStatsDialogViewModel(profile, targets, new GatherStatsRunner(exec),
             ct => DedicatedSessionCommands.OpenDedicatedAsync(container, profile, ct));
-        vm.Completed += (_, done) => Dispatcher.UIThread.Post(() => _ = RefreshAsync(container, done));
+        vm.Completed += (_, done) => Dispatcher.UIThread.Post(() => _ = RefreshAsync(container, session, done));
+        vm.BackgroundFinished += (_, summary) => Dispatcher.UIThread.Post(() => NotifyBackground(container, summary));
         var owner = container.GetService<ShellController>()?.MainWindow;
         await GatherStatsDialog.ShowAsync(owner, vm, (text, title) => SqlEditorHost.Current.NewDocument(text).Title = title).ConfigureAwait(true);
     }
 
-    private static Task RefreshAsync(ServiceContainer container, IReadOnlyList<TableStatsTarget> done)
+    /// <summary>
+    /// 통계를 새로 모은 뒤(확인 창·편집기 DBMS_STATS) 그 테이블만 새로 읽는다(<see cref="GatherStatsRefresh"/>): 상세 캐시, 열 통계 요약·속성 창,
+    /// 열린 「통계 보기」와 테이블 창. <paramref name="session"/> = 그 접속의 세션(상세 캐시 키, 같은 접속 창만).
+    /// </summary>
+    internal static Task RefreshAsync(IServiceProvider services, ISession? session, IReadOnlyList<TableStatsTarget> done)
     {
-        if (container.GetService<IShellUi>() is not { } shell)
+        if (services.GetService(typeof(IShellUi)) is not IShellUi shell)
         {
             return Task.CompletedTask;
         }
 
-        var tabs = shell.Docking.Documents.Select(d => d.Panel).OfType<TableStatsViewModel>();
-        return GatherStatsRefresh.ApplyAsync(done, FindSchemaBrowser(shell.Docking)?.Properties.ColumnStats, tabs, CancellationToken.None);
+        var panels = shell.Docking.Documents.Select(d => d.Panel).ToList();
+        var browser = FindSchemaBrowser(shell.Docking);
+        return GatherStatsRefresh.ApplyAsync(done, new GatherStatsViews
+        {
+            Session = session,
+            Meta = services.GetService(typeof(IMetadataProvider)) as IMetadataProvider,
+            ColumnStats = browser?.Properties.ColumnStats,
+            Properties = browser?.Properties,
+            StatsTabs = panels.OfType<TableStatsViewModel>(),
+            Details = panels.OfType<ObjectDetailViewModel>(),
+        }, CancellationToken.None);
+    }
+
+    /// <summary>백그라운드 수집 끝(S4-2): 스키마 브라우저 상태 줄에 요약을 남긴다(실행 이력에는 문장마다 이미 남는다).</summary>
+    private static void NotifyBackground(ServiceContainer container, string summary)
+    {
+        if (container.GetService<IShellUi>() is { } shell && FindSchemaBrowser(shell.Docking) is { } browser)
+        {
+            browser.StatusText = TuningText.T("통계 수집(백그라운드) 끝: ", "Gather statistics (background) done: ") + summary;
+        }
     }
 
     internal static SchemaBrowserViewModel? FindSchemaBrowser(DockWorkspace docking)

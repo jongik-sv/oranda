@@ -524,6 +524,36 @@ public abstract partial class CachedMetadataProvider
         });
     }
 
+    /// <summary>
+    /// 객체들의 상세 캐시(payload)만 비운다: 목록 행은 그대로 둔다(트리를 다시 그리지 않는다, 알림도 내지 않는다). 통계 수집 뒤처럼 DDL 시각은 그대로인데
+    /// 사전 값이 바뀐 때 쓴다. 다음 <see cref="IMetadataProvider.GetTableAsync"/> 는 서버를 다시 읽는다. 유형이 빈 것은 소유자·이름만 맞춘다.
+    /// 목록에 없는 객체·캐시 오류는 그냥 지나간다.
+    /// </summary>
+    public async Task ForgetObjectDetailsAsync(ISession s, IReadOnlyList<DbObjectRef> objects, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(objects);
+        foreach (var obj in objects)
+        {
+            var found = await TryCacheAsync(() => _cache.FindByPrefixAsync(s.DbKey, obj.Name, 500, ct));
+            var rows = (found ?? []).Where(o => o.PayloadJson is not null
+                && string.Equals(o.Owner, obj.Owner, StringComparison.Ordinal)
+                && string.Equals(o.Name, obj.Name, StringComparison.Ordinal)
+                && (string.IsNullOrEmpty(obj.ObjectType) || string.Equals(o.Type, obj.ObjectType, StringComparison.Ordinal))).ToList();
+            if (rows.Count == 0)
+            {
+                continue;
+            }
+
+            var source = new MetaSource { DbKey = s.DbKey, ServerVersion = s.Server.Version, LastUsedAt = DateTimeOffset.UtcNow };
+            await TryCacheAsync(async () =>
+            {
+                await _cache.UpsertAsync(source, [.. rows.Select(r => r with { PayloadJson = null })], ct);
+                return true;
+            });
+        }
+    }
+
     /// <summary>payload 에서 <paramref name="field"/> 를 읽는다. 형식 버전이 <see cref="PayloadVersion"/> 와 다르거나 깨졌으면 false.</summary>
     protected bool TryReadPayload<T>(string json, string field, out T? value)
     {

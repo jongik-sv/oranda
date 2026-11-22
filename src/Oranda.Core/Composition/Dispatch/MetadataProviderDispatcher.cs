@@ -74,4 +74,7 @@ public sealed class MetadataProviderDispatcher : IMetadataProvider
 
     public Task<ObjectListChange> ResetObjectListCacheAsync(ISession s, CancellationToken ct) =>
         _selector.For<IMetadataProvider>(s).ResetObjectListCacheAsync(s, ct);
+
+    public Task ForgetObjectDetailsAsync(ISession s, IReadOnlyList<DbObjectRef> objects, CancellationToken ct) =>
+        _selector.For<IMetadataProvider>(s).ForgetObjectDetailsAsync(s, objects, ct);
 }

@@ -3,6 +3,7 @@ using Avalonia.LogicalTree;
 using Oranda.App.Features.Tuning.Stats;
 using Oranda.App.Tests.Shell.Headless;
 using Oranda.Core.Connection;
+using Oranda.Core.Execution;
 using Oranda.Core.Sessions;
 using Oranda.Testing;
 
@@ -17,8 +18,9 @@ public class GatherStatsHeadlessTests
 
     private static (Window Window, Control Content, Button Cancel, Button Run, Button Script) Show(GatherStatsDialogViewModel vm)
     {
-        var content = GatherStatsDialog.Build(vm, out var cancel, out var run, out var script);
+        var content = GatherStatsDialog.Build(vm, out var cancel, out var run, out var script, out var background);
         var window = new Window { Content = content, DataContext = vm, Width = 760, Height = 640 };
+        GatherStatsDialog.Wire(window, vm, run, background);
         window.Show();
         HeadlessHost.Pump(4);
         return (window, content, cancel, run, script);
@@ -81,10 +83,81 @@ public class GatherStatsHeadlessTests
             Assert.Equal("닫기", cancel.Content);
             Assert.Equal("성공", vm.Rows[0].StatusText);
             Assert.Contains("성공 1", vm.SummaryText, StringComparison.Ordinal);
+            Assert.False(window.IsVisible); // S4-1: 다 성공하면 창이 닫힌다
         }
         finally
         {
             window.Close();
         }
     });
+
+    [Fact]
+    public Task Failed_run_keeps_the_dialog_open_with_the_error() => HeadlessHost.Run(async () =>
+    {
+        var exec = new FakeExecutionService
+        {
+            Responder = call => new ExecutionResult(call.Statement, ExecutionStatus.Failed) { Error = new DbError("ORA-00054", "ORA-00054: resource busy") { Number = 54, Kind = DbErrorKind.ResourceBusy } },
+        };
+        var vm = Vm(new ConnectionProfile("SAMPLE", "SCOTT", "h/svc"), exec);
+        var (window, _, cancel, run, _) = Show(vm);
+        try
+        {
+            run.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await WaitAsync(() => vm.IsDone);
+            HeadlessHost.Pump(4);
+            Assert.True(window.IsVisible);
+            Assert.Equal("실패", vm.Rows[0].StatusText);
+            Assert.Contains("ORA-00054", vm.Rows[0].Message, StringComparison.Ordinal);
+            Assert.Equal("닫기", cancel.Content);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public Task Background_run_closes_at_once_and_still_refreshes_when_done() => HeadlessHost.Run(async () =>
+    {
+        var profile = new ConnectionProfile("SAMPLE", "SCOTT", "h/svc");
+        var gate = new TaskCompletionSource<ISession?>();
+        var exec = new FakeExecutionService();
+        var vm = new GatherStatsDialogViewModel(profile, [new TableStatsTarget("SCOTT", "EMP")], new GatherStatsRunner(exec), _ => gate.Task);
+        IReadOnlyList<TableStatsTarget>? refreshed = null;
+        string? finished = null;
+        vm.Completed += (_, t) => refreshed = t;
+        vm.BackgroundFinished += (_, s) => finished = s;
+        var (window, content, _, _, _) = Show(vm);
+        try
+        {
+            var background = content.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "GatherInBackground");
+            Assert.True(background.IsEnabled);
+            background.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            HeadlessHost.Pump(4);
+            Assert.False(window.IsVisible); // 누르는 즉시 닫힌다
+            Assert.True(vm.IsRunning); // 실행은 이어 간다(닫기가 멈추지 않는다)
+            Assert.Null(refreshed);
+
+            gate.SetResult(new FakeSession(profile, purpose: SessionPurpose.Dedicated));
+            await WaitAsync(() => finished is not null);
+            Assert.Single(exec.Calls);
+            Assert.Equal([new TableStatsTarget("SCOTT", "EMP")], refreshed); // 끝나면 새로 읽기(S2)는 그대로
+            Assert.Contains("성공 1", finished, StringComparison.Ordinal);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    private static async Task WaitAsync(Func<bool> done)
+    {
+        for (var i = 0; i < 200 && !done(); i++)
+        {
+            HeadlessHost.Pump(1);
+            await Task.Delay(10);
+        }
+
+        Assert.True(done());
+    }
 }

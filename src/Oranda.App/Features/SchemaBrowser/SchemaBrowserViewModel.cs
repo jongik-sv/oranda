@@ -159,6 +159,8 @@ public sealed partial class SchemaBrowserViewModel : ToolPanelViewModelBase, IDi
             _subscriptions.Add(bus.Subscribe<MetadataInvalidated>(this, e => PostToUi(() => _ = OnMetadataInvalidatedAsync(e))));
             _subscriptions.Add(bus.Subscribe<ObjectListRefreshed>(this, e => PostToUi(() => OnObjectListRefreshed(e))));
             _subscriptions.Add(bus.Subscribe<ObjectMarksRefreshed>(this, e => PostToUi(() => _ = OnObjectMarksRefreshedAsync(e))));
+            // 편집기에서 DBMS_STATS 를 직접 돌려 성공하면 그 테이블만 새로 읽는다(결함 2026-11-22, Tuning/Stats/GatherStatsWatch).
+            _subscriptions.Add(bus.Subscribe<StatementExecuted>(this, e => Oranda.App.Features.Tuning.Stats.GatherStatsWatch.OnExecuted(services, e, PostToUi)));
         }
 
         // 패널은 처음 보일 때 만들어진다(같은 자리의 스크립트 창 등 다른 탭 뒤에 있었으면 접속한 뒤). 그 전에 연 접속은 SessionOpened 를

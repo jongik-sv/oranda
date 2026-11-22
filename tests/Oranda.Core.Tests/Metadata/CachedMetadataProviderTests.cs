@@ -134,6 +134,25 @@ public sealed class CachedMetadataProviderTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Forget_details_drops_only_the_payload_of_the_named_tables_and_keeps_them_in_the_list()
+    {
+        var provider = NewProvider(Obj("HR", "EMP"), Obj("HR", "DEPT"));
+        await provider.RefreshAsync(_session);
+        var info = new TableInfo(new DbObjectRef("HR", "EMP", "TABLE"), [new ColumnInfo("ID", 1, "NUMBER")]);
+        await provider.StoreAsync(_session, new DbObjectRef("HR", "EMP", "TABLE"), "table", info);
+        await provider.StoreAsync(_session, new DbObjectRef("HR", "DEPT", "TABLE"), "table", info);
+
+        // 통계 수집 대상은 유형을 모를 수 있다(빈 유형 = 소유자·이름만 맞춘다). 목록에 없는 것은 그냥 지나간다.
+        await provider.ForgetObjectDetailsAsync(_session, [new DbObjectRef("HR", "EMP", ""), new DbObjectRef("HR", "NOPE", "TABLE")], default);
+
+        Assert.Null((await provider.FindAsync(_session, new DbObjectRef("HR", "EMP", "TABLE")))!.PayloadJson);
+        Assert.NotNull((await provider.FindAsync(_session, new DbObjectRef("HR", "DEPT", "TABLE")))!.PayloadJson);
+        var listed = await provider.ListObjectsAsync(_session, new ObjectQuery { Owner = "HR" }, default);
+        Assert.Contains(new DbObjectRef("HR", "EMP", "TABLE"), listed); // 목록에서 빠지지 않는다(트리를 다시 그릴 일이 없다)
+        Assert.Empty(_bus.PublishedOf<MetadataInvalidated>()); // 트리 전체를 다시 그리게 하지 않는다
+    }
+
+    [Fact]
     public async Task Table_edit_metadata_survives_the_payload_round_trip()
     {
         var provider = NewProvider(Obj("HR", "EMP"));

@@ -170,6 +170,15 @@ public sealed class ObjectDetailSection : ObservableObject
     /// <summary>표 대신 안내만 바꾼다(읽는 중·읽지 못함). 내용은 읽지 않은 채로 둔다.</summary>
     internal void ShowNotice(string notice) => Notice = notice;
 
+    /// <summary>읽은 내용을 낡은 것으로 둔다(통계 수집 뒤): 내용은 그대로 보이고, 다음에 고를 때 다시 읽는다.</summary>
+    internal void Forget()
+    {
+        if (Part is not (DetailPart.Whole or DetailPart.Table))
+        {
+            IsLoaded = false;
+        }
+    }
+
     /// <summary>「데이터」 탭 항목(표 내용 없음).</summary>
     internal static ObjectDetailSection CreateData() =>
         new(new DetailSection(ObjectDataViewModel.SectionTitle, [], [])) { IsData = true };
@@ -613,6 +622,39 @@ public sealed partial class ObjectDetailViewModel : ToolPanelViewModelBase
                 }
             }
         }
+    }
+
+    /// <summary>통계를 보이는 구역(통계 수집이 바꾸는 값: 행 수·마지막 분석·파티션 행 수·크기).</summary>
+    internal static readonly DetailPart[] StatsParts = [DetailPart.Stats, DetailPart.Partitions, DetailPart.Size];
+
+    /// <summary>
+    /// 이 객체의 통계가 바뀌었다(통계 수집 뒤): 통계·파티션·크기 탭을 낡은 것으로 두고, 그중 지금 보는 탭이면 바로 다시 읽는다.
+    /// 다른 탭은 고를 때 읽는다. 열·편집 상태·데이터 탭은 건드리지 않는다. 새 테이블 탭이면 할 일이 없다.
+    /// </summary>
+    public Task ReloadStatsAsync()
+    {
+        if (IsNewTableMode || _session is null || Target is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        foreach (var part in StatsParts)
+        {
+            _partLoads.Remove(part);
+        }
+
+        foreach (var section in Sections.Where(s => StatsParts.Contains(s.Part)))
+        {
+            section.Forget();
+        }
+
+        if (!IsDdlSelected && SelectedSection is { IsLoaded: false } selected && StatsParts.Contains(selected.Part))
+        {
+            SectionLoad = EnsureSectionLoadedAsync(selected, _generation);
+            return SectionLoad;
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>옵션이 바뀐 뒤 DDL 만 다시 읽는다.</summary>

@@ -93,6 +93,15 @@ public sealed partial class GatherStatsDialogViewModel : ObservableObject, IDisp
     /// <summary>실행이 끝나면 성공한 테이블을 알린다(열 통계 캐시·열린 통계 보기 새로 읽기).</summary>
     public event EventHandler<IReadOnlyList<TableStatsTarget>>? Completed;
 
+    /// <summary>창을 닫아 달라(전경 실행이 다 성공함, 또는 백그라운드 실행을 시작함).</summary>
+    public event EventHandler? CloseRequested;
+
+    /// <summary>백그라운드 실행이 끝났다(요약 한 줄, 실패가 있으면 첫 실패 이유를 붙인다).</summary>
+    public event EventHandler<string>? BackgroundFinished;
+
+    /// <summary>백그라운드로 돌고 있다(창을 닫아도 멈추지 않는다).</summary>
+    public bool IsBackground { get; private set; }
+
     public ConnectionProfile Profile { get; }
 
     public ObservableCollection<GatherStatsRow> Rows { get; }
@@ -300,6 +309,43 @@ public sealed partial class GatherStatsDialogViewModel : ObservableObject, IDisp
         if (ok.Count > 0)
         {
             Completed?.Invoke(this, ok);
+        }
+
+        if (IsBackground)
+        {
+            var firstError = results.FirstOrDefault(r => r.Outcome == GatherStatsOutcome.Failed);
+            BackgroundFinished?.Invoke(this, firstError is null ? SummaryText : SummaryText + " — " + firstError.Target.Display + ": " + firstError.Message);
+        }
+        else if (failed == 0 && cancelled == 0 && ok.Count > 0)
+        {
+            CloseRequested?.Invoke(this, EventArgs.Empty); // S4-1: 다 성공하면 창을 닫는다(실패·취소면 남겨 결과를 보인다)
+        }
+    }
+
+    /// <summary>
+    /// S4-2 「백그라운드로 실행」: 누르면 곧바로 창을 닫게 하고(<see cref="CloseRequested"/>) 실행은 이어 간다. 진행·결과는 실행 이력과
+    /// <see cref="BackgroundFinished"/>(스키마 브라우저 상태 줄)로 알리고, 끝나면 <see cref="Completed"/>(새로 읽기)는 그대로 돈다. 다 끝나면 스스로 정리한다.
+    /// </summary>
+    public async Task RunInBackgroundAsync()
+    {
+        if (!CanRun)
+        {
+            return;
+        }
+
+        IsBackground = true;
+        CloseRequested?.Invoke(this, EventArgs.Empty);
+        try
+        {
+            await RunAsync().ConfigureAwait(true);
+            if (!IsDone)
+            {
+                BackgroundFinished?.Invoke(this, SummaryText); // 세션을 열지 못함·취소: 그 까닭
+            }
+        }
+        finally
+        {
+            Dispose();
         }
     }
 

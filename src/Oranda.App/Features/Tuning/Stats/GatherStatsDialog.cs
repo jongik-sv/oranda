@@ -37,8 +37,8 @@ internal static class GatherStatsDialog
             ShowInTaskbar = false,
             DataContext = vm,
         };
-        window.Content = Build(vm, out var cancel, out var run, out var script);
-        run.Click += (_, _) => _ = vm.RunAsync();
+        window.Content = Build(vm, out var cancel, out var run, out var script, out var background);
+        Wire(window, vm, run, background);
         cancel.Click += (_, _) =>
         {
             if (vm.IsRunning)
@@ -55,16 +55,38 @@ internal static class GatherStatsDialog
             window.Close();
         };
 
-        // 실행 중에 창을 닫으면 지금 테이블을 멈춘다(세션 cancel).
-        window.Closing += (_, _) => vm.Cancel();
-        window.Closed += (_, _) => vm.Dispose();
+        // 실행 중에 창을 닫으면 지금 테이블을 멈춘다(세션 cancel). 백그라운드 실행은 닫아도 이어 가고 끝나면 스스로 정리한다.
+        window.Closing += (_, _) =>
+        {
+            if (!vm.IsBackground)
+            {
+                vm.Cancel();
+            }
+        };
+        window.Closed += (_, _) =>
+        {
+            if (!vm.IsBackground)
+            {
+                vm.Dispose();
+            }
+        };
         window.Opened += (_, _) => cancel.Focus();
         DialogShell.AutomationName(window, GatherStatsDialogViewModel.Title);
         await DialogShell.ShowAsync(window, owner).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// 실행 단추와 닫기(S4): 「통계 수집 실행」 = 이 창에서 진행을 보이고 다 성공하면 닫는다. 「백그라운드로 실행」 = 누르는 즉시 닫고 실행은 이어 간다.
+    /// </summary>
+    internal static void Wire(Window window, GatherStatsDialogViewModel vm, Button run, Button background)
+    {
+        run.Click += (_, _) => _ = vm.RunAsync();
+        background.Click += (_, _) => _ = vm.RunInBackgroundAsync();
+        vm.CloseRequested += (_, _) => window.Close();
+    }
+
     /// <summary>창 본문(시험이 그대로 그려 본다). DataContext 는 부르는 쪽이 <paramref name="vm"/> 으로 둔다.</summary>
-    internal static Control Build(GatherStatsDialogViewModel vm, out Button cancel, out Button run, out Button script)
+    internal static Control Build(GatherStatsDialogViewModel vm, out Button cancel, out Button run, out Button script, out Button background)
     {
         var header = new Border { Padding = new Thickness(16, 10) };
         var title = new TextBlock { Text = $"[{vm.EnvironmentText}] {vm.HeaderTitle}", FontSize = 16, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
@@ -149,10 +171,14 @@ internal static class GatherStatsDialog
         run.Bind(Button.ForegroundProperty, run.GetResourceObservable("OrandaDangerForegroundBrush"));
         run.Bind(InputElement.IsEnabledProperty, new Binding(nameof(GatherStatsDialogViewModel.CanRun)));
         DialogShell.AutomationName(run, T("통계 수집 실행", "Gather now"));
+        background = new Button { Name = "GatherInBackground", Content = T("백그라운드로 실행", "Run in background"), MinWidth = 80 };
+        background.Bind(InputElement.IsEnabledProperty, new Binding(nameof(GatherStatsDialogViewModel.CanRun)));
+        ToolTip.SetTip(background, T("창을 바로 닫고 뒤에서 수집합니다. 결과는 실행 이력과 스키마 브라우저 상태 줄에 보입니다.", "Close this window and gather in the background. Results show in the history and the schema browser status line."));
+        DialogShell.AutomationName(background, T("백그라운드로 실행", "Run in background"));
         script = new Button { Content = T("스크립트로 열기", "Open as script"), MinWidth = 80 };
         script.Bind(InputElement.IsEnabledProperty, new Binding(nameof(GatherStatsDialogViewModel.CanEditOptions)));
         ToolTip.SetTip(script, T("실행하지 않고 같은 문안을 새 편집기 탭에 넣습니다.", "Put the same text in a new editor tab without running it."));
-        var buttons = DialogShell.Buttons(script, cancel, run);
+        var buttons = DialogShell.Buttons(script, cancel, background, run);
         DockPanel.SetDock(buttons, Avalonia.Controls.Dock.Right);
         var summary = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 12, 0) };
         summary.Bind(TextBlock.TextProperty, new Binding(nameof(GatherStatsDialogViewModel.SummaryText)));

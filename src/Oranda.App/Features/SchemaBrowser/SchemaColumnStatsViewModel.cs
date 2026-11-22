@@ -67,6 +67,9 @@ public sealed partial class SchemaColumnStatsViewModel : ObservableObject, IDisp
     [ObservableProperty]
     private bool _isBusy;
 
+    /// <summary>마지막으로 보인 테이블·열.</summary>
+    private (DbObjectRef Table, string Column)? _shown;
+
     public bool HasMessage => Message.Length > 0;
 
     public bool HasHistogram => HistogramBars.Count > 0;
@@ -110,6 +113,18 @@ public sealed partial class SchemaColumnStatsViewModel : ObservableObject, IDisp
         }
     }
 
+    /// <summary>
+    /// 한 테이블의 캐시를 버리고(<see cref="Invalidate"/>), 지금 그 테이블의 열 요약을 보이고 있으면 다시 읽는다(통계 수집 뒤).
+    /// </summary>
+    public Task RefreshAsync(string owner, string table)
+    {
+        Invalidate(owner, table);
+        return IsVisible && _shown is { } shown
+            && string.Equals(shown.Table.Owner, owner, StringComparison.Ordinal) && string.Equals(shown.Table.Name, table, StringComparison.Ordinal)
+            ? ShowAsync(shown.Table, shown.Column)
+            : Task.CompletedTask;
+    }
+
     /// <summary><paramref name="table"/> 의 <paramref name="column"/> 통계 요약을 보인다. 앞서 부른 것은 취소한다.</summary>
     public async Task ShowAsync(DbObjectRef table, string column)
     {
@@ -120,6 +135,7 @@ public sealed partial class SchemaColumnStatsViewModel : ObservableObject, IDisp
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         var gen = ++_generation;
+        _shown = (table, column);
 
         IsVisible = true;
         Title = T($"열 통계 · {column}", $"Column statistics · {column}");
