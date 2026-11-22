@@ -5,7 +5,7 @@
 - 앞 문서
   - [LLM 연동 연구서 (2026-10-24)](llm-editor-integration-2026-10-24.md) — 이하 「연구서」. §4 구조, §5 도구, §6 실행 안전, §9 편집기 UX 를 이어 쓴다.
   - [LLM 호출 방식 비교 (2026-10-28)](llm-invocation-design-2026-10-28.md) — 이하 「호출 설계」. 이 문서는 그 문서의 경로 D(사용자가 밖에서 에이전트를 쓰고 Oranda 는 도구만 줌)를 실제로 만드는 설계다.
-- 범위: 코드는 읽기만 했다. 문서만 쓴다. 커밋하지 않는다.
+- 범위: 처음 판은 코드를 읽기만 하고 쓴 설계서. 구현 뒤 바뀐 것·실측 결과 = §10A.
 - 표기: 코드로 확인한 것은 파일 경로를 적는다. 확인하지 못한 것은 「확인 못 함」으로 적는다.
 
 ---
@@ -629,6 +629,47 @@ flowchart LR
 10. **여러 CLI 가 한 허가를 같이 쓸 때**: 클라이언트 이름은 연결마다 남지만 감사의 `client` 칸이 허가 단위라 섞일 수 있다. A2 에서 연결별로 남기도록 정한다.
 
 ---
+
+## 10A. 구현 뒤 바뀐 것과 실측 결과 (회차 agent-cli-1122, 2026-11-22)
+
+이 장이 위 본문보다 앞선다. 계약 정본 = 코드, 요약 = [계약 문서](agent-cli-contract.md).
+
+### 10A.1 설계와 달라진 것
+
+| 곳 | 바뀐 것 | 까닭 |
+|---|---|---|
+| §5 행 값 칸 | `rows` → `row_values` | 기존 `benchmark_queries` 의 `rows` 가 행 수(숫자)라 가림 목록에 넣으면 행 수가 지워짐 |
+| §5.3 `range` | `{start,length}` → 글 하나(`document`·`selection`·`statement`·`caret`·`시작:길이`) | 게이트 인자 검사가 `oneOf` 를 읽지 못함 |
+| §5.3 목록 결과 | 맨 위 = 객체(`{"tabs":[…]}`). DDL·소스·이력 SQL 글 = `sql_text` 칸 | 리터럴 가림을 타게 함 |
+| §5 `get_history` | Host = Lang(앱 도구 처리자) | DB 세션이 필요 없음 |
+| §3.1 메뉴 | 「도구 → 외부 에이전트 연결…」 (AI 하위 메뉴 없음) | 도구 ▸ AI 하위 메뉴가 없음 |
+| §3.3 파일 건너뛰기 | 「파이프에 붙지 못하는 파일」 → 「pid 가 죽은 파일」 | 붙어 보면 창 고르기가 느려지고 hello 없는 연결이 생김 |
+| §4 클라이언트 이름 | `ORANDA_CLIENT` → `CLAUDECODE` → `CODEX_THREAD_ID` → `OPENCODE_SESSION_ID`/`OPENCODE` → `ANTIGRAVITY_CONVERSATION_ID` 자동 감지 | 스킬이 명령 앞에 `ORANDA_CLIENT=` 를 붙이게 하면 Claude Code 허락 규칙이 깨짐(실측) |
+| §4.1 오류 코드 | `sandbox_blocked` 추가(종료 3) | Codex·agy 샌드박스가 연결 파일 읽기·소켓 접속을 막을 때 `no_endpoint` 로 잘못 알리던 것 |
+| §3.4 소켓 | 대체 폴더 = `$XDG_RUNTIME_DIR/oranda` → `<tmp>/oranda-<uid>` → `<tmp>/oranda-<uid>-<무작위>`(0700 으로 맞출 수 있는 것만). 남은 `agent.sock` 은 붙어 보고 듣는 쪽 없으면 지움 | 남이 먼저 만든 폴더·비정상 종료 뒤 남은 소켓에서 다리가 못 열리던 것 |
+| §6.2 `query` | 사용자 함수가 든 문장·DB 링크·`FOR UPDATE` 는 실행하지 않음(`sql_unsafe`) | 이 실행 경로에 읽기 전용 트랜잭션이 없음. 다음 회차 후보 |
+| §7.2 스킬 | 「orandactl 은 전체 경로로 시작하는 단독 명령으로(셸 변수·`cd`·`;` 금지)」 규칙, Codex 샌드박스·agy 재시도 안내 추가. `allowed-tools` 는 넣지 않음(E-13 유지) | 실측: 머리말에 넣으면 `Skill(oranda)` 자체가 승인 대상 |
+| §7 설치기 | macOS `/AppTranslocation/` 에서 실행 중이면 설치 거부 | 스킬에 임시 경로가 적힘 |
+
+### 10A.2 §10 확인 못 한 것의 결과
+
+| 번호 | 결과 |
+|---|---|
+| 1 Codex 스킬 경로 | 확인됨: Codex 0.171 이 `~/.agents/skills` 를 읽음(linux·mac). read-only·workspace-write 샌드박스는 소켓 접속을 막음 → `-c sandbox_workspace_write.network_access=true` |
+| 2 설치판 orandactl | macOS: `Oranda.app/Contents/MacOS/orandactl`, 실행 권한 있음, dotnet 없이 실행. 서명·공증판·Windows Velopack 설치판은 아직 못 봄 |
+| 3 Unix CurrentUserOnly | 소켓 파일 모드는 umask 를 따름(linux 0775 실측) → 1차 방어 = 폴더 0700. 연결 파일 0600·폴더 0700 은 umask 000·022·002·077 에서 모두 맞음(linux), mac 도 맞음 |
+| 4 소켓 경로 한도 | linux 107바이트까지, macOS 103바이트까지(실측). 사용자 이름은 UTF-8 40바이트까지 기본 경로에 듦(한글 약 13자). macOS `TMPDIR` 아래 데이터 폴더는 늘 대체 경로를 탐 |
+| 5 opencode 전역 스킬 | 확인됨: 섞임(opencode 1.19·2.0 이 `~/.claude`·`~/.agents` 를 읽음). 내장 실행에 `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`·`OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1` |
+| 6 Claude `allowed-tools` | `Bash("<절대경로>":*)` 따옴표 형태가 공백 경로에도 맞음. `-p` 기본은 Bash 거부로 멈춤(우회 없음) |
+| 7 agy 셸 허락 | agy 1.5.12: `~/.gemini/config/skills` 를 읽음. 셸을 먼저 샌드박스에서 돌리고 실패하면 모델이 다시 돌림. `-p` 에서 묻지 않음 |
+| 8 DB 접근 통제 도구 | 확인 못 함(그대로) |
+| 9 결과 그리드 행 | `ResultGridModel.TryGetValue`·`LoadedRowCount` 로 이미 가져온 행만 읽음 |
+| 10 여러 CLI 한 허가 | 하위 세션 = 접속 × 클라이언트. 감사 `client` 가 섞이지 않음 |
+
+### 10A.3 실제 LLM CLI 왕복 (tools/agent-e2e, linux)
+
+- Claude Code 2.1 `-p --allowedTools "Bash(<orandactl>:*)"`: 통과(탭 읽기 → `sql check` → 고친 문장 제안 → 받아들임, 허락 거부 0, 약 $0.06)
+- opencode: 통과(묻지 않음, 감사 client = opencode). Codex: 인증이 없어 linux 에서는 못 돌림(mac 에서 스킬 읽기·샌드박스만 확인)
 
 ## 11. 출처
 

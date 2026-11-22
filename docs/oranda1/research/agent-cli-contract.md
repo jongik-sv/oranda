@@ -70,7 +70,7 @@
 | 0 | 성공(제안 거절·낡음 포함) | — |
 | 1 | 도구 실패 | `tool_failed` `tool_exception` `internal_error` `not_implemented` `canceled` `busy` `result_too_large` `tab_not_found` `proposal_not_found` `no_result`, 모르는 코드 |
 | 2 | 사용법 | `usage` `unknown_tool` `invalid_arguments` |
-| 3 | 앱에 닿지 못함·연결 끝남 | `oranda_not_running` `no_endpoint` `oranda_run_invalid` `grant_expired` `run_revoked` `run_required` `hello_required` `oranda_shutting_down` `unsupported_protocol` `bridge_error` |
+| 3 | 앱에 닿지 못함·연결 끝남 | `oranda_not_running` `no_endpoint` `oranda_run_invalid` `grant_expired` `run_revoked` `run_required` `hello_required` `oranda_shutting_down` `unsupported_protocol` `bridge_error` `sandbox_blocked`(CLI 가 연결 파일 읽기·접속에서 EPERM·EACCES 를 받음. 샌드박스 밖에서 다시 부를 것) |
 | 4 | 거부 | `connection` `connection_required` `level` `environment` `scope` `sql_id_scope` `sql_not_single_query` `sql_schema_unresolved` `sql_unsafe` `no_statement` `explain_plan_disabled` `literal_mask_unavailable` `session_mismatch` `unsafe_result` `locked` `read_only` `not_allowed` `rate_limited` |
 | 5 | 창을 고르지 못함 | `multiple_instances` `instance_not_found` |
 
