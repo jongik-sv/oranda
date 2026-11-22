@@ -144,6 +144,13 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
     [ObservableProperty]
     private Oranda.App.Features.Ai.Kit.AiInlineStripViewModel? _aiBar;
 
+    /// <summary>
+    /// 편집기 아래 밖의 에이전트 띠(편집 제안·저장 요청·새 탭 알림, 설계 agent-cli-control §6.1). null 이면 자리를 비운다.
+    /// 앱 안 AI 의 <see cref="AiBar"/> 와 따로 둔다: 사람이 쓰는 띠와 밖에서 온 제안이 서로를 덮지 않는다.
+    /// </summary>
+    [ObservableProperty]
+    private Oranda.App.Features.Ai.External.Editor.AgentEditorBarViewModel? _agentBar;
+
     [ObservableProperty]
     public partial string Title { get; set; } = "SQL";
 

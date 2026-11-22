@@ -53,10 +53,32 @@ public sealed class EditorContext : IEditorContext
     public async Task<bool> ProposeEditAsync(TextEdit edit, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(edit);
-        var tab = Host.Active;
-        if (tab is null || tab.IsReadOnly || !edit.Range.IsWithin(tab.Document.TextLength))
+        if (Host.Active is not { } tab)
         {
             return false;
+        }
+
+        var outcome = await ProposeToTabAsync(tab, edit, baseVersion: null, ct).ConfigureAwait(true);
+        return outcome.IsApplied;
+    }
+
+    /// <summary>
+    /// 상태 반환 판: 정한 탭에 제안을 비교 창으로 보이고, 받아들이면 넣는다(실행 취소 1단계). 결과는 받아들임·손 고침·거절·어긋남·읽기 전용 중 하나다.
+    /// <paramref name="baseVersion"/> 이 있으면 창을 띄우기 전에 탭의 판과 같은지 먼저 본다(다르면 창 없이 <see cref="EditProposalStatus.Stale"/>).
+    /// 창을 보는 사이 글이 바뀌었거나 탭이 닫혔으면 넣지 않고 <see cref="EditProposalStatus.Stale"/> 이다.
+    /// </summary>
+    public async Task<EditProposalOutcome> ProposeToTabAsync(SqlEditorViewModel tab, TextEdit edit, long? baseVersion, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(edit);
+        if (tab.IsReadOnly)
+        {
+            return new EditProposalOutcome(EditProposalStatus.ReadOnly, tab.Version);
+        }
+
+        if ((baseVersion is { } expected && expected != tab.Version) || !edit.Range.IsWithin(tab.Document.TextLength))
+        {
+            return new EditProposalOutcome(EditProposalStatus.Stale, tab.Version);
         }
 
         var versionAtPreview = tab.Version;
@@ -66,15 +88,47 @@ public sealed class EditorContext : IEditorContext
             .ConfigureAwait(true);
         if (newText is null)
         {
-            return false;
+            return new EditProposalOutcome(EditProposalStatus.Rejected, tab.Version);
         }
 
         // 미리보기를 보는 사이 문서가 바뀌었으면 범위가 어긋났을 수 있으니 적용하지 않는다.
         if (tab.Version != versionAtPreview || !Host.Tabs.Contains(tab))
         {
-            return false;
+            return new EditProposalOutcome(EditProposalStatus.Stale, tab.Version);
         }
 
-        return tab.Apply(new TextOpResult(edit.Range.Start, edit.Range.Length, newText, edit.Range.Start, newText.Length));
+        if (!tab.Apply(new TextOpResult(edit.Range.Start, edit.Range.Length, newText, edit.Range.Start, newText.Length)))
+        {
+            return new EditProposalOutcome(EditProposalStatus.ReadOnly, tab.Version);
+        }
+
+        var status = string.Equals(newText, edit.NewText, StringComparison.Ordinal) ? EditProposalStatus.Accepted : EditProposalStatus.Modified;
+        return new EditProposalOutcome(status, tab.Version, newText);
     }
+}
+
+/// <summary>제안 편집 한 번의 끝.</summary>
+public enum EditProposalStatus
+{
+    /// <summary>제안 글 그대로 넣었다.</summary>
+    Accepted,
+
+    /// <summary>비교 창에서 사람이 고친 글을 넣었다.</summary>
+    Modified,
+
+    /// <summary>사람이 거절했다.</summary>
+    Rejected,
+
+    /// <summary>탭 글이 제안의 기준 판과 달라 넣지 않았다.</summary>
+    Stale,
+
+    /// <summary>읽기 전용 탭이라 넣지 않았다.</summary>
+    ReadOnly,
+}
+
+/// <summary>제안 편집의 결과: 상태, 그 뒤 탭의 판, 넣은 최종 글(넣었을 때만).</summary>
+public sealed record EditProposalOutcome(EditProposalStatus Status, long Version, string? FinalText = null)
+{
+    /// <summary>글을 넣었다(그대로 또는 고쳐서).</summary>
+    public bool IsApplied => Status is EditProposalStatus.Accepted or EditProposalStatus.Modified;
 }

@@ -1123,5 +1123,19 @@
   "AgentLink.call.masked": "가림",
   "AgentLink.call.denied": "거부",
   "AgentLink.call.failed": "실패",
-  "AgentLink.call.size": "{0:N0}자"
+  "AgentLink.call.size": "{0:N0}자",
+  "AgentBar.defaultClient": "외부 에이전트",
+  "AgentBar.proposal": "{0} 가 편집을 제안했습니다",
+  "AgentBar.save": "{0} 가 이 탭 저장을 요청했습니다",
+  "AgentBar.changeNotice": "AI 가 만든 변경문 — 검토 후 직접 실행",
+  "AgentBar.newTab": "{0} 가 이 탭을 만들었습니다",
+  "AgentBar.queue": "대기 {0}",
+  "AgentBar.accept": "받아들이기",
+  "AgentBar.discard": "버리기",
+  "AgentBar.saveButton": "저장",
+  "AgentBar.ignore": "무시",
+  "AgentBar.close": "닫기",
+  "AgentBar.compareTitle": "{0} 의 제안",
+  "AgentBar.notApplied": "넣지 않았습니다. 다시 받아들이거나 버리세요.",
+  "AgentBar.notSaved": "저장하지 않았습니다."
 }

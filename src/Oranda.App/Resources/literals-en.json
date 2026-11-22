@@ -2258,5 +2258,6 @@
   "실패 수": "Failures",
   "마지막 실행": "Last run",
   "작업 번호": "Job number",
-  "작업 종류": "Job type"
+  "작업 종류": "Job type",
+  "바뀌는 곳을 봅니다(글은 바뀌지 않습니다)": "Shows what changes (the text is not changed)"
 }

@@ -1123,5 +1123,19 @@
   "AgentLink.call.masked": "masked",
   "AgentLink.call.denied": "denied",
   "AgentLink.call.failed": "failed",
-  "AgentLink.call.size": "{0:N0} chars"
+  "AgentLink.call.size": "{0:N0} chars",
+  "AgentBar.defaultClient": "External agent",
+  "AgentBar.proposal": "{0} proposed an edit",
+  "AgentBar.save": "{0} asked to save this tab",
+  "AgentBar.changeNotice": "Change statements made by AI — review and run them yourself",
+  "AgentBar.newTab": "{0} made this tab",
+  "AgentBar.queue": "{0} waiting",
+  "AgentBar.accept": "Accept",
+  "AgentBar.discard": "Discard",
+  "AgentBar.saveButton": "Save",
+  "AgentBar.ignore": "Ignore",
+  "AgentBar.close": "Close",
+  "AgentBar.compareTitle": "Proposal from {0}",
+  "AgentBar.notApplied": "Not applied. Accept again or discard it.",
+  "AgentBar.notSaved": "Not saved."
 }

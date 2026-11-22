@@ -5,6 +5,7 @@
              xmlns:ae="using:AvaloniaEdit"
              xmlns:vm="using:Oranda.App.Features.SqlEditor"
              xmlns:kit="using:Oranda.App.Features.Ai.Kit"
+             xmlns:ext="using:Oranda.App.Features.Ai.External.Editor"
              x:Class="Oranda.App.Features.SqlEditor.SqlEditorView"
              keymaps:FocusSlot.Name="sqlText"
              x:DataType="vm:SqlEditorViewModel">
@@ -45,14 +46,24 @@
                    VerticalScrollBarVisibility="Auto"
                    AutomationProperties.Name="SQL 편집기" />
 
-    <!-- AI 제안 막대(설계 §2.1 바로 처리): 오류 고치기 등. 막대가 없거나 닫혔으면 자리를 차지하지 않는다. -->
-    <ContentControl Grid.Row="2" x:Name="AiBarHost" Content="{Binding AiBar}" Margin="6,4,6,6">
-      <ContentControl.DataTemplates>
-        <DataTemplate x:DataType="kit:AiInlineStripViewModel">
-          <kit:AiInlineStrip />
-        </DataTemplate>
-      </ContentControl.DataTemplates>
-    </ContentControl>
+    <StackPanel Grid.Row="2">
+      <!-- 밖의 에이전트 띠(agent-cli-control §6.1): 편집 제안·저장 요청·새 탭 알림. 없으면 자리를 차지하지 않는다. -->
+      <ContentControl x:Name="AgentBarHost" Content="{Binding AgentBar}" Margin="6,4,6,0">
+        <ContentControl.DataTemplates>
+          <DataTemplate x:DataType="ext:AgentEditorBarViewModel">
+            <ext:AgentEditorBar />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+      <!-- AI 제안 막대(설계 §2.1 바로 처리): 오류 고치기 등. 막대가 없거나 닫혔으면 자리를 차지하지 않는다. -->
+      <ContentControl x:Name="AiBarHost" Content="{Binding AiBar}" Margin="6,4,6,6">
+        <ContentControl.DataTemplates>
+          <DataTemplate x:DataType="kit:AiInlineStripViewModel">
+            <kit:AiInlineStrip />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </StackPanel>
 
   </Grid>
 </UserControl>
