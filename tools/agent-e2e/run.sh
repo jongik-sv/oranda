@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # X2 손 도구: 가짜 Oranda 호스트를 띄우고, 가짜 HOME 에 oranda 스킬을 깐 뒤, 실제 LLM CLI 를 머리 없이 한 번 돌리고 판정한다.
-# 사용법: tools/agent-e2e/run.sh <claude|codex|opencode> [작업 폴더] [--allow]
-#   --allow : CLI 의 셸 허락을 orandactl 하나로만 미리 준다(claude = --allowedTools "Bash(<orandactl>:*)").
+# 사용법: tools/agent-e2e/run.sh <claude|codex|opencode|agy> [작업 폴더] [--allow]
+#   --allow : CLI 의 셸 허락을 orandactl 하나로만 미리 준다(claude = --allowedTools "Bash(<orandactl>:*)", codex = danger-full-access, agy = 없음).
+# linux·macOS(bash 3.2: 빈 배열은 ${a[@]+"${a[@]}"} 로 편다).
 #             빼면 CLI 기본 허락 방식 그대로 돌려 「스킬만으로 되는가」를 본다.
 # 결과: <작업 폴더>/{log.jsonl, transcript.*, verdict.txt}. 사용자 실제 HOME·설정은 건드리지 않는다(인증 파일만 읽어서 복사).
 set -euo pipefail
 
-cli="${1:?claude|codex|opencode}"
+cli="${1:?claude|codex|opencode|agy}"
 out="${2:-$(mktemp -d -t agent-e2e-XXXXXX)}"
 allow="${3:-}"
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
+os="$(uname -s)"   # Darwin = macOS: 인증이 키체인에 있다
 ctl="$repo/src/Oranda.Agent.Cli/bin/Debug/net10.0/orandactl"
 host_dll="$repo/tools/agent-e2e/FakeHost/bin/Debug/net10.0/Oranda.App.Tests.dll"
 task='Oranda 편집기 탭 목록을 보고 문법이 틀린 SQL 을 찾아, 고친 문장을 그 탭에 제안해. 끝나면 무엇을 고쳤는지 한 줄로 말해.'
@@ -23,13 +25,21 @@ rm -f "$out/ready" "$out/log.jsonl"
 mkdir -p "$home" "$data" "$work"
 
 # 인증만 읽기 전용 복사(원본은 건드리지 않는다).
+# macOS: Claude Code·agy 는 로그인을 키체인에 둔다 → 가짜 HOME 에 실제 키체인 폴더 링크(지울 때 `rm -rf "$out/home"` — 링크 뒤에 / 를 붙이지 말 것).
+if [[ "$os" == Darwin ]]; then
+  mkdir -p "$home/Library"
+  ln -s "$HOME/Library/Keychains" "$home/Library/Keychains"
+fi
 case "$cli" in
   claude)
-    mkdir -p "$home/.claude"
-    install -m 600 "$HOME/.claude/.credentials.json" "$home/.claude/.credentials.json"
+    if [[ "$os" != Darwin ]]; then
+      mkdir -p "$home/.claude"
+      install -m 600 "$HOME/.claude/.credentials.json" "$home/.claude/.credentials.json"
+    fi
     ;;
   codex)
-    [[ -f "$HOME/.codex/auth.json" ]] && { mkdir -p "$home/.codex"; install -m 600 "$HOME/.codex/auth.json" "$home/.codex/auth.json"; }
+    # auth.json 은 복사하지 않는다: ChatGPT 로그인이면 사본이 refresh token 을 돌려 실제 사본이 로그아웃된다(맥 실측 위험).
+    # 실제 CODEX_HOME 을 쓰고 --ephemeral 로 세션 기록을 남기지 않는다.
     ;;
   opencode)
     [[ -f "$HOME/.local/share/opencode/auth.json" ]] && { mkdir -p "$home/.local/share/opencode"; install -m 600 "$HOME/.local/share/opencode/auth.json" "$home/.local/share/opencode/auth.json"; }
@@ -46,7 +56,16 @@ for _ in $(seq 1 60); do [[ -f "$out/ready" ]] && break; sleep 0.5; done
 # env -i: 바깥 셸(이 스크립트를 띄운 Claude Code 세션 등)의 CLAUDE_CODE_*·AI_AGENT·토큰이 새지 않게 빈 환경에서 시작한다.
 env_common=(env -i HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" XDG_CACHE_HOME="$home/.cache"
   ORANDA_DATA_DIR="$data" PATH="$PATH" LANG="${LANG:-C.UTF-8}" TERM=dumb USER="${USER:-}")
+# macOS 의 사용자 임시 폴더(TMPDIR)는 사용자마다 달라 그대로 넘긴다.
+[[ -n "${TMPDIR:-}" ]] && env_common+=(TMPDIR="$TMPDIR")
+# 공급자 API 키는 있으면 넘긴다(env -i 가 지우면 opencode 등이 모델을 못 찾는다: provider.no-route).
+for key in GEMINI_API_KEY GOOGLE_GENERATIVE_AI_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY OPENROUTER_API_KEY; do
+  [[ -n "${!key:-}" ]] && env_common+=("$key=${!key}")
+done
 # 개발 빌드 orandactl 은 프레임워크 의존 apphost 라, .NET 이 기본 위치(/usr/share/dotnet)가 아니면 DOTNET_ROOT 가 있어야 뜬다(없으면 exit 131).
+if [[ -z "${DOTNET_ROOT:-}" ]] && command -v dotnet > /dev/null; then
+  DOTNET_ROOT="$(dirname "$(readlink -f "$(command -v dotnet)")")"
+fi
 [[ -n "${DOTNET_ROOT:-}" ]] && env_common+=(DOTNET_ROOT="$DOTNET_ROOT")
 # 더 넣을 변수(예: EXTRA_ENV="OPENCODE_DISABLE_EXTERNAL_SKILLS=1").
 [[ -n "${EXTRA_ENV:-}" ]] && read -r -a more <<< "$EXTRA_ENV" && env_common+=("${more[@]}")
@@ -70,17 +89,28 @@ case "$cli" in
     extra=()
     [[ "$allow" == "--allow" ]] && extra=(--allowedTools "Bash($ctl:*)")
     (cd "$work" && "${env_common[@]}" claude -p "$task" --model sonnet --max-turns 20 --strict-mcp-config \
-      --output-format stream-json --verbose "${extra[@]}") > "$out/transcript.jsonl" 2> "$out/stderr.txt"
+      --output-format stream-json --verbose ${extra[@]+"${extra[@]}"}) > "$out/transcript.jsonl" 2> "$out/stderr.txt"
     ;;
   codex)
     codex_bin="${CODEX_BIN:-codex}"
     extra=(--sandbox read-only)
     [[ "$allow" == "--allow" ]] && extra=(--sandbox danger-full-access)
-    (cd "$work" && "${env_common[@]}" "$codex_bin" exec --skip-git-repo-check "${extra[@]}" --json "$task") > "$out/transcript.jsonl" 2> "$out/stderr.txt"
+    # stdin 을 닫지 않으면 「Reading additional input from stdin...」 에서 끝없이 기다린다(맥 실측).
+    (cd "$work" && "${env_common[@]}" CODEX_HOME="${CODEX_HOME:-$HOME/.codex}" "$codex_bin" exec --ephemeral --skip-git-repo-check ${extra[@]+"${extra[@]}"} --json "$task" < /dev/null) > "$out/transcript.jsonl" 2> "$out/stderr.txt"
     ;;
   opencode)
     oc_bin="${OPENCODE_BIN:-opencode}"
-    (cd "$work" && "${env_common[@]}" "$oc_bin" run ${OPENCODE_MODEL:+--model "$OPENCODE_MODEL"} --format json "$task") > "$out/transcript.jsonl" 2> "$out/stderr.txt"
+    # opencode 2.x 는 탭들이 공유 백그라운드 서비스(실제 HOME)를 쓴다 → 있으면 --standalone 으로 자기 서버를 띄운다.
+    oc_extra=()
+    "$oc_bin" run --help 2>&1 | grep -q -- --standalone && oc_extra=(--standalone)
+    (cd "$work" && "${env_common[@]}" "$oc_bin" run ${oc_extra[@]+"${oc_extra[@]}"} ${OPENCODE_MODEL:+--model "$OPENCODE_MODEL"} --format json "$task") > "$out/transcript.jsonl" 2> "$out/stderr.txt"
+    ;;
+  agy)
+    # Antigravity CLI: 명령을 먼저 샌드박스에서 돌리고, 머리 없는(-p) 모드에서는 사람 확인이 필요한 명령을 거부한다(denied_actions).
+    agy_bin="${AGY_BIN:-agy}"
+    # --allow 는 받지 않는다: orandactl 하나만 허락하는 손잡이가 없고(permissions.allow command(<경로>) 로는 거부가 안 풀렸다, 맥 1회),
+    # --dangerously-skip-permissions 는 모든 도구를 허락해 판정의 뜻이 달라진다.
+    (cd "$work" && "${env_common[@]}" timeout 300 "$agy_bin" -p "$task" --print-timeout 280s --output-format stream-json < /dev/null) > "$out/transcript.jsonl" 2> "$out/stderr.txt"
     ;;
   *) echo "모르는 CLI: $cli" >&2; exit 2 ;;
 esac

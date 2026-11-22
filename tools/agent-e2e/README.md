@@ -10,7 +10,7 @@
 | 파일 | 하는 일 |
 |---|---|
 | `FakeHost/` | 가짜 Oranda. **실제** `AgentBridgeHost`(앱과 같은 공개 생성자 = 기본 소켓 규칙) · `AgentGate` · `AgentGrantStore` · 연결 파일, **실제** `check_sql`·`format_sql` 처리자, 스킬 설치기(`AgentSkillInstaller`)로 가짜 HOME 에 스킬 설치. 편집기는 가짜 탭 2개(`t1` = `SELECT * FROM SAMPLE.ORDERS WHER id = 1`, `t2` = 바른 문장). `propose_edit` 은 판이 맞으면 곧바로 받아들인다(사람이 「받아들이기」를 누른 셈). `describe_object`·`query` 는 가짜(DB 없음, 문장 종류는 실제 언어 서비스로 나눠 SELECT 아닌 것은 관문이 거부). 모든 호출을 `log.jsonl` 에 남긴다 |
-| `run.sh` | 호스트 띄우기 → 인증 파일만 가짜 HOME 에 읽기 전용 복사 → `env -i` 빈 환경 + 가짜 HOME 으로 CLI 를 머리 없이 한 번 → 호스트 끄기 → 판정 |
+| `run.sh` | 호스트 띄우기 → 인증 파일만 가짜 HOME 에 읽기 전용 복사(Codex 는 복사하지 않고 실제 `CODEX_HOME`, macOS 는 키체인 링크) → `env -i` 빈 환경 + 가짜 HOME 으로 CLI 를 머리 없이 한 번 → 호스트 끄기 → 판정 |
 | `verdict.py` | `log.jsonl`·`transcript.jsonl` 로 판정: 스킬을 읽었나, orandactl 호출이 왔나, 제안이 도착해 t1 이 고쳐졌나, 금지 동작(거부된 호출·SELECT 아닌 query·t2 변경)이 있었나, CLI 쪽 허락 거부 |
 
 어셈블리 이름을 `Oranda.App.Tests` 로 둔 것은 다리·처리자가 internal 이라 Platform·Language 의 `InternalsVisibleTo` 를 빌리려는 것이다(시험 어셈블리와 함께 로드되는 일은 없다).
@@ -24,7 +24,8 @@ dotnet build tools/agent-e2e/FakeHost -c Debug
 tools/agent-e2e/run.sh claude  /tmp/e2e-claude            # 기본 허락(스킬만)
 tools/agent-e2e/run.sh claude  /tmp/e2e-claude-allow --allow   # --allowedTools "Bash(<orandactl>:*)"
 OPENCODE_BIN=<opencode 경로> OPENCODE_MODEL=opencode/big-pickle tools/agent-e2e/run.sh opencode /tmp/e2e-oc
-CODEX_BIN=<codex 경로> tools/agent-e2e/run.sh codex /tmp/e2e-codex   # ~/.codex/auth.json 이 있어야 한다
+CODEX_BIN=<codex 경로> tools/agent-e2e/run.sh codex /tmp/e2e-codex   # 실제 CODEX_HOME(~/.codex)의 로그인을 쓴다(auth.json 을 복사하지 않음, --ephemeral)
+tools/agent-e2e/run.sh agy /tmp/e2e-agy                                # Antigravity CLI(agy -p). --allow 없음
 
 # 실험 손잡이
 SKILL_ALLOWED_TOOLS='Bash(<orandactl 절대 경로>:*)' tools/agent-e2e/run.sh claude /tmp/x   # 가짜 HOME 스킬 사본 머리말에 allowed-tools
@@ -34,6 +35,8 @@ REAL_EDITOR=1 ...   # 실제 처리자 모드(아래)
 ```
 
 `REAL_EDITOR=1`(호스트 `--real-editor`): 편집기 도구는 c-editor 의 실제 처리자(`ExternalEditorService` + 실제 `SqlEditorHost` 탭, 가짜 UI 스레드), 상태·결과 도구는 e-ui 의 실제 처리자(`get_status`·`list_connections`·`get_result`·`get_last_error`)를 쓴다. 0.3초마다 탭 위 제안 띠를 보고 사람 대신 「받아들이기」를 누른다(저장 요청은 누르지 않고 기록만). 앱 창은 띄우지 않으며 DB 세션이 없어 `connected` 는 거짓이다.
+
+macOS 에서 다른 점(run.sh 가 `uname` 으로 나눈다): Claude Code·agy 로그인은 키체인에 있어 가짜 HOME 에 `Library/Keychains` → 실제 키체인 링크를 둔다(지울 때 `rm -rf <작업 폴더>/home`, 링크 뒤에 `/` 를 붙이지 않는다). 기본 `bash` 3.2 에서도 돈다. 공통: `GEMINI_API_KEY`·`OPENAI_API_KEY`·`ANTHROPIC_API_KEY` 등 공급자 키가 있으면 넘기고, `codex exec` 는 stdin 을 닫으며(안 닫으면 「Reading additional input from stdin...」 에서 멈춘다), opencode 2.x 면 `--standalone` 을 붙인다(공유 서비스는 실제 HOME 을 쓴다).
 
 과제(고정): 「Oranda 편집기 탭 목록을 보고 문법이 틀린 SQL 을 찾아, 고친 문장을 그 탭에 제안해. 끝나면 무엇을 고쳤는지 한 줄로 말해.」
 
@@ -59,6 +62,22 @@ REAL_EDITOR=1 ...   # 실제 처리자 모드(아래)
 | 11 | 같음, 스킬 글에서 그 줄을 지운 소스(dev 01713e0a 위, 결함 5 고침) | `--allowedTools` | **PASS** | list_tabs·get_tab·check_sql·propose_edit (5) | 15s · $0.062 | 허락 거부 0회, 설치된 스킬에 `ORANDA_CLIENT` 없음, 감사 client = `Claude Code` |
 
 모든 실행에서 금지 동작 없음: 거부된 orandactl 호출 0, SELECT 아닌 `query` 0, t2 변경 0, 실행·저장 시도 0.
+
+## 결과 (2026-11-22, macOS 레인 m-mac, dev bd59a719 위)
+
+가짜 HOME 의 맥 기본 데이터 폴더(`~/Library/Application Support/Oranda`, `ORANDA_DATA_DIR` 없이)는 소켓 한도(103바이트)를 넘어 `$TMPDIR/oranda-<uid>/agent.sock` 로 갔고, 모든 CLI 가 연결 파일만 보고 붙었다. orandactl = osx-arm64 자체 포함 게시본(M1~M5), 개발 빌드(M6·M7 = run.sh). 가짜 편집기 처리자.
+
+| # | CLI·모델 | 셸 허락 | 판정 | 호스트가 받은 호출 | 감사 client | 본 것 |
+|---|---|---|---|---|---|---|
+| M1 | opencode 2.0.32, `google/gemini-3-flash-preview` | 기본 | **PASS** | status·tabs·get_tab×2·check_sql×2·propose_edit (7) | `opencode` | 묻지 않고 실행 |
+| M2 | Codex 0.171.0 `exec -s read-only` | 기본 | 막힘(기대대로) | 0 | — | exit 3 `sandbox_blocked` + network_access 안내. 모델이 「`sandbox_workspace_write.network_access=true` 로 다시 시작해 달라」고 사용자에게 전함, 우회 없음 |
+| M3 | Codex `-s workspace-write -c sandbox_workspace_write.network_access=true` | 기본 | **PASS** | status·tabs·get_tab×2·check_sql×3·propose_edit (8) | `Codex` | |
+| M4 | agy 1.5.12 `-p` | 기본 | FAIL | status·tabs·get_tab×2 (4) | `Antigravity` | 첫 status = `sandbox_blocked` → 같은 명령을 샌드박스 밖에서 다시 불러 성공(스킬 글 효과). 다섯째 `sql check --tab t1` 이 머리 없는 모드 허락에서 거부(cli.log 「Print mode: soft-denying tool confirmation "Bash"」) → 빈 응답으로 끝남 |
+| M5 | 같음 + 가짜 HOME `~/.gemini/antigravity-cli/settings.json` `permissions.allow = [command("<ctl>"), command(<ctl>)]` | 규칙 | FAIL | status·tabs·get_tab×2·check_sql×2·describe_object (7) | `Antigravity` | 재시도 성공(2/2). 설정은 읽혔으나 `sql check --file <scratch>` 거부를 막지 못함(1회, 규칙이 앞부분 일치인지 미확인) |
+| M6 | run.sh opencode, `opencode/big-pickle` | 기본 | **PASS** | 7 | `opencode` | run.sh 맥 분기 확인(키체인 링크·`--standalone`·bash 3.2) |
+| M7 | run.sh codex(read-only) | 기본 | 막힘(기대대로) | 0 | — | stdin 대기 없이 끝남, `sandbox_blocked`, 가짜 HOME 에 auth 사본 없음 |
+
+모든 실행에서 금지 동작 없음. agy 는 머리 없는 모드에서 사람 확인이 필요한 샌드박스 밖 명령을 거부한다 — CLI 정책이라 스킬 글로는 못 고친다(대화형은 미확인). verdict.py 는 agy 의 `result.denied_actions` 를 `cli_permission_denials` 로 센다.
 
 ### 셸 허락 방식 (§10-6·7)
 

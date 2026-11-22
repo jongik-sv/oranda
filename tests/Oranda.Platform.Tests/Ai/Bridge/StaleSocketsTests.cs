@@ -105,6 +105,51 @@ public sealed class StaleSocketsTests : IDisposable
         Assert.True(File.Exists(path));
     }
 
+    [Fact]
+    public void Probe_that_throws_keeps_the_file_and_clean_does_not_throw()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var path = Path.Combine(Run, "agent.sock");
+        File.WriteAllText(path, string.Empty);
+
+        Assert.Equal(0, StaleSockets.Clean(path, _ => throw new InvalidOperationException("probe")));
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task Socket_name_over_the_path_limit_is_kept_and_the_bridge_still_starts()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // agent.sock 은 한도 안, 같은 폴더의 agent-1234567890.sock 은 한도 밖(macOS 103·Linux 107바이트). 붙어 보면 .NET 이
+        // ArgumentOutOfRangeException 을 던진다(맥 실측) — 판단할 수 없으니 남기고, 다리는 기본 이름으로 열려야 한다.
+        var limit = AgentSocketPath.LimitFor(OperatingSystem.IsMacOS());
+        var target = limit - "/agent.sock".Length - 2;
+        Assert.True(target > Run.Length + 1, Run);
+        var folder = Path.Combine(Run, new string('p', target - Run.Length - 1));
+        Directory.CreateDirectory(folder);
+        var socket = Path.Combine(folder, "agent.sock");
+        var tooLong = Path.Combine(folder, "agent-1234567890.sock");
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(socket) <= limit, socket);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(tooLong) > limit, tooLong);
+        File.WriteAllText(tooLong, string.Empty);
+
+        Assert.True(StaleSockets.IsListening(tooLong));
+        Assert.Equal(0, StaleSockets.Clean(socket));
+        Assert.True(File.Exists(tooLong));
+
+        await using var server = new AgentPipeServer((_, instance) => instance is null ? socket : Path.Combine(folder, $"agent-{instance}.sock"), (_, _) => Task.CompletedTask, "test-user");
+        Assert.Equal(socket, server.Start());
+        Assert.True(StaleSockets.IsListening(socket));
+    }
+
     /// <summary>libc 로 Unix 소켓을 묶고 닫아 파일만 남긴다(죽은 앱이 남긴 소켓).</summary>
     private static class LeftOverSocket
     {

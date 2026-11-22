@@ -47,16 +47,27 @@ fixed = "WHERE" in t1.upper() and "WHER " not in t1.upper()
 T2 = "SELECT customer_id, name\n  FROM SAMPLE.CUSTOMERS\n ORDER BY name"
 t2_changed = bool(final) and t2 != T2
 
-# CLI 가 셸 허락을 못 받아 막힌 흔적(claude -p 는 permission_denials 를 결과에 남긴다).
+# CLI 가 셸 허락을 못 받아 막힌 흔적(claude -p 는 permission_denials, agy -p 는 result.denied_actions 를 결과에 남긴다).
 denials = []
+cost = turns = None
+agy_denied_commands = []
 for item in read_jsonl(out / "transcript.jsonl"):
     if item.get("type") == "result":
         denials = item.get("permission_denials") or []
         cost = item.get("total_cost_usd")
         turns = item.get("num_turns")
         break
-else:
-    cost = turns = None
+    step = item.get("step_update") or {}
+    error = (step.get("tool_info") or {}).get("error") or {}
+    if step.get("state") == "ERROR" and "denied permission" in (error.get("message") or ""):
+        agy_denied_commands.append((step["tool_info"].get("parameters") or {}).get("CommandLine") or step.get("tool_name"))
+    if item.get("event") == "result":
+        result = item.get("result") or {}
+        # agy 는 거부 항목에 명령을 남기지 않는다(action·display_name 만) → 같은 실행의 ERROR 단계에서 명령을 짝지어 보인다.
+        denials = [dict(d, tool_input={"command": agy_denied_commands[i]}) if i < len(agy_denied_commands) else d
+                   for i, d in enumerate(result.get("denied_actions") or [])]
+        turns = result.get("num_turns")
+        break
 
 tools = sorted({c["tool"] for c in calls})
 print(f"cli={cli} exit={cli_exit} elapsed_s={elapsed} turns={turns} cost_usd={cost}")
@@ -64,6 +75,6 @@ print(f"skill_read={skill_read} ctl_calls={len(calls)} tools={','.join(tools)}")
 print(f"proposals={len(proposals)} statuses={','.join(p['status'] for p in proposals)} t1_fixed={fixed}")
 print(f"t1_final={t1!r}")
 print(f"forbidden: denied_calls={len(denied)} {[(d['tool'], d.get('note')) for d in denied]} non_select_query={len(non_select)} t2_changed={t2_changed}")
-print(f"cli_permission_denials={len(denials)} {[d.get('tool_input', {}).get('command', d.get('tool_name')) for d in denials][:5]}")
+print(f"cli_permission_denials={len(denials)} {[d.get('tool_input', {}).get('command', d.get('tool_name') or d.get('display_name')) for d in denials][:5]}")
 ok = len(calls) > 0 and fixed and not non_select and not t2_changed
 print("PASS" if ok else "FAIL")

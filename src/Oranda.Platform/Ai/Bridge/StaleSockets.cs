@@ -10,7 +10,7 @@ namespace Oranda.Platform.Ai.Bridge;
 /// </summary>
 internal static class StaleSockets
 {
-    /// <summary><paramref name="socketPath"/> 의 폴더에서 죽은 소켓을 지운다. 지운 수.</summary>
+    /// <summary><paramref name="socketPath"/> 의 폴더에서 죽은 소켓을 지운다. 지운 수. 다리 시작을 막지 않도록 던지지 않는다.</summary>
     public static int Clean(string socketPath) => Clean(socketPath, IsListening);
 
     /// <summary>시험용: 듣는지 판단을 넣는다.</summary>
@@ -23,10 +23,20 @@ internal static class StaleSockets
             return 0;
         }
 
-        var removed = 0;
-        foreach (var path in Directory.EnumerateFiles(directory, "agent*.sock"))
+        string[] candidates;
+        try
         {
-            if (!IsAgentSocketName(Path.GetFileName(path)) || isListening(path))
+            candidates = Directory.GetFiles(directory, "agent*.sock");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return 0; // 폴더를 읽지 못하면 청소 없이 지금처럼 연다.
+        }
+
+        var removed = 0;
+        foreach (var path in candidates)
+        {
+            if (!IsAgentSocketName(Path.GetFileName(path)) || ListeningOrUnknown(isListening, path))
             {
                 continue;
             }
@@ -43,6 +53,19 @@ internal static class StaleSockets
         }
 
         return removed;
+    }
+
+    /// <summary>판단이 던지면 듣는 것으로 본다(모르면 지우지 않는다).</summary>
+    private static bool ListeningOrUnknown(Func<string, bool> isListening, string path)
+    {
+        try
+        {
+            return isListening(path);
+        }
+        catch (Exception)
+        {
+            return true;
+        }
     }
 
     /// <summary><c>agent.sock</c> 또는 <c>agent-&lt;숫자&gt;.sock</c>.</summary>
@@ -66,7 +89,7 @@ internal static class StaleSockets
 
     /// <summary>
     /// 소켓에 붙어 본다(다리와 같은 <see cref="NamedPipeClientStream"/>: 절대 경로면 그 소켓). 붙으면 참(바로 끊는다), 시한 안에 못 붙으면
-    /// 듣는 쪽이 없는 것으로 보고 거짓. 권한 거부처럼 판단할 수 없는 실패는 지우지 않도록 참으로 본다.
+    /// 듣는 쪽이 없는 것으로 보고 거짓. 권한 거부·경로 한도 초과처럼 판단할 수 없는 실패는 지우지 않도록 참으로 본다.
     /// 소켓 API 를 직접 쓰지 않는 까닭: 제품 코드는 통신 라이브러리를 참조하지 않는다(SafetyCrossTests).
     /// </summary>
     public static bool IsListening(string path)
@@ -95,6 +118,11 @@ internal static class StaleSockets
         }
         catch (UnauthorizedAccessException)
         {
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or InvalidOperationException)
+        {
+            // 경로가 sun_path 한도를 넘는 등(macOS 104바이트, ArgumentOutOfRangeException) 붙어 볼 수 없는 경우: 판단할 수 없으니 남긴다(맥 실측).
             return true;
         }
     }
