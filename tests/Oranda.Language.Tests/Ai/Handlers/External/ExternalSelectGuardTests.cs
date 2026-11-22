@@ -265,6 +265,147 @@ public sealed class ExternalSelectGuardTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Objects_missing_from_the_dictionary_are_schema_unresolved_in_every_mode_before_anything_runs()
+    {
+        _extractor.Info = Info([new AgentObjectRef("SCOTT", "EMP"), new AgentObjectRef("SCOTT", "NOPE")]);
+        _extractor.Missing.Add("SCOTT.NOPE");
+
+        var tab = await CheckAsync("SELECT * FROM emp, nope", TabMode);
+        var query = await CheckAsync("SELECT * FROM emp, nope", QueryMode);
+
+        Assert.Equal(ExternalSelectRefusal.NotFound, tab.Refusal);
+        Assert.Equal("sql_schema_unresolved", tab.Code);
+        Assert.StartsWith(ExternalSelectGuard.NotFoundText, tab.Message, StringComparison.Ordinal);
+        Assert.Contains("SCOTT.NOPE", tab.Message, StringComparison.Ordinal);
+        Assert.Null(tab.Statement);
+        Assert.Equal(ExternalSelectRefusal.NotFound, query.Refusal); // query 도: 게이트는 사전에 있는지 보지 않는다
+        Assert.Equal(["\"SCOTT\".\"EMP\"", "\"SCOTT\".\"NOPE\"", "\"SCOTT\".\"EMP\"", "\"SCOTT\".\"NOPE\""], _extractor.Resolved);
+        Assert.All(_exec.Calls, c => Assert.Equal(ExternalSelectGuard.CurrentSchemaSql, c.Statement.Text)); // 실행은 현재 스키마 읽기뿐
+    }
+
+    [Fact]
+    public async Task Dual_is_never_looked_up()
+    {
+        _extractor.Info = Info([new AgentObjectRef("SYS", "DUAL"), new AgentObjectRef("SCOTT", "DUAL")]);
+        _extractor.Missing.UnionWith(["SYS.DUAL", "SCOTT.DUAL"]);
+
+        var check = await CheckAsync("SELECT 1 FROM dual", TabMode);
+
+        Assert.True(check.Allowed);
+        Assert.Empty(_extractor.Resolved);
+    }
+
+    /// <summary>실제 추출기 + 가짜 사전: SCOTT.EMP·APP.EMP(표), SCOTT.E_SYN → APP.EMP(개인 시노님), PUBLIC.P_SYN → APP.EMP, PUBLIC.DUAL → SYS.DUAL, SCOTT.DANGLING → APP.GONE(대상 없음).</summary>
+    private ExternalSelectGuard RealGuard()
+    {
+        var meta = new FakeMetadataProvider();
+        meta.NameSteps[("SCOTT", "EMP")] = NameStep.TableOrView;
+        meta.NameSteps[("SCOTT", "DEPT")] = NameStep.TableOrView;
+        meta.NameSteps[("APP", "EMP")] = NameStep.TableOrView;
+        meta.NameSteps[("SCOTT", "E_SYN")] = NameStep.Synonym("APP", "EMP");
+        meta.NameSteps[("PUBLIC", "P_SYN")] = NameStep.Synonym("APP", "EMP");
+        meta.NameSteps[("PUBLIC", "DUAL")] = NameStep.Synonym("SYS", "DUAL");
+        meta.NameSteps[("SYS", "DUAL")] = NameStep.TableOrView;
+        meta.NameSteps[("SCOTT", "DANGLING")] = NameStep.Synonym("APP", "GONE");
+
+        // 사전 뷰: Oracle 모양(PUBLIC 시노님 → SYS 뷰, V$ → V_$). V$SQL 은 대상이 사전에 안 보인다(권한·유형 — Tibero 실측 전) 고 둔다.
+        foreach (var v in new[] { "USER_TABLES", "ALL_OBJECTS", "DBA_TABLES" })
+        {
+            meta.NameSteps[("PUBLIC", v)] = NameStep.Synonym("SYS", v);
+            meta.NameSteps[("SYS", v)] = NameStep.TableOrView;
+        }
+
+        foreach (var v in new[] { "V$SESSION", "GV$SESSION", "V$SQL" })
+        {
+            meta.NameSteps[("PUBLIC", v)] = NameStep.Synonym("SYS", v.Replace("$", "_$", StringComparison.Ordinal));
+        }
+
+        meta.NameSteps[("SYS", "V_$SESSION")] = NameStep.TableOrView;
+        meta.NameSteps[("SYS", "GV_$SESSION")] = NameStep.TableOrView;
+        return new ExternalSelectGuard(new LanguageService(), new AgentStatementReferenceExtractor(new LanguageService(), meta), new FakeUserFunctions(), _exec);
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM nope")]
+    [InlineData("SELECT * FROM app.nope")]
+    [InlineData("SELECT * FROM b.emp")]
+    [InlineData("SELECT * FROM emp e WHERE EXISTS (SELECT 1 FROM nope n WHERE n.id = e.id)")]
+    [InlineData("SELECT * FROM (SELECT * FROM nope) v")]
+    [InlineData("WITH c AS (SELECT * FROM nope) SELECT * FROM c")]
+    [InlineData("SELECT * FROM emp UNION ALL SELECT * FROM nope")]
+    [InlineData("SELECT * FROM dangling")]
+    public async Task Real_extractor_names_missing_from_the_dictionary_are_refused(string sql)
+    {
+        foreach (var mode in new[] { TabMode, QueryMode })
+        {
+            var check = await RealGuard().CheckAsync(_session, sql, mode, CancellationToken.None);
+
+            Assert.False(check.Allowed, sql);
+            Assert.Equal("sql_schema_unresolved", check.Code);
+        }
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM emp")]
+    [InlineData("SELECT * FROM EMP")]
+    [InlineData("SELECT * FROM \"EMP\"")]
+    [InlineData("SELECT * FROM scott.emp")]
+    [InlineData("SELECT * FROM app.emp")]
+    [InlineData("SELECT * FROM \"APP\".\"EMP\"")]
+    [InlineData("SELECT e.empno, x.cnt FROM emp e, (SELECT deptno, COUNT(*) cnt FROM dept GROUP BY deptno) x WHERE x.deptno = e.deptno")]
+    [InlineData("WITH a AS (SELECT * FROM emp), b AS (SELECT * FROM a) SELECT * FROM b JOIN a ON a.id = b.id")]
+    [InlineData("WITH r (n) AS (SELECT 1 FROM dual UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT n FROM r")]
+    [InlineData("SELECT 1 FROM dual")]
+    [InlineData("SELECT sysdate FROM sys.dual")]
+    [InlineData("SELECT e.ename AS name FROM emp e WHERE e.sal > (SELECT AVG(sal) FROM emp)")]
+    [InlineData("SELECT * FROM e_syn")]
+    [InlineData("SELECT * FROM p_syn")]
+    [InlineData("SELECT table_name FROM user_tables")]
+    [InlineData("SELECT owner, object_name FROM all_objects WHERE object_type = 'TABLE'")]
+    [InlineData("SELECT * FROM dba_tables")]
+    [InlineData("SELECT * FROM sys.dba_tables")]
+    [InlineData("SELECT sid, serial# FROM v$session")]
+    [InlineData("SELECT * FROM V$SESSION s JOIN gv$session g ON g.sid = s.sid")]
+    [InlineData("SELECT sql_id FROM v$sql")]
+    [InlineData("SELECT * FROM sys.v_$sql")]
+    [InlineData("SELECT * FROM syscat.all_tables")]
+    public async Task Real_extractor_ctes_inline_views_dual_aliases_and_synonyms_pass(string sql)
+    {
+        foreach (var mode in new[] { TabMode, QueryMode })
+        {
+            var check = await RealGuard().CheckAsync(_session, sql, mode, CancellationToken.None);
+
+            Assert.True(check.Allowed, $"{sql}: {check.Code} {check.Message}");
+        }
+    }
+
+    [Fact]
+    public async Task Dictionary_owner_exemption_does_not_apply_when_the_session_schema_is_that_owner()
+    {
+        // ALTER SESSION SET CURRENT_SCHEMA = SYS 뒤 소유자 없는 없는 이름은 SYS.NOPE 로 남는다: 시노님을 거친 사전 객체가 아니므로 거부.
+        _sessionSchema = "SYS";
+
+        var check = await RealGuard().CheckAsync(_session, "SELECT * FROM nope", TabMode, CancellationToken.None);
+
+        Assert.Equal(ExternalSelectRefusal.NotFound, check.Refusal);
+        Assert.Contains("SYS.NOPE", check.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Real_extractor_looks_names_up_in_the_session_current_schema()
+    {
+        // 세션이 APP 로 바뀌었다: DEPT 는 SCOTT 에만 있으므로 거부, EMP 는 APP 에 있어 통과.
+        _sessionSchema = "APP";
+
+        var dept = await RealGuard().CheckAsync(_session, "SELECT * FROM dept", TabMode, CancellationToken.None);
+        var emp = await RealGuard().CheckAsync(_session, "SELECT * FROM emp", TabMode, CancellationToken.None);
+
+        Assert.Equal(ExternalSelectRefusal.NotFound, dept.Refusal);
+        Assert.Contains("APP.DEPT", dept.Message, StringComparison.Ordinal);
+        Assert.True(emp.Allowed);
+    }
+
+    [Fact]
     public void Gate_flags_for_read_only_or_substituted_runs_block_query()
     {
         var plain = ExternalFakes.Db(new System.Text.Json.Nodes.JsonObject());
@@ -292,7 +433,19 @@ public sealed class ExternalSelectGuardTests : IAsyncDisposable
             return ValueTask.FromResult(ByDefaultSchema.TryGetValue(defaultSchema ?? string.Empty, out var info) ? info : Info);
         }
 
-        public ValueTask<AgentObjectRef?> ResolveAsync(ISession db, string name, string? defaultSchema, CancellationToken ct) => throw new NotSupportedException();
+        /// <summary>사전에 없는 객체 키(<c>OWNER.NAME</c>). 나머지는 모두 있다고 답한다.</summary>
+        public HashSet<string> Missing { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>존재 확인으로 받은 이름(쓰인 그대로).</summary>
+        public List<string> Resolved { get; } = [];
+
+        public ValueTask<AgentObjectRef?> ResolveAsync(ISession db, string name, string? defaultSchema, CancellationToken ct)
+        {
+            Resolved.Add(name);
+            var parts = name.Split('.', 2).Select(p => p.Trim('"')).ToArray();
+            var obj = new AgentObjectRef(parts[0], parts[1]);
+            return ValueTask.FromResult(Missing.Contains(obj.Key) ? null : obj);
+        }
 
         public ValueTask<IReadOnlyList<AgentObjectRef>> GetRelatedAsync(ISession db, IReadOnlyList<AgentObjectRef> objects, CancellationToken ct) => throw new NotSupportedException();
     }

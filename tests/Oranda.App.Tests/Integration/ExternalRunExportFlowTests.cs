@@ -201,7 +201,7 @@ public sealed class ExternalRunExportFlowTests(ItDb db) : IClassFixture<ItDb>
     /// <list type="bullet">
     /// <item>이름 없는 함수 <c>ORT_AC_FN_PLAIN</c> = S 의 자치 트랜잭션 함수 → <c>sql_unsafe</c>, S 의 표에 아무것도 쓰지 않는다
     /// (고치기 전 실측 2026-11-23: 가드는 접속 계정의 안전 함수로 풀어 통과, 실행은 S 함수를 불러 S.ORT_AC_LOG 에 커밋했다).</item>
-    /// <item>A·S 에 같은 이름 표 <c>ORT_AC_SAME</c> → 실행 결과가 S 의 값. S 에 없는 이름(<c>ORT_AC_ORD</c>) → 실행이 ORA-00942 로 실패(가드는 사전에 없는 이름을 거부하지 않는다).</item>
+    /// <item>A·S 에 같은 이름 표 <c>ORT_AC_SAME</c> → 실행 결과가 S 의 값. S 에 없는 이름(<c>ORT_AC_ORD</c>) → 가드가 S 사전에서 찾지 못해 실행 전에 <c>sql_schema_unresolved</c> 로 거부(그리드가 새로 생기지 않고 ORA-00942 도 나지 않는다).</item>
     /// <item>일부만 가져온 <c>run_tab</c> 직후 <c>export_result</c>: 가드가 같은 세션에서 현재 스키마를 다시 읽어도 열린 그리드 커서와 부딪히지 않고 S 의 전체 행을 쓴다.</item>
     /// </list>
     /// </summary>
@@ -265,9 +265,11 @@ public sealed class ExternalRunExportFlowTests(ItDb db) : IClassFixture<ItDb>
             Assert.Equal(1201, SheetRows(path));
 
             tab.Document.Text = $"SELECT ord_id FROM {Table}";
-            var missing = Ok(await RunTabAsync(rig, grant, tab));
-            Assert.Equal("failed", missing["status"]!.GetValue<string>());
-            Assert.Contains("942", missing["error"]!["code"]?.GetValue<string>() ?? missing["error"]!["message"]!.GetValue<string>(), StringComparison.Ordinal);
+            var gridsBefore = ResultCount(tab);
+            var missing = await RunTabAsync(rig, grant, tab);
+            Assert.True(missing.IsError);
+            Assert.Equal("sql_schema_unresolved", missing.ErrorCode);
+            Assert.Equal(gridsBefore, ResultCount(tab)); // 그리드가 새로 생기지 않았다 = 실행 경로에 들어가지 않았다
         }
         finally
         {

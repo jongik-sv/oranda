@@ -18,6 +18,9 @@ namespace Oranda.Language.Ai.Handlers.External;
 /// <item>이름 풀기: 검사하기 바로 전에 그 세션의 현재 스키마(<c>SYS_CONTEXT('USERENV','CURRENT_SCHEMA')</c>)를 읽어 그 스키마로 푼다 —
 /// 실행이 쓰는 이름 풀이와 같다(<c>ALTER SESSION SET CURRENT_SCHEMA</c>·PL/SQL 블록의 <c>EXECUTE IMMEDIATE</c>·로그온 트리거 모두 반영).
 /// 읽지 못하면 거부한다(닫힌 쪽) → <c>sql_schema_unresolved</c>.</item>
+/// <item>사전에 없는 이름: 참조 객체(시노님을 푼 뒤)가 그 스키마의 표·뷰·MV 로 사전에 보이지 않으면 거부한다(도구 모두) → <c>sql_schema_unresolved</c>.
+/// 시노님 풀이(<see cref="Oranda.Core.Metadata.SynonymResolver"/>)는 없는 이름을 그대로 돌려주므로 추출기 분석만으로는 알 수 없어 객체마다 다시 확인한다.
+/// WITH 이름·인라인 뷰·별칭은 추출기가 참조 객체로 내지 않고, DUAL 과 사전 스키마(SYS·SYSCAT, 현재 스키마가 아닐 때) 객체는 사전과 관계없이 통과시킨다.</item>
 /// <item>호출자가 이름을 미리 푼 스키마(<see cref="ExternalSelectOptions.DefaultSchema"/>)가 세션의 현재 스키마와 다르면 두 쪽에서 같은 객체로 풀려야 한다 → <c>sql_schema_unresolved</c>.</item>
 /// </list>
 /// 운영 허용·수준 판정은 여기서 하지 않는다(허가 정책 함수의 일).
@@ -67,6 +70,9 @@ public enum ExternalSelectRefusal
 
     /// <summary>세션의 현재 스키마를 읽지 못했다(이름을 어디서 풀지 몰라 닫힌 쪽으로 거부).</summary>
     SchemaUnknown,
+
+    /// <summary>참조 객체가 사전에 없다(없는 이름·권한 없음·대상 없는 시노님). 실행하면 ORA-00942 가 날 문장을 미리 거부한다.</summary>
+    NotFound,
 }
 
 /// <summary>검사 결과. 통과면 <see cref="Statement"/> 가 그 한 문장(바인드 이름 포함).</summary>
@@ -84,6 +90,7 @@ public sealed record ExternalSelectCheck(ExternalSelectRefusal Refusal, string? 
         ExternalSelectRefusal.UserFunction => new(refusal, AgentErrorCodes.SqlUnsafe, ExternalToolText.QueryUserFunction, null),
         ExternalSelectRefusal.SchemaMismatch => new(refusal, AgentErrorCodes.SqlSchemaUnresolved, ExternalToolText.QuerySchemaMismatch, null),
         ExternalSelectRefusal.SchemaUnknown => new(refusal, AgentErrorCodes.SqlSchemaUnresolved, ExternalSelectGuard.SchemaUnknownText, null),
+        ExternalSelectRefusal.NotFound => new(refusal, AgentErrorCodes.SqlSchemaUnresolved, ExternalSelectGuard.NotFoundText, null),
         _ => throw new ArgumentOutOfRangeException(nameof(refusal)),
     };
 }
@@ -98,6 +105,9 @@ internal sealed class ExternalSelectGuard(
 
     /// <summary>세션의 현재 스키마를 읽지 못했을 때 글(밖의 에이전트가 읽는다, 영어). DB 오류 원문은 싣지 않는다.</summary>
     internal const string SchemaUnknownText = "Could not read the current schema of this session, so names in the statement cannot be checked. Try again or write OWNER.NAME.";
+
+    /// <summary>참조 객체가 사전에 없을 때 글(밖의 에이전트가 읽는다, 영어). 어느 이름인지는 <see cref="NotFoundMessage"/> 가 덧붙인다.</summary>
+    internal const string NotFoundText = "Some names in the statement are not tables or views visible to this connection. Names without an owner are looked up in the session's current schema. Check the names or write OWNER.NAME.";
 
     /// <summary>세션의 현재 스키마를 읽는 문장. Oracle·Tibero 둘 다 된다(Tibero 실측: docs/design/tibero-catalog-map.md).</summary>
     internal const string CurrentSchemaSql = "SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA') FROM DUAL";
@@ -151,6 +161,11 @@ internal sealed class ExternalSelectGuard(
             return ExternalSelectCheck.Refused(ExternalSelectRefusal.Unresolved);
         }
 
+        if (await FirstMissingAsync(db, info, schema, ct).ConfigureAwait(false) is { } missing)
+        {
+            return ExternalSelectCheck.Refused(ExternalSelectRefusal.NotFound) with { Message = NotFoundMessage(missing, schema) };
+        }
+
         if (string.IsNullOrWhiteSpace(options.DefaultSchema) || string.Equals(schema, options.DefaultSchema, StringComparison.OrdinalIgnoreCase))
         {
             return ExternalSelectCheck.Ok(stmt);
@@ -161,6 +176,52 @@ internal sealed class ExternalSelectGuard(
         var b = viaCaller.Objects.Select(o => o.Key).Order(StringComparer.Ordinal);
         return a.SequenceEqual(b, StringComparer.Ordinal) ? ExternalSelectCheck.Ok(stmt) : ExternalSelectCheck.Refused(ExternalSelectRefusal.SchemaMismatch);
     }
+
+    /// <summary>사전에 없는 객체의 거부 글: 풀린 이름(<c>OWNER.NAME</c>)과 소유자 없는 이름을 찾은 스키마를 붙인다(문장에 적힌 이름이라 값은 들어 있지 않다).</summary>
+    internal static string NotFoundMessage(AgentObjectRef missing, string schema) =>
+        $"{NotFoundText} Not found: {missing.Key} (current schema {schema.ToUpperInvariant()}).";
+
+    /// <summary>
+    /// 참조 객체 중 사전에 표·뷰·MV 로 없는 첫 객체(없으면 null). 분석이 낸 객체는 시노님을 이미 푼 것이라 소유자를 적은 꼴로 다시 풀어 있는지만 본다
+    /// (<see cref="IStatementReferenceExtractor.ResolveAsync"/> = 시노님 풀이 + 사전 확인, 없거나 읽지 못하면 null — 닫힌 쪽).
+    /// DUAL(<see cref="IsDual"/>)과 현재 스키마가 아닌 사전 스키마의 객체(<see cref="IsDictionaryObject"/>)는 건너뛴다.
+    /// </summary>
+    private async ValueTask<AgentObjectRef?> FirstMissingAsync(ISession db, AgentStatementInfo info, string schema, CancellationToken ct)
+    {
+        foreach (var o in info.Objects)
+        {
+            if (IsDual(o) || IsDictionaryObject(o, schema))
+            {
+                continue;
+            }
+
+            var written = "\"" + o.Owner + "\".\"" + o.Name + "\"";
+            if (await extractor.ResolveAsync(db, written, schema, ct).ConfigureAwait(false) is null)
+            {
+                return o;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// DUAL 은 소유자와 관계없이 건너뛴다: Tibero 의 PUBLIC DUAL 시노님이 가리키는 곳·사전에 보이는 꼴을 실측하지 못했다.
+    /// 없는 <c>X.DUAL</c> 은 실행이 ORA-00942 로 실패할 뿐 다른 객체로 새지 않는다.
+    /// </summary>
+    private static bool IsDual(AgentObjectRef o) => string.Equals(o.Name, "DUAL", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>사전 객체를 가진 스키마(Oracle·Tibero SYS, Tibero 정적 사전 뷰 SYSCAT).</summary>
+    private static readonly string[] DictionaryOwners = ["SYS", "SYSCAT"];
+
+    /// <summary>
+    /// 사전 스키마 객체(현재 스키마가 그 스키마가 아닐 때): <c>V$SESSION</c>·<c>USER_TABLES</c> 같은 PUBLIC 시노님이 가리키는 SYS 뷰(<c>V_$SESSION</c>)나 <c>SYS.X</c> 로 적은 이름.
+    /// 이름 풀이 한 단계(<c>meta.name_step</c>)는 <c>*_objects</c> 의 TABLE·VIEW·MATERIALIZED VIEW 만 보므로, 다른 유형으로 잡힌 사전 객체(Tibero 동적 뷰 등, 실측 전)나
+    /// <c>@PFX@ = all</c> 에서 안 보이는 사전 뷰를 없다고 잘못 거부하지 않게 한다. 정말 없으면 실행이 ORA-00942 로 실패할 뿐 다른 객체로 새지 않는다.
+    /// 현재 스키마가 SYS 면(ALTER SESSION) 소유자 없는 이름이 SYS 로 남은 것이라 건너뛰지 않는다.
+    /// </summary>
+    private static bool IsDictionaryObject(AgentObjectRef o, string schema) =>
+        DictionaryOwners.Contains(o.Owner, StringComparer.OrdinalIgnoreCase) && !string.Equals(o.Owner, schema, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// <paramref name="db"/> 의 지금 현재 스키마(<see cref="CurrentSchemaSql"/>, 에이전트 출처·이력 없음). 실패·빈 값이면 null(호출자가 거부한다). 취소는 예외로 둔다.

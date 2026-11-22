@@ -102,7 +102,7 @@ public class TiberoExternalRunGuardIt(ITestOutputHelper output)
             }
 
             // 세션 현재 스키마를 바꾸면(Tibero 도 ALTER SESSION SET CURRENT_SCHEMA) 가드는 SYS_CONTEXT 를 읽어 그 스키마로 푼다:
-            // 계정 표 이름만 쓰면 사전에 없는 이름이라 가드는 통과하고(Oracle 과 같은 현재 동작) 실행은 그 스키마에서 못 찾아 실패, 계정을 적으면 성공.
+            // 계정 표 이름만 쓰면 그 스키마 사전에 없는 이름이라 가드가 sql_schema_unresolved 로 거부하고(가드 없이 실행하면 그 스키마에서 못 찾아 실패), 계정을 적으면 통과.
             var owner = Convert.ToString(await TiberoSessionQuery.ScalarAsync(setup, "SELECT USER FROM DUAL"), System.Globalization.CultureInfo.InvariantCulture)!;
             await ExecAsync(tab, "ALTER SESSION SET CURRENT_SCHEMA = SYS");
             var unqualified = await guard.CheckAsync(tab, $"SELECT id FROM {Table}", TabOptions, default);
@@ -115,7 +115,8 @@ public class TiberoExternalRunGuardIt(ITestOutputHelper output)
             }
 
             output.WriteLine($"[run-guard] altered unqualified={unqualified.Allowed}/{unqualified.Code} run={wrongPlace.Status} qualified={qualified.Allowed}/{qualified.Code}");
-            Assert.NotEqual(ExternalSelectRefusal.SchemaUnknown, unqualified.Refusal); // Tibero 에서도 현재 스키마를 읽었다
+            Assert.Equal(ExternalSelectRefusal.NotFound, unqualified.Refusal); // Tibero 에서도 현재 스키마(SYS)를 읽어 거기서 찾았다
+            Assert.Equal(AgentErrorCodes.SqlSchemaUnresolved, unqualified.Code);
             Assert.Equal(ExecutionStatus.Failed, wrongPlace.Status);
             Assert.True(qualified.Allowed, qualified.Code + " " + qualified.Message);
             await ExecAsync(tab, $"ALTER SESSION SET CURRENT_SCHEMA = {owner}");
@@ -230,6 +231,202 @@ public class TiberoExternalRunGuardIt(ITestOutputHelper output)
     private static IUserFunctionSafetyChecker NewChecker(IExecutionService exec) =>
         (IUserFunctionSafetyChecker)Activator.CreateInstance(
             typeof(IExternalSelectGuard).Assembly.GetType("Oranda.Language.Ai.Handlers.UserFunctionSafetyChecker", throwOnError: true)!, exec, TiberoEmbeddedCatalog.Load())!;
+
+    private static readonly string Synonym = TiberoItSessions.ObjectName("AC_DICT_SYN");
+    private static readonly string PublicSyn = TiberoItSessions.ObjectName("AC_DICT_PSYN");
+
+    /// <summary>
+    /// w-it-dict: 사전 확인(m-unknown-name)이 Tibero 사전 뷰·동적 뷰를 거부하지 않는지, 없는 표는 실행 전에 <c>sql_schema_unresolved</c> 인지.
+    /// 실측 기록(시험 출력 <c>[dict-obj]</c>·<c>[dict-syn]</c>): V$SESSION·V_$SESSION·USER_TABLES·ALL_OBJECTS 의 소유자·유형과 PUBLIC 시노님이 가리키는 곳(SYSCAT 이 사전 소유자인지).
+    /// 통과: WITH·재귀 WITH·인라인 뷰·DUAL·개인 시노님·PUBLIC 시노님(권한 있을 때)·읽을 수 있는 다른 스키마 표(있을 때, 이름은 출력하지 않는다).
+    /// </summary>
+    [TiberoWriteFact]
+    public async Task Dictionary_views_pass_and_missing_tables_are_refused_before_execution_on_tibero()
+    {
+        if (TiberoItSessions.SkipWrite())
+        {
+            return;
+        }
+
+        await using var it = TiberoItSessions.Create();
+        if (it is null)
+        {
+            return;
+        }
+
+        var setup = await it.OpenAsync();
+        await DropDictObjectsAsync(setup);
+        try
+        {
+            await ExecAsync(setup, $"CREATE TABLE {Table} (ID NUMBER PRIMARY KEY, NM VARCHAR2(20))");
+            await ExecAsync(setup, $"INSERT INTO {Table} VALUES (1, 'A')");
+            await ExecAsync(setup, "COMMIT");
+            var hasSynonym = await TryExecAsync(setup, $"CREATE SYNONYM {Synonym} FOR {Table}");
+            var owner = Convert.ToString(await TiberoSessionQuery.ScalarAsync(setup, "SELECT USER FROM DUAL"), System.Globalization.CultureInfo.InvariantCulture)!;
+            var hasPublic = await TryExecAsync(setup, $"CREATE PUBLIC SYNONYM {PublicSyn} FOR {owner}.{Table}");
+            output.WriteLine($"[dict] private-synonym={hasSynonym} public-synonym={hasPublic}");
+
+            foreach (var row in await RowsAsync(setup, "SELECT owner, object_type, object_name FROM all_objects WHERE object_name IN ('V$SESSION','V_$SESSION','USER_TABLES','ALL_OBJECTS','V$SQL','GV$SESSION','DUAL') ORDER BY object_name, owner"))
+            {
+                output.WriteLine("[dict-obj] " + row);
+            }
+
+            foreach (var row in await RowsAsync(setup, "SELECT owner, synonym_name, org_object_owner, org_object_name FROM all_synonyms WHERE synonym_name IN ('V$SESSION','V$SQL','GV$SESSION','USER_TABLES','ALL_OBJECTS','DUAL') ORDER BY synonym_name, owner"))
+            {
+                output.WriteLine("[dict-syn] " + row);
+            }
+
+            var tab = await it.OpenAsync();
+            var exec = new TiberoExecutionService(new ExecutionPolicy(), ExecutionFakes.NoQuestions(), it.Events, null, dbmsOutput: false);
+            var guard = NewGuard(new TiberoMetadataProvider(TiberoCatalogQuery.RunAsync), exec);
+
+            string[] dictionary =
+            [
+                "SELECT table_name FROM user_tables",
+                "SELECT owner, object_name FROM all_objects WHERE ROWNUM <= 5",
+                "SELECT sid, serial# FROM v$session WHERE ROWNUM <= 5",
+                "SELECT sql_id FROM v$sql WHERE ROWNUM <= 5",
+                "SELECT * FROM gv$session WHERE ROWNUM <= 5",
+            ];
+            foreach (var sql in dictionary)
+            {
+                var check = await guard.CheckAsync(tab, sql, TabOptions, default);
+                var run = check.Allowed ? await RunAgentAsync(exec, tab, check.Statement!) : default;
+                output.WriteLine($"[dict] {sql} | guard={check.Allowed}/{check.Refusal}/{check.Code} {check.Message} | run={run.Status}/{run.Error}");
+                Assert.True(check.Allowed, sql + " " + check.Code + " " + check.Message);
+                if (sql.Contains("user_tables", StringComparison.Ordinal) || sql.Contains("all_objects", StringComparison.Ordinal))
+                {
+                    Assert.Equal(ExecutionStatus.Succeeded, run.Status);
+                }
+            }
+
+            foreach (var sql in new[] { "SELECT * FROM ORT_AC_NO_SUCH_TABLE", $"SELECT t.id FROM {Table} t JOIN ORT_AC_NO_SUCH_TABLE n ON n.id = t.id" })
+            {
+                var check = await guard.CheckAsync(tab, sql, TabOptions, default);
+                output.WriteLine($"[missing] {check.Refusal}/{check.Code}");
+                Assert.Equal(ExternalSelectRefusal.NotFound, check.Refusal);
+                Assert.Equal(AgentErrorCodes.SqlSchemaUnresolved, check.Code);
+            }
+
+            var passed = new List<string>
+            {
+                $"WITH c AS (SELECT id FROM {Table}) SELECT id FROM c",
+                "WITH ORT_AC_NO_SUCH_TABLE AS (SELECT 1 AS x FROM DUAL) SELECT x FROM ORT_AC_NO_SUCH_TABLE",
+                "WITH r (n) AS (SELECT 1 FROM DUAL UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT n FROM r",
+                $"SELECT v.id FROM (SELECT id FROM {Table}) v",
+                "SELECT 1 FROM DUAL",
+                $"SELECT id FROM {owner}.{Table}",
+            };
+            if (hasSynonym)
+            {
+                passed.Add($"SELECT id FROM {Synonym}");
+            }
+
+            if (hasPublic)
+            {
+                passed.Add($"SELECT id FROM {PublicSyn}");
+            }
+
+            var other = await RowsAsync(setup, "SELECT owner || '.' || table_name FROM all_tables WHERE owner NOT IN (USER, 'SYS', 'SYSCAT', 'SYSGIS', 'OUTLN', 'PUBLIC') AND ROWNUM <= 1");
+            if (other.Count == 1)
+            {
+                passed.Add($"SELECT 1 FROM {other[0]} WHERE ROWNUM <= 1");
+            }
+
+            output.WriteLine($"[dict] other-schema-table={other.Count}");
+            for (var i = 0; i < passed.Count; i++)
+            {
+                var sql = passed[i];
+                var check = await guard.CheckAsync(tab, sql, TabOptions, default);
+                var run = check.Allowed ? await RunAgentAsync(exec, tab, check.Statement!) : default;
+                output.WriteLine($"[pass] #{i} guard={check.Allowed}/{check.Code} run={run.Status}/{run.Error}");
+                Assert.True(check.Allowed, i + " " + check.Code + " " + check.Message);
+                if (!sql.StartsWith("WITH r", StringComparison.Ordinal))
+                {
+                    Assert.Equal(ExecutionStatus.Succeeded, run.Status); // 재귀 WITH 는 서버 지원만 기록
+                }
+            }
+        }
+        finally
+        {
+            await DropDictObjectsAsync(setup);
+        }
+    }
+
+    private static async Task<(ExecutionStatus? Status, string? Error)> RunAgentAsync(TiberoExecutionService exec, ISession tab, SqlStatement stmt)
+    {
+        var result = await exec.ExecuteAsync(tab, stmt, new Dictionary<string, BindValue>(), new ExecutionOptions { Source = HistorySource.Agent, SkipHistory = true }, default);
+        if (result.ResultSet is { } rs)
+        {
+            await using (rs)
+            {
+                await rs.GetPageAsync(0, default);
+            }
+        }
+
+        return (result.Status, result.Error?.Code);
+    }
+
+    private static async Task DropDictObjectsAsync(TiberoSession session)
+    {
+        if (await CountAsync(session, $"SELECT COUNT(*) FROM all_synonyms WHERE owner = 'PUBLIC' AND synonym_name = '{PublicSyn}'") > 0)
+        {
+            await ExecAsync(session, $"DROP PUBLIC SYNONYM {PublicSyn}");
+        }
+
+        if (await CountAsync(session, $"SELECT COUNT(*) FROM user_synonyms WHERE synonym_name = '{Synonym}'") > 0)
+        {
+            await ExecAsync(session, $"DROP SYNONYM {Synonym}");
+        }
+
+        if (await CountAsync(session, $"SELECT COUNT(*) FROM user_tables WHERE table_name = '{Table}'") > 0)
+        {
+            await ExecAsync(session, $"DROP TABLE {Table}");
+        }
+    }
+
+    private static async Task<bool> TryExecAsync(TiberoSession session, string sql)
+    {
+        try
+        {
+            await ExecAsync(session, sql);
+            return true;
+        }
+#pragma warning disable CA1031 // 권한이 없으면(서버 오류) 그 경우만 건너뛴다 — 실측 줄로 남는다.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return false;
+        }
+    }
+
+    /// <summary>행마다 칸을 「 | 」로 이은 글.</summary>
+    private static async Task<List<string>> RowsAsync(TiberoSession session, string sql)
+    {
+        var rows = new List<string>();
+        await session.CommandGate.EnterAsync(CancellationToken.None);
+        try
+        {
+            await using var command = session.CreateCommand(sql);
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var cells = new string[reader.FieldCount];
+                for (var i = 0; i < cells.Length; i++)
+                {
+                    cells[i] = Convert.ToString(reader.GetValue(i), System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+                }
+
+                rows.Add(string.Join(" | ", cells));
+            }
+        }
+        finally
+        {
+            session.CommandGate.Release();
+        }
+
+        return rows;
+    }
 
     private static IExternalSelectGuard NewGuard(IMetadataProvider metadata, IExecutionService exec)
     {

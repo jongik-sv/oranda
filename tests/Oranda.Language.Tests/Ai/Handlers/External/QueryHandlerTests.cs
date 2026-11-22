@@ -165,7 +165,8 @@ public class QueryHandlerTests
     [Fact]
     public async Task Query_timeout_is_canceled_and_caller_cancel_propagates()
     {
-        var slow = new SlowExecution();
+        // 가드의 현재 스키마 읽기는 답하고 실행만 느리게: 읽기까지 느리면 시간 제한 밖(CancellationToken.None)에서 영영 기다린다.
+        var slow = new SchemaAnsweringExecution(new SlowExecution());
         var handler = new QueryHandler(new LanguageService(), slow, new AgentStatementReferenceExtractor(new LanguageService(), _meta), VisibleCursors.Boxes(_meta));
 
         var timedOut = await handler.ExecuteAsync(ExternalFakes.Db(new JsonObject { ["sql"] = "SELECT * FROM emp", ["timeout_s"] = 1 }), CancellationToken.None);

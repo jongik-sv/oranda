@@ -20,6 +20,7 @@ using Oranda.Oracle.Metadata;
 using Oranda.Oracle.Plans;
 using Oranda.Oracle.Sessions;
 using Oranda.Oracle.Tuning;
+using Xunit.Abstractions;
 
 namespace Oranda.Oracle.IntegrationTests.Ai;
 
@@ -30,6 +31,7 @@ namespace Oranda.Oracle.IntegrationTests.Ai;
 /// 시험 계정 둘(<c>ORT_AC_RA_</c>·<c>ORT_AC_RB_</c> + 실행마다 고유 접미사, 끝에 계정째 지운다).
 /// A = 접속 계정: 표 <c>T_ORD</c>(30행)·시퀀스 <c>SQ</c>·안전 함수 <c>FN_PLAIN</c>·자치 트랜잭션 함수 <c>FN_AUTO</c>.
 /// B = 다른 스키마: 같은 이름의 <c>FN_PLAIN</c> 이지만 자치 트랜잭션으로 <c>B.T_LOG</c> 에 한 줄 쓴다(A 에 EXECUTE 허가). 같은 이름 표 <c>T_SAME</c>(A 값 'A', B 값 'B'). CURRENT_SCHEMA 확인용.
+/// 사전 뷰 확인용(w-it-dict): 비 DBA 계정 <c>ORT_AC_RC_</c>(SELECT_CATALOG_ROLE)·<c>ORT_AC_RD_</c>(SELECT ANY DICTIONARY), A 의 개인 시노님 <c>S_SAME</c>·PUBLIC 시노님 <c>ORT_AC_PS_</c> → B.T_SAME.
 /// 환경 변수: ORANDA_IT_HOST, ORANDA_IT_PORT, ORANDA_IT_SERVICE, ORANDA_IT_ADMIN_USER, ORANDA_IT_ADMIN_PASSWORD(없으면 건너뜀, ORANDA_IT_REQUIRE=1 이면 실패).
 /// 비밀번호는 출력하지 않는다.
 /// </summary>
@@ -40,12 +42,26 @@ public sealed class ExternalRunGuardDbFixture : IAsyncLifetime
     private OracleSessionManager? _manager;
     private OracleConnection? _admin;
     private string _password = string.Empty;
+    private string _adminPassword = string.Empty;
 
     public bool Configured { get; private set; }
 
     public string UserA { get; private set; } = string.Empty;
 
     public string UserB { get; private set; } = string.Empty;
+
+    /// <summary>SELECT_CATALOG_ROLE 만 있는 계정.</summary>
+    public string UserCatalog { get; private set; } = string.Empty;
+
+    /// <summary>SELECT ANY DICTIONARY 만 있는 계정.</summary>
+    public string UserDictionary { get; private set; } = string.Empty;
+
+    /// <summary>B.T_SAME 을 가리키는 PUBLIC 시노님.</summary>
+    public string PublicSynonym { get; private set; } = string.Empty;
+
+    private string AdminUser { get; set; } = string.Empty;
+
+    private string DataSource { get; set; } = string.Empty;
 
     public ConnectionProfile Profile { get; private set; } = null!;
 
@@ -68,15 +84,28 @@ public sealed class ExternalRunGuardDbFixture : IAsyncLifetime
         Configured = true;
         var sfx = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         (UserA, UserB) = ("ORT_AC_RA_" + sfx, "ORT_AC_RB_" + sfx);
+        (UserCatalog, UserDictionary, PublicSynonym) = ("ORT_AC_RC_" + sfx, "ORT_AC_RD_" + sfx, "ORT_AC_PS_" + sfx);
         _password = "It#" + Guid.NewGuid().ToString("N")[..12] + "a1";
+        _adminPassword = adminPassword;
+        AdminUser = admin;
         var dataSource = $"{Env("HOST")}:{Env("PORT") ?? "1521"}/{Env("SERVICE")}";
+        DataSource = dataSource;
         _admin = new OracleConnection(new ConnectionProfile("it-admin", admin, dataSource).BuildConnectionString(adminPassword));
         await _admin.OpenAsync();
         foreach (var u in new[] { UserA, UserB })
         {
             await ExecAsync(_admin, $"CREATE USER {u} IDENTIFIED BY \"{_password}\" QUOTA 10M ON USERS");
-            await ExecAsync(_admin, $"GRANT CREATE SESSION, CREATE TABLE, CREATE PROCEDURE, CREATE SEQUENCE TO {u}");
+            await ExecAsync(_admin, $"GRANT CREATE SESSION, CREATE TABLE, CREATE PROCEDURE, CREATE SEQUENCE, CREATE SYNONYM TO {u}");
         }
+
+        foreach (var u in new[] { UserCatalog, UserDictionary })
+        {
+            await ExecAsync(_admin, $"CREATE USER {u} IDENTIFIED BY \"{_password}\"");
+            await ExecAsync(_admin, $"GRANT CREATE SESSION TO {u}");
+        }
+
+        await ExecAsync(_admin, $"GRANT SELECT_CATALOG_ROLE TO {UserCatalog}");
+        await ExecAsync(_admin, $"GRANT SELECT ANY DICTIONARY TO {UserDictionary}");
 
         await ExecAsync(_admin, $"CREATE TABLE {UserB}.T_LOG (n NUMBER)");
         await ExecAsync(_admin, $"CREATE FUNCTION {UserB}.FN_PLAIN(x NUMBER) RETURN NUMBER IS PRAGMA AUTONOMOUS_TRANSACTION; BEGIN INSERT INTO {UserB}.T_LOG VALUES (x); COMMIT; RETURN x; END;");
@@ -85,6 +114,7 @@ public sealed class ExternalRunGuardDbFixture : IAsyncLifetime
         await ExecAsync(_admin, $"INSERT INTO {UserB}.T_SAME VALUES ('B')");
         await ExecAsync(_admin, "COMMIT");
         await ExecAsync(_admin, $"GRANT SELECT ON {UserB}.T_SAME TO {UserA}");
+        await ExecAsync(_admin, $"CREATE PUBLIC SYNONYM {PublicSynonym} FOR {UserB}.T_SAME");
 
         Profile = new ConnectionProfile("it-run-guard", UserA, dataSource);
         await using (var own = new OracleConnection(Profile.BuildConnectionString(_password)))
@@ -99,6 +129,7 @@ public sealed class ExternalRunGuardDbFixture : IAsyncLifetime
             await ExecAsync(own, "COMMIT");
             await ExecAsync(own, "CREATE TABLE T_LOG (n NUMBER)");
             await ExecAsync(own, "CREATE FUNCTION FN_PLAIN(x NUMBER) RETURN NUMBER IS BEGIN RETURN x * 2; END;");
+            await ExecAsync(own, $"CREATE SYNONYM S_SAME FOR {UserB}.T_SAME");
             await ExecAsync(own, "CREATE FUNCTION FN_AUTO(x NUMBER) RETURN NUMBER IS PRAGMA AUTONOMOUS_TRANSACTION; BEGIN INSERT INTO T_LOG VALUES (x); COMMIT; RETURN x; END;");
         }
 
@@ -138,6 +169,13 @@ public sealed class ExternalRunGuardDbFixture : IAsyncLifetime
     {
         using var credential = new SecureCredential(_password);
         return await _manager!.OpenAsync(Profile, credential, SessionPurpose.Work, default);
+    }
+
+    /// <summary>다른 시험 계정(<paramref name="user"/>) 또는 관리자(<c>null</c>)로 새 작업 세션.</summary>
+    public async Task<ISession> OpenAsAsync(string? user)
+    {
+        using var credential = new SecureCredential(user is null ? _adminPassword : _password);
+        return await _manager!.OpenAsync(new ConnectionProfile("it-run-guard-" + (user ?? "admin"), user ?? AdminUser, DataSource), credential, SessionPurpose.Work, default);
     }
 
     /// <summary>관리자로 값 하나(앱 세션과 따로).</summary>
@@ -181,7 +219,16 @@ public sealed class ExternalRunGuardDbFixture : IAsyncLifetime
 
         try
         {
-            foreach (var u in new[] { UserA, UserB })
+            try
+            {
+                await ExecAsync(_admin, $"DROP PUBLIC SYNONYM {PublicSynonym}");
+            }
+            catch (OracleException)
+            {
+                // 만들기 전에 실패했을 수 있다.
+            }
+
+            foreach (var u in new[] { UserA, UserB, UserCatalog, UserDictionary })
             {
                 try
                 {
@@ -212,7 +259,7 @@ public sealed class ExternalRunGuardDbFixture : IAsyncLifetime
 /// 거부 코드(계획 §3.1): DML = <c>sql_not_single_query</c>, 잠금 절·DB 링크·시퀀스 = <c>sql_unsafe</c>, 자치 트랜잭션 함수 = <c>sql_unsafe</c>.
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class ExternalRunExportIntegrationTests(ExternalRunGuardDbFixture db) : IClassFixture<ExternalRunGuardDbFixture>
+public sealed class ExternalRunExportIntegrationTests(ExternalRunGuardDbFixture db, ITestOutputHelper output) : IClassFixture<ExternalRunGuardDbFixture>
 {
     // RunTab 처리자의 GuardOptions 와 같은 값(App 형식이라 여기서 다시 적는다).
     private static readonly ExternalSelectOptions TabOptions = new() { VerifyUserFunctions = true, RequireResolvedNames = true };
@@ -329,9 +376,10 @@ public sealed class ExternalRunExportIntegrationTests(ExternalRunGuardDbFixture 
         Assert.Equal("B", read); // 검사한 B.T_SAME 을 실행도 읽는다
         Assert.True(qualified.Allowed, qualified.Code);
 
-        // B 에 없는 이름(현재 동작 고정, w-it-p2 보고): 가드는 사전에 없는 이름을 「풀림」으로 본다(SynonymResolver 가 그대로 돌려준다) → 통과.
-        // 실행은 B 에서 풀어 ORA-00942 로 실패한다 — 다른 스키마 객체로 새지는 않는다. 가드가 거부하게 고치면 Unresolved 로 바꾼다.
-        Assert.True(onlyInA.Allowed, onlyInA.Code);
+        // B 에 없는 이름(w-it-p2 보고 뒤 m-unknown-name): 가드가 사전에서 B.T_ORD 를 찾지 못해 실행 전에 sql_schema_unresolved 로 거부한다.
+        // 가드 없이 실행하면 B 에서 풀어 ORA-00942 로 실패한다 — 다른 스키마 객체로 새지는 않는다.
+        Assert.Equal(ExternalSelectRefusal.NotFound, onlyInA.Refusal);
+        Assert.Equal(AgentErrorCodes.SqlSchemaUnresolved, onlyInA.Code);
         var missing = await db.RunAsync(session, "SELECT * FROM t_ord", HistorySource.Agent);
         Assert.Equal(ExecutionStatus.Failed, missing.Status);
         Assert.Contains("942", missing.Error?.Code ?? string.Empty, StringComparison.Ordinal);
@@ -355,5 +403,107 @@ public sealed class ExternalRunExportIntegrationTests(ExternalRunGuardDbFixture 
         Assert.Equal(AgentErrorCodes.SqlSchemaUnresolved, differs.ErrorCode);
         Assert.False(agrees.IsError, agrees.ErrorCode + " " + agrees.ErrorMessage);
         Assert.Equal("B", agrees.Result!["row_values"]![0]![0]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// w-it-dict: 사전 뷰·동적 뷰는 사전 확인(m-unknown-name)에 거부되지 않는다 — PUBLIC 시노님이 SYS 뷰로 풀리고 SYS 객체는 사전 확인을 건너뛴다.
+    /// 계정: none = A(사전 권한 없음), catalog = SELECT_CATALOG_ROLE, dictionary = SELECT ANY DICTIONARY, admin = 관리자(DBA).
+    /// 권한이 있는 계정은 가드 통과 + 실행 성공이어야 한다. 권한이 없으면 실행이 ORA-00942 여도 되고, 가드가 미리 거부해도(시노님이 안 보임) 된다.
+    /// </summary>
+    [Theory]
+    [InlineData("none")]
+    [InlineData("catalog")]
+    [InlineData("dictionary")]
+    [InlineData("admin")]
+    public async Task Dictionary_and_dynamic_views_pass_the_guard_for_every_account_that_may_read_them(string account)
+    {
+        if (!db.Configured)
+        {
+            return;
+        }
+
+        var session = account switch
+        {
+            "none" => await db.OpenAsync(),
+            "catalog" => await db.OpenAsAsync(db.UserCatalog),
+            "dictionary" => await db.OpenAsAsync(db.UserDictionary),
+            _ => await db.OpenAsAsync(null),
+        };
+        string[] everyone = ["SELECT table_name FROM user_tables", "SELECT owner, object_name FROM all_objects WHERE ROWNUM <= 5"];
+        string[] privileged =
+        [
+            "SELECT owner, table_name FROM dba_tables WHERE ROWNUM <= 5",
+            "SELECT sid, serial# FROM v$session WHERE ROWNUM <= 5",
+            "SELECT s.sid, g.inst_id FROM v$session s JOIN gv$session g ON g.sid = s.sid AND g.serial# = s.serial# WHERE ROWNUM <= 5",
+            "SELECT sql_id FROM sys.v_$sql WHERE ROWNUM <= 5",
+        ];
+
+        foreach (var sql in everyone.Concat(privileged))
+        {
+            var check = await db.Guard.CheckAsync(session, sql, TabOptions, default);
+            var run = check.Allowed ? await db.RunAsync(session, check.Statement!.Text, HistorySource.Agent) : null;
+            output.WriteLine($"[dict] {account} | {sql} | guard={check.Allowed}/{check.Refusal}/{check.Code} | run={run?.Status}/{run?.Error?.Code}");
+            if (account != "none" || everyone.Contains(sql))
+            {
+                Assert.True(check.Allowed, account + " " + sql + " " + check.Code + " " + check.Message);
+                Assert.Equal(ExecutionStatus.Succeeded, run!.Status);
+            }
+            else if (check.Allowed)
+            {
+                Assert.Contains("942", run!.Error?.Code ?? string.Empty, StringComparison.Ordinal); // 권한 없음 = 실행이 실패할 뿐
+            }
+            else
+            {
+                Assert.Equal(AgentErrorCodes.SqlSchemaUnresolved, check.Code);
+            }
+        }
+    }
+
+    /// <summary>
+    /// w-it-dict: 없는 표·권한 없는 다른 스키마 표는 실행 전에 <c>sql_schema_unresolved</c>(NotFound). WITH 이름(없는 표와 같은 이름 포함)·재귀 WITH·인라인 뷰·DUAL·
+    /// 개인/PUBLIC 시노님·권한 받은 다른 스키마 표는 통과하고 실행도 된다.
+    /// </summary>
+    [Fact]
+    public async Task Missing_tables_are_refused_before_execution_while_cte_inline_view_dual_synonyms_and_granted_tables_pass()
+    {
+        if (!db.Configured)
+        {
+            return;
+        }
+
+        var session = await db.OpenAsync();
+        string[] refused =
+        [
+            "SELECT * FROM ort_ac_no_such_table",
+            $"SELECT * FROM {db.UserB}.t_log", // 있지만 A 에 권한이 없다
+            "SELECT o.ord_id FROM t_ord o JOIN ort_ac_no_such_table n ON n.id = o.ord_id",
+        ];
+        string[] passed =
+        [
+            "WITH c AS (SELECT ord_id FROM t_ord) SELECT ord_id FROM c",
+            "WITH ort_ac_no_such_table AS (SELECT 1 AS x FROM dual) SELECT x FROM ort_ac_no_such_table",
+            "WITH r (n) AS (SELECT 1 FROM dual UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT n FROM r",
+            "SELECT v.ord_id FROM (SELECT ord_id FROM t_ord) v",
+            "SELECT 1 FROM DUAL",
+            "SELECT src FROM s_same",
+            $"SELECT src FROM {db.PublicSynonym}",
+            $"SELECT src FROM {db.UserB}.t_same",
+        ];
+
+        foreach (var sql in refused)
+        {
+            var check = await db.Guard.CheckAsync(session, sql, TabOptions, default);
+            output.WriteLine($"[missing] {sql} | {check.Refusal}/{check.Code} | {check.Message}");
+            Assert.Equal(ExternalSelectRefusal.NotFound, check.Refusal);
+            Assert.Equal(AgentErrorCodes.SqlSchemaUnresolved, check.Code);
+            Assert.Null(check.Statement);
+        }
+
+        foreach (var sql in passed)
+        {
+            var check = await db.Guard.CheckAsync(session, sql, TabOptions, default);
+            Assert.True(check.Allowed, sql + " " + check.Code + " " + check.Message);
+            Assert.Equal(ExecutionStatus.Succeeded, (await db.RunAsync(session, check.Statement!.Text, HistorySource.Agent)).Status);
+        }
     }
 }
