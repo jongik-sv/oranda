@@ -7,8 +7,9 @@ namespace Oranda.Platform.Tests.Ai.Bridge;
 /// <summary>비정상 종료가 남긴 소켓 청소(A4): 듣는 쪽 없는 agent.sock 은 지우고 기본 이름으로 다시 연다. Windows 는 소켓 파일이 없어 건너뛴다.</summary>
 public sealed class StaleSocketsTests : IDisposable
 {
-    // macOS sun_path 104바이트: 임시 폴더 아래 짧은 이름으로 둔다.
-    private readonly TempDirectory _dir = new("os-");
+    // macOS sun_path 104바이트: TMPDIR(/var/folders/…/T/) 아래 GUID 폴더면 run/agent-4242.sock 이 104바이트를 넘으므로 macOS 는 /tmp 아래에 둔다
+    // (절대 경로 접두는 Path.Combine 이 임시 폴더 대신 그대로 쓴다).
+    private readonly TempDirectory _dir = OperatingSystem.IsMacOS() ? new("/tmp/os-") : new("os-");
 
     public StaleSocketsTests() => Directory.CreateDirectory(Path.Combine(_dir, "run"));
 

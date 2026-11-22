@@ -27,7 +27,9 @@ public sealed class UnixAgentCliTests : IDisposable
     private const UnixFileMode OwnerRw = UnixFileMode.UserRead | UnixFileMode.UserWrite;
     private const UnixFileMode OwnerRwx = OwnerRw | UnixFileMode.UserExecute;
 
-    private readonly TempDirectory _root = new("oranda-x1-");
+    // macOS 의 TMPDIR(/var/folders/…/T/) 아래 GUID 폴더는 그것만으로 run/agent.sock 이 103바이트를 넘어 「짧은 데이터 폴더」 가 되지 않으므로 /tmp 아래에 둔다
+    // (절대 경로 접두는 Path.Combine 이 임시 폴더 대신 그대로 쓴다).
+    private readonly TempDirectory _root = OperatingSystem.IsMacOS() ? new("/tmp/ox1-") : new("oranda-x1-");
 
     public void Dispose() => _root.Dispose();
 
