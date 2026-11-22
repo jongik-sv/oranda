@@ -114,19 +114,8 @@ internal sealed class AgentCliRig : IAsyncDisposable
         _data.Dispose();
     }
 
-    /// <summary>개발 빌드 orandactl(App 이 빌드 순서로 함께 빌드한다).</summary>
-    public static string FindOrandactl()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Oranda.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        var exe = OperatingSystem.IsWindows() ? "orandactl.exe" : "orandactl";
-        var path = Path.Combine(directory!.FullName, "src", "Oranda.Agent.Cli", "bin", "Debug", "net10.0", exe);
-        return File.Exists(path) ? path : throw new FileNotFoundException("orandactl 을 먼저 빌드하세요.", path);
-    }
+    /// <summary>빌드된 orandactl(시험 출력과 같은 구성·tfm, <see cref="OrandactlLocator"/>).</summary>
+    public static string FindOrandactl() => OrandactlLocator.Find();
 
     /// <summary>하위 세션의 접속으로 가짜 DB 세션을 준다.</summary>
     private sealed class ProfileSessions : IAgentSessionSource

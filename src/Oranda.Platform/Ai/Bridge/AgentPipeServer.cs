@@ -52,6 +52,7 @@ internal sealed class AgentPipeServer : IAsyncDisposable
         }
 
         var name = _nameOf(_userKey, null);
+        StaleSockets.Clean(name);
         var first = TryCreate(name, firstInstance: true);
         if (first is null)
         {
