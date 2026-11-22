@@ -38,4 +38,7 @@ public interface IAppDataPaths
 
     /// <summary>원복 스크립트 암호화 파일 폴더(<c>rollback/</c>, 되돌리기 지점 설계 12.2).</summary>
     string RollbackDirectory => Path.Combine(DataDirectory, "rollback");
+
+    /// <summary>외부 연결 파일 폴더(<c>run/agents/</c>, 0700). 규칙은 <see cref="AppDataLocation.AgentsDirectory"/>.</summary>
+    string AgentsDirectory => AppDataLocation.AgentsDirectory(DataDirectory);
 }

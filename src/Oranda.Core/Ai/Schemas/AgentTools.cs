@@ -75,7 +75,7 @@ public static class AgentFields
     /// 결과의 어느 깊이에서든 이 이름의 속성을 지운다. 처리자가 행 값을 결과에 넣어야 하면 반드시 이 이름 중 하나로만 넣는다(다른 이름은 가려지지 않는다).
     /// </summary>
     public static IReadOnlyList<string> RowValueFields { get; } =
-        [HistogramEndpoint, HistogramEndpointValue, HistogramEndpointActualValue, ColumnLowValue, ColumnHighValue];
+        [HistogramEndpoint, HistogramEndpointValue, HistogramEndpointActualValue, ColumnLowValue, ColumnHighValue, RowValues];
 
     /// <summary>
     /// 결과에서 SQL 글·술어 글이 들어가는 필드 이름 전부(계획 단계의 <c>access</c>·<c>filter</c>, 술어 칸, 문장 글). 리터럴 가림이 필요한 실행에서
@@ -98,6 +98,15 @@ public static class AgentFields
 
     /// <summary>카탈로그 열 이름(<c>endpoint_actual_value</c>).</summary>
     public const string HistogramEndpointActualValue = "endpoint_actual_value";
+
+    /// <summary>
+    /// 결과 행 값 표(<c>query</c>·<c>get_result</c> 의 <c>[[…], …]</c>, 외부 연결 계약 A1). <c>rows</c> 가 아닌 까닭: 기존 <c>benchmark_queries</c> 결과의
+    /// <c>rows</c> 는 행 수(숫자)라 행 값 목록에 넣으면 Query 수준에서 행 수가 지워진다. 표 안 위치로는 열을 알 수 없으므로 민감 열 가림(<c>***</c>)은 처리자가 한다.
+    /// </summary>
+    public const string RowValues = "row_values";
+
+    /// <summary><c>describe_object</c> 의 고를 부분 인자(<c>columns</c>·<c>keys</c>·<c>indexes</c>). 빼면 전부.</summary>
+    public const string Parts = "parts";
 }
 
 /// <summary>
@@ -110,13 +119,52 @@ public static class AgentFields
 /// <param name="InputSchemaJson">입력 JSON Schema.</param>
 /// <param name="RequiresExplainPlanSetting">접속의 <c>allowExplainPlan</c> 이 켜져 있어야 한다(<c>EXPLAIN PLAN</c> 이 PLAN_TABLE 에 쓰기 때문).</param>
 /// <param name="DevTestOnly">운영 라벨 접속에서는 쓸 수 없다.</param>
+/// <param name="Host">처리하는 곳(<see cref="AgentToolHost"/>). 기존 도구는 모두 <see cref="AgentToolHost.Db"/>.</param>
+/// <param name="Safety">안전 등급(설계 §5.1). 사용자 개입이 필요한지는 이 값으로 정한다.</param>
 public sealed record AgentToolDefinition(
     string Name,
     string Description,
     AiAccessLevel MinimumLevel,
     string InputSchemaJson,
     bool RequiresExplainPlanSetting = false,
-    bool DevTestOnly = false);
+    bool DevTestOnly = false,
+    AgentToolHost Host = AgentToolHost.Db,
+    AgentToolSafety Safety = AgentToolSafety.Read);
+
+/// <summary>도구를 처리하는 곳(설계 §3.2·§5.3). 게이트는 이 값으로 DB 세션을 잡을지 정한다.</summary>
+public enum AgentToolHost
+{
+    /// <summary>게이트 + DB 세션 + <c>IAgentToolHandler</c>.</summary>
+    Db,
+
+    /// <summary>앱 도구 처리자(<c>IAppToolHandler</c>). 편집기·결과·화면. DB 세션을 잡지 않는다.</summary>
+    App,
+
+    /// <summary>게이트의 수준·가림·감사를 지나되 DB 세션을 잡지 않는 처리자(<c>IAppToolHandler</c>). 문법·서식·이력.</summary>
+    Lang,
+}
+
+/// <summary>안전 등급(설계 §5.1). 값 순서는 뜻이 없다.</summary>
+public enum AgentToolSafety
+{
+    /// <summary>R: 읽기만.</summary>
+    Read,
+
+    /// <summary>U: 화면 위치만 바꾼다(탭 활성화·스크롤·트리 고르기).</summary>
+    Ui,
+
+    /// <summary>P: 기존 탭 글을 바꾸려 한다. 사람이 받아들여야 들어간다.</summary>
+    Propose,
+
+    /// <summary>C: 디스크 쓰기처럼 되돌리기 어렵다. 띠에서 한 번 눌러야 한다.</summary>
+    Confirm,
+
+    /// <summary>N: 새 탭을 만든다. 기존 글을 덮지 않는다.</summary>
+    New,
+
+    /// <summary>X: DB 에 문장을 보낸다(SELECT·계획·벤치마크).</summary>
+    Execute,
+}
 
 /// <summary>튜닝 도구 11개의 정의(설계 §5.2 표 + AWR 두 개). 목록 순서가 LLM 에 보이는 순서다.</summary>
 public static class AgentTools
@@ -133,7 +181,8 @@ public static class AgentTools
             $$"""
             { "type": "object", "additionalProperties": false, "required": ["object"], "properties": {
               {{Conn}},
-              "object": { "type": "string", "description": "OWNER.NAME or NAME." }
+              "object": { "type": "string", "description": "OWNER.NAME or NAME." },
+              "parts": { "type": "array", "items": { "type": "string", "enum": ["columns", "keys", "indexes"] }, "minItems": 1, "maxItems": 3, "description": "Parts to include. Omit for all parts; [\"columns\"] gives a short column list." }
             } }
             """),
         new(AgentToolNames.GetIndexInfo,
@@ -184,7 +233,8 @@ public static class AgentTools
               "sql": { "type": "string", "description": "A single SELECT statement." }
             } }
             """,
-            RequiresExplainPlanSetting: true),
+            RequiresExplainPlanSetting: true,
+            Safety: AgentToolSafety.Execute),
         new(AgentToolNames.GetSqlStats,
             "Execution statistics of a cursor: executions, elapsed time per execution, buffer gets and rows processed.",
             AiAccessLevel.Plan,
@@ -219,7 +269,8 @@ public static class AgentTools
               "repeat": { "type": "integer", "minimum": 1, "maximum": 5, "default": 3 }
             } }
             """,
-            DevTestOnly: false),
+            DevTestOnly: false,
+            Safety: AgentToolSafety.Execute),
         new(AgentToolNames.GetAwrPlanHistory,
             "AWR history of a statement: the plans it used (first and last snapshot time, snapshots, executions, elapsed time and buffer gets per execution) and each snapshot interval with its plan_hash_value. Read only. When the server cannot use AWR (no Diagnostics Pack declared, server setting, or the DBMS has no AWR) the result says supported=false with the reason.",
             AiAccessLevel.Plan,

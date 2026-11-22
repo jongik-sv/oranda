@@ -16,7 +16,7 @@ namespace Oranda.Platform.Storage;
 public sealed class AppDataPaths : IAppDataPaths
 {
     /// <summary>데이터 폴더를 바꾸는 환경 변수.</summary>
-    public const string DataDirEnvironmentVariable = "ORANDA_DATA_DIR";
+    public const string DataDirEnvironmentVariable = AppDataLocation.DataDirEnvironmentVariable;
 
     public AppDataPaths()
         : this(ResolveDataDirectory(Environment.GetEnvironmentVariable))
@@ -58,36 +58,7 @@ public sealed class AppDataPaths : IAppDataPaths
 
     public string CopyRunsDirectory => Path.Combine(LogsDirectory, "copy-runs");
 
-    /// <summary>환경 변수 조회 함수를 받아 데이터 폴더를 정한다(시험에서 가짜 환경을 넣는다).</summary>
-    internal static string ResolveDataDirectory(Func<string, string?> getEnvironmentVariable)
-    {
-        var overridden = getEnvironmentVariable(DataDirEnvironmentVariable);
-        if (!string.IsNullOrWhiteSpace(overridden))
-        {
-            return overridden;
-        }
-
-        if (OperatingSystem.IsMacOS())
-        {
-            var home = getEnvironmentVariable("HOME");
-            if (string.IsNullOrEmpty(home))
-            {
-                home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            }
-
-            return Path.Combine(home, "Library", "Application Support", "Oranda");
-        }
-
-        if (OperatingSystem.IsWindows())
-        {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Oranda");
-        }
-
-        // 지원 대상은 아니지만(Windows·macOS) CI·개발 편의로 XDG 를 따른다.
-        var xdg = getEnvironmentVariable("XDG_DATA_HOME");
-        var root = !string.IsNullOrEmpty(xdg)
-            ? xdg
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
-        return Path.Combine(root, "Oranda");
-    }
+    /// <summary>환경 변수 조회 함수를 받아 데이터 폴더를 정한다(시험에서 가짜 환경을 넣는다). 규칙은 Core 의 <see cref="AppDataLocation"/> 하나다(<c>orandactl</c> 과 같이 쓴다).</summary>
+    internal static string ResolveDataDirectory(Func<string, string?> getEnvironmentVariable) =>
+        AppDataLocation.Resolve(getEnvironmentVariable, AppDataLocation.CurrentOs);
 }

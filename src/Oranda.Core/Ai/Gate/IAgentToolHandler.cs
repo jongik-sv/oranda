@@ -83,9 +83,19 @@ public sealed record AgentToolOutput
     /// </summary>
     public string? LogDetail { get; init; }
 
+    /// <summary>
+    /// 실패의 오류 코드(<c>Oranda.Core.Ai.Protocol.AgentErrorCodes</c> 값, 예 <c>read_only</c>·<c>locked</c>·<c>tab_not_found</c>). null 이면 게이트가 <c>tool_failed</c> 로 낸다.
+    /// <c>orandactl</c> 은 이 코드로 종료 코드를 고른다.
+    /// </summary>
+    public string? ErrorCode { get; init; }
+
     public bool IsError => ErrorMessage is not null;
 
     public static AgentToolOutput Ok(JsonNode result) => new() { Result = result };
 
     public static AgentToolOutput Error(string message) => new() { ErrorMessage = message };
+
+    /// <summary>앱이 쓴 거부(코드 + 영어 한 문장). 글이 그대로 LLM 에 간다(<see cref="AppWritten"/>).</summary>
+    public static AgentToolOutput Error(string code, string message) =>
+        new() { ErrorMessage = message, ErrorCode = code, AppWritten = true };
 }

@@ -45,6 +45,21 @@ public static class AgentRpc
 
         /// <summary><c>hello.protocol</c> 을 앱이 지원하지 않는다.</summary>
         public const int UnsupportedProtocol = -32005;
+
+        /// <summary>외부 허가의 기한이 지났다(<see cref="AgentErrorCodes.GrantExpired"/>). 폐기·모르는 토큰은 <see cref="TokenInvalid"/>.</summary>
+        public const int GrantExpired = -32006;
+
+        /// <summary>JSON-RPC 오류 코드를 도구 오류 코드 글(<see cref="AgentErrorCodes"/>)로. 모르는 값은 <c>bridge_error</c>.</summary>
+        public static string ToErrorCode(int code) => code switch
+        {
+            TokenInvalid => AgentErrorCodes.RunInvalid,
+            RunRequired => AgentErrorCodes.RunRequired,
+            HelloRequired => AgentErrorCodes.HelloRequired,
+            ShuttingDown => AgentErrorCodes.ShuttingDown,
+            UnsupportedProtocol => AgentErrorCodes.UnsupportedProtocol,
+            GrantExpired => AgentErrorCodes.GrantExpired,
+            _ => AgentErrorCodes.BridgeError,
+        };
     }
 
     /// <summary>메서드 이름.</summary>
