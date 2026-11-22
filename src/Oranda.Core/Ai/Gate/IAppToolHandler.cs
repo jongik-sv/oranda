@@ -199,6 +199,9 @@ public static class AppToolOutputs
     /// <summary>앱이 쓴 거부. <paramref name="code"/> 는 <see cref="AgentErrorCodes"/> 값.</summary>
     public static AgentToolOutput Deny(string code, string message) => AgentToolOutput.Error(code, message);
 
+    /// <summary>성공 결과 + 가져온(쓴) 행 수(<see cref="AgentToolOutput.RowCount"/>, 감사 <c>rows=N</c>).</summary>
+    public static AgentToolOutput OkWithRows(JsonNode result, long rows) => AgentToolOutput.Ok(result) with { RowCount = rows };
+
     public static AgentToolOutput TabNotFound(string? tab) =>
         Deny(AgentErrorCodes.TabNotFound, tab is null ? "There is no active tab." : "No tab has this id. Call list_tabs.");
 

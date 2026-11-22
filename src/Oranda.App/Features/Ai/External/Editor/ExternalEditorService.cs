@@ -243,7 +243,7 @@ public sealed partial class ExternalEditorService
         {
             var row = tab.Binds.Find(name);
             var has = row is { Text.Length: > 0 };
-            var value = !has || !values ? null : SensitiveBindNames.IsSensitive(name) ? AppToolValues.Masked : row!.Text;
+            var value = !has || !values ? null : access.MasksSensitive(tab.ConnectionProfileId) && SensitiveBindNames.IsSensitive(name) ? AppToolValues.Masked : row!.Text;
             return new ExternalBind(name, row?.Type.ToString().ToLowerInvariant(), has, value);
         });
         return ExternalEditorResult.Ok<IReadOnlyList<ExternalBind>>([.. binds]);

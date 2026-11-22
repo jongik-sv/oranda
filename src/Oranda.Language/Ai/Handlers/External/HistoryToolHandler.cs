@@ -77,7 +77,7 @@ internal sealed class GetHistoryHandler(IHistoryStore history, ISqlLiteralMasker
             var entries = new JsonArray();
             foreach (var (entry, connection) in found.OrderByDescending(f => f.Entry.ExecutedAt).ThenByDescending(f => f.Entry.Id).Take(limit))
             {
-                entries.Add(Entry(entry, connection));
+                entries.Add(Entry(entry, connection, invocation.Grant));
             }
 
             return AgentToolOutput.Ok(new JsonObject { ["entries"] = entries });
@@ -99,9 +99,9 @@ internal sealed class GetHistoryHandler(IHistoryStore history, ISqlLiteralMasker
         return [.. all.Where(c => c.Level >= AiAccessLevel.Metadata)];
     }
 
-    private JsonObject Entry(HistoryEntry entry, AgentGrantConnection connection)
+    private JsonObject Entry(HistoryEntry entry, AgentGrantConnection connection, AgentGrantView grant)
     {
-        var text = connection.Environment == ConnectionEnvironment.Production ? Mask(entry.SqlText) : entry.SqlText;
+        var text = AgentGrantPolicy.MasksLiterals(grant, connection.Environment) ? Mask(entry.SqlText) : entry.SqlText;
         text = ExternalJson.Clip(text, MaxSqlChars, out var clipped);
         var json = new JsonObject
         {

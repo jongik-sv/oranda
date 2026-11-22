@@ -46,7 +46,7 @@ internal sealed class QueryHandler(
         var timeout = AppToolArgs.Number(args, AppFields.TimeoutSeconds, AppToolValues.DefaultTimeoutSeconds, 1, AppToolValues.MaxTimeoutSeconds);
         var given = Binds(args);
 
-        if (inv.Session.Profile.Environment == ConnectionEnvironment.Production)
+        if (!AgentGrantPolicy.ExecutesIn(inv.Session.Profile.Environment))
         {
             throw new ExternalToolException(AgentErrorCodes.Environment, ExternalToolText.QueryProduction);
         }
@@ -88,7 +88,7 @@ internal sealed class QueryHandler(
                 json = result.Status switch
                 {
                     ExecutionStatus.Succeeded when result.ResultSet is not null =>
-                        await ReadAsync(result.ResultSet, maxRows, inv.Level >= AiAccessLevel.QueryRows, limit.Token).ConfigureAwait(false),
+                        await ReadAsync(result.ResultSet, maxRows, inv.Level >= AiAccessLevel.QueryRows, limit.Token, maskSensitive: !inv.Session.Context.LocalAi).ConfigureAwait(false),
                     ExecutionStatus.Succeeded => throw new ExternalToolException(AgentErrorCodes.SqlNotSingleQuery, ExternalToolText.QuerySingleSelect),
                     ExecutionStatus.Denied => throw new ExternalToolException(AgentErrorCodes.NotAllowed, ExternalToolText.QueryDenied),
                     ExecutionStatus.Cancelled => throw Canceled(limit, ct),
@@ -123,10 +123,10 @@ internal sealed class QueryHandler(
     }
 
     /// <summary>앞에서부터 <paramref name="maxRows"/> 행(+ 하나 더 있는지)을 읽어 결과 JSON 을 만든다.</summary>
-    internal static async Task<JsonObject> ReadAsync(Oranda.Core.Grid.IResultSet set, int maxRows, bool withValues, CancellationToken ct)
+    internal static async Task<JsonObject> ReadAsync(Oranda.Core.Grid.IResultSet set, int maxRows, bool withValues, CancellationToken ct, bool maskSensitive = true)
     {
         var columns = set.Columns;
-        var masked = columns.Select(c => SensitiveColumns.IsSensitive(c.Name)).ToArray();
+        var masked = columns.Select(c => maskSensitive && SensitiveColumns.IsSensitive(c.Name)).ToArray();
         var rows = new JsonArray();
         var count = 0;
         var chars = 0;

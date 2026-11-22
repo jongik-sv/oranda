@@ -89,7 +89,16 @@ public sealed record AgentToolOutput
     /// </summary>
     public string? ErrorCode { get; init; }
 
+    /// <summary>
+    /// 이 호출이 DB 에서 가져온(또는 파일로 쓴) 행 수(2단계 C0, <c>query</c>·<c>run_tab</c>·<c>export_result</c>). null 이면 행을 다루지 않는 도구다.
+    /// 행 값과 달리 LLM 결과 본문을 훑지 않고 게이트가 이 값만 감사 사유에 <see cref="RowsNote"/>(<c>rows=N</c>)로 남긴다(배선 = m-gate-prod G5).
+    /// </summary>
+    public long? RowCount { get; init; }
+
     public bool IsError => ErrorMessage is not null;
+
+    /// <summary>감사 사유에 남기는 행 수 글(<c>rows=N</c>).</summary>
+    public static string RowsNote(long rows) => "rows=" + rows.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     public static AgentToolOutput Ok(JsonNode result) => new() { Result = result };
 

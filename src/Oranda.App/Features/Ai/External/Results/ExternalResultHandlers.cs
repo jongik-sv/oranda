@@ -69,7 +69,7 @@ public sealed class GetResultHandler : IAppToolHandler
 
         var rowValues = level >= AiAccessLevel.QueryRows;
         var columns = model.Columns;
-        var masked = columns.Select(c => SensitiveColumns.IsSensitive(c.Name)).ToArray();
+        var masked = columns.Select(c => grant.MasksSensitive(profileId) && SensitiveColumns.IsSensitive(c.Name)).ToArray();
         var rows = new JsonArray();
         var fetched = 0;
         for (long r = offset; fetched < limit && r < model.RowCount; r++)
@@ -185,13 +185,13 @@ public sealed class GetLastErrorHandler(IServiceProvider services) : IAppToolHan
             return AppToolOutputs.Deny(AgentErrorCodes.Level, "Reading the last error needs at least the Metadata level on its connection.");
         }
 
-        var production = profileId is { } id && grant.FindConnection(id)?.Environment == ConnectionEnvironment.Production;
+        var masksLiterals = grant.MasksLiterals(profileId);
         var result = new JsonObject
         {
             ["code"] = string.IsNullOrEmpty(error.Code) ? null : error.Code,
-            ["message"] = production ? AppToolValues.Masked : error.Message,
+            ["message"] = masksLiterals ? AppToolValues.Masked : error.Message,
         };
-        if (!production && grant.CanReadTabText(profileId) && state.LastErrorStatement is { } statement)
+        if (!masksLiterals && grant.CanReadTabText(profileId) && state.LastErrorStatement is { } statement)
         {
             result[ExternalToolSupport.SqlTextField] = statement.Text;
         }

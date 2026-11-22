@@ -46,6 +46,21 @@ public sealed class CommandParserTests
     }
 
     [Fact]
+    public void Phase_two_commands_map_to_the_new_tools()
+    {
+        // 2단계 C0: tab run·result export·tune start·ui commands·ui run.
+        Assert.Equal(AppToolNames.RunTab, Parse("tab", "run", "--tab", "6f1c").Tool);
+        AssertJson("""{"tab":"6f1c","base_version":41,"range":"statement","timeout_s":60}""",
+            Parse("tab", "run", "--tab", "6f1c", "--base-version", "41", "--range", "statement", "--timeout", "60").Arguments);
+        AssertJson("""{"tab":"6f1c","format":"xlsx","out":"C:\\out\\orders.xlsx","index":1}""",
+            Parse("result", "export", "--tab", "6f1c", "--format", "xlsx", "--out", "C:\\out\\orders.xlsx", "--index", "1").Arguments);
+        Assert.Equal(AppToolNames.TuneStart, Parse("tune", "start", "--tab", "6f1c").Tool);
+        AssertJson("""{"category":"view","grade":"now"}""", Parse("ui", "commands", "--category", "view", "--grade", "now").Arguments);
+        Assert.Equal(AppToolNames.RunCommand, Parse("ui", "run", "oranda.view.toggleResults").Tool);
+        AssertJson("""{"tab":"6f1c","id":"oranda.view.toggleResults"}""", Parse("ui", "run", "oranda.view.toggleResults", "--tab", "6f1c").Arguments);
+    }
+
+    [Fact]
     public void Tune_commands_map_to_existing_tools()
     {
         Assert.Equal(AgentToolNames.GetAwrPlan, Parse("tune", "awr-plan", "abc123", "42").Tool);

@@ -39,6 +39,7 @@ public sealed class OrandaSkillDocumentTests
             "orandactl obj find", "orandactl obj schemas", "orandactl obj describe", "orandactl obj ddl", "orandactl obj source", "orandactl obj resolve",
             "orandactl obj args", "orandactl obj deps", "orandactl obj reveal", "orandactl query", "orandactl result get", "orandactl error",
             "orandactl history", "orandactl tune", "orandactl call", "orandactl tools",
+            "orandactl tab run", "orandactl result export", "orandactl tune start", "orandactl ui commands", "orandactl ui run", "orandactl docs", // 2단계 C0
         })
         {
             Assert.Contains(usages, u => u.StartsWith(head + " ", StringComparison.Ordinal) || u == head);

@@ -121,3 +121,73 @@ JSON-RPC 오류(hello 단계)는 `AgentRpc.ErrorCodes.ToErrorCode` 로 위 글�
 - 다리: hello 토큰이 내장 실행이 아니면 허가로 푼다(만료 = `-32006`). 끝난 허가는 열린 연결에서도 `TokenInvalid`. App·Lang 도구는 DB 대기열(`_callGate`) 밖에서 처리한다. 다리를 닫으면 모든 허가를 폐기하고 파일을 지운다.
 - 게이트: `query` 는 문장을 실제로 실행하는 도구로 본다(사용자 함수 확인). 커서 실측 대체가 없으므로 DB 링크·확인 못 한 함수는 `sql_unsafe`. 외부 하위 세션의 `get_ddl`·`get_source`·`get_procedure_args` 는 `object` 이름 풀기(표·뷰·동의어만)를 거치지 않고 그대로 넘긴다 — 처리자가 스스로 푼다(`Resolved` 비어 있음).
 - App·Lang 도구: 스키마 `maxLength`·`enum`·`boolean` 을 검사한다(Db 도구 글 인자 한도는 기존 20,000자). `connection` 은 값이 있으면 허가 안 별칭이어야 하고, `reveal_object` 만 꼭 필요하다(나머지는 고르기용). 접속이 정해진 호출은 그 수준으로 정의 최소 수준·운영 제한·행 값 가림을 건다.
+
+## 8. 2단계 계약 (C0, 회차 agent-cli-1122 2단계, 레인 w-contract2)
+
+- 정본: [agent-cli-phase2-plan.md](agent-cli-phase2-plan.md) §2. **동작은 바뀌지 않는다** — 새 도구는 목록에만 나오고 처리자가 붙기 전까지 `not_implemented`, 운영 스위치 둘은 꺼짐.
+- 새 도구 5개는 `AppTools.All` 맨 뒤(`All` 28 · `External` 40). 운영 판단은 정의(`DevTestOnly`)가 아니라 처리자가 `AgentGrantPolicy` 로 한다.
+
+### 8.1 새 도구 5개
+
+| 도구 | Host | 등급 | 최소 수준 | 필수 인자 | 선택 인자 | 출력 칸 | 처리 레인 |
+|---|---|---|---|---|---|---|---|
+| `run_tab` | App | X | —(처리자: 탭 접속 `MayExecute`) | `tab` | `base_version`, `range`(`document`\|`statement`, 기본 document = 한 문장 탭만), `timeout_s`(기본 30·최대 60) | `status`(`succeeded`\|`canceled`\|`failed`\|`stale`), `result_index`, `statement_kind`, `fetched`, `more`, `elapsed_ms`, `sql_id?`, `error?{code,message}` | w-run-export |
+| `export_result` | App | N | — | `tab`, `format`(`xlsx`\|`csv`), `out`(절대 경로) | `index`, `sheet` | `path`, `rows`(숫자), `bytes`, `elapsed_ms`, `status`(`written`\|`canceled`) | w-run-export |
+| `tune_start` | App | N | Plan(목록용, 처리자가 탭 수준 확인) | `tab` | `range`(`statement`) | `started`, `chat` | m-skill-docs |
+| `list_commands` | App | R | — | — | `category`, `grade`(`now`\|`confirm`\|`deny`) | `commands[{id, title, category, menu_path?, grade, enabled}]` | m-ui-cmd |
+| `run_command` | App | U | — | `id` | `tab` | `status`(`done`\|`confirmed`\|`rejected`\|`timeout`\|`disabled`), `grade` | m-ui-cmd |
+
+- 이름 = `AppToolNames.RunTab`·`ExportResult`·`TuneStart`·`ListCommands`·`RunCommand`.
+- 새 인자 = `AppFields.Format`·`Out`·`Sheet`·`Id`·`Grade`·`Category`. 재사용 = `Tab`·`BaseVersion`·`Range`·`TimeoutSeconds`·`Index`.
+- 고정 값 = `AppToolValues.RunStatus`·`ExportStatus`·`ExportFormats`·`CommandGrades`·`CommandStatus`(각각 `All` 목록 있음). `range` 값은 기존 `AppToolValues.Scopes`.
+- `export_result` 의 `rows` 는 행 수(숫자)라 행 값 가림(`RowValueFields`)에 걸리지 않는다. 행 값은 LLM 에 가지 않는다.
+
+### 8.2 CLI·스킬 명령 줄
+
+| CLI | 도구 |
+|---|---|
+| `tab run --tab ID [--base-version N] [--range document\|statement] [--timeout 30]` | `run_tab` |
+| `result export --tab ID --format xlsx\|csv --out PATH [--index N] [--sheet S]` | `export_result` |
+| `tune start --tab ID` | `tune_start` |
+| `ui commands [--category C] [--grade now\|confirm\|deny]` | `list_commands` |
+| `ui run <id> [--tab ID]` | `run_command` |
+| `docs [검색어...]` | 도구 없음 — CLI 자체 명령(앱 없이 됨). `CommandTable` 에는 없고 스킬 줄(`OrandaSkillCommands`)에만 있다. 파서·본체는 m-skill-docs |
+
+### 8.3 허가의 로컬 모델 칸과 운영 스위치 (`AgentGrant.cs`)
+
+- `AgentGrantRequest.LocalModel`(기본 false) → `AgentGrantView.LocalModel`(init 속성). `AgentGrantStore.Create` 가 옮기고 연장·클라이언트 추가 사본에도 남는다. 진짜 로컬 모델인지는 확인하지 못한다.
+- 스위치(`static readonly bool` — const 면 시험 `if` 에서 CS0162 로 -warnaserror 가 깨진다. C0 = **false**, 켜는 일 = m-gate-prod G3): `AgentGrantPolicy.ProductionRuns`(D5: 운영에서도 실행) · `AgentGrantPolicy.LocalModelCoversProduction`(D5: 로컬 모델이면 운영도 가리지 않음).
+
+| 정책 함수 | 값 | 부르는 곳 |
+|---|---|---|
+| `EnvironmentCap(env)` | 운영 = `ProductionRuns ? QueryRows : Metadata`, 그 밖 QueryRows | `DefaultCap`·`LevelFor` |
+| `ExecutesIn(env)` | 개발·시험 ‖ `ProductionRuns` | `QueryToolHandler`(운영 거부), `MayExecute` |
+| `MayExecute(connection)` | 수준 ≥ Query && `ExecutesIn` | `run_tab`·`export_result`(새 처리자), m-gate-prod 게이트 운영 갈래 |
+| `UsesLocalModel(grant, env)` | `grant.LocalModel` && (개발·시험 ‖ `LocalModelCoversProduction`) | 하위 세션 `AiContext.LocalAi`(m-gate-prod G1) |
+| `MasksSensitive(grant, env)` | !`UsesLocalModel` | 결과 그리드 민감 열·비밀 바인드 |
+| `MasksLiterals(grant, env)` | 운영 && !`UsesLocalModel` | 이력 `sql_text`·마지막 오류 글·하위 세션 리터럴 사전 |
+| `CanReadProductionTabText(grant)` | `UsesLocalModel(grant, 운영)` | `AgentGrantView.CanReadTabText`(E-18 유지) |
+
+- 허가 사본 도우미: `AgentGrantView.MasksSensitive(profileId)`(접속 모르면 가림) · `AgentGrantView.MasksLiterals(profileId)`(접속 모르면 거짓). `IExternalTabAccess.MasksSensitive(profileId)`(기본 참, `GrantTabAccess` 는 허가에 맡김).
+- C0 가 바꿔 낀 자리(동작 같음): `AgentGrant.cs` `CanReadTabText`, `QueryToolHandler` 운영 거부·민감 열(`ReadAsync(..., maskSensitive: !Session.Context.LocalAi)`), `HistoryToolHandler` 리터럴, `ExternalResultHandlers` 민감 열·오류 글, `ExternalEditorModels` 운영 거부 글, `ExternalEditorService` 비밀 바인드.
+- C0 가 건드리지 않은 자리(m-gate-prod): `AgentGate.External.cs` 의 `DevTestOnly && Production`(두 곳)과 `AgentGrantStore` 하위 세션(운영 리터럴 사전·`LocalAi`).
+
+- 행 수 칸: `AgentToolOutput.RowCount`(long?, 가져오거나 파일로 쓴 행 수) · `AppToolOutputs.OkWithRows(result, rows)` · `AgentToolOutput.RowsNote(rows)` = `rows=N`(감사 사유 글). 처리자(`query`·`run_tab`·`export_result`)가 채우고, 게이트가 감사 사유에 남기는 배선은 m-gate-prod(G5). C0 에서 게이트는 이 값을 읽지 않는다.
+
+### 8.4 새 오류 코드 6개
+
+| 코드 | 종료 | 뜻 |
+|---|---|---|
+| `file_exists` | 4 | `export_result` 의 `out` 이 이미 있다(덮지 않음) |
+| `path_invalid` | 2 | 상대 경로·폴더 없음·확장자가 `format` 과 다름 |
+| `command_not_found` | 1 | `run_command` 모르는 id |
+| `command_denied` | 4 | 등급표 「거부」·표에 없는 명령 |
+| `command_disabled` | 4 | 지금 문맥에서 못 쓰는 명령(`Enablement` 거짓) |
+| `tab_busy` | 1 | 그 탭 세션이 실행 중 |
+
+- 상수 = `AgentErrorCodes.FileExists`·`PathInvalid`·`CommandNotFound`·`CommandDenied`·`CommandDisabled`·`TabBusy`. 모두 `AgentErrorCodes.All` 에 있다.
+
+### 8.5 매뉴얼 색인 껍데기 (`src/Oranda.Core/Ai/Manual/OrandaManual.cs`)
+
+- `OrandaManual.BaseUrl` = `https://jongik-sv.github.io/oranda`, `OrandaManual.Entry(Title, Description, Url, Section)`, `All`(C0 = 빈 목록), `Search(query, limit = 10)`·`Search(query, entries, limit)`(낱말이 모두 제목·설명·장 이름에 있는 줄, 대소문자 무시, 빈 검색어 = 전부).
+- 표 채우기·site 와 맞춤 시험·`orandactl docs` = m-skill-docs(S1·S2).

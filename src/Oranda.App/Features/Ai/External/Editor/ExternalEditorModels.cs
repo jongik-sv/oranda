@@ -20,6 +20,9 @@ public interface IExternalTabAccess
     /// <summary>그 접속에서 바인드 값까지 줄 수 있는가(행 값 수준, 운영은 거짓). 기본 = 주지 않음.</summary>
     bool CanReadBindValues(Guid? connectionProfileId) => false;
 
+    /// <summary>비밀처럼 보이는 바인드 값을 가리는가(<see cref="AgentGrantPolicy.MasksSensitive"/>). 기본 = 가림.</summary>
+    bool MasksSensitive(Guid? connectionProfileId) => true;
+
     /// <summary>허가 밖 접속에 묶인 탭인가(<c>list_tabs</c> 의 <c>locked</c>: 제목만 보인다). 기본 = 글을 못 읽으면 잠김.</summary>
     bool IsLocked(Guid? connectionProfileId) => !CanReadText(connectionProfileId);
 
@@ -42,6 +45,8 @@ public sealed class GrantTabAccess(AgentGrantView grant) : IExternalTabAccess
 
     public bool IsLocked(Guid? connectionProfileId) => Grant.IsLocked(connectionProfileId);
 
+    public bool MasksSensitive(Guid? connectionProfileId) => Grant.MasksSensitive(connectionProfileId);
+
     public (string Code, string Message) Refusal(Guid? connectionProfileId)
     {
         if (connectionProfileId is null)
@@ -54,7 +59,7 @@ public sealed class GrantTabAccess(AgentGrantView grant) : IExternalTabAccess
             return (AgentErrorCodes.Locked, ExternalEditorText.Locked);
         }
 
-        return connection.Environment == ConnectionEnvironment.Production
+        return connection.Environment == ConnectionEnvironment.Production && !AgentGrantPolicy.CanReadProductionTabText(Grant)
             ? (AgentErrorCodes.Environment, ExternalEditorText.ProductionText)
             : (AgentErrorCodes.Level, ExternalEditorText.LevelOff);
     }

@@ -100,7 +100,7 @@ public sealed class AgentGrantStore : IAgentGrants, IAgentGrantSessions, IDispos
             now,
             request.Lifetime is { } life ? now + life : null,
             request.AllowUnboundTabText,
-            request.Label ?? string.Empty);
+            request.Label ?? string.Empty) { LocalModel = request.LocalModel };
         foreach (var target in request.Targets)
         {
             ArgumentNullException.ThrowIfNull(target);
@@ -473,6 +473,8 @@ public sealed class AgentGrantStore : IAgentGrants, IAgentGrantSessions, IDispos
 
         public List<AgentGrantTarget> Targets { get; } = [];
 
+        public bool LocalModel { get; init; }
+
         public List<string> Clients { get; } = [];
 
         public Dictionary<(Guid ProfileId, string Client), AgentSession> Sessions { get; } = [];
@@ -488,6 +490,6 @@ public sealed class AgentGrantStore : IAgentGrants, IAgentGrantSessions, IDispos
             ExpiresAt,
             [.. Clients],
             allowUnbound,
-            label);
+            label) { LocalModel = LocalModel };
     }
 }

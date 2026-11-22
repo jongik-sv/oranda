@@ -24,6 +24,12 @@ public sealed record AgentGrantView(
     bool AllowUnboundTabText = true,
     string Label = "")
 {
+    /// <summary>
+    /// 「로컬 모델 — 가리지 않음」을 골랐다(<see cref="AgentGrantRequest.LocalModel"/>, 2단계 D4). 진짜 로컬 모델인지는 앱이 확인하지 못한다.
+    /// 실제로 가림을 풀지는 환경과 스위치를 보는 <see cref="AgentGrantPolicy.UsesLocalModel"/> 이 정한다.
+    /// </summary>
+    public bool LocalModel { get; init; }
+
     /// <summary>별칭(대소문자 무시)으로 허용 접속을 찾는다. 없으면 null.</summary>
     public AgentGrantConnection? FindConnection(string? alias)
     {
@@ -89,7 +95,7 @@ public sealed record AgentGrantView(
 
     /// <summary>
     /// 탭 글을 읽어도 되는가(설계 §6.1): 접속 없는 탭은 <see cref="AllowUnboundTabText"/>, 허가 밖 접속은 거부,
-    /// 운영 접속은 수준과 관계없이 거부(리터럴에 업무 값이 있다, E-18), 수준 Off 도 거부.
+    /// 운영 접속은 <see cref="AgentGrantPolicy.CanReadProductionTabText"/> 가 아니면 수준과 관계없이 거부(리터럴에 업무 값이 있다, E-18), 수준 Off 도 거부.
     /// </summary>
     public bool CanReadTabText(Guid? profileId)
     {
@@ -99,9 +105,17 @@ public sealed record AgentGrantView(
         }
 
         return FindConnection(id) is { } connection
-            && connection.Environment != ConnectionEnvironment.Production
+            && (connection.Environment != ConnectionEnvironment.Production || AgentGrantPolicy.CanReadProductionTabText(this))
             && connection.Level > AiAccessLevel.Off;
     }
+
+    /// <summary>그 접속의 결과에서 민감 열·비밀 바인드 값을 가리는가(<see cref="AgentGrantPolicy.MasksSensitive"/>). 접속을 모르면 가린다.</summary>
+    public bool MasksSensitive(Guid? profileId) =>
+        profileId is not { } id || FindConnection(id) is not { } connection || AgentGrantPolicy.MasksSensitive(this, connection.Environment);
+
+    /// <summary>그 접속의 이력·오류 글에서 리터럴을 가리는가(<see cref="AgentGrantPolicy.MasksLiterals"/>). 접속을 모르면 거짓(그런 탭은 먼저 거부된다).</summary>
+    public bool MasksLiterals(Guid? profileId) =>
+        profileId is { } id && FindConnection(id) is { } connection && AgentGrantPolicy.MasksLiterals(this, connection.Environment);
 
     /// <summary>만료됐는가(<paramref name="now"/> 가 만료 시각 이상).</summary>
     public bool IsExpired(DateTimeOffset now) => ExpiresAt is { } at && now >= at;
@@ -134,11 +148,13 @@ public sealed record AgentGrantTarget(ConnectionProfile Profile, AiAccessLevel C
 /// <param name="Lifetime">기한. null 이면 앱을 끌 때까지. 기본 <see cref="AgentGrantPolicy.DefaultLifetime"/>.</param>
 /// <param name="AllowUnboundTabText">접속 없는 탭 글 읽기 허용.</param>
 /// <param name="Label">창 이름(연결 파일의 <c>label</c>, 보통 작업 공간 이름).</param>
+/// <param name="LocalModel">「로컬 모델 — 가리지 않음」(2단계 D4, 기본 꺼짐). <see cref="AgentGrantView.LocalModel"/> 로 옮겨진다.</param>
 public sealed record AgentGrantRequest(
     IReadOnlyList<AgentGrantTarget> Targets,
     TimeSpan? Lifetime,
     bool AllowUnboundTabText = true,
-    string Label = "");
+    string Label = "",
+    bool LocalModel = false);
 
 /// <summary>허가를 만든 결과. <see cref="Token"/> 원문은 연결 파일에만 쓰고 다른 곳에 두지 않는다.</summary>
 public sealed record AgentGrantIssue(AgentGrantView Grant, string Token)
@@ -178,18 +194,74 @@ public interface IAgentGrants
 /// <summary><see cref="IAgentGrants.Changed"/> 인자. 폐기·만료면 <see cref="Grant"/> 는 마지막 사본이고 <see cref="Ended"/> 가 참.</summary>
 public sealed record AgentGrantChanged(AgentGrantView Grant, bool Ended);
 
-/// <summary>외부 허가의 기본값과 수준 계산(설계 §6.3·§6.4). 순수 함수.</summary>
+/// <summary>
+/// 외부 허가의 기본값과 수준 계산(설계 §6.3·§6.4). 순수 함수.
+/// 2단계(agent-cli-1122 C0): 운영 접속 허용과 로컬 모델 가림 해제를 스위치 둘(<see cref="ProductionRuns"/>·<see cref="LocalModelCoversProduction"/>)과
+/// 정책 함수 몇 개에 모은다. 처리자·게이트는 환경을 직접 보지 않고 이 함수들을 부른다 — 스위치를 바꿔도 다른 코드는 그대로다.
+/// </summary>
 public static class AgentGrantPolicy
 {
+    /// <summary>
+    /// D5: 운영 접속에서도 <c>query</c>·<c>run_tab</c>·<c>export_result</c>·계획 도구를 쓴다(외부 상한 운영 = QueryRows).
+    /// C0 는 꺼 둔다(지금 동작 그대로). 켜는 일 = m-gate-prod(G3).
+    /// const 가 아닌 까닭: 시험·처리자의 <c>if</c> 에 넣어도 CS0162(도달 못 하는 코드)가 -warnaserror 빌드를 깨지 않게.
+    /// </summary>
+    public static readonly bool ProductionRuns;
+
+    /// <summary>
+    /// D5: 「로컬 모델」 허가면 운영 접속도 가리지 않는다(민감 열·리터럴·운영 탭 글). 꺼져 있으면 로컬 모델은 개발·시험에서만 가림을 푼다.
+    /// C0 는 꺼 둔다. 켜는 일 = m-gate-prod(G3). const 가 아닌 까닭은 <see cref="ProductionRuns"/> 와 같다.
+    /// </summary>
+    public static readonly bool LocalModelCoversProduction;
+
     /// <summary>기본 기한 8시간(E-4). 「연장」 한 번도 같은 길이.</summary>
     public static readonly TimeSpan DefaultLifetime = TimeSpan.FromHours(8);
 
     /// <summary>만료 몇 분 전에 「연장」 띠를 보일지.</summary>
     public static readonly TimeSpan ExtendNoticeBefore = TimeSpan.FromMinutes(10);
 
-    /// <summary>환경별 외부 상한: 운영 = Metadata, 그 밖 = QueryRows(곧 접속 실효 수준이 그대로 적용).</summary>
-    public static AiAccessLevel DefaultCap(ConnectionEnvironment environment) =>
-        environment == ConnectionEnvironment.Production ? AiAccessLevel.Metadata : AiAccessLevel.QueryRows;
+    /// <summary>환경별 외부 상한(<see cref="EnvironmentCap"/> 과 같다). 연결 창이 고른 접속의 기본 상한.</summary>
+    public static AiAccessLevel DefaultCap(ConnectionEnvironment environment) => EnvironmentCap(environment);
+
+    /// <summary>
+    /// 환경별 외부 상한: 운영 = <see cref="ProductionRuns"/> 면 QueryRows 아니면 Metadata, 그 밖 = QueryRows(곧 접속 실효 수준이 그대로 적용).
+    /// </summary>
+    public static AiAccessLevel EnvironmentCap(ConnectionEnvironment environment) =>
+        environment == ConnectionEnvironment.Production && !ProductionRuns ? AiAccessLevel.Metadata : AiAccessLevel.QueryRows;
+
+    /// <summary>그 환경에서 외부 에이전트가 문장을 실행해도 되는가: 개발·시험은 언제나, 운영은 <see cref="ProductionRuns"/> 일 때만.</summary>
+    public static bool ExecutesIn(ConnectionEnvironment environment) =>
+        environment != ConnectionEnvironment.Production || ProductionRuns;
+
+    /// <summary>
+    /// 그 접속에서 문장을 실행해도 되는가(<c>query</c>·<c>run_tab</c>·<c>export_result</c>): 수준 Query 이상이고 <see cref="ExecutesIn"/>.
+    /// 문장 검사(한 문장 SELECT/WITH 등)는 따로 한다.
+    /// </summary>
+    public static bool MayExecute(AgentGrantConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        return connection.Level >= AiAccessLevel.Query && ExecutesIn(connection.Environment);
+    }
+
+    /// <summary>
+    /// 이 허가의 그 환경 호출을 「로컬 AI」로 보는가(하위 세션 <c>AiContext.LocalAi</c> 값): 허가가 <see cref="AgentGrantView.LocalModel"/> 이고
+    /// 개발·시험이거나 <see cref="LocalModelCoversProduction"/>.
+    /// </summary>
+    public static bool UsesLocalModel(AgentGrantView grant, ConnectionEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(grant);
+        return grant.LocalModel && (environment != ConnectionEnvironment.Production || LocalModelCoversProduction);
+    }
+
+    /// <summary>처리자가 민감 열(<c>***</c>)·비밀 바인드 값을 가리는가 = 로컬 모델이 아니면 언제나.</summary>
+    public static bool MasksSensitive(AgentGrantView grant, ConnectionEnvironment environment) => !UsesLocalModel(grant, environment);
+
+    /// <summary>이력·오류 글·하위 세션의 리터럴을 가리는가 = 운영 접속이고 로컬 모델이 아닐 때.</summary>
+    public static bool MasksLiterals(AgentGrantView grant, ConnectionEnvironment environment) =>
+        environment == ConnectionEnvironment.Production && !UsesLocalModel(grant, environment);
+
+    /// <summary>운영 탭 글을 줘도 되는가(E-18 유지): 로컬 모델이 운영까지 덮을 때만. 클라우드 모델은 운영 탭 글을 받지 않는다.</summary>
+    public static bool CanReadProductionTabText(AgentGrantView grant) => UsesLocalModel(grant, ConnectionEnvironment.Production);
 
     /// <summary>연결 창에서 기본으로 체크하는가: 개발만(E-6).</summary>
     public static bool CheckedByDefault(ConnectionEnvironment environment) => environment == ConnectionEnvironment.Development;

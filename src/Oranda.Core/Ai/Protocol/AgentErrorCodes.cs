@@ -58,6 +58,9 @@ public static class AgentErrorCodes
 
     public const string InvalidArguments = "invalid_arguments";
 
+    /// <summary><c>export_result</c> 의 <c>out</c> 이 상대 경로이거나·폴더가 없거나·확장자가 <c>format</c> 과 다르다(2단계 C0).</summary>
+    public const string PathInvalid = "path_invalid";
+
     // ---- 게이트·허가 거부 (종료 코드 4) ----
 
     /// <summary><c>connection</c> 이 허가(또는 실행) 밖 접속이다.</summary>
@@ -102,6 +105,15 @@ public static class AgentErrorCodes
     /// <summary>한도를 넘었다(<c>new_tab</c> 1분 10개).</summary>
     public const string RateLimited = "rate_limited";
 
+    /// <summary><c>export_result</c> 의 <c>out</c> 파일이 이미 있다. 덮어쓰지 않는다(2단계 C0).</summary>
+    public const string FileExists = "file_exists";
+
+    /// <summary><c>run_command</c>: 등급표가 「거부」로 둔 명령이거나 표에 없는 명령이다(2단계 C0).</summary>
+    public const string CommandDenied = "command_denied";
+
+    /// <summary><c>run_command</c>: 명령이 지금 문맥에서 쓸 수 없다(<c>Enablement</c> 거짓, 2단계 C0).</summary>
+    public const string CommandDisabled = "command_disabled";
+
     // ---- 도구 실패 (종료 코드 1) ----
 
     public const string ToolFailed = "tool_failed";
@@ -128,15 +140,23 @@ public static class AgentErrorCodes
     /// <summary>탭에 결과·오류가 없다(<c>get_result</c>·<c>get_last_error</c>).</summary>
     public const string NoResult = "no_result";
 
+    /// <summary><c>run_command</c>: 모르는 명령 id(2단계 C0).</summary>
+    public const string CommandNotFound = "command_not_found";
+
+    /// <summary>그 탭의 세션이 실행 중이다(<c>run_tab</c>·<c>export_result</c>, 2단계 C0). 끝난 뒤 다시 부른다.</summary>
+    public const string TabBusy = "tab_busy";
+
     /// <summary>위 목록 전부(시험·문서용).</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         NotRunning, NoEndpoint, RunInvalid, GrantExpired, RunRevoked, RunRequired, HelloRequired, ShuttingDown, UnsupportedProtocol, BridgeError, SandboxBlocked,
         MultipleInstances, InstanceNotFound,
-        Usage, UnknownTool, InvalidArguments,
+        Usage, UnknownTool, InvalidArguments, PathInvalid,
         Connection, ConnectionRequired, Level, Environment, Scope, SqlIdScope, SqlNotSingleQuery, SqlSchemaUnresolved, SqlUnsafe, NoStatement,
         ExplainPlanDisabled, LiteralMaskUnavailable, SessionMismatch, UnsafeResult, Locked, ReadOnly, NotAllowed, RateLimited,
+        FileExists, CommandDenied, CommandDisabled,
         ToolFailed, ToolException, InternalError, NotImplemented, Canceled, Busy, ResultTooLarge, TabNotFound, ProposalNotFound, NoResult,
+        CommandNotFound, TabBusy,
     ];
 }
 
@@ -167,12 +187,13 @@ public static class AgentCliExit
             or AgentErrorCodes.RunRevoked or AgentErrorCodes.RunRequired or AgentErrorCodes.HelloRequired or AgentErrorCodes.ShuttingDown
             or AgentErrorCodes.UnsupportedProtocol or AgentErrorCodes.BridgeError or AgentErrorCodes.SandboxBlocked => Unreachable,
         AgentErrorCodes.MultipleInstances or AgentErrorCodes.InstanceNotFound => InstanceChoice,
-        AgentErrorCodes.Usage or AgentErrorCodes.UnknownTool or AgentErrorCodes.InvalidArguments => Usage,
+        AgentErrorCodes.Usage or AgentErrorCodes.UnknownTool or AgentErrorCodes.InvalidArguments or AgentErrorCodes.PathInvalid => Usage,
         AgentErrorCodes.Connection or AgentErrorCodes.ConnectionRequired or AgentErrorCodes.Level or AgentErrorCodes.Environment
             or AgentErrorCodes.Scope or AgentErrorCodes.SqlIdScope or AgentErrorCodes.SqlNotSingleQuery or AgentErrorCodes.SqlSchemaUnresolved
             or AgentErrorCodes.SqlUnsafe or AgentErrorCodes.NoStatement or AgentErrorCodes.ExplainPlanDisabled
             or AgentErrorCodes.LiteralMaskUnavailable or AgentErrorCodes.SessionMismatch or AgentErrorCodes.UnsafeResult
-            or AgentErrorCodes.Locked or AgentErrorCodes.ReadOnly or AgentErrorCodes.NotAllowed or AgentErrorCodes.RateLimited => Denied,
+            or AgentErrorCodes.Locked or AgentErrorCodes.ReadOnly or AgentErrorCodes.NotAllowed or AgentErrorCodes.RateLimited
+            or AgentErrorCodes.FileExists or AgentErrorCodes.CommandDenied or AgentErrorCodes.CommandDisabled => Denied,
         _ => ToolFailed,
     };
 }

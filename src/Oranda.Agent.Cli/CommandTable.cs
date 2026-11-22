@@ -4,7 +4,8 @@ namespace Oranda.Agent.Cli;
 
 /// <summary>
 /// 설계 §4.2 하위 명령 표 전부. 명령 → 도구 이름 + 인자 이름 대응만 둔다(도구 스키마는 앱이 가진다).
-/// 시험이 모든 인자 이름이 그 도구 스키마에 있는지, 외부 도구 35개가 모두 명령으로 닿는지 본다.
+/// 시험이 모든 인자 이름이 그 도구 스키마에 있는지, 외부 도구 40개가 모두 명령으로 닿는지 본다.
+/// <c>docs</c>(매뉴얼 링크)는 앱 없이 도는 CLI 자체 명령이라 이 표에 없다(도구가 아니다, 2단계 E-27). 본체 = m-skill-docs.
 /// </summary>
 internal static class CommandTable
 {
@@ -35,6 +36,9 @@ internal static class CommandTable
             [Tab, new("--line", AppFields.Line, ValueKind.Integer), new("--range", AppFields.Range)], []),
         new("tab save", AppToolNames.SaveTab, "--tab ID", [Tab], []),
         new("tab binds", AppToolNames.GetBinds, "--tab ID", [Tab], []),
+        new("tab run", AppToolNames.RunTab, "--tab ID [--base-version N] [--range document|statement] [--timeout 30]",
+            [Tab, new("--base-version", AppFields.BaseVersion, ValueKind.Integer), new("--range", AppFields.Range),
+             new("--timeout", AppFields.TimeoutSeconds, ValueKind.Integer)], []),
 
         // ---- 언어 ----
         new("sql check", AppToolNames.CheckSql, "[--conn A] [--no-lint] (--file F | - | --tab ID)",
@@ -62,6 +66,9 @@ internal static class CommandTable
             [], AgentFields.Sql, BodyRule.Required),
         new("result get", AppToolNames.GetResult, "--tab ID [--index 0] [--offset 0] [--limit 50]",
             [Tab, new("--index", AppFields.Index, ValueKind.Integer), new("--offset", AppFields.Offset, ValueKind.Integer), Limit], []),
+        new("result export", AppToolNames.ExportResult, "--tab ID --format xlsx|csv --out PATH [--index N] [--sheet S]",
+            [Tab, new("--format", AppFields.Format), new("--out", AppFields.Out), new("--index", AppFields.Index, ValueKind.Integer),
+             new("--sheet", AppFields.Sheet)], []),
         new("error", AppToolNames.GetLastError, "[--tab ID]", [Tab], []),
         new("history", AppToolNames.GetHistory, "[--conn A] [--limit 20] [--source editor|agent|...] [--since ISO8601]",
             [Conn, Limit, new("--source", AppFields.Source), new("--since", AppFields.Since)], []),
@@ -81,6 +88,12 @@ internal static class CommandTable
         new("tune awr-history", AgentToolNames.GetAwrPlanHistory, "<sql_id> [--conn A]", [Conn], [SqlId]),
         new("tune awr-plan", AgentToolNames.GetAwrPlan, "<sql_id> <plan_hash_value> [--conn A]",
             [Conn], [SqlId, new(AgentFields.PlanHashValue, ValueKind.Integer)]),
+        new("tune start", AppToolNames.TuneStart, "--tab ID", [Tab], []),
+
+        // ---- 앱 명령(2단계) ----
+        new("ui commands", AppToolNames.ListCommands, "[--category C] [--grade now|confirm|deny]",
+            [new("--category", AppFields.Category), new("--grade", AppFields.Grade)], []),
+        new("ui run", AppToolNames.RunCommand, "<id> [--tab ID]", [Tab], [new(AppFields.Id)]),
     ];
 
     /// <summary>
