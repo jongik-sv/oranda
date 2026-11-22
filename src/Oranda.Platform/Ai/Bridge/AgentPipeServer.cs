@@ -91,9 +91,10 @@ internal sealed class AgentPipeServer : IAsyncDisposable
 
     private static NamedPipeServerStream? TryCreate(string name, bool firstInstance)
     {
-        if (Path.IsPathRooted(name) && Path.GetDirectoryName(name) is { Length: > 0 } directory)
+        // 소켓 폴더를 0700 으로 맞추지 못하면(남이 먼저 만든 폴더 등) 그 이름을 쓰지 않는다. 예외를 밖으로 내면 다리 전체가 열리지 않는다.
+        if (Path.IsPathRooted(name) && Path.GetDirectoryName(name) is { Length: > 0 } directory && !PrivateDirectory.TryEnsure(directory))
         {
-            PrivateDirectory.Ensure(directory);
+            return null;
         }
 
         var options = PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly;

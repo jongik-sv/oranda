@@ -152,7 +152,8 @@ internal sealed class AgentBridgeHost : IAgentBridgeEndpoint, IAgentBridgeHost, 
                 Path.GetTempPath(),
                 userKey,
                 instance,
-                AgentSocketPath.LimitFor(OperatingSystem.IsMacOS()));
+                AgentSocketPath.LimitFor(OperatingSystem.IsMacOS()),
+                Environment.GetEnvironmentVariable);
     }
 
     /// <summary>연결 하나의 읽기 루프. 시험이 파이프 없이 부를 수 있도록 internal.</summary>

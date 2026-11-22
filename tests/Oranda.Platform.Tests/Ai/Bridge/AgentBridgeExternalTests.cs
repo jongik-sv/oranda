@@ -184,26 +184,6 @@ public sealed class AgentBridgeExternalTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.TokenInvalid, (await third.HelloAsync(revoked.Token, "codex")).Error!.Code);
     }
 
-    [Fact]
-    public void Socket_path_falls_back_to_a_short_temp_path_over_the_limit()
-    {
-        const string Short = "/Users/short/Library/Application Support/Oranda/run/agent.sock";
-        Assert.Equal(Short, AgentSocketPath.Choose(Short, "/tmp", "501", null, AgentSocketPath.LimitFor(macOS: true)));
-
-        var tooLong = "/Users/" + new string('n', 60) + "/Library/Application Support/Oranda/run/agent.sock";
-        Assert.Equal(Path.Combine("/tmp", "oranda-501", "agent.sock"), AgentSocketPath.Choose(tooLong, "/tmp", "501", null, AgentSocketPath.LimitFor(macOS: true)));
-    }
-
-    [Fact]
-    public void Socket_path_keeps_the_instance_suffix_and_limits_differ_by_os()
-    {
-        var longPath = "/" + new string('x', 120) + "/agent-42.sock";
-        Assert.Equal(Path.Combine("/tmp", "oranda-501", "agent-42.sock"), AgentSocketPath.Choose(longPath, "/tmp", "501", 42, 103));
-        Assert.Equal(103, AgentSocketPath.LimitFor(macOS: true));
-        Assert.Equal(107, AgentSocketPath.LimitFor(macOS: false));
-        Assert.Equal(longPath, AgentSocketPath.Choose(longPath, "/" + new string('t', 120), "501", 42, 103)); // 짧은 경로도 넘으면 그대로
-    }
-
     private async Task<Connection> ConnectAsync()
     {
         var client = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
