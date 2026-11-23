@@ -50,7 +50,13 @@ public static class OrandaSkillGuides
         "- It runs for at most 30 s by default (`--timeout`, up to 60); after that it is canceled (`canceled`). "
             + "`tab_busy` (exit 1) means the tab's session is already running something or saving a file; tell the user or try once more later, do not loop.",
         "- `tab run` and `result export` refuse FOR UPDATE, database links, sequences, Oracle-supplied packages and user functions Oranda cannot verify as read-only "
-            + "(`sql_unsafe`, exit 4), and binds without a value in the tab. Rewrite the SELECT or ask the user.",
+            + "(`sql_unsafe`, exit 4). Rewrite the SELECT or ask the user.",
+        "- Binds (`:NAME` in the SQL; `binds` of `sql check`, or `orandactl tab binds --tab <id>`): pass the values yourself, do not ask the user to type them into the bind list. "
+            + "`orandactl tab run --tab <id> --base-version <version> --binds-json '{\"FROM_DT\":\"20261101\",\"DEPT\":10}'` puts them in the tab's bind list, where the user sees them, and runs; "
+            + "`orandactl tab binds set --tab <id> --binds-json '…'` only fills them. Use the bind names of the tab and values that fit each bind's `type` (string, number, true/false, null = NULL). "
+            + "`bind_invalid` (exit 2) means an unknown name or a value that does not fit the type; nothing was set. "
+            + "When a value is not clear from the request (which date or period, a code, a format such as YYYYMMDD), ask the user to confirm only that value, then pass it. "
+            + "If quoting the JSON fails in your shell, pipe it instead: `printf '%s' '{\"tab\":\"<id>\",\"binds\":{…}}' | orandactl call set_binds -`.",
         "- No rows come back from `tab run`, only `fetched` (rows in the grid) and `more`. Read a few with `orandactl result get --tab <id> --index <result_index> --limit 5`.",
         "- `orandactl result export --tab <id> --format xlsx --out <absolute path>` makes Oranda read all rows again and write the file itself (no row limit; rows do not come to you). "
             + "It only creates a new file: `file_exists` (exit 4) means pick another name; never delete the user's files. "

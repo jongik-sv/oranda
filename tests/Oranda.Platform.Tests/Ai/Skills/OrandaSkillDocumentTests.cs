@@ -46,6 +46,7 @@ public sealed class OrandaSkillDocumentTests
             "orandactl obj args", "orandactl obj deps", "orandactl obj reveal", "orandactl query", "orandactl result get", "orandactl error",
             "orandactl history", "orandactl tune", "orandactl call", "orandactl tools",
             "orandactl tab run", "orandactl result export", "orandactl tune start", "orandactl ui commands", "orandactl ui run", "orandactl docs", // 2단계 C0
+            "orandactl tab binds set", // agent-cli-set-binds
         })
         {
             Assert.Contains(usages, u => u.StartsWith(head + " ", StringComparison.Ordinal) || u == head);
@@ -170,6 +171,21 @@ public sealed class OrandaSkillDocumentTests
         {
             Assert.Contains(phrase, run, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void Run_guide_has_the_agent_pass_bind_values_and_confirm_only_unclear_ones()
+    {
+        // agent-cli-set-binds: 사용자에게 바인드 창에 값을 치라고 하지 않고 에이전트가 넘긴다. 날짜처럼 애매한 값만 사용자에게 확인한다.
+        var run = Section(OrandaSkillDocument.Render(Ctl), OrandaSkillGuides.RunHeading);
+
+        foreach (var phrase in new[] { "--binds-json", "`orandactl tab binds set --tab <id>", "do not ask the user to type them into the bind list",
+                     "`bind_invalid` (exit 2)", "ask the user to confirm only that value", "orandactl call set_binds -" })
+        {
+            Assert.Contains(phrase, run, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("binds without a value in the tab. Rewrite the SELECT or ask the user", run, StringComparison.Ordinal);
     }
 
     [Fact]
