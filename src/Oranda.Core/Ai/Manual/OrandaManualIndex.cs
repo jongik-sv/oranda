@@ -128,7 +128,7 @@ public static partial class OrandaManual
         },
         new("AI 연결 도우미", "단추만 눌러 따라 하면 회사 Claude 계정이나 회사 AI 서버로 Oranda 에 AI 를 연결하는 도우미를 안내합니다.", "https://jongik-sv.github.io/oranda/ai/setup/", "ai")
         {
-            Headings = [],
+            Headings = ["여는 곳", "방법 고르기", "회사 Claude 계정으로 연결하기", "회사 AI 서버로 연결하기", "AI 를 쓸 접속", "해 보기", "잘 모르겠으면"],
         },
         new("AI 모델 설정", "AI 튜닝과 대화에 쓸 주 모델과 가벼운 일 모델을 고르고, LLM 프로필, 시스템 CLI, 기타 CLI를 설정하는 방법을 안내합니다.", "https://jongik-sv.github.io/oranda/ai/models/", "ai")
         {
