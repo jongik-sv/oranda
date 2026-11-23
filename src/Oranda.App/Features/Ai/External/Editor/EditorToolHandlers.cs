@@ -295,8 +295,14 @@ internal sealed class GetBindsToolHandler(ExternalEditorService service) : Edito
             return Task.FromResult(Deny(result));
         }
 
-        var binds = new JsonArray();
-        foreach (var bind in result.Value!)
+        return Task.FromResult(AgentToolOutput.Ok(new JsonObject { ["binds"] = BindsJson(result.Value!) }));
+    }
+
+    /// <summary><c>get_binds</c> 의 <c>binds</c> 배열(<c>set_binds</c> 도 같은 모양으로 돌려준다).</summary>
+    internal static JsonArray BindsJson(IEnumerable<ExternalBind> binds)
+    {
+        var array = new JsonArray();
+        foreach (var bind in binds)
         {
             var json = new JsonObject { ["name"] = bind.Name, ["type"] = bind.Type, ["has_value"] = bind.HasValue };
             if (bind.Value is { } value)
@@ -304,9 +310,9 @@ internal sealed class GetBindsToolHandler(ExternalEditorService service) : Edito
                 json["value"] = value;
             }
 
-            binds.Add(json);
+            array.Add(json);
         }
 
-        return Task.FromResult(AgentToolOutput.Ok(new JsonObject { ["binds"] = binds }));
+        return array;
     }
 }

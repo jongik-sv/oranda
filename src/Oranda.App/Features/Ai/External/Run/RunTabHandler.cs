@@ -26,6 +26,8 @@ namespace Oranda.App.Features.Ai.External.Run;
 /// <item>범위: <c>document</c>(기본) = 탭이 한 문장일 때만, <c>statement</c> = 커서(선택) 문장(<see cref="ExecutionController.PrepareSingleStatementAsync"/> 규칙).</item>
 /// <item>관문: 허가 안 접속·<see cref="AgentGrantPolicy.MayExecute"/> → 열린 접속(묻는 창 없음) → 세션 바쁨이면 <c>tab_busy</c>(기다리지 않음) → 문장 가드(<see cref="Language.Ai.Handlers.External.IExternalSelectGuard"/>)
 /// → <see cref="ExecutionController.RunPreparedAsync"/>(출처 <see cref="HistorySource.Agent"/>: 이력·정책 규칙 0 이중 방어).</item>
+/// <item><c>binds</c>(agent-cli-set-binds): 있으면 <c>stale</c> 확인 뒤 검사하고(<c>bind_invalid</c>), 문장 가드까지 지난 뒤 탭 「바인드 변수」 목록에 넣고 실행한다(<c>set_binds</c> 와 같은 길).
+/// 실행 값은 언제나 그 목록에서 만든다(<see cref="ExportBinds.Resolve"/>) — 이력·감사는 사람이 목록에 친 값과 같은 모양으로 남는다.</item>
 /// <item>시간 상한 30초 기본·60초 최대, 넘으면 실행을 취소하고 <c>canceled</c>. 행은 돌려주지 않는다(그리드 첫 페이지까지, 읽기는 <c>get_result</c>).</item>
 /// <item>사람이 보는 표시: 그 탭 띠 「… 가 이 문장을 실행하는 중입니다 [취소]」 → 「… 실행했습니다 · N행 [닫기]」, 메시지 창 「[에이전트] …」, 결과 탭 제목 앞 <c>AI·</c>.</item>
 /// </list>
@@ -58,11 +60,13 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
             return AppToolOutputs.Deny(AgentErrorCodes.NotImplemented, "Running tabs is not available in this window.");
         }
 
-        var request = new Request(invocation, tabId, baseVersion, range == AppToolValues.Scopes.Statement, TimeSpan.FromSeconds(timeout));
+        var binds = ExternalBindFill.Arg(args);
+        var request = new Request(invocation, tabId, baseVersion, range == AppToolValues.Scopes.Statement, TimeSpan.FromSeconds(timeout), binds);
         return await ExternalRunSupport.OnUiAsync(() => RunAsync(parts, request, ct)).ConfigureAwait(false);
     });
 
-    private sealed record Request(AppToolInvocation Invocation, string TabId, long? BaseVersion, bool CaretStatement, TimeSpan Timeout);
+    /// <param name="Binds">에이전트가 보낸 바인드 값(<c>binds</c>, 없으면 null). 관문을 다 지난 뒤 실행 바로 앞에서 탭 목록에 넣는다(<see cref="ExternalBindFill"/>).</param>
+    private sealed record Request(AppToolInvocation Invocation, string TabId, long? BaseVersion, bool CaretStatement, TimeSpan Timeout, JsonObject? Binds);
 
     private static async Task<AgentToolOutput> RunAsync(ExternalRunParts parts, Request request, CancellationToken ct)
     {
@@ -76,6 +80,13 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
         if (request.BaseVersion is { } expected && expected != tab.Version)
         {
             return AgentToolOutput.Ok(new JsonObject { ["status"] = AppToolValues.RunStatus.Stale, ["version"] = tab.Version });
+        }
+
+        // 바인드 값은 먼저 검사만 한다(틀리면 다른 관문 전에 bind_invalid). 목록에 넣는 일은 문장 가드까지 지난 뒤.
+        var fill = request.Binds is { } given ? ExternalBindFill.Plan(tab, given) : null;
+        if (fill?.Denial is { } badBinds)
+        {
+            return badBinds;
         }
 
         var controller = parts.Controller;
@@ -134,6 +145,12 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
         if (!check.Allowed)
         {
             return ExternalRunSupport.Refusal(check);
+        }
+
+        if (fill is not null)
+        {
+            // 사람이 바인드 창에 친 것과 같다: 값이 그 탭 목록에 남고(작업 공간에 저장), 실행은 그 목록 값을 쓴다.
+            ExternalBindFill.Apply(tab, fill, line => controller.Log.AddMessage(MessageKind.Info, line), request.Invocation.Client);
         }
 
         var bound = ExportBinds.Resolve(statement, null, tab.Binds);

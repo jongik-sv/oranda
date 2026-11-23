@@ -234,19 +234,35 @@ public sealed partial class ExternalEditorService
             return refused;
         }
 
-        var values = access.CanReadBindValues(tab.ConnectionProfileId);
-        var names = tab.ReferencedBindNames
+        return ExternalEditorResult.Ok(DescribeBinds(access, tab));
+    }
+
+    /// <summary>
+    /// 탭이 아는 바인드 이름(글이 참조하는 이름 + 바인드 창의 줄, 대문자로). <c>get_binds</c> 가 보이는 이름이고 <c>set_binds</c> 가 받는 이름이다.
+    /// </summary>
+    internal static IEnumerable<string> KnownBindNames(SqlEditorViewModel tab) =>
+        tab.ReferencedBindNames
             .Concat(tab.Binds.Rows.Select(r => r.Name))
             .Select(Oranda.App.Features.Binds.BindVariableRow.Normalize)
             .Distinct(StringComparer.OrdinalIgnoreCase);
-        var binds = names.Select(name =>
+
+    /// <summary>
+    /// 바인드 줄들(<c>get_binds</c> 모양). 값은 허가가 허락할 때만, 비밀 이름은 가린다. <paramref name="only"/> 가 있으면 그 이름만
+    /// (<c>set_binds</c> 가 탭 글을 읽을 수 없는 허가에서 에이전트가 보낸 이름만 돌려줄 때).
+    /// </summary>
+    internal static IReadOnlyList<ExternalBind> DescribeBinds(IExternalTabAccess access, SqlEditorViewModel tab, IEnumerable<string>? only = null)
+    {
+        ArgumentNullException.ThrowIfNull(access);
+        ArgumentNullException.ThrowIfNull(tab);
+        var values = access.CanReadBindValues(tab.ConnectionProfileId);
+        var binds = (only ?? KnownBindNames(tab)).Select(name =>
         {
             var row = tab.Binds.Find(name);
             var has = row is { Text.Length: > 0 };
             var value = !has || !values ? null : access.MasksSensitive(tab.ConnectionProfileId) && SensitiveBindNames.IsSensitive(name) ? AppToolValues.Masked : row!.Text;
             return new ExternalBind(name, row?.Type.ToString().ToLowerInvariant(), has, value);
         });
-        return ExternalEditorResult.Ok<IReadOnlyList<ExternalBind>>([.. binds]);
+        return [.. binds];
     }
 
     // ---- 도움 ------------------------------------------------------------------------------

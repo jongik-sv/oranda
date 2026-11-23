@@ -50,6 +50,16 @@ internal static class ExternalRunText
     public static string LogSaved(string client, string path, long rows, string status) =>
         LogPrefix + L($"{client} 가 결과를 파일로 저장했습니다 · {status} · {path} · {Count(rows)}행", $"{client} saved a result to a file · {status} · {path} · {Count(rows)} rows");
 
+    /// <summary><c>set_binds</c> 뒤 띠 글.</summary>
+    public static string BindsSet(string client, int count) =>
+        L($"{client} 가 바인드 값 {count}개를 채웠습니다", $"{client} set {count} bind value{(count == 1 ? string.Empty : "s")}");
+
+    /// <summary>바인드 값을 채운 뒤 메시지 창 한 줄(값은 바인드 창에 보이므로 이름만).</summary>
+    public static string LogBindsSet(string client, string tab, IReadOnlyList<string> names) =>
+        LogPrefix + L($"{client} 가 「{tab}」 탭 바인드 값을 채웠습니다 · {Names(names)}", $"{client} set bind values of tab \"{tab}\" · {Names(names)}");
+
+    private static string Names(IReadOnlyList<string> names) => string.Join(", ", names.Select(n => ":" + n));
+
     // ---- 도구 결과의 거부 글(밖의 에이전트, 영어) ----
 
     public const string NoConnection = "This tab has no connection. Choose a connection for the tab in Oranda first.";
@@ -73,7 +83,20 @@ internal static class ExternalRunText
 
     public const string Unsafe = "The statement uses FOR UPDATE, a database link, a sequence or an Oracle-supplied package; it is not run automatically.";
 
-    public const string MissingBinds = "The statement uses binds that have no value in the tab's bind list. Ask the user to set them.";
+    public const string MissingBinds =
+        "The statement uses binds that have no usable value in the tab's bind list. Pass them with binds (orandactl tab run --binds-json or tab binds set); confirm unclear values with the user first.";
+
+    public static string UnknownBind(string name) =>
+        $"The tab has no bind :{name}; nothing was set. Use the names listed by get_binds (orandactl tab binds).";
+
+    public static string BindTwice(string name) => $"The bind :{name} is given twice; nothing was set.";
+
+    public static string BindTakesNoValue(string name) => $"The bind :{name} is an OUT bind or a ref cursor and takes no value; nothing was set.";
+
+    public static string BindWrongType(string name, string type, bool date) =>
+        $"The value for :{name} does not fit its type {type} in the tab's bind list; nothing was set."
+        + (date ? " Dates look like 2026-11-23, 20261123 or 2026-11-23 13:05." : string.Empty)
+        + " Fix the value, or ask the user whether the bind type in the list is right.";
 
     public const string NoResultGrid = "This tab has no result grid at that index. Run the statement first (run_tab).";
 
