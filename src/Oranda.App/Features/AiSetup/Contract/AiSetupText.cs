@@ -17,7 +17,7 @@ public static class AiSetupText
     public static string T(bool english, string ko, string en) => english ? en : ko;
 
     /// <summary>창 제목·메뉴 이름(「…」 없음).</summary>
-    public static string WindowTitle(bool english) => T(english, "AI 연결 도우미", "AI setup assistant");
+    public static string WindowTitle(bool english) => T(english, "AI 연결 도우미", "AI Setup Assistant");
 
     /// <summary>[이전].</summary>
     public static string Back(bool english) => T(english, "이전", "Back");

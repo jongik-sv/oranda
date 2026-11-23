@@ -11,6 +11,7 @@ using Oranda.Core.Ai.Setup;
 using Oranda.Core.Features;
 using Oranda.Core.Settings;
 using Oranda.Core.Shell;
+using Oranda.App.Tests.Shell.Headless;
 using Oranda.Testing;
 
 namespace Oranda.App.Tests.Features.AiSetup.Entry;
@@ -103,10 +104,24 @@ public sealed class AiSetupEntryTests
     }
 
     [Fact]
+    public Task First_run_without_a_window_to_ask_on_does_not_even_look_for_claude() => HeadlessHost.Run(async () =>
+    {
+        var missing = new FakeClaude(null);
+        var (services, _, _, store) = Rig(claude: missing);
+        var asked = 0;
+
+        await new AiSetupFirstRunPrompt(services) { CanAsk = () => false, Ask = _ => { asked++; return Task.FromResult<bool?>(true); } }.RunAsync(CancellationToken.None);
+
+        Assert.Equal(0, missing.Finds);
+        Assert.Equal(0, asked);
+        Assert.False(store.Current.Ai.Setup.FirstRunPromptClosed);
+    });
+
+    [Fact]
     public async Task First_run_that_could_not_ask_does_not_close_the_question()
     {
         var (services, settings, launcher, store) = Rig(claude: new FakeClaude(null));
-        var prompt = new AiSetupFirstRunPrompt(services) { Ask = _ => Task.FromResult<bool?>(null) };
+        var prompt = new AiSetupFirstRunPrompt(services) { CanAsk = () => true, Ask = _ => Task.FromResult<bool?>(null) };
 
         await prompt.AskOnceAsync(settings, CancellationToken.None);
 
@@ -115,18 +130,18 @@ public sealed class AiSetupEntryTests
     }
 
     [Fact]
-    public async Task First_run_task_hands_the_question_to_the_ui_thread_without_waiting_for_the_answer()
+    public Task First_run_task_hands_the_question_to_the_ui_thread_without_waiting_for_the_answer() => HeadlessHost.Run(async () =>
     {
         var (services, _, _, _) = Rig(claude: new FakeClaude(null));
         var answer = new TaskCompletionSource<bool?>();
         var asked = 0;
-        var prompt = new AiSetupFirstRunPrompt(services) { Ask = _ => { asked++; return answer.Task; } };
+        var prompt = new AiSetupFirstRunPrompt(services) { CanAsk = () => true, Ask = _ => { asked++; return answer.Task; } };
 
         await prompt.RunAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10)); // 답을 기다리지 않고 끝난다
 
         answer.SetResult(false);
         Assert.InRange(asked, 0, 1);
-    }
+    });
 
     [Fact]
     public void First_run_asks_only_when_every_condition_holds()
@@ -141,25 +156,25 @@ public sealed class AiSetupEntryTests
     }
 
     [Fact]
-    public async Task First_run_does_not_ask_when_claude_is_found_or_cannot_be_looked_for()
+    public Task First_run_does_not_ask_when_claude_is_found_or_cannot_be_looked_for() => HeadlessHost.Run(async () =>
     {
         var found = new FakeClaude(new ClaudeInstallation(@"C:\u\.local\bin\claude.exe", "2.1.330"));
         var (services, _, launcher, _) = Rig(claude: found);
         var asked = 0;
-        await new AiSetupFirstRunPrompt(services) { Ask = _ => { asked++; return Task.FromResult<bool?>(true); } }.RunAsync(CancellationToken.None);
+        await new AiSetupFirstRunPrompt(services) { CanAsk = () => true, Ask = _ => { asked++; return Task.FromResult<bool?>(true); } }.RunAsync(CancellationToken.None);
         Assert.Equal(1, found.Finds);
 
         var (noService, _, _, _) = Rig();
-        await new AiSetupFirstRunPrompt(noService) { Ask = _ => { asked++; return Task.FromResult<bool?>(true); } }.RunAsync(CancellationToken.None);
+        await new AiSetupFirstRunPrompt(noService) { CanAsk = () => true, Ask = _ => { asked++; return Task.FromResult<bool?>(true); } }.RunAsync(CancellationToken.None);
 
         var missing = new FakeClaude(null);
         var (off, _, _, _) = Rig(claude: missing, aiTuning: false);
-        await new AiSetupFirstRunPrompt(off) { Ask = _ => { asked++; return Task.FromResult<bool?>(true); } }.RunAsync(CancellationToken.None);
+        await new AiSetupFirstRunPrompt(off) { CanAsk = () => true, Ask = _ => { asked++; return Task.FromResult<bool?>(true); } }.RunAsync(CancellationToken.None);
         Assert.Equal(0, missing.Finds); // 조건이 안 맞으면 찾지도 않는다
 
         Assert.Equal(0, asked);
         Assert.Empty(launcher.Opened);
-    }
+    });
 
     [Theory]
     [InlineData(true)]
@@ -168,7 +183,7 @@ public sealed class AiSetupEntryTests
     {
         var (services, settings, launcher, store) = Rig(claude: new FakeClaude(null));
         var asked = 0;
-        var prompt = new AiSetupFirstRunPrompt(services) { Ask = _ => { asked++; return Task.FromResult<bool?>(open); } };
+        var prompt = new AiSetupFirstRunPrompt(services) { CanAsk = () => true, Ask = _ => { asked++; return Task.FromResult<bool?>(open); } };
 
         await prompt.AskOnceAsync(settings, CancellationToken.None);
         await prompt.AskOnceAsync(settings, CancellationToken.None);

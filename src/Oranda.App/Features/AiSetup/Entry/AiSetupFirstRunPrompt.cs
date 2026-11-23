@@ -32,6 +32,11 @@ public sealed class AiSetupFirstRunPrompt(IServiceProvider services) : IStartupT
     internal Func<bool, Task<bool?>> Ask { get; init; } = AiSetupAskDialog.ShowAsync;
 
     /// <summary>
+    /// 물을 주 창이 떠 있다(화면 스레드에서 본다). 거짓이면(시험·Headless) claude 찾기(실제 <c>claude --version</c> 실행)도 하지 않는다. 시험이 바꾼다.
+    /// </summary>
+    internal Func<bool> CanAsk { get; init; } = AiSetupAskDialog.HasOwner;
+
+    /// <summary>
     /// 물어도 되는가(claude 찾기 전 조건): aiTuning 켬 · 대상이 Claude Code(프로필·다른 시스템 CLI·기타 CLI 안 고름) · 아직 닫지 않음.
     /// 드라이버 「선택 안 함」 도 묻지 않는다(사용자가 고른 값).
     /// </summary>
@@ -53,6 +58,11 @@ public sealed class AiSetupFirstRunPrompt(IServiceProvider services) : IStartupT
         if (!MayAsk(aiTuningOn, settings.Current.Ai))
         {
             return;
+        }
+
+        if (!(Dispatcher.UIThread.CheckAccess() ? CanAsk() : await Dispatcher.UIThread.InvokeAsync(CanAsk)))
+        {
+            return; // 물을 창이 없다(시험·Headless. 실제 앱은 유휴 시작 작업 때 주 창이 이미 떠 있다): 찾지도 않는다, 다음 실행에 다시 본다
         }
 
         ClaudeInstallation? found;
@@ -115,6 +125,9 @@ public sealed class AiSetupFirstRunPrompt(IServiceProvider services) : IStartupT
 /// <summary>첫 실행 묻기 작은 대화상자(주 창 위). 보이는 주 창이 없으면(시험·Headless) 묻지 못함(null).</summary>
 internal static class AiSetupAskDialog
 {
+    /// <summary>보이는 주 창이 있다(화면 스레드에서 부른다).</summary>
+    public static bool HasOwner() => DialogShell.MainWindow is { IsVisible: true };
+
     public static async Task<bool?> ShowAsync(bool english)
     {
         if (DialogShell.MainWindow is not { IsVisible: true } owner)

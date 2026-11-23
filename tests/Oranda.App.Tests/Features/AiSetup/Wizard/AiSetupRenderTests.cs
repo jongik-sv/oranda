@@ -22,7 +22,9 @@ namespace Oranda.App.Tests.Features.AiSetup.Wizard;
 /// <summary>
 /// U5 렌더 점검: 창 틀 + 방법 고르기·설치·로그인의 상태마다 × 한/영 × 밝음/어둠 × 창 최소 크기.
 /// 글 잘림·창 밖으로 나감·단추 넘침이 없고, 운영 빨강(<c>OrandaEnvProductionBrush</c>)을 쓰지 않는다.
+/// 영어 차례는 정적 글 번역기(<c>LiteralTranslator</c>)를 바꾸므로 언어 시험 묶음(<c>UiLanguage</c>, 병렬 끔)에서 돈다 — 다른 시험이 영어 글을 보지 않게.
 /// </summary>
+[Collection("UiLanguage")]
 public sealed class AiSetupRenderTests
 {
     public static TheoryData<string, string> Variants => new()

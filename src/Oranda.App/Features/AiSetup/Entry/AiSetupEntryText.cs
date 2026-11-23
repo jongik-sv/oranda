@@ -9,7 +9,7 @@ public static class AiSetupEntryText
     public const string MenuTitle = "AI 연결 도우미…";
 
     /// <summary>실패 띠·설정의 단추 글.</summary>
-    public static string OpenButton(bool english) => AiSetupText.T(english, "AI 연결 도우미 열기", "Open AI setup assistant");
+    public static string OpenButton(bool english) => AiSetupText.T(english, "AI 연결 도우미 열기", "Open AI Setup Assistant");
 
     /// <summary>실패 띠의 안내 한 줄(단추 옆).</summary>
     public static string BandHint(bool english) => AiSetupText.T(english, "AI 가 아직 연결되지 않았습니다. 도우미를 따라 하면 단추만 눌러 연결할 수 있습니다.", "AI is not connected yet. The setup assistant walks you through it with a few clicks.");
