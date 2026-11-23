@@ -69,7 +69,7 @@
 |---|---|---|
 | 0 | 성공(제안 거절·낡음 포함) | — |
 | 1 | 도구 실패 | `tool_failed` `tool_exception` `internal_error` `not_implemented` `canceled` `busy` `result_too_large` `tab_not_found` `proposal_not_found` `no_result`, 모르는 코드 |
-| 2 | 사용법 | `usage` `unknown_tool` `invalid_arguments` |
+| 2 | 사용법 | `usage` `unknown_tool` `invalid_arguments` `path_invalid`(§8.4) `bind_invalid`(§9) |
 | 3 | 앱에 닿지 못함·연결 끝남 | `oranda_not_running` `no_endpoint` `oranda_run_invalid` `grant_expired` `run_revoked` `run_required` `hello_required` `oranda_shutting_down` `unsupported_protocol` `bridge_error` `sandbox_blocked`(CLI 가 연결 파일 읽기·접속에서 EPERM·EACCES 를 받음. 샌드박스 밖에서 다시 부를 것) |
 | 4 | 거부 | `connection` `connection_required` `level` `environment` `scope` `sql_id_scope` `sql_not_single_query` `sql_schema_unresolved` `sql_unsafe` `no_statement` `explain_plan_disabled` `literal_mask_unavailable` `session_mismatch` `unsafe_result` `locked` `read_only` `not_allowed` `rate_limited` |
 | 5 | 창을 고르지 못함 | `multiple_instances` `instance_not_found` |
@@ -191,3 +191,40 @@ JSON-RPC 오류(hello 단계)는 `AgentRpc.ErrorCodes.ToErrorCode` 로 위 글�
 
 - `OrandaManual.BaseUrl` = `https://jongik-sv.github.io/oranda`, `OrandaManual.Entry(Title, Description, Url, Section)`, `All`(C0 = 빈 목록), `Search(query, limit = 10)`·`Search(query, entries, limit)`(낱말이 모두 제목·설명·장 이름에 있는 줄, 대소문자 무시, 빈 검색어 = 전부).
 - 표 채우기·site 와 맞춤 시험·`orandactl docs` = m-skill-docs(S1·S2).
+
+## 9. 탭 바인드 값 채우기 (`set_binds`, 2026-11-23)
+
+- 까닭: 외부 에이전트가 바인드 하나(YYYYMMDD 글)가 있는 탭을 만들고 `sql check` 는 지났지만 `tab run` 이 「바인드 값 없음」으로 막혔다. `orandactl` 은 바인드를 읽기만(`tab binds` = `get_binds`) 할 수 있었고, `query --binds-json` 은 결과를 탭 그리드에 보이지 않아 사용자에게 바인드 창에 값을 치라고 부탁해야 했다. 설계서 §5.3 「이번에 두지 않는 도구」의 `set_binds` 를 넣는다.
+- 보고: [agent-cli-set-binds-2026-11-23.md](agent-cli-set-binds-2026-11-23.md).
+
+### 9.1 도구·인자
+
+| 도구 | Host | 등급 | 최소 수준 | 필수 인자 | 선택 인자 | 출력 칸 |
+|---|---|---|---|---|---|---|
+| `set_binds` | App | X(`run_tab` 과 같음) | —(처리자: 탭 접속 `MayExecute`) | `tab`, `binds`(객체) | `base_version` | `status`(`set`\|`stale`), `version`, `binds[{name, type, has_value, value?}]`(`get_binds` 와 같은 모양·같은 가림) |
+| `run_tab`(인자 더함) | App | X | — | `tab` | 기존 + `binds`(객체) | 그대로 |
+
+- 이름·값 = `AppToolNames.SetBinds` · `AppFields.Binds`(`query` 와 같은 `binds`) · `AppToolValues.BindStatus.Set`·`Stale`(`All`). `AppTools.All` 맨 뒤(`All` 29 · `External` 41). 두 도구의 `binds` 스키마 글은 같다(`AppTools.BindsArg`).
+- CLI: `tab binds set --tab ID --binds-json J [--base-version N]` → `set_binds`, `tab run … [--binds-json J]` → `run_tab` 의 `binds`. `tab binds --tab ID`(읽기)는 그대로.
+
+### 9.2 규칙 (`ExternalBindFill`, `SetBindsHandler`, `RunTabHandler`)
+
+- 관문 = `run_tab` 과 같은 `ExternalRunSupport.Resolve`: 탭 없음 `tab_not_found`, 접속 없는 탭 `connection_required`, 허가 밖 접속(잠김) `locked`, 수준 < Query `level`, `MayExecute` 거짓 `environment`. `set_binds` 는 DB 를 쓰지 않으므로 접속이 열려 있을 필요는 없다.
+- `base_version` 이 지금 판과 다르면 넣지 않고 `{status: stale, version}`(종료 0 — `run_tab`·`propose_edit` 의 낡음과 같은 상태 글). `run_tab` 은 기존처럼 `RunStatus.Stale`.
+- 이름 = 탭이 아는 바인드(글이 참조하는 이름 ∪ 바인드 창 줄, `get_binds` 가 보이는 이름). 앞 `:` 는 빼고 대문자로(`BindVariableRow.Normalize`). 모르는 이름·대소문자만 다른 같은 이름 두 번은 `bind_invalid`.
+- 값 = 글·숫자·참거짓·null. 바인드 창 글로 바꾼다(숫자는 JSON 글자, 참거짓 `TRUE`/`FALSE`, null = 빈 글 = NULL). 줄이 있으면 **그 줄의 형식·방향을 따른다**, 없으면 글 = VARCHAR2, 숫자 = NUMBER, 참거짓 = BOOLEAN 줄을 만든다(`query` 의 `binds` 와 같은 규칙). 사람이 칸을 떠날 때와 같이 `BindValueFormatter.Normalize`(DATE `20261101` → `2026-11-01 00:00:00`, NUMBER 쉼표 제거) 뒤 `Validate`·`BindInput.ToBindValue` 로 검사한다. 맞지 않으면 `bind_invalid`. OUT·REF CURSOR 줄에 준 값도 `bind_invalid`. 객체·배열 값은 `invalid_arguments`.
+- 하나라도 틀리면 아무것도 넣지 않는다. 거부 글에 값은 싣지 않는다(이름·형식만).
+- `run_tab` 순서: 관문 → `stale` → **값 검사**(`bind_invalid` 는 접속·바쁨보다 먼저) → 접속·바쁨·문장 고르기·문장 가드 → **목록에 넣기** → `ExportBinds.Resolve`(실행 값은 언제나 목록에서) → 실행. 그래서 거부된 실행은 목록을 바꾸지 않는다.
+- 결과의 `binds`: 탭 글을 읽을 수 있는 허가면 `get_binds` 와 같은 전체 목록, 읽을 수 없는 허가(운영·클라우드 모델)면 보낸 이름만(값 없음). 값은 `CanReadBindValues`(행 값 수준)일 때만, 비밀 이름 `***`.
+- 사람이 보는 것: 바인드 창의 값(그 탭 목록 — 작업 공간·.sql 바인드 블록에 저장됨), `set_binds` 뒤 탭 띠 「… 가 바인드 값 N개를 채웠습니다」, 메시지 창 「[에이전트] … 바인드 값을 채웠습니다 · :NAME」(이름만).
+- 감사·이력: 게이트의 인자 요약이 `binds={…}`(값 100자까지)를 남긴다 — `query --binds-json` 과 같다. 실행 이력의 바인드 값은 `run_tab` 이 목록 값으로 실행하므로 사람 실행과 같은 규칙(`SaveBindValues` 설정·비밀 이름 `***`)을 따른다.
+- 그대로인 것: 실행 정책·SELECT 가드·운영 가림(`get_binds` 가림 포함)·`query` 의 `binds`.
+
+### 9.3 오류 코드
+
+| 코드 | 종료 | 뜻 |
+|---|---|---|
+| `bind_invalid` | 2 | `binds` 가 탭 바인드 목록과 맞지 않음: 모르는 이름, 목록 형식에 맞지 않는 값, OUT·REF CURSOR, 같은 이름 두 번. 아무것도 넣지 않음 |
+
+- 상수 = `AgentErrorCodes.BindInvalid`(`All` 에 있음). 종료 2 인 까닭: `path_invalid` 처럼 에이전트가 보낸 값이 틀렸고 고쳐 다시 부르면 된다(허가 거부가 아니다).
+- `run_tab` 에 `binds` 없이 목록에도 값이 없으면 기존처럼 `invalid_arguments`(글이 `--binds-json` 을 알려 준다).
