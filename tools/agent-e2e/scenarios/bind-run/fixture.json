@@ -1,0 +1,20 @@
+{
+  "about": "⑨ 바인드 값(agent-cli-set-binds): 탭 SQL 에 YYYYMMDD 바인드 하나. 에이전트가 사용자에게 바인드 창에 치라고 하지 않고 tab run --binds-json 으로 넘긴다. 실제 처리자 모드 전용.",
+  "tabs": [
+    {
+      "id": "t1",
+      "title": "일자별 주문",
+      "text": "SELECT id, status\n  FROM SAMPLE.ORDERS\n WHERE TO_CHAR(ordered_at, 'YYYYMMDD') = :BASE_DT",
+      "active": true
+    }
+  ],
+  "objects": {
+    "SAMPLE.ORDERS": ["ID NUMBER", "CUSTOMER_ID NUMBER", "STATUS VARCHAR2(20)", "ORDERED_AT DATE"]
+  },
+  "results": [
+    {
+      "columns": [ { "name": "ID", "type": "NUMBER" }, { "name": "STATUS", "type": "VARCHAR2" } ],
+      "rows": [ ["1", "A"], ["2", "B"], ["3", "A"] ]
+    }
+  ]
+}

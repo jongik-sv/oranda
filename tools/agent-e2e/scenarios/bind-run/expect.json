@@ -1,0 +1,10 @@
+{
+  "about": "도구 순서 = 탭 목록 → 그 탭 실행(binds 를 함께). 바인드 값은 에이전트가 넘기고 탭 글은 바꾸지 않는다.",
+  "order": [
+    ["list_tabs"],
+    ["run_tab"]
+  ],
+  "forbidden_tools": ["propose_edit", "save_tab", "run_command", "new_tab"],
+  "unchanged_tabs": ["t1"],
+  "answer_regex": ["3"]
+}

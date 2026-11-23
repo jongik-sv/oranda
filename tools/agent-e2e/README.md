@@ -59,6 +59,7 @@ macOS 에서 다른 점(run.sh 가 `uname` 으로 나눈다): Claude Code·agy �
 | `prod-mask-local` ⑦ | 운영 접속 + 허가 「로컬 모델」(REAL 전용) | 답에 이름·전화 원래 값(D5). 12bae7ad 전엔 FAIL(결함 4) |
 | `dev-mask-cloud` ⑧ | 대조: 개발 접속 + 클라우드(REAL 전용) | 행 값 보임, PHONE 은 `***`, 원래 전화 값은 어디에도 없음 |
 | `tune-start` ⑤ | 탭 t1 을 앱 안 AI 튜닝으로 넘기기(앞 탭은 t2) | `tune_start --tab t1`, 직접 튜닝·벤치·새 탭 금지, 실제 모드는 띄울 때 앞 탭 = t1·접속 있음, 답에 창 이름 |
+| `bind-run` ⑨ | YYYYMMDD 바인드 하나가 있는 「일자별 주문」 탭을 날짜를 주고 실행(REAL 전용, agent-cli-set-binds) | `list_tabs`→`run_tab`(binds 를 함께, succeeded), 탭 글 그대로, 제안·새 탭 금지, 답에 행 수. selftest: 값 없이 실행 `invalid_arguments` 2 → 모르는 이름 `bind_invalid` 2 → `--binds-json` 실행 succeeded → `tab binds` 에 값 보임 |
 
 ```bash
 SCENARIO=nl2sql-export tools/agent-e2e/run.sh claude /tmp/e2e-s1 --allow

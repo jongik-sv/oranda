@@ -1,0 +1,5 @@
+"$C" tab binds --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')"
+"$C" tab run --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')"
+"$C" tab run --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')" --binds-json '{"BASE_DATE":"20261101"}'
+"$C" tab run --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')" --binds-json '{"BASE_DT":"20261101"}'
+"$C" tab binds --tab "$("$C" tabs | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["tabs"][0]["tab_id"])')"

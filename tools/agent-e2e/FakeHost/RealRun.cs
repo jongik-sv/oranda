@@ -18,7 +18,7 @@ using Oranda.Testing;
 namespace Oranda.AgentE2e;
 
 /// <summary>
-/// w-run-export 의 실제 <c>run_tab</c>·<c>export_result</c> 처리자를 실제 편집기 탭에 붙인다.
+/// w-run-export 의 실제 <c>run_tab</c>·<c>export_result</c> 처리자(와 agent-cli-set-binds 의 <c>set_binds</c>)를 실제 편집기 탭에 붙인다.
 /// 실행 경로(<see cref="ExecutionController"/>)·문장 가드(<see cref="ExternalSelectGuard"/>)·내보내기(<see cref="DataTransferService"/>, 서버에서 다시 읽음)는 실제,
 /// DB 만 가짜: 실행 서비스가 시나리오 결과(<see cref="FakeResults"/>)를 돌려주고 받은 문장·출처를 <c>exec</c> 사건으로 남긴다.
 /// </summary>
@@ -92,6 +92,7 @@ internal sealed class RealRun : IDisposable
     public IEnumerable<IAppToolHandler> Handlers() =>
     [
         new RunTabHandler(NoServices.Instance) { Parts = Parts },
+        new SetBindsHandler(NoServices.Instance) { Parts = Parts },
         new ExportResultHandler(NoServices.Instance) { Parts = Parts },
     ];
 

@@ -201,6 +201,11 @@ internal sealed class RealEditor : IDisposable
                 entry["fetched"] = output.Result?["fetched"]?.DeepClone();
                 log.Write("run_tab", entry);
             }
+            else if (ToolName == AppToolNames.SetBinds)
+            {
+                entry["status"] = (string?)output.Result?["status"];
+                log.Write("set_binds", entry);
+            }
             else if (ToolName == AppToolNames.ExportResult)
             {
                 entry["status"] = (string?)output.Result?["status"];
