@@ -61,6 +61,25 @@ public sealed class CommandParserTests
     }
 
     [Fact]
+    public void Tab_binds_reads_and_sets_and_tab_run_takes_binds_json()
+    {
+        // agent-cli-set-binds: 읽기(tab binds)는 그대로, 채우기는 tab binds set, 실행 전에 채우기는 tab run --binds-json.
+        Assert.Equal(AppToolNames.GetBinds, Parse("tab", "binds", "--tab", "6f1c").Tool);
+        AssertJson("""{"tab":"6f1c"}""", Parse("tab", "binds", "--tab", "6f1c").Arguments);
+
+        var set = Parse("tab", "binds", "set", "--tab", "6f1c", "--binds-json", """{"FROM_DT":"20261101","DEPT":10}""", "--base-version", "41");
+        Assert.Equal(AppToolNames.SetBinds, set.Tool);
+        AssertJson("""{"tab":"6f1c","binds":{"FROM_DT":"20261101","DEPT":10},"base_version":41}""", set.Arguments);
+
+        var run = Parse("tab", "run", "--tab", "6f1c", "--base-version", "41", "--binds-json", """{":FROM_DT":"20261101"}""");
+        Assert.Equal(AppToolNames.RunTab, run.Tool);
+        AssertJson("""{"tab":"6f1c","base_version":41,"binds":{":FROM_DT":"20261101"}}""", run.Arguments);
+
+        AssertUsage("tab", "binds", "set", "--tab", "6f1c", "--binds-json", "[1]");
+        AssertUsage("tab", "run", "--tab", "6f1c", "--binds-json", "{bad");
+    }
+
+    [Fact]
     public void Tune_commands_map_to_existing_tools()
     {
         Assert.Equal(AgentToolNames.GetAwrPlan, Parse("tune", "awr-plan", "abc123", "42").Tool);

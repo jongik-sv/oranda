@@ -61,6 +61,12 @@ public static class AgentErrorCodes
     /// <summary><c>export_result</c> 의 <c>out</c> 이 상대 경로이거나·폴더가 없거나·확장자가 <c>format</c> 과 다르다(2단계 C0).</summary>
     public const string PathInvalid = "path_invalid";
 
+    /// <summary>
+    /// <c>set_binds</c>·<c>run_tab</c> 의 <c>binds</c> 가 탭의 바인드 목록과 맞지 않는다: 탭에 없는 이름, 목록 형식(VARCHAR2·NUMBER·DATE …)에 맞지 않는 값,
+    /// 값을 받지 않는 OUT·REF CURSOR 바인드, 대소문자만 다른 같은 이름. 이때 목록의 값은 하나도 바뀌지 않는다(agent-cli-set-binds 2026-11-23).
+    /// </summary>
+    public const string BindInvalid = "bind_invalid";
+
     // ---- 게이트·허가 거부 (종료 코드 4) ----
 
     /// <summary><c>connection</c> 이 허가(또는 실행) 밖 접속이다.</summary>
@@ -151,7 +157,7 @@ public static class AgentErrorCodes
     [
         NotRunning, NoEndpoint, RunInvalid, GrantExpired, RunRevoked, RunRequired, HelloRequired, ShuttingDown, UnsupportedProtocol, BridgeError, SandboxBlocked,
         MultipleInstances, InstanceNotFound,
-        Usage, UnknownTool, InvalidArguments, PathInvalid,
+        Usage, UnknownTool, InvalidArguments, PathInvalid, BindInvalid,
         Connection, ConnectionRequired, Level, Environment, Scope, SqlIdScope, SqlNotSingleQuery, SqlSchemaUnresolved, SqlUnsafe, NoStatement,
         ExplainPlanDisabled, LiteralMaskUnavailable, SessionMismatch, UnsafeResult, Locked, ReadOnly, NotAllowed, RateLimited,
         FileExists, CommandDenied, CommandDisabled,
@@ -187,7 +193,8 @@ public static class AgentCliExit
             or AgentErrorCodes.RunRevoked or AgentErrorCodes.RunRequired or AgentErrorCodes.HelloRequired or AgentErrorCodes.ShuttingDown
             or AgentErrorCodes.UnsupportedProtocol or AgentErrorCodes.BridgeError or AgentErrorCodes.SandboxBlocked => Unreachable,
         AgentErrorCodes.MultipleInstances or AgentErrorCodes.InstanceNotFound => InstanceChoice,
-        AgentErrorCodes.Usage or AgentErrorCodes.UnknownTool or AgentErrorCodes.InvalidArguments or AgentErrorCodes.PathInvalid => Usage,
+        AgentErrorCodes.Usage or AgentErrorCodes.UnknownTool or AgentErrorCodes.InvalidArguments or AgentErrorCodes.PathInvalid
+            or AgentErrorCodes.BindInvalid => Usage,
         AgentErrorCodes.Connection or AgentErrorCodes.ConnectionRequired or AgentErrorCodes.Level or AgentErrorCodes.Environment
             or AgentErrorCodes.Scope or AgentErrorCodes.SqlIdScope or AgentErrorCodes.SqlNotSingleQuery or AgentErrorCodes.SqlSchemaUnresolved
             or AgentErrorCodes.SqlUnsafe or AgentErrorCodes.NoStatement or AgentErrorCodes.ExplainPlanDisabled

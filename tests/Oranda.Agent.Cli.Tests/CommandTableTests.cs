@@ -54,7 +54,7 @@ public sealed class CommandTableTests
         var missing = AppTools.External.Select(t => t.Name).Where(n => !covered.Contains(n)).ToList();
 
         Assert.Empty(missing);
-        Assert.Equal(40, AppTools.External.Count); // 2단계 C0: run_tab·export_result·tune_start·list_commands·run_command
+        Assert.Equal(41, AppTools.External.Count); // 2단계 C0: run_tab·export_result·tune_start·list_commands·run_command, 그 뒤 set_binds
     }
 
     [Fact]

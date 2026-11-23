@@ -37,12 +37,36 @@ public class AppToolContract2Tests
     public void Phase_two_tools_follow_the_existing_ones_in_order()
     {
         string[] added = [AppToolNames.RunTab, AppToolNames.ExportResult, AppToolNames.TuneStart, AppToolNames.ListCommands, AppToolNames.RunCommand];
-        Assert.Equal(added, AppTools.All.Skip(23).Select(t => t.Name));
-        Assert.Equal(added, AppTools.External.TakeLast(5).Select(t => t.Name));
+        Assert.Equal(added, AppTools.All.Skip(23).Take(5).Select(t => t.Name));
+        Assert.Equal(added, AppTools.External.SkipLast(1).TakeLast(5).Select(t => t.Name));
+        Assert.Equal(AppToolNames.SetBinds, AppTools.All[^1].Name); // agent-cli-set-binds 는 그 뒤
+    }
+
+    [Fact]
+    public void Set_binds_is_an_app_tool_with_the_run_tab_tier_and_the_get_binds_names()
+    {
+        // 허가 등급·접속 규칙은 run_tab 과 같다(처리자가 탭 접속 MayExecute 로 본다). 정의의 최소 수준은 Off, 운영 판단은 정의가 아니라 처리자.
+        var tool = AppTools.Find(AppToolNames.SetBinds)!;
+        var run = AppTools.Find(AppToolNames.RunTab)!;
+        Assert.Equal("set_binds", AppToolNames.SetBinds);
+        Assert.Equal(AgentToolHost.App, tool.Host);
+        Assert.Equal(run.Safety, tool.Safety);
+        Assert.Equal(run.MinimumLevel, tool.MinimumLevel);
+        Assert.False(tool.DevTestOnly);
+        Assert.Null(AgentTools.Find(AppToolNames.SetBinds));
+        Assert.Equal(["set", "stale"], AppToolValues.BindStatus.All);
+
+        // run_tab 과 set_binds 의 binds 칸은 같은 글(같은 규칙)이다. query 의 binds 와 이름이 같다.
+        var setBinds = JsonNode.Parse(tool.InputSchemaJson)!["properties"]![AppFields.Binds]!;
+        var runBinds = JsonNode.Parse(run.InputSchemaJson)!["properties"]![AppFields.Binds]!;
+        Assert.Equal("object", (string?)setBinds["type"]);
+        Assert.Equal(setBinds.ToJsonString(), runBinds.ToJsonString());
+        Assert.NotNull(JsonNode.Parse(AppTools.Find(AppToolNames.Query)!.InputSchemaJson)!["properties"]![AppFields.Binds]);
     }
 
     [Theory]
-    [InlineData(AppToolNames.RunTab, new[] { "tab" }, new[] { "tab", "base_version", "range", "timeout_s" })]
+    [InlineData(AppToolNames.SetBinds, new[] { "tab", "binds" }, new[] { "tab", "binds", "base_version" })]
+    [InlineData(AppToolNames.RunTab, new[] { "tab" }, new[] { "tab", "base_version", "range", "timeout_s", "binds" })]
     [InlineData(AppToolNames.ExportResult, new[] { "tab", "format", "out" }, new[] { "tab", "format", "out", "index", "sheet" })]
     [InlineData(AppToolNames.TuneStart, new[] { "tab" }, new[] { "tab", "range" })]
     [InlineData(AppToolNames.ListCommands, new string[0], new[] { "category", "grade" })]
@@ -103,6 +127,7 @@ public class AppToolContract2Tests
     [InlineData("command_denied", AgentCliExit.Denied)]
     [InlineData("command_disabled", AgentCliExit.Denied)]
     [InlineData("tab_busy", AgentCliExit.ToolFailed)]
+    [InlineData("bind_invalid", AgentCliExit.Usage)] // agent-cli-set-binds: path_invalid 처럼 보낸 값이 틀렸다
     public void Phase_two_error_codes_are_listed_and_map_to_exit_codes(string code, int exit)
     {
         Assert.Contains(code, AgentErrorCodes.All);

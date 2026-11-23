@@ -16,9 +16,9 @@ public class AppToolContractTests
     [Fact]
     public void Twenty_three_new_tools_with_unique_names_apart_from_the_existing_twelve()
     {
-        Assert.Equal(28, AppTools.All.Count); // A1 23 + 2단계 C0 5
-        Assert.Equal(40, AppTools.External.Count);
-        Assert.Equal(40, AppTools.External.Select(t => t.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(29, AppTools.All.Count); // A1 23 + 2단계 C0 5 + set_binds
+        Assert.Equal(41, AppTools.External.Count);
+        Assert.Equal(41, AppTools.External.Select(t => t.Name).Distinct(StringComparer.Ordinal).Count());
         Assert.All(AppTools.All, t => Assert.Null(AgentTools.Find(t.Name))); // 앱 안 AI 실행에는 나오지 않는다
         Assert.Equal(12, AgentTools.All.Count);
         Assert.Same(AgentTools.All[0], AppTools.External[0]);

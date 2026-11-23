@@ -4,7 +4,7 @@ namespace Oranda.Agent.Cli;
 
 /// <summary>
 /// 설계 §4.2 하위 명령 표 전부. 명령 → 도구 이름 + 인자 이름 대응만 둔다(도구 스키마는 앱이 가진다).
-/// 시험이 모든 인자 이름이 그 도구 스키마에 있는지, 외부 도구 40개가 모두 명령으로 닿는지 본다.
+/// 시험이 모든 인자 이름이 그 도구 스키마에 있는지, 외부 도구 41개가 모두 명령으로 닿는지 본다.
 /// <c>docs</c>(매뉴얼 링크)는 앱 없이 도는 CLI 자체 명령이라 이 표에 없다(도구가 아니다, 2단계 E-27). 본체 = m-skill-docs.
 /// </summary>
 internal static class CommandTable
@@ -12,6 +12,7 @@ internal static class CommandTable
     private static readonly OptionSpec Conn = new("--conn", AgentFields.Connection);
     private static readonly OptionSpec Tab = new("--tab", AppFields.Tab);
     private static readonly OptionSpec Limit = new("--limit", AppFields.Limit, ValueKind.Integer);
+    private static readonly OptionSpec Binds = new("--binds-json", AppFields.Binds, ValueKind.JsonObject);
     private static readonly PositionalSpec Object = new(AgentFields.ObjectName);
     private static readonly PositionalSpec SqlId = new(AgentFields.SqlId);
     private static readonly PositionalSpec Table = new(AgentFields.Table);
@@ -36,9 +37,11 @@ internal static class CommandTable
             [Tab, new("--line", AppFields.Line, ValueKind.Integer), new("--range", AppFields.Range)], []),
         new("tab save", AppToolNames.SaveTab, "--tab ID", [Tab], []),
         new("tab binds", AppToolNames.GetBinds, "--tab ID", [Tab], []),
-        new("tab run", AppToolNames.RunTab, "--tab ID [--base-version N] [--range document|statement] [--timeout 30]",
+        new("tab binds set", AppToolNames.SetBinds, "--tab ID --binds-json J [--base-version N]",
+            [Tab, Binds, new("--base-version", AppFields.BaseVersion, ValueKind.Integer)], []),
+        new("tab run", AppToolNames.RunTab, "--tab ID [--base-version N] [--range document|statement] [--timeout 30] [--binds-json J]",
             [Tab, new("--base-version", AppFields.BaseVersion, ValueKind.Integer), new("--range", AppFields.Range),
-             new("--timeout", AppFields.TimeoutSeconds, ValueKind.Integer)], []),
+             new("--timeout", AppFields.TimeoutSeconds, ValueKind.Integer), Binds], []),
 
         // ---- 언어 ----
         new("sql check", AppToolNames.CheckSql, "[--conn A] [--no-lint] (--file F | - | --tab ID)",
@@ -61,8 +64,7 @@ internal static class CommandTable
 
         // ---- 실행·결과·이력 ----
         new("query", AppToolNames.Query, "[--conn A] [--max-rows 50] [--timeout 30] [--binds-json J] (--file F | -)",
-            [Conn, new("--max-rows", AppFields.MaxRows, ValueKind.Integer), new("--timeout", AppFields.TimeoutSeconds, ValueKind.Integer),
-             new("--binds-json", AppFields.Binds, ValueKind.JsonObject)],
+            [Conn, new("--max-rows", AppFields.MaxRows, ValueKind.Integer), new("--timeout", AppFields.TimeoutSeconds, ValueKind.Integer), Binds],
             [], AgentFields.Sql, BodyRule.Required),
         new("result get", AppToolNames.GetResult, "--tab ID [--index 0] [--offset 0] [--limit 50]",
             [Tab, new("--index", AppFields.Index, ValueKind.Integer), new("--offset", AppFields.Offset, ValueKind.Integer), Limit], []),
