@@ -986,8 +986,12 @@ public sealed class PlsqlEditorTests : IDisposable
         }
 
         public Task<IReadOnlyList<CompileError>> GetCompileErrorsAsync(ISession s, DbObjectRef obj, CancellationToken ct)
-            => Task.FromResult(ErrorsByType.TryGetValue(obj.ObjectType, out var own) ? own
+            => ErrorsFailure is not null ? Task.FromException<IReadOnlyList<CompileError>>(ErrorsFailure)
+                : Task.FromResult(ErrorsByType.TryGetValue(obj.ObjectType, out var own) ? own
                 : ErrorsOnlyFor is null || ErrorsOnlyFor == obj.ObjectType ? Errors : []);
+
+        /// <summary>오류 목록 읽기가 이 예외로 실패한다(null 이면 읽는다).</summary>
+        public Exception? ErrorsFailure { get; set; }
 
         public Task<Oranda.Core.Metadata.ObjectDetail> GetObjectDetailAsync(ISession s, DbObjectRef obj, CancellationToken ct)
             => Task.FromResult(new Oranda.Core.Metadata.ObjectDetail(obj, [new DetailSection("일반", ["항목", "값"], [["유형", obj.ObjectType], ["마지막 DDL", LastDdl]])]));
@@ -1011,30 +1015,125 @@ public sealed class PlsqlEditorTests : IDisposable
 
         public ExecutionStatus CreateStatus { get; set; } = ExecutionStatus.Succeeded;
 
-        public Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds,
+        /// <summary>CREATE 가 실패할 때의 서버 오류(null 이면 ORA-00900).</summary>
+        public DbError? CreateError { get; set; }
+
+        /// <summary>현재 스키마 질의(<c>rollback.session_schema</c>)의 답: 현재 스키마·세션 사용자.</summary>
+        public (string Schema, string User) SessionSchema { get; set; } = ("SCOTT", "SCOTT");
+
+        /// <summary>다른 세션 수 질의가 이 오류로 실패한다(권한 없음 등). null 이면 <see cref="OtherSessions"/>.</summary>
+        public DbError? UsersQueryError { get; set; }
+
+        /// <summary>RAC 질의(gv$access)만 권한이 없다(V_$ACCESS 만 받은 계정).</summary>
+        public bool GvAccessDenied { get; set; }
+
+        /// <summary>CREATE 가 드라이버로 가기 전에 이만큼 머문다(실행 확인 창을 읽는 시간, 토큰과 무관).</summary>
+        public TimeSpan ConfirmDelay { get; set; }
+
+        /// <summary>다른 세션 수 질의가 토큰이 취소될 때까지 답하지 않는다(사전 확인 상한 시험).</summary>
+        public bool UsersQueryHangs { get; set; }
+
+        /// <summary>CREATE 가 토큰이 취소될 때까지 돌아오지 않는다(다른 세션이 실행 중인 객체의 library cache 잠금 대기를 흉내 낸다).</summary>
+        public bool BlockCreate { get; set; }
+
+        /// <summary>CREATE 를 받았다(막힌 CREATE 가 시작됨을 기다리는 데 쓴다).</summary>
+        public TaskCompletionSource CreateStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>막힌 CREATE 가 토큰 취소를 보았다(드라이버 break 를 보냈을 자리).</summary>
+        public bool CreateSawCancel { get; private set; }
+
+        /// <summary>CREATE 가 이 예외를 던진다.</summary>
+        public Exception? CreateThrows { get; set; }
+
+        /// <summary>CREATE 를 받는 순간 부른다(그 순간의 화면 상태를 보는 시험).</summary>
+        public Action? OnCreate { get; set; }
+
+        public List<string> Queries { get; } = [];
+
+        public async Task<ExecutionResult> ExecuteAsync(ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds,
             ExecutionOptions? options, CancellationToken ct)
         {
             if (stmt.Kind == StatementKind.Query)
             {
+                Queries.Add(stmt.Text);
+                if (stmt.Text.Contains("CURRENT_SCHEMA", StringComparison.Ordinal))
+                {
+                    return new ExecutionResult(stmt, ExecutionStatus.Succeeded) { ResultSet = new RowResultSet(SessionSchema.Schema, SessionSchema.User) };
+                }
+
+                if (UsersQueryHangs)
+                {
+                    try
+                    {
+                        await Task.Delay(Timeout.Infinite, ct);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return new ExecutionResult(stmt, ExecutionStatus.Cancelled);
+                    }
+                }
+
+                if (UsersQueryError is { } denied)
+                {
+                    return new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = denied };
+                }
+
+                if (GvAccessDenied && stmt.Text.Contains("gv$access", StringComparison.Ordinal))
+                {
+                    return new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = new DbError("ORA-00942", "table or view does not exist") { Number = 942, Kind = DbErrorKind.ObjectNotFound } };
+                }
+
                 // 다른 세션 수 조회: 열 1개·행 1개짜리 가짜 결과.
-                return Task.FromResult(new ExecutionResult(stmt, ExecutionStatus.Succeeded) { ResultSet = new CountResultSet(OtherSessions) });
+                return new ExecutionResult(stmt, ExecutionStatus.Succeeded) { ResultSet = new RowResultSet(OtherSessions) };
             }
 
             Statements.Add(stmt);
+            OnCreate?.Invoke();
+            CreateStarted.TrySetResult();
+            if (CreateThrows is { } thrown)
+            {
+                throw thrown;
+            }
+
+            if (ConfirmDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(ConfirmDelay, CancellationToken.None); // 실행 확인 창은 토큰을 보지 않는다
+                if (ct.IsCancellationRequested)
+                {
+                    return new ExecutionResult(stmt, ExecutionStatus.Cancelled);
+                }
+            }
+
+            options?.Sending?.Invoke(); // 실제 엔진처럼 명령 잠금을 잡은 뒤 드라이버로 보내기 직전에 알린다
+
+            if (BlockCreate)
+            {
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    CreateSawCancel = true;
+                    return new ExecutionResult(stmt, ExecutionStatus.Cancelled) { Error = new DbError("ORA-01013", "user requested cancel of current operation") { Kind = DbErrorKind.Cancelled } };
+                }
+            }
+
             var result = new ExecutionResult(stmt, CreateStatus);
             if (CreateStatus == ExecutionStatus.Failed)
             {
-                result = result with { Error = new DbError("ORA-00900", "invalid SQL statement") };
+                result = result with { Error = CreateError ?? new DbError("ORA-00900", "invalid SQL statement") };
             }
 
-            return Task.FromResult(result);
+            return result;
         }
 
         public IAsyncEnumerable<ExecutionResult> ExecuteScriptAsync(ISession s, IReadOnlyList<SqlStatement> stmts, ScriptErrorMode mode,
             ExecutionOptions? options, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed class CountResultSet(int count) : Oranda.Core.Grid.IResultSet
+    /// <summary>행 1개짜리 가짜 결과(열마다 값 하나).</summary>
+    private sealed class RowResultSet(params object?[] values) : Oranda.Core.Grid.IResultSet
     {
         public IReadOnlyList<Oranda.Core.Grid.ResultColumn> Columns => [];
 
@@ -1043,7 +1142,7 @@ public sealed class PlsqlEditorTests : IDisposable
         public long? KnownRowCount => 1;
 
         public Task<Oranda.Core.Grid.ResultPage> GetPageAsync(int pageIndex, CancellationToken ct)
-            => Task.FromResult(new Oranda.Core.Grid.ResultPage(0, 0, 1, [[(object?)count]]) { IsLast = true });
+            => Task.FromResult(new Oranda.Core.Grid.ResultPage(0, 0, 1, [.. values.Select(v => (IReadOnlyList<object?>)[v])]) { IsLast = true });
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

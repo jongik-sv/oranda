@@ -194,7 +194,8 @@ public sealed class EmbeddedCatalogCharacterizationTests
         await vm.CompileAsync();
 
         var query = Assert.Single(exec.Queries);
-        Assert.Equal("SELECT COUNT(DISTINCT sid) FROM v$access WHERE owner = 'SCOTT' AND object = 'PK' AND sid <> TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))", query);
+        // RAC 의 다른 인스턴스 세션도 센다(PHC-4): gv$access, 내 세션 = 이 인스턴스의 내 SID.
+        Assert.Equal("SELECT COUNT(*) FROM (SELECT DISTINCT inst_id, sid FROM gv$access WHERE owner = 'SCOTT' AND object = 'PK' AND NOT (inst_id = TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AND sid = TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))))", query);
     }
 
     /// <summary>질의로 분류된 문장의 글을 모으고 나머지는 안쪽 가짜 실행 엔진에 맡긴다.</summary>

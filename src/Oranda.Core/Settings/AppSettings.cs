@@ -511,6 +511,16 @@ public sealed record ExecutionSettings
     /// 기본은 켬: 서버 statistics_level 이 TYPICAL 이어도 A-Rows 가 자동으로 보이게 한다. 저장된 설정에 명시적으로 꺼 둔 값(false)이 있으면 그 값을 따른다.
     /// </summary>
     public bool GatherPlanStatisticsHint { get; init; } = true;
+
+    /// <summary>
+    /// PL/SQL 편집기 컴파일(<c>CREATE OR REPLACE</c>)이 끝나기를 기다리는 상한(초). 넘으면 컴파일을 끊고 「시간 초과」로 알린다
+    /// (다른 세션이 그 객체를 실행 중이면 서버가 잠금을 기다린다). 0 = 상한 없음. 새 키라 스키마 버전은 그대로, 키가 없는 옛 파일 = 기본값.
+    /// </summary>
+    public int PlsqlCompileWaitSeconds { get; init; } = DefaultPlsqlCompileWaitSeconds;
+
+    public const int DefaultPlsqlCompileWaitSeconds = 60;
+
+    public const int MaxPlsqlCompileWaitSeconds = 3600;
 }
 
 public sealed record GridSettings

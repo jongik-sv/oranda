@@ -239,7 +239,7 @@
           <!-- 여기 값은 새 탭·다음 실행의 기본값이다. 지금 탭은 SQL 메뉴의 「(이번 실행)」 토글로 바꾼다(D-016). -->
           <StackPanel Spacing="10">
             <TextBlock x:Name="ExecNotice" Classes="hint" HorizontalAlignment="Left" Text="{Binding Strings[execNotice]}" />
-            <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+            <Grid Classes="form" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="10">
               <TextBlock Grid.Row="0" Text="{Binding Strings[tx]}" />
               <CheckBox Grid.Row="0" Grid.Column="1" Content="{Binding Strings[autoCommit]}" IsChecked="{Binding AutoCommit}" />
               <TextBlock Grid.Row="1" Text="{Binding Strings[dbmsOutput]}" />
@@ -258,6 +258,13 @@
               <TextBlock Grid.Row="4" Text="{Binding Strings[planHintLabel]}" />
               <CheckBox x:Name="PlanHintBox" Grid.Row="4" Grid.Column="1" Content="{Binding Strings[planHint]}" IsChecked="{Binding GatherPlanStatisticsHint}"
                         ToolTip.Tip="{Binding Strings[planHintTip]}" />
+              <!-- PL/SQL 편집기 컴파일 대기 상한(0 = 상한 없음). 다른 세션이 그 객체를 실행 중이면 컴파일이 잠금을 기다린다. -->
+              <TextBlock Grid.Row="5" Text="{Binding Strings[plsqlCompileWait]}" />
+              <StackPanel Grid.Row="5" Grid.Column="1" Spacing="4">
+                <NumericUpDown x:Name="PlsqlCompileWaitBox" HorizontalAlignment="Left" MinWidth="160" Minimum="0" Maximum="3600" Increment="10" FormatString="0"
+                               Value="{Binding PlsqlCompileWaitSeconds}" AutomationProperties.Name="{Binding Strings[plsqlCompileWaitName]}" />
+                <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Strings[plsqlCompileWaitHint]}" />
+              </StackPanel>
             </Grid>
           </StackPanel>
         </ScrollViewer>

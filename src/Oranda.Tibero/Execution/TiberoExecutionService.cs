@@ -292,6 +292,7 @@ internal sealed partial class TiberoExecutionService : IExecutionService
         try
         {
             session.SetBusy(true);
+            options.Sending?.Invoke(); // 확인 창·명령 잠금 대기를 지나 드라이버로 간다(PL/SQL 컴파일 대기 상한이 여기서부터 센다)
             try
             {
                 // 드라이버 호출은 동기로 돈다(실측 4장) → 부른 스레드(UI)를 막지 않게 드라이버 단계 전체를 스레드 풀로 옮긴다.

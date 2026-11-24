@@ -46,6 +46,12 @@ public enum PlsqlCompileStatus
     NoSession,
 
     NothingToCompile,
+
+    /// <summary>사용자가 컴파일을 취소했다(「컴파일 취소」 단추·실행 취소·탭 닫기). 서버에서 끝나지 않았을 수 있다.</summary>
+    Cancelled,
+
+    /// <summary>대기 상한(설정 <c>execution.plsqlCompileWaitSeconds</c>) 안에 끝나지 않아 멈췄다. 대개 다른 세션이 이 객체를 실행 중이라 잠금을 기다린 것이다.</summary>
+    Timeout,
 }
 
 public sealed record PlsqlCompileOutcome(PlsqlCompileStatus Status, IReadOnlyList<CompileError> Errors, string Message);
@@ -224,6 +230,10 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     [ObservableProperty]
     public partial bool IsBusy { get; set; }
+
+    /// <summary>서버에 컴파일을 보내는 중(사전 확인부터 오류 목록 읽기까지). 「컴파일 취소」 단추가 보인다.</summary>
+    [ObservableProperty]
+    public partial bool IsCompiling { get; set; }
 
     /// <summary>편집을 시작한 뒤 보이는 쪽의 서버 소스가 바뀌었다(문맥 키 <c>serverSourceChanged</c>).</summary>
     public bool ServerSourceChanged
@@ -462,11 +472,13 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
             return false;
         }
 
-        var now = await ReadLastDdlAsync(meta, _session, part.Target, ct).ConfigureAwait(true);
+        var session = _session;
+        var target = part.Target;
+        var now = await ReadLastDdlAsync(meta, session, target, ct).ConfigureAwait(true);
         var changed = part.Baseline is not null && now is not null && now != part.Baseline;
         if (changed)
         {
-            part.ServerSource = await meta.GetSourceAsync(_session, part.Target, ct).ConfigureAwait(true);
+            part.ServerSource = await OffUi(() => meta.GetSourceAsync(session, target, ct)).ConfigureAwait(true);
             if (ReferenceEquals(part, _current))
             {
                 FillDiff(part, part.ServerSource);
@@ -479,135 +491,6 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     /// <summary>저장(컴파일) — 보이는 쪽만(「이 쪽만 컴파일」). <paramref name="force"/> = 충돌·다른 세션 사용 경고를 알고도 진행.</summary>
     public Task<PlsqlCompileOutcome> CompileAsync(bool force = false, CancellationToken ct = default) => CompilePartAsync(_current, force, ct);
-
-    private async Task<PlsqlCompileOutcome> CompilePartAsync(PlsqlSourcePart part, bool force, CancellationToken ct)
-    {
-        Session ??= ResolveSession();
-        if (_session is null)
-        {
-            return Report(PlsqlCompileStatus.NoSession, _restoredProfileId is null ? "접속이 없다" : "이 탭을 연 접속이 아직 열리지 않았다 — 그 접속을 열면 컴파일한다");
-        }
-
-        var (text, hasMore) = PlsqlSourceText.SplitCompileUnit(part.Editor.Text);
-        if (hasMore)
-        {
-            return Report(PlsqlCompileStatus.NothingToCompile, "단위가 여러 개인 파일은 컴파일하지 않는다 — SQL 탭에서 스크립트로 실행한다");
-        }
-
-        var header = PlsqlSourceText.ParseHeader(text);
-        if (string.IsNullOrWhiteSpace(text) || header is null)
-        {
-            return Report(PlsqlCompileStatus.NothingToCompile, "PACKAGE·PROCEDURE·FUNCTION·TRIGGER·TYPE 소스가 아니다");
-        }
-
-        // 명세 쪽에는 명세, 본문 쪽에는 본문만(한 탭 두 쪽이 서로 덮어쓰지 않게).
-        if (_secondary is not null && PlsqlSourceText.SiblingType(header.Value.ObjectType) is not null
-            && PlsqlSourceText.IsBodyType(header.Value.ObjectType) != (part.Side == PlsqlSide.Body))
-        {
-            return Report(PlsqlCompileStatus.NothingToCompile, part.Side == PlsqlSide.Body
-                ? "본문 쪽에는 본문(BODY) 소스를 둔다 — 명세는 「명세」 쪽에서 컴파일한다"
-                : "명세 쪽에는 명세 소스를 둔다 — 본문은 「본문」 쪽에서 컴파일한다");
-        }
-
-        var owner = header.Value.Owner ?? part.Target?.Owner ?? _session.Profile.User.ToUpperInvariant();
-        var effective = new DbObjectRef(owner, header.Value.Name, header.Value.ObjectType);
-        if (part.Target is null || part.Target.Owner != effective.Owner || part.Target.Name != effective.Name || part.Target.ObjectType != effective.ObjectType)
-        {
-            // 이름·유형이 바뀌었거나 새 문서: 새 객체로 본다(충돌 기준 없음).
-            part.Target = effective;
-            part.Baseline = null;
-            part.ServerSource = null;
-            if (part.Editor.FilePath is null)
-            {
-                Title = $"{effective.Owner}.{effective.Name}"; // 파일 탭은 파일 이름을 그대로 둔다
-            }
-
-            RaiseSides();
-        }
-
-        var meta = ResolveMeta();
-        var exec = ResolveExec();
-        if (exec is null)
-        {
-            return Report(PlsqlCompileStatus.NoSession, "실행 서비스가 없다");
-        }
-
-        IsBusy = true;
-        try
-        {
-            if (!force && meta is not null && part.Baseline is not null && await CheckServerChangedAsync(part, ct).ConfigureAwait(true))
-            {
-                return Report(PlsqlCompileStatus.Conflict, "다른 사람이 서버 소스를 바꿨다 — 차이를 확인하고 덮어쓸지 정한다");
-            }
-
-            if (!force)
-            {
-                var others = await CountOtherUsersAsync(exec, _session, effective, ct).ConfigureAwait(true);
-                if (others > 0)
-                {
-                    WarningText = $"다른 세션 {others}개가 이 객체를 쓰고 있다. 지금 컴파일하면 기다리거나 그 세션이 영향을 받는다.";
-                    return Report(PlsqlCompileStatus.InUse, WarningText);
-                }
-            }
-
-            WarningText = string.Empty;
-            DiffText = string.Empty;
-            await ArchiveServerSourceAsync(meta, effective, ct).ConfigureAwait(true);
-            var stmt = new SqlStatement(text, default, StatementKind.Ddl) { Verb = "CREATE" };
-            var result = await exec.ExecuteAsync(_session, stmt, new Dictionary<string, BindValue>(),
-                new ExecutionOptions { Source = HistorySource.Editor }, ct).ConfigureAwait(true);
-            if (result.ResultSet is not null)
-            {
-                await result.ResultSet.DisposeAsync().ConfigureAwait(true);
-            }
-
-            switch (result.Status)
-            {
-                case ExecutionStatus.Denied:
-                    return Report(PlsqlCompileStatus.Blocked, "정책이 컴파일을 막았다");
-                case ExecutionStatus.Cancelled:
-                    return Report(PlsqlCompileStatus.Blocked, "컴파일이 취소됐다");
-                case ExecutionStatus.Failed:
-                    return Report(PlsqlCompileStatus.Failed, result.Error is { } e ? $"{e.Code} {e.Message}" : "컴파일 실패");
-            }
-
-            // 새 문서를 패키지·타입으로 처음 만들었으면 다른 쪽을 붙인다(처음 볼 때 서버에서 읽는다).
-            BecomePair(part);
-            IReadOnlyList<CompileError> errors = [];
-            if (meta is not null)
-            {
-                part.Errors = errors = await ReadErrorsAsync(meta, _session, part, ct).ConfigureAwait(true);
-                part.Baseline = await ReadLastDdlAsync(meta, _session, effective, ct).ConfigureAwait(true);
-                PublishErrors(publish: true);
-            }
-
-            part.ServerSource = PlsqlSourceText.ToEditorText(text);
-            part.Missing = false;
-            part.Loaded = true;
-            SetServerChanged(part, false);
-            if (part.Editor.FilePath is null)
-            {
-                part.Editor.MarkSaved(); // 파일 탭은 컴파일해도 파일에는 쓰지 않았으므로 고침 표시를 지우지 않는다
-            }
-
-            RefreshMembers();
-            var errorCount = errors.Count(x => !x.IsWarning);
-            return Report(errorCount > 0 ? PlsqlCompileStatus.CompiledWithErrors : PlsqlCompileStatus.Compiled,
-                errorCount > 0 ? $"컴파일됐지만 오류 {errorCount}건" : errors.Count > 0 ? $"컴파일됨 (경고 {errors.Count}건)" : "컴파일됨", errors);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return Report(PlsqlCompileStatus.Failed, ex.Message);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
 
     /// <summary>
     /// 오류의 줄·열을 편집기 위치로 옮겨 커서를 둔다. 서버 오류는 소스 시작(유형 낱말)부터 센다.
@@ -838,7 +721,7 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
 
     private static async Task<DateTime?> ReadLastDdlAsync(IMetadataProvider meta, ISession session, DbObjectRef target, CancellationToken ct)
     {
-        var sections = await meta.GetDetailPartAsync(session, target, DetailPart.General, ct).ConfigureAwait(true); // 「일반」만(DL-1)
+        var sections = await OffUi(() => meta.GetDetailPartAsync(session, target, DetailPart.General, ct)).ConfigureAwait(true); // 「일반」만(DL-1)
         var row = sections.FirstOrDefault(s => s.Title == "일반")?.Rows.FirstOrDefault(r => r.Count > 1 && Equals(r[0], "마지막 DDL"));
         return row?[1] switch
         {
@@ -846,44 +729,6 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
             DateTimeOffset o => o.UtcDateTime,
             _ => null,
         };
-    }
-
-    /// <summary>이 객체를 쓰고 있는 다른 세션 수(v$access). 권한이 없거나 못 읽으면 0(경고만 못 한다).</summary>
-    private async Task<int> CountOtherUsersAsync(IExecutionService exec, ISession session, DbObjectRef target, CancellationToken ct)
-    {
-        static string Lit(string s) => s.Replace("'", "''", StringComparison.Ordinal);
-
-        // 이 DBMS·버전에 문장이 없으면 null — 못 읽은 것과 같게 0(경고만 못 한다, 컴파일은 막지 않는다).
-        var sql = CatalogRouting.Text(_services, session, "meta.object_users", ("owner", Lit(target.Owner)), ("name", Lit(target.Name)));
-        if (sql is null)
-        {
-            return 0;
-        }
-
-        try
-        {
-            var stmt = new SqlStatement(sql, default, StatementKind.Query) { Verb = "SELECT" };
-            var r = await exec.ExecuteAsync(session, stmt, new Dictionary<string, BindValue>(),
-                new ExecutionOptions { Source = HistorySource.Editor, SkipHistory = true }, ct).ConfigureAwait(true);
-            if (r.ResultSet is null)
-            {
-                return 0;
-            }
-
-            await using (r.ResultSet.ConfigureAwait(true))
-            {
-                var page = await r.ResultSet.GetPageAsync(0, ct).ConfigureAwait(true);
-                return page.RowCount > 0 && page.Columns.Count > 0 ? Convert.ToInt32(page.Columns[0][0], CultureInfo.InvariantCulture) : 0;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            return 0;
-        }
     }
 
     private ContextKeyService? Keys => _services?.GetService(typeof(ContextKeyService)) as ContextKeyService ?? ContextKeyService.Shared;
@@ -949,7 +794,9 @@ public sealed partial class PlsqlEditorViewModel : ToolPanelViewModelBase, IComp
             string source;
             try
             {
-                source = await meta.GetSourceAsync(_session, target, limit.Token).ConfigureAwait(true);
+                var session = _session;
+                var token = limit.Token;
+                source = await OffUi(() => meta.GetSourceAsync(session, target, token)).ConfigureAwait(true);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {

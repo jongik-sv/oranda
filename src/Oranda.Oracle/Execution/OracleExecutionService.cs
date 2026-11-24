@@ -229,6 +229,7 @@ internal sealed partial class OracleExecutionService : IExecutionService
         session.SetBusy(true);
         try
         {
+            options.Sending?.Invoke(); // 확인 창·명령 잠금 대기를 지나 드라이버로 간다(PL/SQL 컴파일 대기 상한이 여기서부터 센다)
             return await RunOnDriverAsync(session, runtime, stmt, binds, applied, gate.Answer, extras, plan, ct);
         }
         finally

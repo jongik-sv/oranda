@@ -97,6 +97,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _gatherPlanStatisticsHint;
 
+    /// <summary>PL/SQL 컴파일 대기 상한(초, 0 = 상한 없음, 최대 <see cref="ExecutionSettings.MaxPlsqlCompileWaitSeconds"/>).</summary>
+    [ObservableProperty]
+    private decimal _plsqlCompileWaitSeconds;
+
     [ObservableProperty]
     private decimal _pageSize;
 
@@ -303,6 +307,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _selectedErrorMode = ErrorModes.First(m => m.Mode == s.Execution.ScriptErrorMode);
         _splitOnBlankLine = s.Execution.SplitOnBlankLine;
         _gatherPlanStatisticsHint = s.Execution.GatherPlanStatisticsHint;
+        _plsqlCompileWaitSeconds = Math.Clamp(s.Execution.PlsqlCompileWaitSeconds, 0, ExecutionSettings.MaxPlsqlCompileWaitSeconds);
         _pageSize = s.Grid.PageSize;
         _memoryLimitMb = s.Grid.MemoryLimitMb;
         _lobFetchSize = s.Grid.InitialLobFetchSize;
@@ -631,6 +636,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                     ScriptErrorMode = SelectedErrorMode.Mode,
                     SplitOnBlankLine = SplitOnBlankLine,
                     GatherPlanStatisticsHint = GatherPlanStatisticsHint,
+                    PlsqlCompileWaitSeconds = (int)Math.Clamp(PlsqlCompileWaitSeconds, 0, ExecutionSettings.MaxPlsqlCompileWaitSeconds),
                 },
                 Grid = s.Grid with
                 {

@@ -373,7 +373,9 @@ public sealed partial class PlsqlWorkspaceViewModel : ToolPanelViewModelBase, II
     /// <summary>미리보기 탭에서 글을 고치기 시작하면(명세·본문 어느 쪽이든) 고정한다(소스를 읽어 채운 것은 고침이 아니다).</summary>
     private void OnPreviewEdited(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PlsqlEditorViewModel.IsDirty) && PreviewTab is { IsDirty: true } tab && ReferenceEquals(sender, tab))
+        // 고쳤거나 컴파일을 시작한 미리보기는 고정한다: 다음 미리보기가 그 자리를 바꿔 끼우면(탭 닫힘) 서버에서 기다리던 컴파일이 취소되기 때문이다.
+        if (e.PropertyName is nameof(PlsqlEditorViewModel.IsDirty) or nameof(PlsqlEditorViewModel.IsCompiling)
+            && PreviewTab is { } tab && ReferenceEquals(sender, tab) && (tab.IsDirty || tab.IsCompiling))
         {
             Pin(tab);
         }

@@ -28,6 +28,7 @@ public partial class PlsqlEditorView : UserControl, Oranda.App.Shell.Docking.IFo
         CompileSideButton.Click += async (_, _) => await Run(() => CompileAndShowAsync(both: false));
         CompileBothButton.Click += async (_, _) => await Run(() => CompileAndShowAsync(both: true));
         ForceButton.Click += async (_, _) => await Run(async () => { if (_vm is not null) { await _vm.CompileAsync(force: true); } });
+        CancelCompileButton.Click += (_, _) => _vm?.CancelCompile();
         DiffButton.Click += async (_, _) => await Run(async () => { if (_vm is not null) { await _vm.ShowServerDiffAsync(); } });
         CloseDiffButton.Click += (_, _) => _vm?.CloseDiff();
         ReloadButton.Click += async (_, _) => await Run(async () => { if (_vm is not null) { await _vm.ReloadAsync(); } });

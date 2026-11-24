@@ -34,6 +34,9 @@
                 ToolTip.Tip="보이는 쪽(명세 또는 본문)만 컴파일합니다(F5)." />
         <Button x:Name="CompileBothButton" Classes="tool" Content="명세+본문 컴파일" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding HasSides}" icons:ButtonIcon.Key="compile"
                 ToolTip.Tip="명세를 먼저, 이어서 본문을 컴파일합니다. 명세가 막히면 본문은 보내지 않습니다." />
+        <!-- 컴파일하는 동안만 보인다. 다른 세션이 이 객체를 실행 중이면 서버가 잠금을 기다리므로 사용자가 끊을 수 있어야 한다. -->
+        <Button x:Name="CancelCompileButton" Classes="tool" Content="컴파일 취소" IsVisible="{Binding IsCompiling}" icons:ButtonIcon.Key="cancel"
+                ToolTip.Tip="보내 둔 컴파일을 서버에서 중단합니다. 다른 세션이 이 객체를 실행 중이면 컴파일이 잠금을 기다립니다." />
         <Button x:Name="DiffButton" Classes="tool" Content="서버와 차이" icons:ButtonIcon.Key="diff" />
         <!-- 명세 | 본문(Ctrl+Shift+B). 고친 쪽에는 * 가 붙는다. -->
         <ListBox x:Name="SideSwitch" Classes="segmented" Margin="6,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasSides}"
@@ -59,8 +62,9 @@
       <StackPanel Spacing="4">
         <TextBlock x:Name="BannerText" TextWrapping="Wrap" />
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <Button x:Name="ForceButton" Classes="tool" Content="무시하고 덮어쓰기" icons:ButtonIcon.Key="warn" />
-          <Button x:Name="ReloadButton" Classes="tool" Content="서버 소스 다시 읽기" icons:ButtonIcon.Key="refresh" />
+          <!-- 컴파일 중에는 끈다: 두 번째 CREATE 가 첫째 뒤에 줄 서지 않게 -->
+          <Button x:Name="ForceButton" Classes="tool" Content="무시하고 덮어쓰기" IsEnabled="{Binding !IsBusy}" icons:ButtonIcon.Key="warn" />
+          <Button x:Name="ReloadButton" Classes="tool" Content="서버 소스 다시 읽기" IsEnabled="{Binding !IsBusy}" icons:ButtonIcon.Key="refresh" />
         </StackPanel>
       </StackPanel>
     </Border>

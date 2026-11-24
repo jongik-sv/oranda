@@ -67,6 +67,13 @@ public sealed record ExecutionOptions
     /// LOB 쓰기·데이터 가져오기는 <see cref="Oranda.Core.Rollback.ChangeRecording.PointOnly"/>, 원복 실행·비교 반영은 <see cref="Oranda.Core.Rollback.ChangeRecording.None"/>.
     /// </summary>
     public Oranda.Core.Rollback.ChangeRecording Recording { get; init; } = Oranda.Core.Rollback.ChangeRecording.Normal;
+
+    /// <summary>
+    /// 한 문장 실행(<see cref="IExecutionService.ExecuteAsync"/>)이 확인 창·정책 관문을 지나 세션의 명령 잠금을 잡은 뒤, 드라이버로 보내기 직전에 한 번 부른다.
+    /// 서버에서 기다린 시간만 재려는 쪽이 쓴다(PL/SQL 컴파일 대기 상한: 확인 창을 읽는 시간·같은 연결의 앞 작업을 기다린 시간은 세지 않는다).
+    /// 실행 스레드에서 부르므로 가볍고 스레드 안전해야 한다. 드라이버까지 가지 않으면(거부·취소) 부르지 않는다. null = 알리지 않음.
+    /// </summary>
+    public Action? Sending { get; init; }
 }
 
 /// <summary>스크립트 오류 처리(EXEC-10). 설정 <c>execution.scriptErrorMode</c> 와 같은 형식.</summary>

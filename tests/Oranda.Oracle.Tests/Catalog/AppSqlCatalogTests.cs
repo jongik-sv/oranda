@@ -38,6 +38,29 @@ public class AppSqlCatalogTests
     }
 
     [Fact]
+    public void Object_users_counts_sessions_of_every_rac_instance_but_mine()
+    {
+        var query = EmbeddedCatalog.Load().Get("meta.object_users", 19);
+
+        Assert.Equal(Oranda.Core.Catalog.CatalogRac.Gv, query.Header.Rac);
+        Assert.Contains("gv$access", query.Header.Requires);
+        Assert.Contains("FROM gv$access", query.Sql, StringComparison.Ordinal);
+        Assert.DoesNotContain(" v$access", query.Sql, StringComparison.Ordinal);
+        // 같은 SID 라도 다른 인스턴스의 세션은 남이다: 내 세션은 인스턴스와 SID 가 둘 다 같을 때만 뺀다.
+        Assert.Contains("NOT (inst_id = TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AND sid = TO_NUMBER(SYS_CONTEXT('USERENV', 'SID')))", query.Sql, StringComparison.Ordinal);
+        Assert.Contains("SELECT DISTINCT inst_id, sid", query.Sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Object_users_local_fallback_keeps_the_v_access_statement()
+    {
+        // GV_$ACCESS 없이 V_$ACCESS 만 받은 계정이 쓰는 대체 문장: 예전 글 그대로.
+        Assert.Equal("SELECT COUNT(DISTINCT sid) FROM v$access WHERE owner = 'SCOTT' AND object = 'PK' AND sid <> TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))",
+            EmbeddedCatalog.Text("meta.object_users_local", ("owner", "SCOTT"), ("name", "PK")));
+        Assert.Equal(Oranda.Core.Catalog.CatalogRac.V, EmbeddedCatalog.Load().Get("meta.object_users_local", 19).Header.Rac);
+    }
+
+    [Fact]
     public void Foreign_key_index_check_has_optional_owner_line()
     {
         var withOwner = EmbeddedCatalog.Text("app.fk_index_check", ("owner_filter", "   AND c.owner = 'HR'\n"), ("table", "'T'"));

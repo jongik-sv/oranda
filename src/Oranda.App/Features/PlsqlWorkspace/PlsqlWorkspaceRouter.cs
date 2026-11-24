@@ -379,6 +379,7 @@ public sealed class PlsqlWorkspaceRouter
 
     private void OnTabClosed(object? sender, PlsqlEditorViewModel tab)
     {
+        tab.CancelCompile(); // 닫은 탭의 컴파일이 세션을 붙잡고 잠금을 기다리지 않게
         if (ReferenceEquals(PlsqlEditorViewModel.Active, tab))
         {
             PlsqlEditorViewModel.Active = null;
@@ -404,6 +405,7 @@ public sealed class PlsqlWorkspaceRouter
         _recent.Remove(w);
         foreach (var tab in w.Tabs)
         {
+            tab.CancelCompile();
             if (ReferenceEquals(PlsqlEditorViewModel.Active, tab))
             {
                 PlsqlEditorViewModel.Active = null;
