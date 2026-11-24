@@ -70,6 +70,12 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
     public Task<bool> ConfirmSharedTransactionAsync(string connection, IReadOnlyList<string> workspaces, bool commit, CancellationToken ct)
         => OnUi(() => SharedTransactionCoreAsync(connection, workspaces, commit));
 
+    public Task<bool> ConfirmCancelRunningAsync(IReadOnlyList<string> connections, bool uncommitted, TimeSpan wait, CancellationToken ct)
+        => OnUi(() => TwoChoiceCoreAsync(CreateCancelRunningDialog(connections, uncommitted, wait)));
+
+    public Task<bool> ConfirmCloseWithoutCommitAsync(string connection, TimeSpan limit, CancellationToken ct)
+        => OnUi(() => TwoChoiceCoreAsync(CreateCloseWithoutCommitDialog(connection, limit)));
+
     public Task<bool> PreviewDmlAsync(string text, CancellationToken ct)
         => OnUi(() => PreviewCoreAsync(text, commit: false));
 
@@ -280,6 +286,43 @@ public sealed class AvaloniaExecutionDialogs : IExecutionDialogs
         dialog.Opened += (_, _) => cancel.Focus();
         await ShowAsync(dialog).ConfigureAwait(true);
         return accepted;
+    }
+
+    // ---- 실행 중 닫기(PHC-3) -----------------------------------------------------------------
+
+    private async Task<bool> TwoChoiceCoreAsync(Window dialog)
+    {
+        await ShowAsync(dialog).ConfigureAwait(true);
+        return dialog.Tag is true;
+    }
+
+    /// <summary>
+    /// 실행 중인 세션 닫기 확인 창(띄우지는 않는다): 「취소하고 닫기」 / 「돌아가기」(기본 단추). 「취소하고 닫기」를 누르면 창의 <see cref="StyledElement.Tag"/> 가 true.
+    /// </summary>
+    internal static Window CreateCancelRunningDialog(IReadOnlyList<string> connections, bool uncommitted, TimeSpan wait) =>
+        CreateTwoChoiceDialog(ExecutionDialogText.BusyCloseTitle, ExecutionDialogText.BusyClose(connections, uncommitted, wait), ExecutionDialogText.CancelAndClose);
+
+    /// <summary>커밋 상한 초과 확인 창(띄우지는 않는다): 「커밋하지 않고 닫기」 / 「돌아가기」(기본 단추).</summary>
+    internal static Window CreateCloseWithoutCommitDialog(string connection, TimeSpan limit) =>
+        CreateTwoChoiceDialog(ExecutionDialogText.BusyCloseTitle,
+            ExecutionDialogText.CommitTimedOut(connection, limit) + "\n" + ExecutionDialogText.CloseWithoutCommitQuestion, ExecutionDialogText.CloseWithoutCommit);
+
+    private static Window CreateTwoChoiceDialog(string title, string text, string proceed)
+    {
+        var dialog = NewWindow(title);
+        var ok = new Button { Content = proceed, MinWidth = 80, Name = "ProceedButton" };
+        var back = new Button { Content = ExecutionDialogText.GoBack, MinWidth = 80, IsDefault = true, IsCancel = true, Name = "BackButton" };
+        ok.Click += (_, _) =>
+        {
+            dialog.Tag = true;
+            dialog.Close();
+        };
+        back.Click += (_, _) => dialog.Close();
+        dialog.Content = DialogShell.Framed(
+            new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 460 },
+            DialogShell.Buttons(ok, back));
+        dialog.Opened += (_, _) => back.Focus();
+        return dialog;
     }
 
     // ---- 치환 변수 -------------------------------------------------------------------------

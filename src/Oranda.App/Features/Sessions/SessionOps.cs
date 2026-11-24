@@ -18,6 +18,8 @@ internal interface ISessionOps
     /// <summary>미커밋이 있으면 접속 이름을 밝혀 커밋/롤백/취소를 묻는다. true = 이제 미커밋이 없다(닫아도 된다).</summary>
     Task<bool> ConfirmUncommittedAsync(ISession session, CancellationToken ct);
 
+    /// <summary>명령이 도는 세션을 닫기 전 「실행 중인 작업을 취소하고 닫을까요?」(PHC-3). true = 취소하고 닫기(닫아도 된다), false = 돌아가기.</summary>
+    Task<bool> ConfirmCancelRunningAsync(ISession session, CancellationToken ct);
     Task DisconnectAsync(ISession session, CancellationToken ct);
 }
 
@@ -30,8 +32,10 @@ internal sealed class ContainerSessionOps(ServiceContainer container) : ISession
     public Task RollbackAsync(ISession session, CancellationToken ct) => ExecutionCommands.Resolve(container).ConfirmedRollbackAsync(session, ct);
 
     public Task<bool> ConfirmUncommittedAsync(ISession session, CancellationToken ct) =>
-        ExecutionCommands.Resolve(container).ConfirmConnectionUncommittedAsync(session, ct);
+        ExecutionCommands.Resolve(container).ConfirmConnectionCloseAsync(session, ct); // 닫기 전: 커밋·롤백 상한(PHC-3)
 
+    public Task<bool> ConfirmCancelRunningAsync(ISession session, CancellationToken ct) =>
+        ExecutionCommands.Resolve(container).ConfirmCancelRunningAsync([session], ct);
     public Task DisconnectAsync(ISession session, CancellationToken ct) =>
         ConnectionManagerCommands.Resolve(container).DisconnectAsync(session, ct);
 }

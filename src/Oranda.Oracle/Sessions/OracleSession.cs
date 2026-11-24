@@ -67,6 +67,9 @@ internal sealed class OracleSession : ISession
 
     public bool HasPendingTransaction => _pending;
 
+    /// <summary>실행 중이거나(<see cref="SessionState.Busy"/>) 누가 명령 잠금(<see cref="CommandGate"/>)을 쥐고 있다(PHC-3: 종료·접속 끊기가 「취소하고 닫기」를 묻는다).</summary>
+    public bool IsCommandRunning => State == SessionState.Busy || CommandGate.IsHeld;
+
     /// <summary>실행 서비스가 쓰는 실제 연결. 같은 어셈블리 안에서만 본다. 명령은 <see cref="CommandGate"/> 를 쥔 동안에만 보낸다.</summary>
     internal OracleConnection Connection { get; }
 

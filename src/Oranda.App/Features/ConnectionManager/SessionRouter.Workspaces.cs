@@ -27,6 +27,21 @@ public sealed partial class SessionRouter
     public Func<ISession, CancellationToken, Task<bool>>? ConfirmUncommitted { get; set; }
 
     /// <summary>
+    /// 세션 자체를 닫는 경로(접속 끊기·작업 공간과 함께 닫는 더 연 세션)의 미커밋 확인. 조립이 <see cref="ExecutionController.ConfirmConnectionCloseAsync"/>
+    /// (커밋·롤백 상한, PHC-3)를 넣는다. 없으면 <see cref="ConfirmUncommitted"/>. 작업 공간을 닫아도 남는 접속 세션은 상한 없는 <see cref="ConfirmUncommitted"/> 로 묻는다
+    /// (상한을 넘겨 「그대로 닫음」 해도 그 세션과 트랜잭션은 남으므로).
+    /// </summary>
+    public Func<ISession, CancellationToken, Task<bool>>? ConfirmCloseUncommitted { get; set; }
+
+    private Func<ISession, CancellationToken, Task<bool>>? CloseConfirm => ConfirmCloseUncommitted ?? ConfirmUncommitted;
+
+    /// <summary>
+    /// 접속 끊기 전 「실행 중인 작업을 취소하고 닫을까요?」(세션들 → true = 끊어도 된다, PHC-3). 조립이 <see cref="ExecutionController.ConfirmCancelRunningAsync(IReadOnlyList{ISession}, CancellationToken)"/> 를 넣는다.
+    /// 없으면 실행 중일 때 알리고 끊지 않는다(예전 동작).
+    /// </summary>
+    public Func<IReadOnlyList<ISession>, CancellationToken, Task<bool>>? ConfirmCancelRunning { get; set; }
+
+    /// <summary>
     /// 툴바 콤보의 「새 세션」 줄이 열 DB(TSK-14-03): SQL 작업 공간의 탭(전용 세션 탭 제외)이 활성이고 그 탭의 접속(없으면 지금 접속)이 열려 있으면
     /// 그 접속(기본 세션), 아니면 null(PL/SQL 문서 등은 지금처럼 접속만 고른다).
     /// </summary>
@@ -560,7 +575,7 @@ public sealed partial class SessionRouter
                 return false;
             }
 
-            if (IsUncommitted(session) && (ConfirmUncommitted is not { } confirm || !await confirm(session, ct).ConfigureAwait(true)))
+            if (IsUncommitted(session) && (CloseConfirm is not { } confirm || !await confirm(session, ct).ConfigureAwait(true)))
             {
                 return false;
             }
@@ -606,7 +621,7 @@ public sealed partial class SessionRouter
 
     /// <summary>
     /// 툴바·메뉴 「접속 끊기」(TSK-14-07): 접속(기본 세션)을 끊으면 같은 DB 에 더 연 세션도 모두 끊는다(남은 추가 세션이 접속 자리로 올라와
-    /// 작업 공간이 따라가지 않게). 하나라도 실행 중이면 알리고 끊지 않는다. 미커밋인 세션마다 기존 확인 창(<see cref="ConfirmUncommitted"/>)으로 묻고
+    /// 작업 공간이 따라가지 않게). 하나라도 명령이 도는 중이면 먼저 「취소하고 닫기」를 묻는다(<see cref="ConfirmCancelRunning"/>, 없으면 알리고 끊지 않는다). 미커밋인 세션마다 기존 확인 창(<see cref="ConfirmUncommitted"/>)으로 묻고
     /// 취소하면 끊지 않는다. 추가 세션 하나면 그것만 끊는다. 끊었으면 true. 그 세션들을 쓰던 작업 공간은 「접속 안 됨」 이 된다.
     /// </summary>
     public async Task<bool> DisconnectAsync(ISession target, CancellationToken ct = default)
@@ -616,7 +631,15 @@ public sealed partial class SessionRouter
             ? [.. _connections.SessionsOf(target.Profile.Id).Reverse()] // 추가 세션부터 끊는다(접속을 먼저 끊으면 추가 세션이 그 자리로 올라온다)
             : [target];
         var log = ExecutionLog.For(_bus);
-        if (targets.FirstOrDefault(s => _state.IsRunning(s.Id)) is { } running)
+        if (ConfirmCancelRunning is { } cancelRunning)
+        {
+            // 명령이 도는 세션(실행·컴파일·잠금을 쥔 일)이 있으면 미커밋 확인보다 먼저 「취소하고 닫기」를 묻는다(PHC-3). 돌아가기 = 끊지 않는다.
+            if (!await cancelRunning(targets, ct).ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+        else if (targets.FirstOrDefault(s => _state.IsRunning(s.Id)) is { } running)
         {
             log.AddMessage(MessageKind.Warning, $"「{LabelOf(running)}」 에서 실행 중입니다. 실행을 취소하거나 끝난 뒤 접속을 끊으세요.");
             return false;
@@ -624,7 +647,7 @@ public sealed partial class SessionRouter
 
         foreach (var session in targets.Where(IsUncommitted))
         {
-            if (ConfirmUncommitted is not { } confirm || !await confirm(session, ct).ConfigureAwait(true))
+            if (CloseConfirm is not { } confirm || !await confirm(session, ct).ConfigureAwait(true))
             {
                 return false;
             }

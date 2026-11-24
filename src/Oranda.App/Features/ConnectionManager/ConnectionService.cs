@@ -667,6 +667,8 @@ public sealed class ConnectionService : IConnectionService, IDisposable
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 // 응답이 없거나 실패해도 닫기는 계속한다(멈춘 서버 때문에 닫기가 막히지 않게). 늦게 끝난 롤백의 예외는 관찰만 한다.
+                // 기다림이 토큰 시한보다 먼저 끝났을 수 있다: 잠금 대기를 확실히 그만두게 취소한다(PHC-3).
+                cts.Cancel();
                 _ = rollback.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             }
         }

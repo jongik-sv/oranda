@@ -423,6 +423,37 @@ public sealed class WorkspaceSessionTests
         Assert.True(rig.Service.IsOpen(a)); // 접속의 세션은 닫지 않는다
     });
 
+    [Fact]
+    public Task Closing_a_workspace_uses_the_bounded_close_check_only_for_sessions_it_closes() => Ui.Run(async () =>
+    {
+        // PHC-3: 함께 닫는 더 연 세션 = 상한 있는 닫기 확인, 작업 공간을 닫아도 남는 접속 세션 = 상한 없는 보통 확인(「그대로 닫음」 뒤에도 트랜잭션이 남으므로).
+        using var rig = new Rig();
+        var a = await rig.ConnectAsync();
+        var (wsA, tabA, wsB, tabB) = rig.TwoWorkspaces();
+        await rig.Router.PrepareAsync(tabA);
+        await rig.Router.PrepareAsync(tabB);
+        var sessionB = rig.Router.SessionFor(tabB)!;
+        Assert.NotSame(a, sessionB);
+        rig.State.ApplyTransaction(a.Id, true);
+        rig.State.ApplyTransaction(sessionB.Id, true);
+        var asked = new List<string>();
+        rig.Router.ConfirmUncommitted = (s, _) =>
+        {
+            asked.Add("plain:" + (ReferenceEquals(s, a) ? "a" : "b"));
+            return Task.FromResult(false);
+        };
+        rig.Router.ConfirmCloseUncommitted = (s, _) =>
+        {
+            asked.Add("close:" + (ReferenceEquals(s, a) ? "a" : "b"));
+            return Task.FromResult(false);
+        };
+
+        Assert.False(await rig.Host.TryCloseWorkspaceAsync(wsA, default));
+        Assert.False(await rig.Host.TryCloseWorkspaceAsync(wsB, default));
+
+        Assert.Equal(["plain:a", "close:b"], asked);
+    });
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

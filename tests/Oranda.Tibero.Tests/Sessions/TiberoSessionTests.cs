@@ -53,6 +53,37 @@ public class TiberoSessionTests
     }
 
     [Fact]
+    public async Task A_held_gate_makes_the_session_busy_and_a_bounded_end_returns_in_time()
+    {
+        // PHC-3: Oracle 과 같다 — 누가 명령 잠금을 쥐면 「명령이 도는 중」, 닫는 경로의 커밋·롤백은 상한 안에 돌아온다.
+        var (session, _, _, _) = Create();
+        Assert.False(session.IsCommandRunning);
+
+        await session.CommandGate.EnterAsync(default);
+        try
+        {
+            Assert.True(session.IsCommandRunning);
+            foreach (var commit in new[] { true, false })
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var r = await BoundedTransactionEnd.RunAsync(session, commit, TimeSpan.FromMilliseconds(200));
+                Assert.Equal(TransactionEndOutcome.TimedOut, r.Outcome);
+                Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"{watch.Elapsed} 걸림");
+            }
+        }
+        finally
+        {
+            session.CommandGate.Release();
+        }
+
+        Assert.False(session.IsCommandRunning);
+        session.SetBusy(true);
+        Assert.True(session.IsCommandRunning);
+        session.SetBusy(false);
+        Assert.False(session.IsCommandRunning);
+    }
+
+    [Fact]
     public void SetPending_publishes_only_changes()
     {
         var (session, _, events, _) = Create();

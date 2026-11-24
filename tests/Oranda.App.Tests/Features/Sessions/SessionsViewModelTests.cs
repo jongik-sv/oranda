@@ -100,6 +100,15 @@ public sealed class SessionsViewModelTests
             return Task.FromResult(Confirm);
         }
 
+        /// <summary>「실행 중인 작업을 취소하고 닫을까요?」의 답(false = 돌아가기, PHC-3).</summary>
+        public bool CancelRunning { get; set; }
+
+        public Task<bool> ConfirmCancelRunningAsync(ISession session, CancellationToken ct)
+        {
+            Calls.Add("cancelRunning");
+            return Task.FromResult(CancelRunning);
+        }
+
         public Task DisconnectAsync(ISession session, CancellationToken ct)
         {
             Calls.Add("disconnect");
@@ -299,7 +308,7 @@ public sealed class SessionsViewModelTests
     });
 
     [Fact]
-    public Task Closing_a_running_session_is_refused_without_asking() => Ui.Run(async () =>
+    public Task Closing_a_running_session_asks_to_cancel_first_and_going_back_keeps_it() => Ui.Run(async () =>
     {
         using var rig = new Rig();
         var a = await rig.ConnectAsync();
@@ -309,8 +318,23 @@ public sealed class SessionsViewModelTests
 
         await rig.Vm.CloseAsync(rig.Vm.Rows[1]);
 
-        Assert.Empty(rig.Ops.Calls);
-        Assert.Contains(ExecutionLog.For(rig.Fx.Events).Messages, m => m.Kind == MessageKind.Warning && m.Text.Contains("실행 중입니다", StringComparison.Ordinal));
+        Assert.Equal(["cancelRunning"], rig.Ops.Calls); // 돌아가기: 미커밋도 묻지 않고 끊지 않는다
+        rig.State.EndRun(extra.Id);
+    });
+
+    [Fact]
+    public Task Cancel_and_close_on_a_running_session_goes_on_to_the_uncommitted_check_and_disconnects() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        var a = await rig.ConnectAsync();
+        var extra = await rig.OpenExtraAsync(a);
+        rig.Vm.Refresh();
+        rig.State.BeginRun(extra.Id);
+        rig.Ops.CancelRunning = true;
+
+        await rig.Vm.CloseAsync(rig.Vm.Rows[1]);
+
+        Assert.Equal(["cancelRunning", "confirm", "disconnect"], rig.Ops.Calls);
         rig.State.EndRun(extra.Id);
     });
 

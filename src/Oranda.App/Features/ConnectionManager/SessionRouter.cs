@@ -140,6 +140,8 @@ public sealed partial class SessionRouter
             {
                 ConfirmSwitch = (session, ct) => ExecutionCommands.Resolve(container).ConfirmSwitchAsync(session, ct),
                 ConfirmUncommitted = (session, ct) => ExecutionCommands.Resolve(container).ConfirmConnectionUncommittedAsync(session, ct),
+                ConfirmCloseUncommitted = (session, ct) => ExecutionCommands.Resolve(container).ConfirmConnectionCloseAsync(session, ct), // 세션을 닫는 경로: 커밋·롤백 상한(PHC-3)
+                ConfirmCancelRunning = (sessions, ct) => ExecutionCommands.Resolve(container).ConfirmCancelRunningAsync(sessions, ct),
                 SessionPerWorkspace = () => settings?.Current.Workspace.SessionPerWorkspace ?? true,
             };
             if (container.GetService<Shell.Docking.DockWorkspace>() is { } docking)

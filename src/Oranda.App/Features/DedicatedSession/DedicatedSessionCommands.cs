@@ -92,6 +92,13 @@ public static class DedicatedSessionCommands
                 return result;
             }
 
+            // 공유 작업 세션에서 명령이 도는 중이면(실행·PL/SQL 컴파일·멈춘 DDL 등) 미커밋 확인보다 먼저 「취소하고 닫기」를 묻는다(PHC-3·3b):
+            // 그렇지 않으면 커밋·롤백이 그 명령 뒤에 줄 서 종료가 멈춘다. 돌아가기 = 종료하지 않는다.
+            if (!await ExecutionCommands.Resolve(container).ConfirmCancelRunningAsync(ct).ConfigureAwait(true))
+            {
+                return result;
+            }
+
             // 전용 세션 확인을 마치면 그 세션들은 「닫는 중」으로 남는다(공유 세션 확인·커밋을 기다리는 동안 실행이 끼어들지 않게).
             if (!await host.CanShutdownAsync(ct).ConfigureAwait(true))
             {
@@ -120,6 +127,7 @@ public static class DedicatedSessionCommands
             if (result != ExitConfirmResult.Proceed)
             {
                 registry?.CancelClosing(); // 종료를 그만두면 다시 실행할 수 있게
+                ExecutionCommands.Resolve(container).ForgetAbandoned(); // 「취소하고 닫기」 표시도 지운다(다음 닫기는 처음부터 묻는다)
             }
         }
     }

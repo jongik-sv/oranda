@@ -23,6 +23,12 @@ public interface ISession : IAsyncDisposable
 
     bool HasPendingTransaction { get; }
 
+    /// <summary>
+    /// 지금 이 연결에 명령이 가는 중인지: 실행·컴파일·메타데이터 읽기·커밋 등 누가 세션 명령 잠금(<c>SessionCommandGate</c>)을 쥐고 있거나 실행 중(<see cref="SessionState.Busy"/>).
+    /// 종료·접속 끊기가 이것을 보고 「실행 중인 작업을 취소하고 닫을까요?」를 묻는다(잠금 뒤에 커밋·롤백을 줄 세워 멈추지 않게). 기본은 <see cref="SessionState.Busy"/> 만 본다.
+    /// </summary>
+    bool IsCommandRunning => State == SessionState.Busy;
+
     Task CommitAsync(CancellationToken ct);
 
     Task RollbackAsync(CancellationToken ct);

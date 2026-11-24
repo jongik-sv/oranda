@@ -279,7 +279,7 @@ public sealed partial class SessionsViewModel : ToolPanelViewModelBase, IDisposa
     }
 
     /// <summary>
-    /// 세션 닫기: 실행 중이면 알리고 닫지 않는다. 미커밋이면 이 세션에 대해 한 번 묻고(커밋/롤백/취소) 취소하면 닫지 않는다.
+    /// 세션 닫기: 명령이 도는 중이면 「실행 중인 작업을 취소하고 닫을까요?」를 묻고 돌아가기면 닫지 않는다(PHC-3). 미커밋이면 이 세션에 대해 한 번 묻고(커밋/롤백/취소) 취소하면 닫지 않는다.
     /// 접속(기본 세션)도 같은 규칙으로 닫을 수 있고, 더 연 세션이 남아 있으면 처음 연 것이 그 자리의 접속이 된다(툴바 「접속 끊기」 는 그 DB 세션을 모두 끊는다).
     /// 닫으면 그 세션을 쓰던 워크스페이스는 「접속 안 됨」 이 되어 다음 실행 때 기존 창이 다시 고르게 한다: 그 자리로 올라온 세션으로 몰래 옮기지 않는다
     /// (<see cref="SessionRouter.BoundSession"/>, D-039).
@@ -292,10 +292,9 @@ public sealed partial class SessionsViewModel : ToolPanelViewModelBase, IDisposa
         }
 
         var session = row.Session;
-        if (_state!.IsRunning(session.Id))
+        if ((_state!.IsRunning(session.Id) || session.IsCommandRunning) && !await ops.ConfirmCancelRunningAsync(session, ct).ConfigureAwait(true))
         {
-            ExecutionLog.For(_bus).AddMessage(MessageKind.Warning, $"「{_router!.LabelOf(session)}」 에서 실행 중입니다. 실행을 취소하거나 끝난 뒤 세션을 닫으세요.");
-            return;
+            return; // 명령이 도는 중: 「취소하고 닫기」를 묻고(PHC-3) 돌아가기면 닫지 않는다
         }
 
         if (!await ops.ConfirmUncommittedAsync(session, ct).ConfigureAwait(true))

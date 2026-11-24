@@ -108,6 +108,20 @@ public interface IExecutionDialogs
     Task<MissingConnectionChoice> AskMissingConnectionAsync(string profile, string? current, CancellationToken ct) =>
         Task.FromResult(MissingConnectionChoice.Cancel);
 
+    /// <summary>
+    /// 닫으려는 세션(<paramref name="connections"/> = 「번호 - 사용자@이름」)에서 명령이 도는 중일 때(PHC-3, 앱 종료·접속 끊기·세션 닫기): 「실행 중인 작업을 취소하고 닫을까요?」
+    /// true = 취소하고 닫기, false = 돌아가기. <paramref name="uncommitted"/> 면 DDL 뒤의 커밋 여부는 알 수 없다고 밝힌다(PHC-3b).
+    /// <paramref name="wait"/> = 취소 뒤 기다리는 시간(글에 보인다). 기본은 돌아가기.
+    /// </summary>
+    Task<bool> ConfirmCancelRunningAsync(IReadOnlyList<string> connections, bool uncommitted, TimeSpan wait, CancellationToken ct) =>
+        Task.FromResult(false);
+
+    /// <summary>
+    /// 닫는 경로의 커밋이 상한(<paramref name="limit"/>) 안에 끝나지 않았다(PHC-3): 「세션이 응답하지 않아 커밋하지 못했습니다」. true = 커밋하지 않고 닫기,
+    /// false = 돌아가기(기본 단추). 기본은 돌아가기.
+    /// </summary>
+    Task<bool> ConfirmCloseWithoutCommitAsync(string connection, TimeSpan limit, CancellationToken ct) => Task.FromResult(false);
+
     /// <summary>DML 미리보기(그리드 반영 전, GRID-05). true = 반영.</summary>
     Task<bool> PreviewDmlAsync(string text, CancellationToken ct);
 
@@ -116,6 +130,67 @@ public interface IExecutionDialogs
     /// 기본은 동작을 밝히지 않는 <see cref="PreviewDmlAsync(string, CancellationToken)"/> 로 넘긴다.
     /// </summary>
     Task<bool> PreviewDmlAsync(string text, bool commit, CancellationToken ct) => PreviewDmlAsync(text, ct);
+}
+
+/// <summary>실행 중 닫기(PHC-3) 확인 창·메시지 창 글. 화면 없이 시험한다.</summary>
+public static class ExecutionDialogText
+{
+    private static string Seconds(TimeSpan t) => t.TotalSeconds.ToString("0.#", CultureInfo.CurrentCulture);
+
+    private static string Join(IReadOnlyList<string> connections) => string.Join(", ", connections.Select(c => $"「{c}」"));
+
+    /// <summary>창 제목.</summary>
+    public static string BusyCloseTitle => Localization.UiText.Get("Execution.busyClose.title", "실행 중인 작업");
+
+    /// <summary>
+    /// 「취소하고 닫기」 확인 본문. <paramref name="uncommitted"/> 면 DDL(컴파일 포함)이 그 앞 변경을 이미 커밋했을 수 있어 커밋 여부를 알 수 없다는 줄을 붙인다.
+    /// </summary>
+    public static string BusyClose(IReadOnlyList<string> connections, bool uncommitted, TimeSpan wait)
+    {
+        ArgumentNullException.ThrowIfNull(connections);
+        var text = Localization.UiText.Get("Execution.busyClose",
+                "{0} 에서 실행 중인 작업이 있습니다. 실행 중인 작업을 취소하고 닫을까요?\n취소를 요청한 뒤 {1}초 안에 끝나지 않으면 기다리지 않고 닫습니다.")
+            .Replace("{0}", Join(connections), StringComparison.Ordinal)
+            .Replace("{1}", Seconds(wait), StringComparison.Ordinal);
+        return uncommitted
+            ? text + "\n" + Localization.UiText.Get("Execution.busyClose.ddl",
+                "실행 중인 문장이 DDL(CREATE·ALTER·DROP, PL/SQL 컴파일 등)이면 서버가 그 앞의 변경을 이미 커밋했을 수 있어, 커밋했는지 알 수 없습니다. 미커밋 표시는 그 문장이 끝나야 맞춰집니다.")
+            : text;
+    }
+
+    /// <summary>「취소하고 닫기」 단추.</summary>
+    public static string CancelAndClose => Localization.UiText.Get("Execution.busyClose.cancelAndClose", "취소하고 닫기");
+
+    /// <summary>「돌아가기」 단추(기본 단추).</summary>
+    public static string GoBack => Localization.UiText.Get("Execution.busyClose.back", "돌아가기");
+
+    /// <summary>취소 뒤에도 명령을 놓지 않아 기다리지 않고 닫는다(메시지 창 경고).</summary>
+    public static string Abandoned(string connection, TimeSpan wait) =>
+        Localization.UiText.Get("Execution.busyClose.abandoned",
+                "「{0}」 세션이 {1}초 안에 실행 중인 명령을 끝내지 않아 기다리지 않고 닫습니다. 커밋하지 않은 변경은 롤백됩니다(실행 중이던 문장이 DDL 이면 그 앞의 변경은 이미 커밋됐을 수 있습니다).")
+            .Replace("{0}", connection, StringComparison.Ordinal)
+            .Replace("{1}", Seconds(wait), StringComparison.Ordinal);
+
+    /// <summary>닫는 경로의 롤백이 상한을 넘었다(메시지 창 경고). 그대로 닫는다.</summary>
+    public static string RollbackTimedOut(string connection, TimeSpan limit) =>
+        Localization.UiText.Get("Execution.endTimeout.rollback",
+                "「{0}」 세션이 응답하지 않아 {1}초 안에 롤백하지 못했습니다. 그대로 닫습니다(커밋하지 않은 변경은 롤백됩니다).")
+            .Replace("{0}", connection, StringComparison.Ordinal)
+            .Replace("{1}", Seconds(limit), StringComparison.Ordinal);
+
+    /// <summary>닫는 경로의 커밋이 상한을 넘었다(메시지 창 경고·확인 창 본문).</summary>
+    public static string CommitTimedOut(string connection, TimeSpan limit) =>
+        Localization.UiText.Get("Execution.endTimeout.commit",
+                "「{0}」 세션이 응답하지 않아 {1}초 안에 커밋하지 못했습니다(커밋됐는지 확인하지 못했습니다).")
+            .Replace("{0}", connection, StringComparison.Ordinal)
+            .Replace("{1}", Seconds(limit), StringComparison.Ordinal);
+
+    /// <summary>커밋 상한 초과 확인 창 질문 줄.</summary>
+    public static string CloseWithoutCommitQuestion =>
+        Localization.UiText.Get("Execution.endTimeout.question", "커밋하지 않고 닫으면 커밋하지 않은 변경은 롤백됩니다. 커밋하지 않고 닫을까요?");
+
+    /// <summary>「커밋하지 않고 닫기」 단추.</summary>
+    public static string CloseWithoutCommit => Localization.UiText.Get("Execution.endTimeout.close", "커밋하지 않고 닫기");
 }
 
 /// <summary>실행 확인 대화상자의 판단 부분(화면 없이 시험한다).</summary>

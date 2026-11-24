@@ -50,18 +50,34 @@ internal sealed class FakeSession(ConnectionProfile profile) : ISession
 
     public int Rollbacks { get; private set; }
 
-    public Task CommitAsync(CancellationToken ct)
+    /// <summary>누가 세션 명령 잠금을 쥐고 있는 것처럼(실행·컴파일 등, PHC-3).</summary>
+    public bool CommandRunning { get; set; }
+
+    public bool IsCommandRunning => CommandRunning || State == SessionState.Busy;
+
+    /// <summary>넣으면 커밋·롤백이 이것을 먼저 기다린다(잠금 대기 흉내). 토큰을 받는다.</summary>
+    public Func<CancellationToken, Task>? EndWait { get; set; }
+
+    public async Task CommitAsync(CancellationToken ct)
     {
+        if (EndWait is { } wait)
+        {
+            await wait(ct);
+        }
+
         Commits++;
         HasPendingTransaction = false;
-        return Task.CompletedTask;
     }
 
-    public Task RollbackAsync(CancellationToken ct)
+    public async Task RollbackAsync(CancellationToken ct)
     {
+        if (EndWait is { } wait)
+        {
+            await wait(ct);
+        }
+
         Rollbacks++;
         HasPendingTransaction = false;
-        return Task.CompletedTask;
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
@@ -206,6 +222,29 @@ internal sealed class FakeDialogs : IExecutionDialogs
     {
         PreviewText = text;
         return Task.FromResult(PreviewAnswer);
+    }
+
+    /// <summary>「실행 중인 작업을 취소하고 닫을까요?」의 답(true = 취소하고 닫기, PHC-3).</summary>
+    public bool CancelRunningAnswer { get; set; } = true;
+
+    /// <summary>「취소하고 닫기」에서 물은 (접속 이름들, 미커밋 여부).</summary>
+    public List<(IReadOnlyList<string> Connections, bool Uncommitted)> CancelRunningAsked { get; } = [];
+
+    public Task<bool> ConfirmCancelRunningAsync(IReadOnlyList<string> connections, bool uncommitted, TimeSpan wait, CancellationToken ct)
+    {
+        CancelRunningAsked.Add((connections, uncommitted));
+        return Task.FromResult(CancelRunningAnswer);
+    }
+
+    /// <summary>커밋 상한 초과 뒤 「커밋하지 않고 닫기」의 답.</summary>
+    public bool CloseWithoutCommitAnswer { get; set; }
+
+    public List<string> CloseWithoutCommitAsked { get; } = [];
+
+    public Task<bool> ConfirmCloseWithoutCommitAsync(string connection, TimeSpan limit, CancellationToken ct)
+    {
+        CloseWithoutCommitAsked.Add(connection);
+        return Task.FromResult(CloseWithoutCommitAnswer);
     }
 }
 

@@ -468,6 +468,39 @@ public sealed class SessionLifecycleTests
     });
 
     [Fact]
+    public Task Disconnecting_while_a_session_runs_asks_cancel_and_close_before_the_uncommitted_check() => Ui.Run(async () =>
+    {
+        // PHC-3: 실행 중이면 막지 않고 「취소하고 닫기」를 먼저 묻는다. 돌아가기 = 끊지 않는다, 취소하고 닫기 = 미커밋 확인으로 이어 간다.
+        using var rig = new Rig();
+        var a = await rig.ConnectAsync();
+        rig.State.ApplyTransaction(a.Id, true);
+        rig.State.BeginRun(a.Id);
+        var order = new List<string>();
+        var cancelAnswer = false;
+        rig.Router.ConfirmCancelRunning = (sessions, _) =>
+        {
+            order.Add("cancelRunning:" + sessions.Count);
+            return Task.FromResult(cancelAnswer);
+        };
+        rig.Router.ConfirmUncommitted = (_, _) =>
+        {
+            order.Add("uncommitted");
+            return Task.FromResult(true);
+        };
+
+        Assert.False(await rig.Router.DisconnectAsync(a));
+        Assert.Equal(["cancelRunning:1"], order);
+        Assert.True(rig.Service.IsOpen(a));
+
+        cancelAnswer = true;
+        Assert.True(await rig.Router.DisconnectAsync(a));
+        HeadlessHost.PumpIfOnUiThread();
+        Assert.Equal(["cancelRunning:1", "cancelRunning:1", "uncommitted"], order);
+        Assert.False(rig.Service.IsOpen(a));
+        rig.State.EndRun(a.Id);
+    });
+
+    [Fact]
     public Task Disconnecting_a_second_session_closes_only_that_one() => Ui.Run(async () =>
     {
         using var rig = new Rig();
