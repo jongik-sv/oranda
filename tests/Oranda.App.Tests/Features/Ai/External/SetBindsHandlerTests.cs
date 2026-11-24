@@ -157,7 +157,7 @@ public sealed class SetBindsHandlerTests
     });
 
     [Fact]
-    public Task Query_level_and_production_cloud_grants_hide_values_like_get_binds() => Ui.Run(async () =>
+    public Task Query_level_hides_values_and_a_grant_that_cannot_read_the_tab_is_refused_like_get_tab() => Ui.Run(async () =>
     {
         using var query = Env(level: AiAccessLevel.Query);
         var queryOutput = await SetAsync(query, new JsonObject { ["FROM_DT"] = "20261101" });
@@ -165,18 +165,68 @@ public sealed class SetBindsHandlerTests
         Assert.Null(queryOutput.Result["binds"]![0]!["value"]); // 행 값 수준이 아니면 값은 돌려주지 않는다
         Assert.Equal("20261101", query.Tab.Binds.Find("FROM_DT")!.Text);
 
+        // 결정 ③: 운영 탭 + 클라우드 모델은 탭 글을 읽을 수 없다 → get_tab 과 같은 코드(environment)로 거부, 모르는 이름(:OTHER)을 더듬어 볼 수 없다.
         using var prod = Env("SELECT n FROM sample_orders WHERE order_dt = :FROM_DT AND secret_code = :OTHER", AiAccessLevel.Query, ConnectionEnvironment.Production);
-        var prodOutput = await SetAsync(prod, new JsonObject { ["FROM_DT"] = "20261101" });
-        if (!AgentGrantPolicy.ProductionRuns)
-        {
-            Assert.Equal("environment", prodOutput.ErrorCode);
-            return;
-        }
+        var probe = await SetAsync(prod, new JsonObject { ["NOT_THERE"] = "x" });
+        var known = await SetAsync(prod, new JsonObject { ["FROM_DT"] = "20261101" });
+        Assert.Equal("environment", probe.ErrorCode);
+        Assert.Equal("environment", known.ErrorCode); // 있는 이름과 없는 이름이 같은 답
+        Assert.Equal(probe.ErrorMessage, known.ErrorMessage);
+        Assert.Empty(prod.Tab.Binds.Rows);
 
-        Assert.False(prodOutput.IsError, prodOutput.ErrorMessage);
-        var shown = Assert.Single(prodOutput.Result!["binds"]!.AsArray())!; // 운영 탭 글을 읽을 수 없는 허가: 보낸 이름만(:OTHER 를 드러내지 않는다)
-        Assert.Equal("FROM_DT", shown["name"]!.GetValue<string>());
-        Assert.Null(shown["value"]);
+        var run = await prod.RunAsync(a => a["binds"] = new JsonObject { ["FROM_DT"] = "20261101" });
+        Assert.Equal("environment", run.ErrorCode); // run_tab --binds-json 도 같다
+        Assert.Empty(prod.Rig.Exec.Statements);
+    });
+
+    [Fact]
+    public Task Typed_values_set_the_type_of_a_new_or_unchosen_row_and_refuse_a_different_chosen_type() => Ui.Run(async () =>
+    {
+        // 결정 ①: {"value": …, "type": "varchar2|number|date|timestamp"}.
+        using var env = Env("SELECT n FROM sample_orders WHERE d1 = :NEW_DT AND d2 = :BLANK_DT AND d3 = :DATE_DT AND n1 = :NUM");
+        env.Tab.Binds.Add("BLANK_DT"); // 실행이 만든 줄: 빈 값·VARCHAR2 = 아직 형식을 고르지 않음
+        env.Tab.Binds.Add("DATE_DT").Type = BindDataType.Date;
+        var num = env.Tab.Binds.Add("NUM");
+        num.Type = BindDataType.Number;
+        num.Text = "10";
+
+        var ok = await SetAsync(env, new JsonObject
+        {
+            ["NEW_DT"] = new JsonObject { ["value"] = "20261101", ["type"] = "date" },
+            ["BLANK_DT"] = new JsonObject { ["value"] = "20261102", ["type"] = "DATE" },
+            ["DATE_DT"] = new JsonObject { ["value"] = "20261103", ["type"] = "date" },
+        });
+
+        Assert.False(ok.IsError, ok.ErrorMessage);
+        Assert.Equal((BindDataType.Date, "2026-11-01 00:00:00"), (env.Tab.Binds.Find("NEW_DT")!.Type, env.Tab.Binds.Find("NEW_DT")!.Text));
+        Assert.Equal((BindDataType.Date, "2026-11-02 00:00:00"), (env.Tab.Binds.Find("BLANK_DT")!.Type, env.Tab.Binds.Find("BLANK_DT")!.Text));
+        Assert.Equal("2026-11-03 00:00:00", env.Tab.Binds.Find("DATE_DT")!.Text);
+
+        var conflict = await SetAsync(env, new JsonObject { ["NUM"] = new JsonObject { ["value"] = "11", ["type"] = "varchar2" } });
+        Assert.Equal("bind_invalid", conflict.ErrorCode);
+        Assert.Contains("number", conflict.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal((BindDataType.Number, "10"), (num.Type, num.Text)); // 말없이 바꾸지 않는다
+
+        var badType = await SetAsync(env, new JsonObject { ["NUM"] = new JsonObject { ["value"] = "11", ["type"] = "clob" } });
+        var extra = await SetAsync(env, new JsonObject { ["NUM"] = new JsonObject { ["value"] = "11", ["kind"] = "x" } });
+        Assert.Equal("invalid_arguments", badType.ErrorCode);
+        Assert.Equal("invalid_arguments", extra.ErrorCode);
+
+        var untyped = await SetAsync(env, new JsonObject { ["NUM"] = 12 }); // 형식 없이 = 지금 규칙
+        Assert.False(untyped.IsError, untyped.ErrorMessage);
+        Assert.Equal("12", num.Text);
+    });
+
+    [Fact]
+    public Task Run_tab_with_a_typed_date_runs_with_a_date_value() => Ui.Run(async () =>
+    {
+        using var env = Env();
+
+        var output = await env.RunAsync(a => a["binds"] = new JsonObject { ["FROM_DT"] = new JsonObject { ["value"] = "20261101", ["type"] = "date" } });
+
+        Assert.False(output.IsError, output.ErrorMessage);
+        var used = env.Rig.Exec.LastBinds!["FROM_DT"];
+        Assert.Equal((BindDataType.Date, (object?)new DateTime(2026, 11, 1)), (used.Type, used.Value));
     });
 
     [Fact]

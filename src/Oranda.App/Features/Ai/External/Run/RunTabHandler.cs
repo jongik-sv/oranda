@@ -77,6 +77,12 @@ public sealed class RunTabHandler(IServiceProvider services) : IAppToolHandler
 
     private static async Task<AgentToolOutput> RunOnAsync(ExternalRunParts parts, Request request, SqlEditorViewModel tab, CancellationToken ct)
     {
+        // 결정 ③: binds 를 주면 탭 글을 읽을 수 있는 허가여야 한다(get_tab 과 같은 거부 코드). binds 없는 실행은 그대로.
+        if (request.Binds is not null && ExternalBindFill.RefuseUnreadable(request.Invocation.Grant, tab) is { } unreadable)
+        {
+            return unreadable;
+        }
+
         if (request.BaseVersion is { } expected && expected != tab.Version)
         {
             return AgentToolOutput.Ok(new JsonObject { ["status"] = AppToolValues.RunStatus.Stale, ["version"] = tab.Version });
