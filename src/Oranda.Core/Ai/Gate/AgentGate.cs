@@ -426,7 +426,7 @@ public sealed partial class AgentGate : IAgentGate, IAgentExternalGate
             Client = session.Client,
             RunId = session.RunId,
             Tool = shownName,
-            Arguments = FindTool(session, toolName) is null ? null : SummarizeArguments(state),
+            Arguments = FindTool(session, toolName) is null ? null : SummarizeArguments(state, bindsNamesOnly: session.Profile.Environment == Oranda.Core.Connection.ConnectionEnvironment.Production),
             AccessLevel = level,
             Verdict = outcome.Judgement,
             Reason = outcome.Reason,

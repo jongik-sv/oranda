@@ -340,7 +340,8 @@ public sealed partial class AgentGate
                 Client = client,
                 RunId = runId,
                 Tool = shownName,
-                Arguments = AppTools.Find(toolName) is null ? null : SummarizeArguments(state),
+                // 바인드 값(결정 ②, 2026-11-24): 운영 접속이거나 접속을 모르는 호출(잠긴 탭·없는 탭)은 이름·형식만 남긴다. 개발·시험은 query 의 binds 와 같이 값까지.
+                Arguments = AppTools.Find(toolName) is null ? null : SummarizeArguments(state, bindsNamesOnly: connection is null || connection.Environment == Oranda.Core.Connection.ConnectionEnvironment.Production),
                 AccessLevel = connection?.Level ?? AiAccessLevel.Off,
                 Verdict = outcome.Judgement,
                 Reason = outcome.Reason,

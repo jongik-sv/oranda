@@ -50,7 +50,7 @@ public partial class AgentGateTests
 
         public List<FakeAppHandler> AppHandlerList { get; } =
             [new(AppToolNames.ListTabs), new(AppToolNames.NewTab), new(AppToolNames.RevealObject), new(AppToolNames.GetHistory), new(AppToolNames.CheckSql),
-             new(AppToolNames.RunTab), new(AppToolNames.GetResult), new(AppToolNames.GetTab)];
+             new(AppToolNames.RunTab), new(AppToolNames.GetResult), new(AppToolNames.GetTab), new(AppToolNames.SetBinds)];
 
         public FakeAppHandler App(string name) => AppHandlerList.Single(h => h.ToolName == name);
 

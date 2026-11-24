@@ -174,7 +174,11 @@ public sealed partial class AgentGate
     /// 감사 기록 <c>arguments</c> 열의 요약: <c>키=값</c> 쉼표 나열. SQL 글은 절대 넣지 않고 <c>sql=&lt;N chars&gt;</c> 로 길이만, 변형 배열은 개수만 적는다.
     /// 객체 인자는 해석된 <c>OWNER.NAME</c>(없으면 원래 값 앞 100자)이다. 전체 400자 제한.
     /// </summary>
-    private static string? SummarizeArguments(CallState state)
+    /// <param name="bindsNamesOnly">
+    /// 참이면 <c>binds</c> 를 값 없이 <c>{이름:형식}</c> 로 적는다(운영 접속, 결정 ② 2026-11-24 — 예: <c>binds={PAK_PST_DD:date}</c>).
+    /// 형식 = <c>{"value","type"}</c> 의 type, 아니면 값의 꼴(글 varchar2·숫자 number·참거짓 boolean·null).
+    /// </param>
+    private static string? SummarizeArguments(CallState state, bool bindsNamesOnly = false)
     {
         if (state.Clean.Count == 0 && !state.LiteralMasking && !state.LocalAi && !state.ReportedOutsideGrant && state.UserFunctionCount == 0 && state.FirstSubstitution is null)
         {
@@ -227,6 +231,10 @@ public sealed partial class AgentGate
             {
                 text = value is JsonArray array ? array.Count.ToString(CultureInfo.InvariantCulture) : "<invalid>";
             }
+            else if (key == AppFields.Binds && bindsNamesOnly)
+            {
+                text = Clip(BindNamesAndTypes(value), AuditValueMaxChars);
+            }
             else if ((key == AgentFields.ObjectName || key == AgentFields.Table) && state.Resolved.TryGetValue(key, out var resolved))
             {
                 text = Clip(resolved.Owner + "." + resolved.Name, AuditValueMaxChars);
@@ -241,6 +249,32 @@ public sealed partial class AgentGate
 
         var summary = string.Join(", ", parts);
         return summary.Length > AuditArgumentsMaxChars ? summary[..AuditArgumentsMaxChars] : summary;
+    }
+
+    /// <summary><c>binds</c> 의 이름과 형식만(값 없음): <c>{ID:number,FROM_DT:date}</c>. 객체가 아니면 <c>&lt;invalid&gt;</c>.</summary>
+    internal static string BindNamesAndTypes(JsonNode? binds)
+    {
+        if (binds is not JsonObject obj)
+        {
+            return "<invalid>";
+        }
+
+        static string TypeOf(JsonNode? value) => value switch
+        {
+            JsonObject typed when typed["type"] is JsonValue t && t.TryGetValue<string>(out var name) => name.Trim().ToLowerInvariant(),
+            JsonObject typed => TypeOf(typed["value"]),
+            null => "null",
+            JsonValue v => v.GetValueKind() switch
+            {
+                JsonValueKind.String => "varchar2",
+                JsonValueKind.Number => "number",
+                JsonValueKind.True or JsonValueKind.False => "boolean",
+                _ => "null",
+            },
+            _ => "invalid",
+        };
+
+        return "{" + string.Join(",", obj.Select(p => p.Key.Trim().TrimStart(':') + ":" + TypeOf(p.Value))) + "}";
     }
 
     private static string Render(JsonNode? node) => node switch
