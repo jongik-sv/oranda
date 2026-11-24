@@ -250,7 +250,7 @@ public sealed class AccessStepTests
         text.SetLanguage("en");
 
         Assert.Equal("Production", vm.Rows[0].EnvironmentLabel);
-        Assert.Contains("never sent", vm.Rows[0].Description);
+        Assert.Contains("no row values", vm.Rows[0].Description);
         Assert.StartsWith("Could not save", vm.ErrorText);
         Assert.Equal("Connections that use AI", vm.Title);
     }

@@ -258,11 +258,11 @@ public sealed partial class AiSettingsHubPage : ObservableObject, IDisposable
     /// <summary>① 표 읽는 법: 오른쪽일수록 더 많이 보임, 모르면 그대로, 운영 값은 가지 않음.</summary>
     public string AccessHelp => _t.T(
         "단추가 오른쪽으로 갈수록 AI 에 더 많이 보여 줍니다. 잘 모르겠으면 처음 값 그대로 두세요(개발 · 시험은 「계획」, 운영은 「조회 실행」).\n"
-        + "운영 DB 의 실제 데이터 값은 회사 밖 AI(Claude 등)로 보내지 않습니다. 운영에서 SELECT 를 돌려도 그 AI 에는 몇 행이 나왔는지만 갑니다. "
-        + "회사 안 AI 서버를 「로컬 AI」로 표시한 프로필이면 값까지 봅니다.",
+        + "운영은 처음에 「조회 실행」이라 회사 밖 AI(Claude 등)에는 결과 값을 보내지 않습니다. 학습에 쓰지 않는 기업용 AI 라면 「조회+행 값」까지 올릴 수 있습니다(접속 이름을 한 번 더 입력). "
+        + "회사 안 AI 서버를 「로컬 AI」로 표시한 프로필은 처음 값에서도 값까지 봅니다.",
         "The further right the button, the more AI is shown. If unsure, keep the starting value (Development and Test: \"Plan\", Production: \"Run SELECT\").\n"
-        + "Actual data values from a production DB are not sent to AI outside the company (Claude and others). When a SELECT runs on production, that AI only gets the row count. "
-        + "A profile that marks a company AI server as \"Local AI\" sees the values too.");
+        + "Production starts at \"Run SELECT\", so AI outside the company (Claude and others) gets no result values. With an enterprise AI that does not train on your data you can raise it to \"SELECT + rows\" (type the connection name once more). "
+        + "A profile that marks a company AI server as \"Local AI\" sees the values even at the starting value.");
 
     /// <summary>접혀 있을 때(연결 전·막힘) 머리 옆 한 줄.</summary>
     public string AccessCollapsedHint => _t.T("도우미 마지막 단계에서 정합니다. 지금 바로 정해도 됩니다.", "The assistant sets this in its last step. You can also set it now.");
@@ -357,7 +357,15 @@ public sealed partial class AiSettingsHubPage : ObservableObject, IDisposable
     public string TestText => _t.T("연결 시험", "Test connection");
 
     /// <summary>회색 띠: 「위 1 의 표를 그대로 따릅니다: dev-erp 계획 · …」.</summary>
-    public string InsideSummary => _t.T("위 1 의 표를 그대로 따릅니다: ", "Follows table 1 as is: ") + Levels(a => (a.Level, false));
+    public string InsideSummary => _t.T("위 1 의 표를 그대로 따릅니다: ", "Follows table 1 as is: ") + Levels(a => (a.Level, false))
+        + (UsesLocalAi
+            ? "\n" + _t.T(
+                "지금 쓰는 AI 는 「로컬 AI」(회사 안 서버)라서, 「끔」이 아닌 접속은 운영까지 결과 값을 가리지 않고 봅니다. AI 가 할 수 있는 일(SELECT 실행 등)은 위 표 그대로입니다.",
+                "The AI in use is a \"Local AI\" (company server), so on every connection that is not \"Off\", production included, it sees result values unmasked. What AI may do (running SELECT and so on) still follows the table above.")
+            : string.Empty);
+
+    /// <summary>저장된 주 모델이 「로컬 AI」 로 지정된 프로필인가. 그러면 값 수준이 <see cref="AiAccessPolicy.DataLevel"/> 로 「조회+행 값」 까지 올라간다.</summary>
+    public bool UsesLocalAi => Saved is { Kind: AiActiveKind.Profile, Profile: { IsLocalAi: true } };
 
     public string AdvancedTitle => _t.T("고급 설정 (모델 · 프로필 · 기타 CLI · 값 가림 …)", "Advanced settings (model · profiles · other CLIs · value masking …)");
 

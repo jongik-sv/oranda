@@ -29,7 +29,7 @@ public class AiConnectionAccessTests
         var prd = AiConnectionAccess.Of(Prd());
         Assert.True(prd.FollowsDefault);
         Assert.Equal(AiAccessLevel.Query, prd.Level); // 운영 기본 = 조회 실행
-        Assert.Equal(AiAccessLevel.Query, prd.MaxLevel);
+        Assert.Equal(AiAccessLevel.QueryRows, prd.MaxLevel); // 운영 최대 = 조회+행 값(2026-11-24)
         Assert.Equal(AgentGrantPolicy.DefaultCap(ConnectionEnvironment.Production), prd.ExternalCap);
         Assert.Equal(prd.ExternalCap < AiAccessLevel.Query ? prd.ExternalCap : AiAccessLevel.Query, prd.ExternalLevel); // min(접속, 상한)
         Assert.True(prd.ShowsExternalCap); // 운영은 상한을 보인다
@@ -83,7 +83,7 @@ public class AiConnectionAccessTests
     public void Choices_stop_at_the_environment_maximum()
     {
         Assert.Equal([AiAccessLevel.Off, AiAccessLevel.Metadata, AiAccessLevel.Plan, AiAccessLevel.Query, AiAccessLevel.QueryRows], AiConnectionAccessRules.Choices(ConnectionEnvironment.Development));
-        Assert.Equal([AiAccessLevel.Off, AiAccessLevel.Metadata, AiAccessLevel.Plan, AiAccessLevel.Query], AiConnectionAccessRules.Choices(ConnectionEnvironment.Production));
+        Assert.Equal([AiAccessLevel.Off, AiAccessLevel.Metadata, AiAccessLevel.Plan, AiAccessLevel.Query, AiAccessLevel.QueryRows], AiConnectionAccessRules.Choices(ConnectionEnvironment.Production));
         Assert.Equal(AiConnectionAccessRules.Choices(ConnectionEnvironment.Production), AiConnectionAccess.Of(Prd()).Choices);
     }
 
@@ -108,7 +108,9 @@ public class AiConnectionAccessTests
         Assert.Equal(AiAccessChange.NeedsNameConfirmation, AiConnectionAccessRules.Check(off, AiAccessLevel.Plan, "prd"));
         Assert.Equal(AiAccessChange.Saved, AiConnectionAccessRules.Check(off, AiAccessLevel.Plan, "prd-erp"));
         Assert.Equal(AiAccessChange.Saved, AiConnectionAccessRules.Check(Prd(), AiAccessLevel.Metadata, null)); // 내리기는 묻지 않는다
-        Assert.Equal(AiAccessChange.AboveMaximum, AiConnectionAccessRules.Check(off, AiAccessLevel.QueryRows, "prd-erp"));
+        Assert.Equal(AiAccessChange.NeedsNameConfirmation, AiConnectionAccessRules.Check(off, AiAccessLevel.QueryRows, null)); // 운영 행 값도 이름 재입력
+        Assert.Equal(AiAccessChange.Saved, AiConnectionAccessRules.Check(off, AiAccessLevel.QueryRows, "prd-erp"));
+        Assert.Equal(AiAccessChange.NeedsNameConfirmation, AiConnectionAccessRules.Check(Prd(), AiAccessLevel.QueryRows, null)); // 기본(조회 실행)에서 올려도
         Assert.Equal(AiAccessChange.AboveMaximum, AiConnectionAccessRules.Check(Dev(), (AiAccessLevel)42, null));
         Assert.Equal(AiAccessChange.Saved, AiConnectionAccessRules.Check(Dev(), AiAccessLevel.QueryRows, null)); // 개발은 묻지 않는다
     }

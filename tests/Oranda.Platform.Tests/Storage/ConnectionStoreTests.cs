@@ -25,7 +25,7 @@ public sealed class ConnectionStoreTests : IDisposable
         new(name, "scott", dataSource);
 
     [Fact]
-    public async Task Ai_access_round_trips_and_production_is_clamped_to_plan_on_load()
+    public async Task Ai_access_round_trips_and_production_keeps_query_rows_on_load()
     {
         File.WriteAllText(
             Path.Combine(_dir, "connections.json"),
@@ -33,7 +33,7 @@ public sealed class ConnectionStoreTests : IDisposable
         using var store = NewStore();
 
         var loaded = (await store.LoadAsync(CancellationToken.None)).Value.Profiles;
-        Assert.Equal(Core.Ai.Access.AiAccessLevel.Plan, loaded[0].AiAccess);
+        Assert.Equal(Core.Ai.Access.AiAccessLevel.QueryRows, loaded[0].AiAccess); // 운영 최대 = 조회+행 값(D-068)
         Assert.Equal(Core.Ai.Access.AiAccessLevel.QueryRows, loaded[1].AiAccess);
         Assert.False(loaded[1].AllowExplainPlan);
     }

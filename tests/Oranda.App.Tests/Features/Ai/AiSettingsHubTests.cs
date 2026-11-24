@@ -382,9 +382,9 @@ public sealed class AiSettingsHubTests
             var buttons = view.AccessGroup.GetVisualDescendants().OfType<Button>().Where(b => b.DataContext is AccessLevelButton).ToList();
             Assert.Equal(10, buttons.Count); // 접속 둘 × 다섯
             var prdRows = buttons.Where(b => ((AccessLevelButton)b.DataContext!).Row.IsProduction).ToList();
-            Assert.False(prdRows.Single(b => ((AccessLevelButton)b.DataContext!).Level == AiAccessLevel.QueryRows).IsEnabled); // 운영은 조회 실행까지
+            Assert.True(prdRows.Single(b => ((AccessLevelButton)b.DataContext!).Level == AiAccessLevel.QueryRows).IsEnabled); // 운영도 조회+행 값(2026-11-24)
             Assert.Contains(AccessTableView.SelectedClass, prdRows.Single(b => ((AccessLevelButton)b.DataContext!).Level == AiAccessLevel.Query).Classes);
-            Assert.Contains(view.AccessGroup.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "운영은 「조회 실행」까지");
+            Assert.Contains(view.AccessGroup.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "운영은 올릴 때 접속 이름을 다시 입력");
             Assert.StartsWith("위 1 의 표를 그대로 따릅니다", view.InsideSummary.Text, StringComparison.Ordinal);
             Assert.StartsWith("위 1 의 표를 그대로 따릅니다", view.OutsideSummary.Text, StringComparison.Ordinal);
             Assert.EndsWith("운영 접속은 연결할 때 접속 이름을 한 번 더 입력해야 고를 수 있습니다.", view.OutsideSummary.Text, StringComparison.Ordinal);

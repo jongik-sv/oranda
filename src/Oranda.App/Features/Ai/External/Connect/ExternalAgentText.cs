@@ -37,7 +37,7 @@ internal static class ExternalAgentText
         "Development is chosen by default. Production is never chosen by default and needs its name typed again.");
 
     /// <summary>「조회 허용」 체크 글: 운영 상한이 메타데이터뿐일 때(개발·시험만 올린다).</summary>
-    /// <summary>「조회 허용」 체크 글: 운영도 올릴 때(운영 최대 수준은 「조회 실행」).</summary>
+    /// <summary>「조회 허용」 체크 글: 운영도 올릴 때(운영 처음 값은 「조회 실행」, 최대는 「조회+행 값」).</summary>
     public static string ConnectionsTitle => T("에이전트가 볼 수 있는 접속", "Connections the agent can see");
 
     public static string LevelsLink => T("수준 바꾸기: 설정 > AI 의 접속 표 열기", "Change levels: open the connection table in Settings > AI");

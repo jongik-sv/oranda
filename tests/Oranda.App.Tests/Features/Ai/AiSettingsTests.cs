@@ -100,18 +100,18 @@ public class AiSettingsTests
     }
 
     [Fact]
-    public void Production_defaults_to_query_caps_at_query_and_asks_for_the_name_only_when_the_user_raises_it()
+    public void Production_defaults_to_query_allows_query_rows_and_asks_for_the_name_only_when_the_user_raises_it()
     {
         var vm = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production, AiAccessLevel.Off));
         Assert.Equal(AiAccessLevel.Off, vm.Level);
         Assert.Equal(AiAccessLevel.Query, new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production)).Level);
         Assert.False(new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Production)).NeedsNameConfirmation);
         Assert.True(vm.ExplainAllowed); // 운영도 EXPLAIN PLAN 기본 켬
-        Assert.All(vm.Levels.Where(l => l.Level > AiAccessLevel.Query), l => Assert.False(l.IsEnabled));
-        Assert.All(vm.Levels.Where(l => l.Level <= AiAccessLevel.Query), l => Assert.True(l.IsEnabled));
+        Assert.All(vm.Levels, l => Assert.True(l.IsEnabled)); // 운영 최대 = 조회+행 값(2026-11-24)
 
         vm.SelectLevelCommand.Execute(AiAccessLevel.QueryRows);
-        Assert.Equal(AiAccessLevel.Off, vm.Level); // 상한 밖은 무시
+        Assert.Equal(AiAccessLevel.QueryRows, vm.Level);
+        Assert.True(vm.NeedsNameConfirmation);
 
         vm.SelectLevelCommand.Execute(AiAccessLevel.Plan);
         Assert.True(vm.NeedsNameConfirmation);
@@ -121,14 +121,14 @@ public class AiSettingsTests
     }
 
     [Fact]
-    public void Switching_a_dev_connection_to_production_clamps_and_asks_for_the_name()
+    public void Switching_a_dev_connection_to_production_keeps_the_level_and_asks_for_the_name()
     {
         var vm = new ConnectionAiAccessViewModel(Profile(ConnectionEnvironment.Development, AiAccessLevel.QueryRows));
         vm.Environment = ConnectionEnvironment.Production;
 
-        Assert.Equal(AiAccessLevel.Plan, vm.Level);
+        Assert.Equal(AiAccessLevel.QueryRows, vm.Level); // 운영 최대 = 조회+행 값이라 줄이지 않는다
         Assert.True(vm.NeedsNameConfirmation);
-        Assert.Equal(AiAccessLevel.Plan, vm.Result.AiAccess);
+        Assert.Equal(AiAccessLevel.QueryRows, vm.Result.AiAccess);
     }
 
     [Fact]

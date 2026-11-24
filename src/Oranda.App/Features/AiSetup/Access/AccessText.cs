@@ -46,9 +46,16 @@ internal sealed class AccessText(IShellText? text)
         _ => T("조회+행 값", "SELECT + rows"),
     };
 
-    /// <summary>줄 설명(고른 수준의 뜻). 운영 줄은 「값은 항상 가려서 보내고 행 값은 보내지 않아요」 를 붙인다.</summary>
-    public string LevelDescription(AiAccessLevel level, bool production) =>
-        production && level != AiAccessLevel.Off ? LevelDescription(level) + " · " + ProductionDescription : LevelDescription(level);
+    /// <summary>
+    /// 줄 설명(고른 수준의 뜻). 운영 줄: 「조회+행 값」 이면 운영 데이터가 AI 로 간다는 경고, 그 밖(끔 제외)은
+    /// 「회사 밖 AI 에는 값을 가려서 보내고 …(「로컬 AI」는 값까지 봐요)」 를 붙인다.
+    /// </summary>
+    public string LevelDescription(AiAccessLevel level, bool production) => production switch
+    {
+        true when level == AiAccessLevel.QueryRows => LevelDescription(level) + " · " + ProductionRowsWarning,
+        true when level != AiAccessLevel.Off => LevelDescription(level) + " · " + ProductionDescription,
+        _ => LevelDescription(level),
+    };
 
     /// <summary>수준의 뜻.</summary>
     public string LevelDescription(AiAccessLevel level) => level switch
@@ -61,10 +68,16 @@ internal sealed class AccessText(IShellText? text)
     };
 
     public string ProductionDescription => T(
-        "값은 항상 가려서 보내고, 행 값은 보내지 않아요.",
-        "Values are always masked, and row values are never sent.");
+        "회사 밖 AI 에는 값을 가려서 보내고 행 값은 보내지 않아요(「로컬 AI」는 값까지 봐요).",
+        "AI outside the company gets masked values and no row values (a \"Local AI\" sees the values).");
 
-    public string ProductionLimit => T("운영은 「조회 실행」까지", "Production goes up to \"Run SELECT\"");
+    /// <summary>운영 「조회+행 값」 경고: 운영 데이터 값이 AI 업체로 간다.</summary>
+    public string ProductionRowsWarning => T(
+        "운영 데이터 값이 AI 업체로 갑니다. 학습에 쓰지 않는 기업용 AI 일 때만 고르세요.",
+        "Production data values go to the AI provider. Choose this only with an enterprise AI that does not train on your data.");
+
+    /// <summary>운영 줄 옆 한 줄: 수준을 올릴 때 이름을 다시 입력한다.</summary>
+    public string ProductionLimit => T("운영은 올릴 때 접속 이름을 다시 입력", "Production: type the connection name to raise it");
 
     public string ConfirmPlaceholder(string name) => T($"올리려면 {name} 를 그대로 입력", $"Type {name} to raise it");
 

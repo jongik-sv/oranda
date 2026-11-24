@@ -4,8 +4,9 @@ namespace Oranda.Core.Ai.Access;
 
 /// <summary>
 /// 접속의 AI 허용 수준 계산·검증(연구서 §6.4).
-/// 운영 라벨은 기본·최대 모두 <see cref="AiAccessLevel.Query"/>(SELECT 실행은 되지만 행 값은 운영에서 보내지 않는다). 접속별로 <see cref="AiAccessLevel.Off"/> 로 끌 수 있다.
-/// 운영 접속에 저장된 <see cref="AiAccessLevel.QueryRows"/>(옛 파일·손으로 고친 파일)는 한 칸이 아니라 <see cref="AiAccessLevel.Plan"/> 으로 줄여 읽는다: 행 값을 못 보내는 쪽으로 닫는다.
+/// 운영 라벨은 기본 <see cref="AiAccessLevel.Query"/>(SELECT 실행은 되지만 행 값은 보내지 않는다), 최대 <see cref="AiAccessLevel.QueryRows"/>.
+/// 운영을 「조회+행 값」 으로 올리는 것은 사용자 결정(2026-11-24: 학습에 쓰지 않는 기업용 AI 면 운영 행 값도 보낼 수 있어야 한다)이고,
+/// 올릴 때는 접속 이름 재입력이 필요하다(<see cref="NeedsNameConfirmation"/>). 접속별로 <see cref="AiAccessLevel.Off"/> 로 끌 수 있다.
 /// 개발·시험은 기본 <see cref="AiAccessLevel.Plan"/>, 최대 <see cref="AiAccessLevel.QueryRows"/>.
 /// 프로필의 <see cref="ConnectionProfile.AiAccess"/> 가 null 이면 환경 기본값이고, 한도를 넘는 값은 한도로 줄여 읽는다.
 /// </summary>
@@ -16,10 +17,9 @@ public static class AiAccessPolicy
         environment == ConnectionEnvironment.Production ? AiAccessLevel.Query : AiAccessLevel.Plan;
 
     /// <summary>환경 라벨이 허용하는 최대 수준.</summary>
-    public static AiAccessLevel MaxLevel(ConnectionEnvironment environment) =>
-        environment == ConnectionEnvironment.Production ? AiAccessLevel.Query : AiAccessLevel.QueryRows;
+    public static AiAccessLevel MaxLevel(ConnectionEnvironment environment) => AiAccessLevel.QueryRows;
 
-    /// <summary>환경 한도를 넘는 수준을 읽을 때의 값: 운영의 <see cref="AiAccessLevel.QueryRows"/> 는 <see cref="AiAccessLevel.Plan"/>, 그 밖에는 그대로.</summary>
+    /// <summary>환경 한도를 넘는 수준을 읽을 때의 값(지금은 모든 환경의 최대가 <see cref="AiAccessLevel.QueryRows"/> 라 그대로).</summary>
     private static AiAccessLevel Limit(ConnectionEnvironment environment, AiAccessLevel level) =>
         level > MaxLevel(environment) ? AiAccessLevel.Plan : level;
 

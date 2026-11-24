@@ -76,7 +76,8 @@ public sealed class SharedAiAccessServiceTests
         var (service, store) = Make();
 
         Assert.Equal(AiAccessChange.NeedsNameConfirmation, (await service.SetLevelAsync(Prd.Id, AiAccessLevel.Plan, null, CancellationToken.None)).Result);
-        Assert.Equal(AiAccessChange.AboveMaximum, (await service.SetLevelAsync(Prd.Id, AiAccessLevel.QueryRows, "prd-erp", CancellationToken.None)).Result);
+        Assert.Equal(AiAccessChange.NeedsNameConfirmation, (await service.SetLevelAsync(Prd.Id, AiAccessLevel.QueryRows, null, CancellationToken.None)).Result); // 운영 행 값도 이름 재입력(2026-11-24)
+        Assert.Equal(AiAccessChange.AboveMaximum, (await service.SetLevelAsync(Prd.Id, (AiAccessLevel)42, "prd-erp", CancellationToken.None)).Result);
         Assert.Empty(store.Saved);
 
         Assert.Equal(AiAccessChange.Saved, (await service.SetLevelAsync(Prd.Id, AiAccessLevel.Plan, "prd-erp", CancellationToken.None)).Result);

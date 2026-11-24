@@ -78,7 +78,7 @@ public partial class AgentGateTests
     }
 
     [Fact]
-    public async Task Production_query_level_runs_benchmark_but_a_stored_query_rows_shrinks_to_plan_and_is_denied()
+    public async Task Production_query_level_runs_benchmark_and_a_stored_query_rows_is_kept()
     {
         var fx = new GateFixture();
         const string benchmark = """{"variants":[{"label":"a","sql":"SELECT * FROM TB_ORDER"}]}""";
@@ -89,11 +89,12 @@ public partial class AgentGateTests
         Assert.False(ok.Result.IsError);
         Assert.True(Assert.Single(fx.Handlers[AgentToolNames.BenchmarkQueries].Calls).MayExecuteSql);
 
-        var narrowed = Session(Prod(AiAccessLevel.QueryRows), context: AiAccessLevel.QueryRows);
-        Assert.Equal(AiAccessLevel.Plan, narrowed.Level);
-        var response = await Call(fx, narrowed, AgentToolNames.BenchmarkQueries, benchmark);
-        AssertDenied(response, "level");
-        Assert.Single(fx.Handlers[AgentToolNames.BenchmarkQueries].Calls);
+        // 운영 최대 = 조회+행 값(2026-11-24): 저장된 QueryRows 는 줄지 않고 그대로 쓰인다.
+        var rows = Session(Prod(AiAccessLevel.QueryRows), context: AiAccessLevel.QueryRows);
+        Assert.Equal(AiAccessLevel.QueryRows, rows.Level);
+        var response = await Call(fx, rows, AgentToolNames.BenchmarkQueries, benchmark);
+        Assert.False(response.Result.IsError);
+        Assert.Equal(2, fx.Handlers[AgentToolNames.BenchmarkQueries].Calls.Count);
     }
 
     [Fact]

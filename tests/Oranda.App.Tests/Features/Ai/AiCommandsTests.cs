@@ -208,14 +208,14 @@ public class AiCommandsTests
     }
 
     [Fact]
-    public void Changing_the_environment_in_the_profile_editor_lowers_the_ai_ceiling()
+    public void Changing_the_environment_in_the_profile_editor_keeps_the_ai_ceiling()
     {
         var vm = ProfileEditorViewModel.From(Profile(ConnectionEnvironment.Development));
         vm.AiAccess.SelectLevelCommand.Execute(AiAccessLevel.QueryRows);
 
         vm.Environment = ConnectionEnvironment.Production;
 
-        Assert.Equal(AiAccessLevel.Query, vm.AiAccess.MaxLevel);
+        Assert.Equal(AiAccessLevel.QueryRows, vm.AiAccess.MaxLevel); // 운영 최대 = 조회+행 값(2026-11-24)
         Assert.True(vm.IsDirty);
     }
 

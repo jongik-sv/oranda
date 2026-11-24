@@ -19,22 +19,22 @@ public class AiAccessPolicyTests
         Assert.Equal(expected, AiAccessPolicy.Effective(Profile(env)));
 
     [Fact]
-    public void Production_is_capped_at_query_and_a_stored_query_rows_shrinks_to_plan()
+    public void Production_defaults_to_query_and_may_be_raised_to_query_rows()
     {
+        // 2026-11-24 사용자 결정: 학습에 쓰지 않는 기업용 AI 면 운영 행 값도 보낼 수 있어야 한다 → 운영 최대 = 조회+행 값(올릴 때 이름 재입력).
         var query = Profile(ConnectionEnvironment.Production, AiAccessLevel.Query);
-        Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.MaxLevel(ConnectionEnvironment.Production));
+        Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.DefaultLevel(ConnectionEnvironment.Production));
+        Assert.Equal(AiAccessLevel.QueryRows, AiAccessPolicy.MaxLevel(ConnectionEnvironment.Production));
         Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.Effective(query));
-        Assert.True(AiAccessPolicy.Allows(query, AiAccessLevel.Query));
         Assert.False(AiAccessPolicy.Allows(query, AiAccessLevel.QueryRows));
         Assert.Empty(AiAccessPolicy.Validate(query));
 
-        // 행 값은 운영으로 못 보낸다: 한 칸(Query)이 아니라 Plan 으로 줄인다.
         var prod = Profile(ConnectionEnvironment.Production, AiAccessLevel.QueryRows);
-        Assert.Equal(AiAccessLevel.Plan, AiAccessPolicy.Effective(prod));
-        Assert.False(AiAccessPolicy.Allows(prod, AiAccessLevel.Query));
-        Assert.True(AiAccessPolicy.Allows(prod, AiAccessLevel.Plan));
-        Assert.Equal(AiAccessLevel.Plan, AiAccessPolicy.Clamp(prod).AiAccess);
-        Assert.Single(AiAccessPolicy.Validate(prod));
+        Assert.Equal(AiAccessLevel.QueryRows, AiAccessPolicy.Effective(prod));
+        Assert.True(AiAccessPolicy.Allows(prod, AiAccessLevel.QueryRows));
+        Assert.Equal(AiAccessLevel.QueryRows, AiAccessPolicy.Clamp(prod).AiAccess);
+        Assert.Empty(AiAccessPolicy.Validate(prod));
+        Assert.True(AiAccessPolicy.NeedsNameConfirmation(query, prod)); // 올릴 때는 이름 재입력
     }
 
     [Fact]
