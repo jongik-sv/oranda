@@ -8,6 +8,9 @@ public static class AiSetupEntryText
     /// <summary>메뉴 제목(한국어 원문, 영어는 <c>strings-en.json</c> 의 <c>Cmd.oranda.ai.setup.open</c>).</summary>
     public const string MenuTitle = "AI 연결 도우미…";
 
+    /// <summary>「도구 → AI 설정…」 메뉴 제목(영어는 <c>strings-en.json</c> 의 <c>Cmd.oranda.ai.settings.open</c>).</summary>
+    public const string SettingsMenuTitle = "AI 설정…";
+
     /// <summary>실패 띠·설정의 단추 글.</summary>
     public static string OpenButton(bool english) => AiSetupText.T(english, "AI 연결 도우미 열기", "Open AI Setup Assistant");
 
@@ -18,7 +21,7 @@ public static class AiSetupEntryText
     public static string AskTitle(bool english) => AiSetupText.T(english, "AI 연결", "Connect AI");
 
     /// <summary>첫 실행 묻기 본문.</summary>
-    public static string AskMessage(bool english) => AiSetupText.T(english, "AI 를 연결할까요?\n도우미를 따라 하면 몇 분 안에 끝납니다. 나중에 도구 메뉴에서도 열 수 있습니다.", "Connect AI now?\nThe setup assistant takes a few minutes. You can also open it later from the Tools menu.");
+    public static string AskMessage(bool english) => AiSetupText.T(english, "AI 를 연결할까요?\n도우미를 따라 하면 몇 분 안에 끝납니다. 나중에 도구 메뉴의 「AI 설정…」에서도 열 수 있습니다.", "Connect AI now?\nThe setup assistant takes a few minutes. You can also open it later from Tools > AI Settings….");
 
     /// <summary>첫 실행 묻기 [나중에].</summary>
     public static string Later(bool english) => AiSetupText.T(english, "나중에", "Later");

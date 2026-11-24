@@ -10,8 +10,11 @@ namespace Oranda.App.Features.AiSetup.Contract;
 /// <summary>도우미 이름표(명령 id·창 이름). 바꾸면 매뉴얼 범위표(<c>site/scope.json</c>)도 바꾼다.</summary>
 public static class AiSetupIds
 {
-    /// <summary>도구 메뉴 「AI 연결 도우미…」 명령 id.</summary>
+    /// <summary>「AI 연결 도우미…」 명령 id(메뉴에서는 뺐고 팔레트로만, 설정 「AI」 탭 위에 도우미를 띄운다).</summary>
     public const string OpenCommand = "oranda.ai.setup.open";
+
+    /// <summary>도구 메뉴 「AI 설정…」 명령 id(설정 창 「AI」 탭, ai-settings-one-place 2026-11-24).</summary>
+    public const string SettingsCommand = "oranda.ai.settings.open";
 
     /// <summary>도우미 창 형 이름(창 틀 레인이 만든다).</summary>
     public const string WindowName = "AiSetupWindow";

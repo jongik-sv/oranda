@@ -181,7 +181,7 @@ public class CommandGradeTableTests
 
         // 바뀌면: 어떤 명령의 등급이 옮겨 갔는지 확인하고 이 수를 고친다.
         Assert.Equal(
-            "now=165 confirm=16 deny=133",
+            "now=165 confirm=16 deny=134", // + oranda.ai.settings.open(「oranda.ai.」 규칙 거부, ai-settings-one-place)
             $"now={counts.GetValueOrDefault(CommandGrade.Now)} confirm={counts.GetValueOrDefault(CommandGrade.Confirm)} deny={counts.GetValueOrDefault(CommandGrade.Deny)}");
     }
 

@@ -313,10 +313,10 @@ public sealed partial class PartitionAdvisorStartViewModel : ObservableObject
 
         return AiActiveProfile.Find(settings).Kind switch
         {
-            AiActiveKind.None => TableEditText.T("AI 모델이 「선택 안 함」 입니다. 설정 › AI 모델에서 고르면 쓸 수 있습니다.", "No AI model is selected. Choose one in Settings › AI model."),
-            AiActiveKind.ProfileMissing => TableEditText.T("선택한 AI 프로필을 찾을 수 없습니다. 설정 › AI 모델에서 다른 프로필을 고르십시오.", "The selected AI profile is missing. Choose another in Settings › AI model."),
-            AiActiveKind.ProfileInvalid => TableEditText.T("선택한 AI 프로필의 형식을 이 버전이 알지 못합니다. 설정 › AI 모델에서 다른 프로필을 고르십시오.", "This version does not know the selected AI profile. Choose another in Settings › AI model."),
-            AiActiveKind.SystemCliUnavailable or AiActiveKind.CustomCliUnavailable => TableEditText.T("선택한 AI CLI 를 쓸 수 없습니다. 설정 › AI 모델에서 다른 대상을 고르십시오.", "The selected AI CLI is not available. Choose another in Settings › AI model."),
+            AiActiveKind.None => TableEditText.T("AI 모델이 「선택 안 함」 입니다. 설정 › AI 에서 고르면 쓸 수 있습니다.", "No AI model is selected. Choose one in Settings › AI."),
+            AiActiveKind.ProfileMissing => TableEditText.T("선택한 AI 프로필을 찾을 수 없습니다. 설정 › AI 에서 다른 프로필을 고르십시오.", "The selected AI profile is missing. Choose another in Settings › AI."),
+            AiActiveKind.ProfileInvalid => TableEditText.T("선택한 AI 프로필의 형식을 이 버전이 알지 못합니다. 설정 › AI 에서 다른 프로필을 고르십시오.", "This version does not know the selected AI profile. Choose another in Settings › AI."),
+            AiActiveKind.SystemCliUnavailable or AiActiveKind.CustomCliUnavailable => TableEditText.T("선택한 AI CLI 를 쓸 수 없습니다. 설정 › AI 에서 다른 대상을 고르십시오.", "The selected AI CLI is not available. Choose another in Settings › AI."),
             _ => null,
         };
     }

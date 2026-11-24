@@ -538,12 +538,15 @@ public sealed class ExternalAgentConnectTests
     });
 
     [Fact]
-    public void Connect_command_is_registered_in_the_tools_menu()
+    public void Connect_command_is_registered_but_reached_from_the_ai_settings_tab_not_the_tools_menu()
     {
+        // ai-settings-one-place: 도구 메뉴에는 「AI 설정…」 한 줄만. 연결 창은 설정 「AI」 탭의 「연결…」 과 팔레트로 연다.
         var all = Oranda.App.Shell.ShellContributions.Scan(typeof(ExternalAgentConnectCommandHandler).Assembly);
 
         var command = Assert.Single(all.Commands, c => c.Definition.Id == ExternalAgentConnectCommands.Connect).Definition;
-        Assert.Contains(command.Placements, p => p.StartsWith("menu:tools/", StringComparison.Ordinal));
+        Assert.DoesNotContain(command.Placements, p => p.StartsWith("menu:", StringComparison.Ordinal));
+        var settings = Assert.Single(all.Commands, c => c.Definition.Id == Oranda.App.Features.AiSetup.Contract.AiSetupIds.SettingsCommand).Definition;
+        Assert.Contains("menu:tools/externalAgent@44", settings.Placements);
     }
 
     /// <summary>연결 파일 기록기를 붙인 허가 저장소(다리가 열린 상태와 같다).</summary>

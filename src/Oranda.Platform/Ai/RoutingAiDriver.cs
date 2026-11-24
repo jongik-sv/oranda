@@ -204,7 +204,7 @@ internal sealed class RoutingAiDriver : IAiDriver
         var active = AiActiveProfile.Find(settings, SystemClis);
         if (active.Kind == AiActiveKind.None)
         {
-            return Selection.Fail("AI 모델이 선택되지 않았습니다. 설정의 「AI 모델」 에서 고르세요.", "driver_none");
+            return Selection.Fail("AI 모델이 선택되지 않았습니다. 설정의 「AI」 탭에서 고르세요.", "driver_none");
         }
 
         if (request.Expected is { } expected && expected.ProfileId != settings.ActiveProfileId)
@@ -240,7 +240,7 @@ internal sealed class RoutingAiDriver : IAiDriver
                 // 운영 접속도 막지 않는다(D-039). 게이트와 운영 리터럴 가림은 이 경로에도 그대로 적용된다.
                 return Selection.ViaSystemCli(cliDriver);
             case AiActiveKind.ProfileMissing:
-                return Selection.Fail("선택한 LLM 프로필을 찾지 못했습니다. 설정의 「AI 모델」 에서 프로필을 다시 고르세요.", AiActiveProfile.ProfileMissingCode);
+                return Selection.Fail("선택한 LLM 프로필을 찾지 못했습니다. 설정의 「AI」 탭에서 프로필을 다시 고르세요.", AiActiveProfile.ProfileMissingCode);
             case AiActiveKind.ProfileInvalid:
                 return Selection.Fail($"프로필 「{active.Profile!.Name}」 의 종류나 API 형식을 이 버전이 알지 못합니다. 프로필을 다시 만드세요.", AiActiveProfile.ProfileInvalidCode);
             default:
@@ -270,7 +270,7 @@ internal sealed class RoutingAiDriver : IAiDriver
         // 기타 CLI 는 값을 가려 보낼 수 없다. 가림 대상(운영 표시·전역 가림 설정·세션의 리터럴 가림 요구)이거나 가림이 필요 없다고 확인되지 않은 요청은 접속이 없어도 보내지 않는다.
         if (request.MaskingRequired != false || settings.MaskLiterals || IsProduction(request) || request.Session?.Run.MaskLiteralsRequired == true)
         {
-            return Selection.Fail("가림 대상 접속(운영 표시 또는 값 가림 설정)에서는 기타 CLI 로 보내지 않습니다. 요청을 보내지 않았으니 설정의 「AI 모델」 에서 다른 모델을 고르세요.", CustomCliMaskingBlockedCode);
+            return Selection.Fail("가림 대상 접속(운영 표시 또는 값 가림 설정)에서는 기타 CLI 로 보내지 않습니다. 요청을 보내지 않았으니 설정의 「AI」 탭에서 다른 모델을 고르세요.", CustomCliMaskingBlockedCode);
         }
 
         return _services.GetService(typeof(ICustomCliAiDriver)) is ICustomCliAiDriver driver
@@ -283,12 +283,12 @@ internal sealed class RoutingAiDriver : IAiDriver
         || request.Session?.Run.Context.Environment == ConnectionEnvironment.Production;
 
     private static Selection CustomCliUnavailable() =>
-        Selection.Fail("선택한 기타 CLI 를 쓸 수 없습니다. 목록에서 지워졌거나 실행 명령이 비어 있습니다. 설정의 「AI 모델」 에서 다시 고르세요.", AiActiveProfile.CustomCliUnavailableCode);
+        Selection.Fail("선택한 기타 CLI 를 쓸 수 없습니다. 목록에서 지워졌거나 실행 명령이 비어 있습니다. 설정의 「AI」 탭에서 다시 고르세요.", AiActiveProfile.CustomCliUnavailableCode);
 
     private static string NormalizeCliId(string? id) => id ?? AiProfilePresets.ClaudeCodeId;
 
     private static Selection SystemCliUnavailable(string? cliId) =>
-        Selection.Fail($"선택한 시스템 CLI({cliId})를 이 컴퓨터에서 쓸 수 없습니다. 설정의 「AI 모델」 에서 다른 모델을 고르세요.", AiActiveProfile.SystemCliUnavailableCode);
+        Selection.Fail($"선택한 시스템 CLI({cliId})를 이 컴퓨터에서 쓸 수 없습니다. 설정의 「AI」 탭에서 다른 모델을 고르세요.", AiActiveProfile.SystemCliUnavailableCode);
 
     private static bool MatchesExpectation(AiProfileExpectation expected, AiLlmProfile profile) =>
         (expected.BaseUrl is null || string.Equals(expected.BaseUrl.Trim(), profile.BaseUrl.Trim(), StringComparison.Ordinal))

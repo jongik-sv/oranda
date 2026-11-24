@@ -95,12 +95,54 @@ public sealed class AiSetupEntryTests
     }
 
     [Fact]
-    public void Menu_command_sits_above_external_agent_and_is_common()
+    public void Ai_settings_is_the_one_common_menu_line_and_the_assistant_and_agent_commands_are_palette_only()
     {
-        var attribute = (OrandaCommandAttribute)Attribute.GetCustomAttribute(typeof(AiSetupOpenCommandHandler), typeof(OrandaCommandAttribute))!;
-        Assert.Equal(AiSetupIds.OpenCommand, attribute.Id);
-        Assert.Equal(["menu:tools/externalAgent@44"], attribute.Placements);
-        Assert.Null(FeatureCatalog.FeatureFor(attribute.Id, typeof(AiSetupOpenCommandHandler)));
+        // ai-settings-one-place: 도구 메뉴에는 「AI 설정…」 한 줄(AI 기능과 무관하게 보임). 도우미·외부 에이전트 연결은 팔레트·설정 「AI」 탭으로만.
+        var settings = (OrandaCommandAttribute)Attribute.GetCustomAttribute(typeof(AiSettingsOpenCommandHandler), typeof(OrandaCommandAttribute))!;
+        Assert.Equal(AiSetupIds.SettingsCommand, settings.Id);
+        Assert.Equal("oranda.ai.settings.open", settings.Id);
+        Assert.Equal(["menu:tools/externalAgent@44"], settings.Placements);
+        Assert.Null(FeatureCatalog.FeatureFor(settings.Id, typeof(AiSettingsOpenCommandHandler)));
+
+        var assistant = (OrandaCommandAttribute)Attribute.GetCustomAttribute(typeof(AiSetupOpenCommandHandler), typeof(OrandaCommandAttribute))!;
+        Assert.Equal(AiSetupIds.OpenCommand, assistant.Id);
+        Assert.True(assistant.Placements is null or { Length: 0 });
+        var agent = (OrandaCommandAttribute)Attribute.GetCustomAttribute(typeof(Oranda.App.Features.Ai.External.Connect.ExternalAgentConnectCommandHandler), typeof(OrandaCommandAttribute))!;
+        Assert.True(agent.Placements is null or { Length: 0 });
+    }
+
+    [Fact]
+    public void Ai_settings_command_opens_the_settings_window_on_the_ai_tab()
+    {
+        var ui = new RecordingUi();
+        new AiSettingsOpenCommandHandler(ui).ExecuteAsync(new CommandContext(AiSetupIds.SettingsCommand, new Oranda.App.Shell.ContextKeyService()), CancellationToken.None);
+        var vm = new Oranda.App.Shell.Settings.SettingsViewModel(new Oranda.App.Shell.Settings.SettingsService(new Oranda.App.Tests.Features.Update.MemorySettingsStore()), new Oranda.App.Shell.ShellText(language: "ko"));
+        Assert.NotNull(ui.Prepare);
+        ui.Prepare!(vm);
+        Assert.Equal(Oranda.App.Shell.Settings.SettingsViewModel.AiTabIndex, vm.SelectedTab);
+    }
+
+    private sealed class RecordingUi : Oranda.App.Shell.IShellUi
+    {
+        public Action<Oranda.App.Shell.Settings.SettingsViewModel>? Prepare { get; private set; }
+
+        public Oranda.App.Shell.Docking.DockWorkspace Docking => throw new NotSupportedException();
+
+        public Oranda.App.Shell.Settings.SettingsService Settings => throw new NotSupportedException();
+
+        public Oranda.Core.Connection.ConnectionEnvironment? ActiveEnvironment { get; set; }
+
+        public void ShowCommandPalette() { }
+
+        public void ShowSettings() { }
+
+        public void ShowSettings(Action<Oranda.App.Shell.Settings.SettingsViewModel>? prepare) => Prepare = prepare;
+
+        public void ShowAbout() { }
+
+        public void CloseMainWindow() { }
+
+        public void FocusDocument() { }
     }
 
     [Fact]

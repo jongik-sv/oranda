@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Oranda.App.Features.AiSetup.Contract;
+using Oranda.App.Shell;
 using Oranda.App.Shell.Composition;
 using Oranda.App.Shell.Settings;
 using Oranda.Core.Ai.Contracts;
@@ -12,10 +13,10 @@ using Oranda.Core.Shell;
 namespace Oranda.App.Features.AiSetup.Entry;
 
 /// <summary>
-/// 「도구 → AI 연결 도우미…」(명령 <c>oranda.ai.setup.open</c>, 외부 에이전트 연결 바로 위). 도우미 창을 연다.
-/// 네임스페이스가 <c>Features.AiSetup</c> 이라 aiTuning 이 꺼져 있어도 메뉴에 보인다. 런처(<see cref="IAiSetupLauncher"/>)가 없으면 아무것도 안 한다.
+/// 「AI 연결 도우미…」(명령 <c>oranda.ai.setup.open</c>). 메뉴에서는 뺐고(ai-settings-one-place 2026-11-24: 「도구 → AI 설정…」 한 줄로) 명령 팔레트로만 닿는다.
+/// 설정 창을 「AI」 탭으로 열고 그 위에 도우미를 띄운다(런처 <see cref="IAiSetupLauncher"/>). 런처가 없으면 아무것도 안 한다.
 /// </summary>
-[OrandaCommand(AiSetupIds.OpenCommand, CommandCategory.Tools, Title = AiSetupEntryText.MenuTitle, Placements = ["menu:tools/externalAgent@44"])]
+[OrandaCommand(AiSetupIds.OpenCommand, CommandCategory.Tools, Title = AiSetupEntryText.MenuTitle)]
 public sealed class AiSetupOpenCommandHandler : ICommandHandler
 {
     private readonly IServiceProvider? _services;
@@ -28,6 +29,21 @@ public sealed class AiSetupOpenCommandHandler : ICommandHandler
 
     public Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken) =>
         AiSetupOpener.OpenAsync(_services, AiSetupEntry.Menu, reason: null, cancellationToken);
+}
+
+/// <summary>
+/// 「도구 → AI 설정…」(명령 <c>oranda.ai.settings.open</c>, ai-settings-one-place 2026-11-24): 설정 창을 「AI」 탭으로 바로 연다.
+/// 예전 「AI 연결 도우미…」·「외부 에이전트 연결…」 두 줄을 이 한 줄로 바꿨다. 네임스페이스가 <c>Features.AiSetup</c> 이라 AI 기능이 꺼져 있어도 보인다
+/// (탭이 까닭과 「기능 켜기」 를 보인다).
+/// </summary>
+[OrandaCommand(AiSetupIds.SettingsCommand, CommandCategory.Tools, Title = AiSetupEntryText.SettingsMenuTitle, Placements = ["menu:tools/externalAgent@44"])]
+public sealed class AiSettingsOpenCommandHandler(IShellUi ui) : ICommandHandler
+{
+    public Task ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    {
+        ui.ShowSettings(vm => vm.SelectedTab = SettingsViewModel.AiTabIndex);
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>진입점이 도우미를 여는 길(한 곳). 런처가 없으면(창 틀이 아직 없음·시험) 아무것도 안 한다.</summary>

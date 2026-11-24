@@ -310,7 +310,7 @@
   "Menu.disabled.hasFindText": "Enter text to find first",
   "Menu.disabled.hasSelection": "Select text in the editor",
   "Menu.disabled.hasSession": "Connect to a database first",
-  "Menu.disabled.aiConfigured": "Choose an AI model in Settings first",
+  "Menu.disabled.aiConfigured": "Connect AI in the AI tab of Settings first",
   "Menu.disabled.aiAccessOn": "AI access is Off for this connection. Change it in the connection editor",
   "Menu.disabled.aiAccessPlan": "AI access for this connection must be Plan or higher. Change it in the connection editor",
   "Menu.disabled.mybatisExpandedTab": "Open a MyBatis statement tab first (the target is the SQL expanded with the current values)",
@@ -873,7 +873,7 @@
   "Shell.settings.tab.grid": "Result grid",
   "Shell.settings.tab.history": "History and cache",
   "Shell.settings.tab.monitor": "Monitor",
-  "Shell.settings.tab.ai": "AI Model",
+  "Shell.settings.tab.ai": "AI",
   "Shell.settings.tab.update": "Update",
   "Shell.settings.tabSize": "Tab width",
   "Shell.settings.theme": "Theme",
@@ -1138,5 +1138,6 @@
   "AgentBar.compareTitle": "Proposal from {0}",
   "AgentBar.notApplied": "Not applied. Accept again or discard it.",
   "AgentBar.notSaved": "Not saved.",
-  "Cmd.oranda.ai.setup.open": "AI Setup Assistant…"
+  "Cmd.oranda.ai.setup.open": "AI Setup Assistant…",
+  "Cmd.oranda.ai.settings.open": "AI Settings…"
 }

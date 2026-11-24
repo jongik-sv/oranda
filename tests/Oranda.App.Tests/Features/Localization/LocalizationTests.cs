@@ -74,7 +74,8 @@ public partial class LocalizationTests
     {
         // 영어 그대로 두어도 되는 이름(제품·약어)만 예외다.
         string[] same = ["Menu.sql", "Menu.sql.access", "Cat.Sql", "Shell.window.title", "Shell.toolbar.more", "Shell.settings.language.en", "Shell.settings.dbmsOutput",
-            "Menu.file.mybatis", "Menu.sql.plsql"]; // 하위 메뉴 「MyBatis ▸」·「PL/SQL ▸」(TSK-09-01)
+            "Menu.file.mybatis", "Menu.sql.plsql", // 하위 메뉴 「MyBatis ▸」·「PL/SQL ▸」(TSK-09-01)
+            "Shell.settings.tab.ai"]; // 설정 「AI」 탭(ai-settings-one-place 2026-11-24, 메뉴 「AI 설정…」 과 맞춤)
         var offenders = Ko.Where(kv => !Hangul().IsMatch(kv.Value) && !same.Contains(kv.Key))
             .Select(kv => kv.Key + "=" + kv.Value)
             .ToList();

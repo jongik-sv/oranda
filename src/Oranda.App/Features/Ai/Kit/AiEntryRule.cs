@@ -23,7 +23,7 @@ public static class AiEntryRule
     public const string Enablement = AiContextKeys.ConfiguredKey + " && " + AiContextKeys.AccessOnKey;
 
     /// <summary>AI 모델이 「선택 안 함」 이다.</summary>
-    public const string NotConfiguredText = "AI 모델이 설정되지 않았습니다. 설정 › AI 모델에서 고르세요.";
+    public const string NotConfiguredText = "AI 모델이 설정되지 않았습니다. 설정 › AI 에서 고르세요.";
 
     /// <summary>접속의 AI 허용 수준이 「끔」 이다.</summary>
     public const string AccessOffText = "이 접속은 AI 허용 수준이 「끔」 입니다. 접속 편집에서 바꾸세요.";

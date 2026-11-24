@@ -39,15 +39,15 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
 
     internal static readonly Dictionary<string, Config> Configs = new(StringComparer.Ordinal)
     {
-        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 293, 11, ["view/도구 창=18", "sql=27", "result=18", "database=26", "monitor=21", "tuning=24"], 18, 21, 21, 5, 18, 241, 312, 275, 11), // 팔레트 +1 테이블 편집 켜기·끄기 · SG-1 데이터베이스 ▸ 통계 수집 +1, 팔레트 +2 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22)
-        ["none(default-R1)"] = new(null, 222, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 207, 232, 210, 10), // 팔레트 +1 테이블 편집 켜기·끄기 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22)
-        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 222, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 207, 232, 210, 10), // 팔레트 +1 테이블 편집 켜기·끄기 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22)
-        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 236, 10, ["view/도구 창=16", "sql=24", "result=18", "database=22"], 18, 19, 19, 5, 16, 215, 246, 220, 10), // 팔레트 +1 테이블 편집 켜기·끄기 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22)
-        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 228, 10, ["view/도구 창=17", "sql=26", "result=17"], 17, 17, 17, 5, 17, 204, 244, 217, 10), // 팔레트 +1 테이블 편집 켜기·끄기 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22)
-        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 251, 11, ["sql=23", "result=16", "database=20", "monitor=21", "tuning=24"], 16, 21, 21, 5, 14, 211, 262, 240, 11), // SG-1 데이터베이스 ▸ 통계 수집 +1, 팔레트 +2 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22)
-        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 275, 11, ["view/도구 창=16", "sql=24", "result=18", "database=25", "monitor=21", "tuning=21"], 18, 21, 21, 5, 16, 232, 286, 257, 11), // 팔레트 +1 테이블 편집 켜기·끄기 · SG-1 데이터베이스 ▸ 통계 수집 +1, 팔레트 +2 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22)
-        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 187, 9, ["sql=22", "result=16"], 16, 14, 16, 5, 12, 173, 197, 184, 9),
-        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 275, 11, ["view/도구 창=16", "sql=24", "result=18", "database=23", "monitor=21", "tuning=24"], 18, 21, 21, 5, 16, 233, 288, 258, 11), // 팔레트 +1 테이블 편집 켜기·끄기 · SG-1 데이터베이스 ▸ 통계 수집 +1, 팔레트 +2 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22)
+        ["all-features"] = new(PrdMatrix.FeaturesJson(null, allFeatures: true), 292, 11, ["view/도구 창=18", "sql=27", "result=18", "database=26", "monitor=21", "tuning=24"], 18, 21, 21, 5, 18, 240, 313, 275, 11), // 팔레트 +1 테이블 편집 켜기·끄기 · SG-1 데이터베이스 ▸ 통계 수집 +1, 팔레트 +2 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22) · 도구 ▸ 「AI 설정…」 한 줄로(연결 도우미·외부 에이전트 연결 메뉴 뺌, 항목·SQL 탭 −1, 팔레트 +1, ai-settings-one-place)
+        ["none(default-R1)"] = new(null, 221, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 206, 233, 210, 10), // 팔레트 +1 테이블 편집 켜기·끄기 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22) · 도구 ▸ 「AI 설정…」 한 줄로(연결 도우미·외부 에이전트 연결 메뉴 뺌, 항목·SQL 탭 −1, 팔레트 +1, ai-settings-one-place)
+        ["R1"] = new(PrdMatrix.FeaturesJson(["sqlDev"]), 221, 10, ["sql=23", "result=18"], 18, 17, 17, 5, 15, 206, 233, 210, 10), // 팔레트 +1 테이블 편집 켜기·끄기 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22) · 도구 ▸ 「AI 설정…」 한 줄로(연결 도우미·외부 에이전트 연결 메뉴 뺌, 항목·SQL 탭 −1, 팔레트 +1, ai-settings-one-place)
+        ["R2"] = new(PrdMatrix.FeaturesJson(["plsqlDev"]), 235, 10, ["view/도구 창=16", "sql=24", "result=18", "database=22"], 18, 19, 19, 5, 16, 214, 247, 220, 10), // 팔레트 +1 테이블 편집 켜기·끄기 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22) · 도구 ▸ 「AI 설정…」 한 줄로(연결 도우미·외부 에이전트 연결 메뉴 뺌, 항목·SQL 탭 −1, 팔레트 +1, ai-settings-one-place)
+        ["R3"] = new(PrdMatrix.FeaturesJson(["myBatisDev"]), 227, 10, ["view/도구 창=17", "sql=26", "result=17"], 17, 17, 17, 5, 17, 203, 245, 217, 10), // 팔레트 +1 테이블 편집 켜기·끄기 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22) · 도구 ▸ 「AI 설정…」 한 줄로(연결 도우미·외부 에이전트 연결 메뉴 뺌, 항목·SQL 탭 −1, 팔레트 +1, ai-settings-one-place)
+        ["R4"] = new(PrdMatrix.FeaturesJson(["tuner"]), 250, 11, ["sql=23", "result=16", "database=20", "monitor=21", "tuning=24"], 16, 21, 21, 5, 14, 210, 263, 240, 11), // SG-1 데이터베이스 ▸ 통계 수집 +1, 팔레트 +2 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22) · 도구 ▸ 「AI 설정…」 한 줄로(연결 도우미·외부 에이전트 연결 메뉴 뺌, 항목·SQL 탭 −1, 팔레트 +1, ai-settings-one-place)
+        ["R5"] = new(PrdMatrix.FeaturesJson(["dba"]), 274, 11, ["view/도구 창=16", "sql=24", "result=18", "database=25", "monitor=21", "tuning=21"], 18, 21, 21, 5, 16, 231, 287, 257, 11), // 팔레트 +1 테이블 편집 켜기·끄기 · SG-1 데이터베이스 ▸ 통계 수집 +1, 팔레트 +2 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22) · 도구 ▸ 「AI 설정…」 한 줄로(연결 도우미·외부 에이전트 연결 메뉴 뺌, 항목·SQL 탭 −1, 팔레트 +1, ai-settings-one-place)
+        ["R6"] = new(PrdMatrix.FeaturesJson(["viewer"]), 187, 9, ["sql=22", "result=16"], 16, 14, 16, 5, 12, 173, 198, 184, 9), // + 팔레트 「AI 설정…」(oranda.ai.settings.open, ai-settings-one-place)
+        ["R1+R4"] = new(PrdMatrix.FeaturesJson(["sqlDev", "tuner"]), 274, 11, ["view/도구 창=16", "sql=24", "result=18", "database=23", "monitor=21", "tuning=24"], 18, 21, 21, 5, 16, 232, 289, 258, 11), // 팔레트 +1 테이블 편집 켜기·끄기 · SG-1 데이터베이스 ▸ 통계 수집 +1, 팔레트 +2 · 도구 ▸ 외부 에이전트 연결 +1(agent-cli 2026-11-22) · 도구 ▸ 「AI 설정…」 한 줄로(연결 도우미·외부 에이전트 연결 메뉴 뺌, 항목·SQL 탭 −1, 팔레트 +1, ai-settings-one-place)
         // AI 튜닝 기본 켬(2026-10-29): 조회 전용(R6)·Role 0개를 뺀 구성은 툴바 AI 단추 1·튜닝 메뉴 「AI 튜닝」 1·보기 > 도구 창 ▸ AI 대화 토글 1(항목 +2, 툴바 +1, 도구 창 등록 +1, 팔레트 +5).
         // TSK-14-17: SQL 모니터 기능이 있는 구성(all-features·R4·R5·R1+R4)은 튜닝 메뉴 「튜닝 추천」 한 줄이 늘었다(항목·tuning·SQL 탭·팔레트 +1).
         // 실행하고 실제 계획(oranda.plan.runActual): 툴바 +1·튜닝 메뉴 +1(튜닝 메뉴가 없는 R6·roles-empty 는 항목 그대로)·팔레트 +1.
@@ -66,7 +66,7 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
         // 새 테이블(oranda.schema.newTable·newTableLike, 테이블 편집기 T8): 스키마 브라우저 오른쪽 클릭 「새 테이블 ▸」 하위 메뉴 2줄 — 테이블 편집기 기능(tableEditor)이 켜진 구성(all-features·none·R1·R2·R3·R5·R1+R4, 튜너·조회 전용·Role 0개는 끔)의 항목·SQL 탭·팔레트 +2, database 한 단계 +1(하위 메뉴 한 줄, database 가 15줄을 넘는 구성).
         // AI 연결 도우미(oranda.ai.setup.open, ai-onboard-1123): 도구 ▸ 「AI 연결 도우미…」 — 공통(aiTuning 과 무관)이라 모든 구성의 항목·SQL 탭·팔레트 +1.
         // 만들던 새 테이블(oranda.schema.resumeNewTable, T16d 작업 저장): 「새 테이블 ▸」 안 한 줄 — tableEditor 가 켜진 구성의 항목·SQL 탭·팔레트 +1(database 한 단계 그대로).
-        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 180, 9, ["sql=22"], 12, 16, 16, 5, 11, 169, 190, 176, 9),
+        ["roles-empty"] = new(PrdMatrix.FeaturesJson([]), 180, 9, ["sql=22"], 12, 16, 16, 5, 11, 169, 191, 176, 9), // + 팔레트 「AI 설정…」(oranda.ai.settings.open, ai-settings-one-place)
     };
 
     /// <summary>조사(413a33d) 뒤 모든 구성에 더해진 메뉴 줄: 보기 &gt; 도구 창 ▸ 「세션」 토글(TSK-14-04) 1, 도움말 「새 기능(릴리스 노트)」 1, 도움말 「사용자 문서」 1,
@@ -75,7 +75,7 @@ public sealed class MenuWidthTests(ITestOutputHelper output)
     private const int AddedSinceSurvey = 11; // + 도구 ▸ 「AI 연결 도우미…」(공통, ai-onboard-1123)
 
     /// <summary>AI 튜닝(aiTuning)이 켜진 구성이 더하는 메뉴 줄: 튜닝 메뉴 「AI 튜닝」 1, 보기 &gt; 도구 창 ▸ 「AI 대화」 토글 1.</summary>
-    private const int AiMenuItems = 3; // + 도구 ▸ 외부 에이전트 연결…(agent-cli 2026-11-22)
+    private const int AiMenuItems = 2; // 도구 ▸ 외부 에이전트 연결…(agent-cli 2026-11-22)은 메뉴에서 뺐다 — 설정 「AI」 탭의 「연결…」(ai-settings-one-place 2026-11-24)
 
     /// <summary>테이블 편집기(tableEditor)가 켜진 구성이 더하는 메뉴 줄: 스키마 브라우저 오른쪽 클릭 「새 테이블 ▸」 의 「새 테이블…」·「이 구조로 새 테이블…」 2(T8)·「만들던 새 테이블…」 1(T16d).</summary>
     private const int TableEditorMenuItems = 3;

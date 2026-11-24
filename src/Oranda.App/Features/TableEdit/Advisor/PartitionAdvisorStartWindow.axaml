@@ -9,7 +9,7 @@
     <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,0,0,8">
       <TextBlock Grid.Row="0" Grid.Column="0" Text="받는 곳" FontWeight="SemiBold" Margin="0,0,12,4" VerticalAlignment="Center" />
       <TextBlock Grid.Row="0" Grid.Column="1" x:Name="RecipientText" Text="{Binding RecipientText}" VerticalAlignment="Center" TextWrapping="Wrap"
-                 ToolTip.Tip="설정 › AI 모델에서 바꿉니다" />
+                 ToolTip.Tip="설정 › AI 에서 바꿉니다" />
       <TextBlock Grid.Row="1" Grid.Column="0" Text="목적" FontWeight="SemiBold" Margin="0,0,12,0" VerticalAlignment="Center" />
       <ComboBox Grid.Row="1" Grid.Column="1" x:Name="GoalChoice" MinWidth="260" SelectedIndex="{Binding GoalIndex, Mode=TwoWay}" IsEnabled="{Binding CanStart}"
                 AutomationProperties.Name="추천 목적">
