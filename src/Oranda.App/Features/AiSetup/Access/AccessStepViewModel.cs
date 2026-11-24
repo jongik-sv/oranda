@@ -184,7 +184,8 @@ public sealed partial class AccessStepViewModel : ObservableObject, IDisposable
             {
                 try
                 {
-                    var desired = Oranda.Core.Ai.Access.AiConnectionAccessRules.Apply(row.Profile, row.Level);
+                    var desired = Oranda.Core.Ai.Access.AiConnectionAccessRules.Apply(row.Profile, row.Level)
+                        with { AiMaskSensitive = row.MaskSensitive ? null : false }; // D-069: 켬 = null(기본)
                     row.Profile = row.ConfirmName.Length > 0 && _services.SaveConfirmed is { } confirmed
                         ? await confirmed(desired, row.ConfirmName, ct).ConfigureAwait(true)
                         : await _services.Save(desired, ct).ConfigureAwait(true);
@@ -214,7 +215,7 @@ public sealed partial class AccessStepViewModel : ObservableObject, IDisposable
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(AccessRow.Level) or nameof(AccessRow.ConfirmName))
+        if (e.PropertyName is nameof(AccessRow.Level) or nameof(AccessRow.ConfirmName) or nameof(AccessRow.MaskSensitive))
         {
             IsComplete = false; // 스위치를 바꾸면 다시 저장해야 끝난다
             Notify();

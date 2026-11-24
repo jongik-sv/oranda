@@ -50,7 +50,16 @@ internal sealed class AccessText(IShellText? text)
     /// 줄 설명(고른 수준의 뜻). 운영 줄: 「조회+행 값」 이면 운영 데이터가 AI 로 간다는 경고, 그 밖(끔 제외)은
     /// 「회사 밖 AI 에는 값을 가려서 보내고 …(「로컬 AI」는 값까지 봐요)」 를 붙인다.
     /// </summary>
-    public string LevelDescription(AiAccessLevel level, bool production) => production switch
+    public string LevelDescription(AiAccessLevel level, bool production) => LevelDescription(level, production, maskSensitive: true);
+
+    /// <summary>줄 설명. <paramref name="maskSensitive"/> 가 꺼져 있으면 「조회+행 값」 의 「민감 컬럼은 가려요」 를 「민감 컬럼도 보내요」 로 바꾼다(D-069).</summary>
+    public string LevelDescription(AiAccessLevel level, bool production, bool maskSensitive) => (production, maskSensitive) switch
+    {
+        (_, false) when level == AiAccessLevel.QueryRows => RowsUnmaskedDescription + (production ? " · " + ProductionRowsWarning : string.Empty),
+        _ => LevelDescriptionMasked(level, production),
+    };
+
+    private string LevelDescriptionMasked(AiAccessLevel level, bool production) => production switch
     {
         true when level == AiAccessLevel.QueryRows => LevelDescription(level) + " · " + ProductionRowsWarning,
         true when level != AiAccessLevel.Off => LevelDescription(level) + " · " + ProductionDescription,
@@ -70,6 +79,18 @@ internal sealed class AccessText(IShellText? text)
     public string ProductionDescription => T(
         "회사 밖 AI 에는 값을 가려서 보내고 행 값은 보내지 않아요(「로컬 AI」는 값까지 봐요).",
         "AI outside the company gets masked values and no row values (a \"Local AI\" sees the values).");
+
+    private string RowsUnmaskedDescription => T(
+        "+ 결과 값(전화·이메일·이름 같은 민감 컬럼도 보내요. 비밀번호·주민번호·카드·계좌·주소는 가려요)",
+        "+ result values (sensitive columns such as phone, e-mail and names are sent too; passwords, resident numbers, cards, accounts and addresses stay masked)");
+
+    /// <summary>운영 줄의 민감 가림 확인란 글(D-069).</summary>
+    public string MaskSensitiveLabel => T("민감 데이터 가리기(전화·이메일·이름 등)", "Mask sensitive data (phone, e-mail, names …)");
+
+    /// <summary>가림을 끈 운영 줄 아래 경고.</summary>
+    public string MaskOffWarning => T(
+        "꺼 두면 「조회+행 값」에서 전화·이메일·이름 같은 값도 AI 로 갑니다. 비밀번호·주민번호·카드·계좌·주소·인증값은 그래도 가립니다.",
+        "When off, values such as phone numbers, e-mail addresses and names also go to AI at \"SELECT + rows\". Passwords, resident numbers, cards, accounts, addresses and credentials stay masked.");
 
     /// <summary>운영 「조회+행 값」 경고: 운영 데이터 값이 AI 업체로 간다.</summary>
     public string ProductionRowsWarning => T(

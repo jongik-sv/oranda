@@ -38,6 +38,16 @@ public static class AiAccessPolicy
         return Limit(profile.Environment, level);
     }
 
+    /// <summary>
+    /// AI 로 결과 값을 보낼 때 민감 컬럼(<see cref="Gate.SensitiveColumns.IsSensitive"/>)을 가리는가: 프로필 값 ?? 켬(D-069).
+    /// 끄면 가림을 <see cref="Gate.SensitiveColumns.IsAlwaysHidden"/>(비밀번호·주민번호·카드·계좌·주소·인증값)로 좁힌다 — 「로컬 AI」 와 같은 좁힘이다.
+    /// </summary>
+    public static bool MasksSensitiveColumns(ConnectionProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return profile.AiMaskSensitive ?? true;
+    }
+
     /// <summary>AI 의 EXPLAIN PLAN 허용 여부: 프로필 값 ?? 켬(운영도 기본 켬, 접속별로 끌 수 있다). 수준이 <see cref="AiAccessLevel.Plan"/> 미만이면 어차피 거부된다.</summary>
     public static bool ExplainPlanEnabled(ConnectionProfile profile)
     {

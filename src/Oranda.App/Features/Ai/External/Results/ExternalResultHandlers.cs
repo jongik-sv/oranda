@@ -77,7 +77,9 @@ public sealed class GetResultHandler : IAppToolHandler
         // 값 수준 = 게이트와 같은 DataLevel(로컬 모델이면 운영 Query 수준에서도 행 값, D4·D5). 전에는 수준만 봐 운영 로컬 모델에 행 값이 없었다(w-it-p2 실측).
         var rowValues = AiAccessPolicy.DataLevel(level, !grant.MasksSensitive(profileId)) >= AiAccessLevel.QueryRows;
         var columns = model.Columns;
-        var masked = columns.Select(c => grant.MasksSensitive(profileId) && SensitiveColumns.IsSensitive(c.Name)).ToArray();
+        // D-069: 접속의 민감 가림을 끄면 「항상 가리는 열」(비밀번호·주민번호·카드·계좌·주소·인증값)만 가린다. 로컬 모델은 지금처럼 처리자가 가리지 않는다.
+        var narrow = !grant.MasksSensitiveColumns(profileId);
+        var masked = columns.Select(c => grant.MasksSensitive(profileId) && SensitiveColumns.Hides(c.Name, narrow)).ToArray();
         var rows = new JsonArray();
         var fetched = 0;
         for (long r = offset; fetched < limit && r < model.RowCount; r++)

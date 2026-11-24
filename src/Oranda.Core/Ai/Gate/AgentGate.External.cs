@@ -256,7 +256,7 @@ public sealed partial class AgentGate
             // 접속이 정해진 호출은 값 수준으로 행 값 칸을 가린다. 탭이 접속을 정하는 도구는 처리자가 판단했다.
             // 값 수준 = AiAccessPolicy.DataLevel(수준, 로컬 모델): 클라우드 모델 운영(Query)은 행 값을 지우고, 로컬 모델이면 행 값까지 보인다(D4·D5).
             var dataLevel = AiAccessPolicy.DataLevel(connection.Level, state.LocalAi);
-            removed = MaskRowValues(ref result, tool.Name, dataLevel, state.Clean, state.LocalAi);
+            removed = MaskRowValues(ref result, tool.Name, dataLevel, state.Clean, state.LocalAi || !connection.MaskSensitiveColumns); // D-069
             if (dataLevel < AiAccessLevel.QueryRows && !IsMaskableShape(result))
             {
                 return (Deny(AgentErrorCodes.UnsafeResult, "The tool result has a shape whose row values cannot be masked; it was withheld."), connection);

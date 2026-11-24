@@ -51,6 +51,7 @@ public sealed partial class AccessRow : ObservableObject
         _profile = profile;
         Text = text;
         _level = AiAccessPolicy.Effective(profile);
+        _maskSensitive = AiAccessPolicy.MasksSensitiveColumns(profile);
         Buttons = [.. new[] { AiAccessLevel.Off, AiAccessLevel.Metadata, AiAccessLevel.Plan, AiAccessLevel.Query, AiAccessLevel.QueryRows }.Select(l => new AccessLevelButton(this, l))];
     }
 
@@ -66,6 +67,7 @@ public sealed partial class AccessRow : ObservableObject
             OnPropertyChanged(nameof(IsChanged));
             OnPropertyChanged(nameof(NeedsName));
             OnPropertyChanged(nameof(SavedLevel));
+            OnPropertyChanged(nameof(SavedMaskSensitive));
         }
     }
 
@@ -95,6 +97,23 @@ public sealed partial class AccessRow : ObservableObject
     [NotifyPropertyChangedFor(nameof(NeedsName))]
     private string _confirmName = string.Empty;
 
+    /// <summary>
+    /// 민감 데이터 가리기(D-069, 모든 줄의 확인란 — 개발·시험도 운영 데이터를 복사해 쓸 수 있다): 켜면 전화·이메일·이름 같은 민감 컬럼 값을 가려서 보낸다. 끄면 비밀번호·주민번호·카드·계좌·주소·인증값만 가린다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Description), nameof(IsChanged), nameof(NeedsName), nameof(MaskOffWarningVisible))]
+    private bool _maskSensitive;
+
+    /// <summary>저장된 민감 가림 값.</summary>
+    public bool SavedMaskSensitive => AiAccessPolicy.MasksSensitiveColumns(Profile);
+
+    public string MaskSensitiveLabel => Text.MaskSensitiveLabel;
+
+    public string MaskOffWarning => Text.MaskOffWarning;
+
+    /// <summary>가림을 끈 상태(경고 글을 보인다).</summary>
+    public bool MaskOffWarningVisible => !MaskSensitive;
+
     /// <summary>저장된 실효 수준.</summary>
     public AiAccessLevel SavedLevel => AiAccessPolicy.Effective(Profile);
 
@@ -115,13 +134,13 @@ public sealed partial class AccessRow : ObservableObject
         }
     }
 
-    public string Description => Text.LevelDescription(Level, IsProduction);
+    public string Description => Text.LevelDescription(Level, IsProduction, MaskSensitive);
 
-    /// <summary>고른 수준이 저장된 값과 다르다.</summary>
-    public bool IsChanged => Level != SavedLevel;
+    /// <summary>고른 수준이나 민감 가림이 저장된 값과 다르다.</summary>
+    public bool IsChanged => Level != SavedLevel || MaskSensitive != SavedMaskSensitive;
 
     /// <summary>저장하려면 접속 이름을 다시 입력해야 한다(운영 수준을 직접 올림, 이름이 아직 맞지 않음).</summary>
-    public bool NeedsName => IsChanged && AiConnectionAccessRules.Check(Profile, Level, ConfirmName) == AiAccessChange.NeedsNameConfirmation;
+    public bool NeedsName => Level != SavedLevel && AiConnectionAccessRules.Check(Profile, Level, ConfirmName) == AiAccessChange.NeedsNameConfirmation;
 
     public string ConfirmPlaceholder => Text.ConfirmPlaceholder(Name);
 
@@ -148,6 +167,7 @@ public sealed partial class AccessRow : ObservableObject
     {
         Profile = saved;
         Level = AiAccessPolicy.Effective(saved);
+        MaskSensitive = AiAccessPolicy.MasksSensitiveColumns(saved);
         ConfirmName = string.Empty;
     }
 
@@ -158,6 +178,8 @@ public sealed partial class AccessRow : ObservableObject
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(LimitNote));
         OnPropertyChanged(nameof(ConfirmPlaceholder));
+        OnPropertyChanged(nameof(MaskSensitiveLabel));
+        OnPropertyChanged(nameof(MaskOffWarning));
         foreach (var button in Buttons)
         {
             button.Refresh();

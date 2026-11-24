@@ -40,6 +40,9 @@ public static partial class SensitiveColumns
         "SECRET", "TOKEN", "API_KEY", "APIKEY", "AUTH_KEY", "AUTHKEY", "CREDENTIAL", "OTP_", "토큰", "비밀키", "인증키", "인증번호",
     ];
 
+    /// <summary>가릴 컬럼인가: <paramref name="narrow"/>(로컬 AI·접속의 민감 가림 끔, D-069)면 <see cref="IsAlwaysHidden"/>, 아니면 <see cref="IsSensitive"/>.</summary>
+    public static bool Hides(string? columnName, bool narrow) => narrow ? IsAlwaysHidden(columnName) : IsSensitive(columnName);
+
     /// <summary>컬럼 이름이 민감한가. 비었으면 false.</summary>
     public static bool IsSensitive(string? columnName) => Matches(columnName, Fragments);
 

@@ -226,6 +226,23 @@ public class QueryHandlerTests
         Assert.True(json.ToJsonString().Length < QueryHandler.MaxRowChars + 2000);
     }
 
+    [Fact]
+    public async Task Turning_sensitive_masking_off_keeps_only_always_hidden_columns_masked()
+    {
+        // D-069: 접속의 민감 가림을 끄면(narrow) 전화번호는 보내고 비밀번호는 가린다.
+        var set = new FakeResultSet(
+            [new ResultColumn(0, "PHONE_NO", "VARCHAR2", ColumnDataKind.Text), new ResultColumn(1, "USER_PWD", "VARCHAR2", ColumnDataKind.Text)],
+            [(IReadOnlyList<object?>)["010-1234", "secret"]]);
+
+        var masked = (await QueryHandler.ReadAsync(set, 10, true, CancellationToken.None)).ToJsonString();
+        var narrow = (await QueryHandler.ReadAsync(set, 10, true, CancellationToken.None, maskSensitive: true, narrow: true)).ToJsonString();
+
+        Assert.DoesNotContain("010-1234", masked, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", masked, StringComparison.Ordinal);
+        Assert.Contains("010-1234", narrow, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", narrow, StringComparison.Ordinal);
+    }
+
     private sealed class SlowExecution : IExecutionService
     {
         public async Task<ExecutionResult> ExecuteAsync(Oranda.Core.Sessions.ISession s, SqlStatement stmt, IReadOnlyDictionary<string, BindValue> binds, ExecutionOptions? options, CancellationToken ct)

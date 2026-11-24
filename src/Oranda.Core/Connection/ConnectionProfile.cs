@@ -55,6 +55,7 @@ public sealed record NlsSettings
 /// (<see cref="AiAccessPolicy"/>, 옛 JSON 도 null 로 읽힌다).
 /// <see cref="Dbms"/> 는 접속 대상 DBMS 종류(D-046). 옛 JSON(키 없음)은 <see cref="Connection.Dbms.Oracle"/> 로 읽힌다.
 /// <see cref="SortIndex"/> 는 접속 관리자 「직접 정렬」 의 같은 폴더 안 순서(작을수록 위). 옛 JSON(키 없음)은 null 로 읽혀 이름순 뒤에 놓인다.
+/// <see cref="AiMaskSensitive"/> 는 AI 로 결과 값을 보낼 때 민감 컬럼(전화·이메일·이름 등)을 가리는가 — null 이면 켬(D-069). 끄더라도 비밀번호·주민번호·카드·계좌·주소·인증값은 가린다.
 /// D-004: 위치 매개변수 record 를 유지하고 새 매개변수는 끝에 기본값과 함께 덧붙인다.
 /// </summary>
 public sealed record ConnectionProfile(
@@ -80,7 +81,8 @@ public sealed record ConnectionProfile(
     AiAccessLevel? AiAccess = null,
     bool? AllowExplainPlan = null,
     Dbms Dbms = Dbms.Oracle,
-    int? SortIndex = null);
+    int? SortIndex = null,
+    bool? AiMaskSensitive = null);
 
 /// <summary><c>connections.json</c> 루트.</summary>
 public sealed record ConnectionsDocument

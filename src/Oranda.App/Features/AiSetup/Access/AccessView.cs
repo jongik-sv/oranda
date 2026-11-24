@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Layout;
@@ -125,6 +126,16 @@ internal sealed class AccessTableView : UserControl
         confirm.Bind(IsVisibleProperty, new Binding(nameof(AccessRow.NeedsName)));
         confirm.Bind(Avalonia.Automation.AutomationProperties.NameProperty, new Binding(nameof(AccessRow.ConfirmPlaceholder)));
 
+        // 민감 데이터 가리기(D-069): 모든 줄. 끄면 경고 글.
+        var mask = new CheckBox { Name = "AccessMaskSensitive", FontSize = 12 };
+        mask.Bind(ContentProperty, new Binding(nameof(AccessRow.MaskSensitiveLabel)));
+        mask.Bind(ToggleButton.IsCheckedProperty, new Binding(nameof(AccessRow.MaskSensitive)) { Mode = BindingMode.TwoWay });
+        mask.Bind(Avalonia.Automation.AutomationProperties.NameProperty, new Binding(nameof(AccessRow.MaskSensitiveLabel)));
+        var maskWarning = new TextBlock { Name = "AccessMaskOffWarning", TextWrapping = TextWrapping.Wrap, FontSize = 12 };
+        maskWarning.Classes.Add("warning-text");
+        maskWarning.Bind(TextBlock.TextProperty, new Binding(nameof(AccessRow.MaskOffWarning)));
+        maskWarning.Bind(IsVisibleProperty, new Binding(nameof(AccessRow.MaskOffWarningVisible)));
+
         var frame = new Border
         {
             DataContext = row,
@@ -132,7 +143,7 @@ internal sealed class AccessTableView : UserControl
             Margin = new Thickness(0, 0, 0, 6),
             BorderThickness = row.IsProduction ? new Thickness(3, 1, 1, 1) : new Thickness(1),
             CornerRadius = new CornerRadius(4),
-            Child = new StackPanel { Spacing = 4, Children = { head, buttonLine, description, confirm } },
+            Child = new StackPanel { Spacing = 4, Children = { head, buttonLine, description, mask, maskWarning, confirm } },
             Classes = { row.IsProduction ? "ai-setup-production" : "ai-setup-connection" },
         };
         frame.Bind(Border.BorderBrushProperty, frame.GetResourceObservable(row.IsProduction ? "OrandaEnvProductionBrush" : "OrandaSeparatorBrush"));

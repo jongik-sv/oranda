@@ -73,7 +73,7 @@ public sealed class SharedAiAccessService : IDisposable
     public async Task<ConnectionProfile> SaveDesiredAsync(ConnectionProfile desired, string? confirmName, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(desired);
-        var (result, profile) = await SaveLevelAsync(desired.Id, AiAccessPolicy.Effective(desired), confirmName, ct).ConfigureAwait(true);
+        var (result, profile) = await SaveLevelAsync(desired.Id, AiAccessPolicy.Effective(desired), confirmName, ct, updateMask: true, desired.AiMaskSensitive).ConfigureAwait(true);
         return result == AiAccessChange.Saved && profile is not null
             ? profile
             : throw new InvalidOperationException(result switch
@@ -99,7 +99,9 @@ public sealed class SharedAiAccessService : IDisposable
         return (result, profile is null ? null : AiConnectionAccess.Of(profile));
     }
 
-    private async Task<(AiAccessChange Result, ConnectionProfile? Profile)> SaveLevelAsync(Guid profileId, AiAccessLevel level, string? confirmName, CancellationToken ct)
+    /// <param name="updateMask">참이면 민감 가림 저장 값을 <paramref name="maskSensitive"/> 로 바꾼다(D-069, null = 켬). 거짓이면 그대로 둔다.</param>
+    private async Task<(AiAccessChange Result, ConnectionProfile? Profile)> SaveLevelAsync(
+        Guid profileId, AiAccessLevel level, string? confirmName, CancellationToken ct, bool updateMask = false, bool? maskSensitive = null)
     {
         var profile = (await _load(ct).ConfigureAwait(true)).FirstOrDefault(p => p.Id == profileId);
         if (profile is null)
@@ -114,7 +116,12 @@ public sealed class SharedAiAccessService : IDisposable
         }
 
         var next = AiConnectionAccessRules.Apply(profile, level);
-        if (ReferenceEquals(next, profile))
+        if (updateMask && next.AiMaskSensitive != maskSensitive)
+        {
+            next = next with { AiMaskSensitive = maskSensitive };
+        }
+
+        if (ReferenceEquals(next, profile) || next == profile)
         {
             return (AiAccessChange.Saved, profile);
         }

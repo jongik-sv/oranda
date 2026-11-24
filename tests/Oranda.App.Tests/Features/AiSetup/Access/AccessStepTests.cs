@@ -53,6 +53,47 @@ public sealed class AccessStepTests
         Assert.True(vm.Rows[1].IsProduction);
     }
 
+    [Theory]
+    [InlineData(ConnectionEnvironment.Production)]
+    [InlineData(ConnectionEnvironment.Test)]
+    [InlineData(ConnectionEnvironment.Development)]
+    public async Task MaskSensitive_SwitchOff_SavesFalse_AndOnAgain_SavesNull(ConnectionEnvironment environment)
+    {
+        // D-069: 모든 접속에 민감 데이터 가리기. 끄면 false, 다시 켜면 기본(null). 끄면 경고 글이 보인다.
+        var h = new Harness();
+        h.Profiles.Add(Profile("conn", environment, AiAccessLevel.Query));
+        var vm = h.Create();
+        await vm.LoadAsync(default);
+        var row = vm.Rows[0];
+        Assert.True(row.MaskSensitive);
+        Assert.False(row.MaskOffWarningVisible);
+
+        row.MaskSensitive = false;
+        Assert.True(row.IsChanged);
+        Assert.False(row.NeedsName); // 수준을 올린 것이 아니라 이름은 묻지 않는다
+        Assert.True(row.MaskOffWarningVisible);
+        Assert.True(await vm.SaveAsync(default));
+        Assert.False(Assert.Single(h.Saved).AiMaskSensitive);
+        Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.Effective(h.Saved[0]));
+
+        row.MaskSensitive = true;
+        Assert.True(await vm.SaveAsync(default));
+        Assert.Null(h.Saved[^1].AiMaskSensitive);
+    }
+
+    [Fact]
+    public async Task MaskSensitive_Off_ChangesTheRowsDescriptionAtSelectPlusRows()
+    {
+        var h = new Harness();
+        h.Profiles.Add(Profile("dev-erp", ConnectionEnvironment.Development, AiAccessLevel.QueryRows));
+        var vm = h.Create();
+        await vm.LoadAsync(default);
+
+        Assert.Contains("민감 컬럼은 가려요", vm.Rows[0].Description, StringComparison.Ordinal);
+        vm.Rows[0].MaskSensitive = false;
+        Assert.Contains("민감 컬럼도 보내요", vm.Rows[0].Description, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task TurnOnDev_FromOff_SavesDefault_AndPassesEnabledList()
     {

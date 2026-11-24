@@ -113,6 +113,10 @@ public sealed record AgentGrantView(
     public bool MasksSensitive(Guid? profileId) =>
         profileId is not { } id || FindConnection(id) is not { } connection || AgentGrantPolicy.MasksSensitive(this, connection.Environment);
 
+    /// <summary>그 접속의 민감 컬럼 가림이 켜져 있는가(D-069). 접속을 모르면 켬. 꺼져 있으면 가림을 「항상 가리는 열」로 좁힌다.</summary>
+    public bool MasksSensitiveColumns(Guid? profileId) =>
+        profileId is not { } id || FindConnection(id) is not { } connection || connection.MaskSensitiveColumns;
+
     /// <summary>그 접속의 이력·오류 글에서 리터럴을 가리는가(<see cref="AgentGrantPolicy.MasksLiterals"/>). 접속을 모르면 거짓(그런 탭은 먼저 거부된다).</summary>
     public bool MasksLiterals(Guid? profileId) =>
         profileId is { } id && FindConnection(id) is { } connection && AgentGrantPolicy.MasksLiterals(this, connection.Environment);
@@ -136,7 +140,8 @@ public sealed record AgentGrantConnection(
     Dbms Dbms,
     AiAccessLevel Level,
     bool ReadOnly = false,
-    bool ExplainPlanAllowed = true);
+    bool ExplainPlanAllowed = true,
+    bool MaskSensitiveColumns = true);
 
 /// <summary>허가를 만들 때 고른 접속 하나와 그 외부 상한.</summary>
 /// <param name="Profile">접속 프로필(지금 값).</param>
@@ -288,6 +293,7 @@ public static class AgentGrantPolicy
             profile.Dbms,
             LevelFor(profile, target.Cap),
             profile.ReadOnly,
-            AiAccessPolicy.ExplainPlanEnabled(profile));
+            AiAccessPolicy.ExplainPlanEnabled(profile),
+            AiAccessPolicy.MasksSensitiveColumns(profile));
     }
 }

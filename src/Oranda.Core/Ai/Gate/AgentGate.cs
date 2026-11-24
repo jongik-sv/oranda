@@ -376,7 +376,8 @@ public sealed partial class AgentGate : IAgentGate, IAgentExternalGate
 
         // 처리자가 캐시 노드를 돌려줄 수 있으므로 복사본에서 가린다.
         var result = output.Result?.DeepClone() ?? new JsonObject();
-        var removed = MaskRowValues(ref result, tool.Name, dataLevel, state.Clean, session.Context.LocalAi);
+        var removed = MaskRowValues(ref result, tool.Name, dataLevel, state.Clean,
+            session.Context.LocalAi || !AiAccessPolicy.MasksSensitiveColumns(session.Profile)); // D-069: 접속의 민감 가림 끔도 좁힌다
 
         // 결과의 SQL 글·술어 칸(AgentFields.SqlTextFields)에서 리터럴을 가린다. 가릴 수 없는 모양의 결과는 내지 않는다.
         if (state.LiteralMasking)
