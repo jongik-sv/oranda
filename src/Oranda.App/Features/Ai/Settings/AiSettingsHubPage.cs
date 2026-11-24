@@ -334,9 +334,15 @@ public sealed partial class AiSettingsHubPage : ObservableObject, IDisposable
 
     public string OutsideCollapsedHint => _t.T("필요한 사람만. 터미널에서 AI 를 쓰는 개발자용", "Only if you need it: for developers who use AI in a terminal");
 
-    /// <summary>회색 띠: 「위 1 의 표를 따르되, 운영은 외부 상한까지만: prd-erp 조회 실행 · …」(상한이 실제로 낮출 때 「(외부 상한)」).</summary>
-    public string OutsideSummary => _t.T("위 1 의 표를 따르되, 운영은 외부 상한까지만: ", "Follows table 1, production only up to the external cap: ")
-        + Levels(a => (a.ExternalLevel, a.ExternalCapped));
+    /// <summary>
+    /// 회색 띠(Mac 시안 문구 2026-11-24): 「위 1 의 표를 그대로 따릅니다: dev-erp 계획 · prd-erp 조회 실행」. 수준은 min(접속 수준, 외부 상한)이고
+    /// 상한이 실제로 낮출 때만 「(외부 상한)」 을 붙인다. 운영 접속이 있으면 둘째 줄 「운영 접속은 연결할 때 접속 이름을 한 번 더 입력해야 고를 수 있습니다」.
+    /// </summary>
+    public string OutsideSummary => _t.T("위 1 의 표를 그대로 따릅니다: ", "Follows table 1 as is: ")
+        + Levels(a => (a.ExternalLevel, a.ExternalCapped))
+        + (Access?.Rows.Any(r => r.IsProduction) == true
+            ? "\n" + _t.T("운영 접속은 연결할 때 접속 이름을 한 번 더 입력해야 고를 수 있습니다.", "Production connections can be chosen only after typing the connection name once more when connecting.")
+            : string.Empty);
 
     public string OutsideNote => _t.T("외부 에이전트는 자기 프로그램과 자기 로그인을 씁니다. Oranda 는 어느 접속을 어디까지 볼지만 정합니다.",
         "External agents use their own program and their own sign-in. Oranda only decides which connections they can see and how far.");

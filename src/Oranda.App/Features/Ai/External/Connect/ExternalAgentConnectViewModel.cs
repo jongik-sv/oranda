@@ -62,10 +62,12 @@ public sealed partial class ExternalAgentConnectionRow : ObservableObject
     public AiAccessLevel ExternalLevel => AgentGrantPolicy.LevelFor(Profile, AgentGrantPolicy.DefaultCap(Profile.Environment));
 
     /// <summary>
-    /// 줄의 수준 글(글자만): 실효 수준 = min(접속 수준, 외부 상한)(<see cref="AiConnectionAccess"/>). 운영 줄은 「(외부 상한 · 고르려면 접속 이름을 다시 입력)」.
+    /// 줄의 수준 글(글자만): 실효 수준 = min(접속 수준, 외부 상한)(<see cref="AiConnectionAccess"/>). 운영 줄은 실제 수준 뒤에 「(고르려면 접속 이름을 다시 입력)」, 외부 상한이 실제로 낮췄으면 「(외부 상한 · …)」.
     /// 수준을 바꾸는 곳은 설정 「AI」 탭 ① 하나다(이 창은 「이번 연결에 쓸 접속」 만 고른다).
     /// </summary>
-    public string LevelText => LevelName(ExternalLevel) + (IsProductionMarked ? ExternalAgentText.ProductionLevelNote : string.Empty);
+    public string LevelText => LevelName(ExternalLevel) + (!IsProductionMarked ? string.Empty
+        : ExternalLevel < CurrentLevel ? ExternalAgentText.ProductionCappedLevelNote
+        : ExternalAgentText.ProductionLevelNote);
 
     /// <summary>운영 행 경고 「운영 접속 — LLM 이 SELECT 를 자동 실행합니다」: 운영이고 허가 수준이 조회 실행 이상(스위치를 끄면 Metadata 라 숨는다).</summary>
     public bool ShowsRunWarning => IsProductionMarked && ExternalLevel >= AiAccessLevel.Query;

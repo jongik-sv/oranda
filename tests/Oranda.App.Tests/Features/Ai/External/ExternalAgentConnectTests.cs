@@ -68,7 +68,7 @@ public sealed class ExternalAgentConnectTests
         Assert.False(Row(vm, "test-a").IsChecked);
         Assert.False(Row(vm, "prd-a").IsChecked);
         var prd = Row(vm, "prd-a");
-        Assert.Equal(ExternalAgentConnectionRow.LevelName(prd.ExternalLevel) + " (외부 상한 · 고르려면 접속 이름을 다시 입력)", prd.LevelText);
+        Assert.Equal(ExternalAgentConnectionRow.LevelName(prd.ExternalLevel) + (prd.ExternalLevel < prd.CurrentLevel ? " (외부 상한 · 고르려면 접속 이름을 다시 입력)" : " (고르려면 접속 이름을 다시 입력)"), prd.LevelText);
         Assert.Equal(AgentGrantPolicy.LevelFor(prd.Profile, AgentGrantPolicy.DefaultCap(ConnectionEnvironment.Production)), prd.ExternalLevel);
         Assert.True(prd.IsProductionMarked);
         Assert.False(Row(vm, "dev-a").IsProductionMarked);
@@ -177,7 +177,12 @@ public sealed class ExternalAgentConnectTests
         var prd = Row(vm, "prd-a");
 
         Assert.Equal("조회 + 행 값", dev.LevelText);
-        Assert.Equal(ExternalAgentConnectionRow.LevelName(prd.ExternalLevel) + " (외부 상한 · 고르려면 접속 이름을 다시 입력)", prd.LevelText);
+        Assert.Equal(ExternalAgentConnectionRow.LevelName(prd.ExternalLevel) + (prd.ExternalLevel < prd.CurrentLevel ? " (외부 상한 · 고르려면 접속 이름을 다시 입력)" : " (고르려면 접속 이름을 다시 입력)"), prd.LevelText);
+        if (AgentGrantPolicy.ProductionRuns)
+        {
+            Assert.Equal("조회 실행 (고르려면 접속 이름을 다시 입력)", prd.LevelText); // Mac 시안 문구: 실제 수준을 보이고 상한 말은 낮출 때만
+        }
+
         Assert.Equal("에이전트가 볼 수 있는 접속", ExternalAgentConnectViewModel.ConnectionsTitle);
         Assert.Contains("설정 > AI", ExternalAgentConnectViewModel.LevelsLinkText, StringComparison.Ordinal);
         Assert.Contains("한곳(설정 > AI)", ExternalAgentConnectViewModel.OnlyChooseNote, StringComparison.Ordinal);
