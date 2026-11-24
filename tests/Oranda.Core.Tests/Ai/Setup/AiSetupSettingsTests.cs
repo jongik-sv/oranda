@@ -30,6 +30,26 @@ public class AiSetupSettingsTests
         Assert.Equal(setup, Read(json).Ai.Setup);
     }
 
+    [Fact]
+    public void Last_connection_test_round_trips_and_unreadable_ones_are_dropped()
+    {
+        // ai-settings-one-place: 설정 「AI」 탭 맨 위 카드가 보이는 마지막 연결 시험. 비밀(키·주소)은 없다.
+        var ok = new AiConnectionTestRecord(new DateTimeOffset(2026, 11, 24, 9, 30, 0, TimeSpan.FromHours(9)), true, "Claude Code", 1234);
+        var failed = new AiConnectionTestRecord(new DateTimeOffset(2026, 11, 24, 9, 31, 0, TimeSpan.Zero), false, "dev-erp server", 0, AiSetupErrorKind.Network);
+        foreach (var test in new[] { ok, failed })
+        {
+            var json = JsonSerializer.Serialize(new AppSettings { Ai = new AiSettings { Setup = new AiSetupSettings { LastTest = test } } }, OrandaJsonContext.Default.AppSettings);
+            Assert.Equal(test, Read(json).Ai.Setup.LastTest);
+        }
+
+        Assert.Null(Read("""{ "ai": { "setup": { "lastTest": 3 } } }""").Ai.Setup.LastTest);
+        Assert.Null(Read("""{ "ai": { "setup": { "lastTest": { "at": "soon", "succeeded": true, "target": "x" } } } }""").Ai.Setup.LastTest);
+        Assert.Null(Read("""{ "ai": { "setup": { "lastTest": { "at": "2026-11-24T00:00:00Z", "succeeded": true } } } }""").Ai.Setup.LastTest);
+        var unknown = Read("""{ "ai": { "setup": { "lastStep": "Login", "lastTest": { "at": "2026-11-24T00:00:00Z", "succeeded": false, "target": "x", "error": "Robot", "extra": [1] } } } }""").Ai.Setup;
+        Assert.Equal(AiSetupErrorKind.Unknown, unknown.LastTest!.Error);
+        Assert.Equal(AiSetupStepId.Login, unknown.LastStep); // 뒤 칸도 그대로 읽는다
+    }
+
     [Theory]
     [InlineData("""{ "ai": { "model": "haiku", "setup": null } }""")]
     [InlineData("""{ "ai": { "model": "haiku", "setup": 3 } }""")]

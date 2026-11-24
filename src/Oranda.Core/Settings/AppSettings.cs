@@ -410,7 +410,21 @@ public sealed record AiSetupSettings
 
     /// <summary>갈래 B 에서 만든 프로필 id(이어 하기). null = 없음. 목록에 없는 id 면 단계가 다시 만들게 한다.</summary>
     public Guid? LastProfileId { get; init; }
+
+    /// <summary>
+    /// 마지막 연결 시험(도우미의 연결 시험 단계·설정 「AI」 탭의 「연결 시험」, ai-settings-one-place 2026-11-24). null = 아직 안 함.
+    /// 설정 탭 맨 위 「연결 상태」 카드가 보인다. 비밀(키·주소)은 담지 않는다.
+    /// </summary>
+    public AiConnectionTestRecord? LastTest { get; init; }
 }
+
+/// <summary>연결 시험 한 번의 기록.</summary>
+/// <param name="At">시험한 때.</param>
+/// <param name="Succeeded">답을 받았다.</param>
+/// <param name="Target">시험한 대상의 이름(Claude Code 또는 프로필 이름).</param>
+/// <param name="ElapsedMs">답 시간(성공일 때).</param>
+/// <param name="Error">실패 종류(실패일 때). 이 빌드가 모르는 이름은 <see cref="AiSetupErrorKind.Unknown"/> 으로 읽는다.</param>
+public sealed record AiConnectionTestRecord(DateTimeOffset At, bool Succeeded, string Target, long ElapsedMs = 0, AiSetupErrorKind? Error = null);
 
 /// <summary>MyBatis 작업 공간 설정. 설정 창에는 없고 「바뀌는 부분」 창의 확인란이 바꾼다.</summary>
 public sealed record MyBatisSettings

@@ -149,6 +149,11 @@ public sealed class AiSetupTestStepViewModel : INotifyPropertyChanged
                 ? await TestServerAsync(running.Token).ConfigureAwait(true)
                 : await TestClaudeAsync(running.Token).ConfigureAwait(true);
 
+            if (outcome.Notice is null)
+            {
+                await RecordAsync(_context.Settings, Record(outcome, path)).ConfigureAwait(true); // 시험을 실제로 한 경우만 남긴다(설정 탭 「연결 상태」 카드)
+            }
+
             if (outcome.Success)
             {
                 Headline = AiSetupTestText.Succeeded(outcome.Elapsed, English);
@@ -214,6 +219,32 @@ public sealed class AiSetupTestStepViewModel : INotifyPropertyChanged
 
         await _context.CopyText(text).ConfigureAwait(true);
         JustCopied = true;
+    }
+
+    /// <summary>시험한 대상의 이름: 갈래 B 는 만든 프로필 이름, 그 밖은 Claude Code.</summary>
+    private string TargetName(AiSetupPath? path) =>
+        path == AiSetupPath.CompanyServer && _context.CreatedProfileId is { } id
+        && _context.Settings.Current.Ai.Profiles.FirstOrDefault(p => p.Id == id) is { } profile
+            ? profile.Name
+            : "Claude Code";
+
+    private AiConnectionTestRecord Record(Outcome outcome, AiSetupPath? path) =>
+        new(_clock(), outcome.Success, TargetName(path), (long)outcome.Elapsed.TotalMilliseconds, outcome.Success ? null : outcome.Kind ?? AiSetupErrorKind.Unknown);
+
+    /// <summary>
+    /// 마지막 연결 시험을 설정(<c>ai.setup.lastTest</c>)에 남긴다. 설정을 쓸 수 없으면(읽기 전용 등) 조용히 넘어간다 — 시험 결과 화면은 그대로다.
+    /// 도우미의 연결 시험 단계와 설정 「AI」 탭의 「연결 시험」 이 함께 쓴다.
+    /// </summary>
+    internal static async Task RecordAsync(Oranda.App.Shell.Settings.SettingsService settings, AiConnectionTestRecord record)
+    {
+        try
+        {
+            await settings.UpdateAsync(s => s with { Ai = s.Ai with { Setup = s.Ai.Setup with { LastTest = record } } }).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 기록만 못 한다.
+        }
     }
 
     private async Task<Outcome> TestClaudeAsync(CancellationToken ct)
