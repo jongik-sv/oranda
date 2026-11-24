@@ -17,11 +17,12 @@ using Oranda.Platform.Ai.Skills;
 namespace Oranda.App.Features.Ai.External.Connect;
 
 /// <summary>
-/// 「도구 → 외부 에이전트 연결…」(설계서 §3.1, 명령 <c>oranda.agent.external.connect</c>). 연결 창을 연다.
+/// 「외부 에이전트 연결…」(설계서 §3.1, 명령 <c>oranda.agent.external.connect</c>). 연결 창을 연다.
+/// 메뉴에서는 뺐다(ai-settings-one-place 2026-11-24): 설정 「AI」 탭의 「외부 에이전트」 묶음 「연결…」 과 명령 팔레트로 닿는다.
 /// 이 형은 <c>Features.Ai</c> 네임스페이스라 aiTuning 기능이 꺼져 있으면 메뉴에 나오지 않는다(E-21: 다리도 그 기능에서만 열린다).
 /// 셸의 처리기 팩터리(DI)가 <see cref="IServiceProvider"/> 를 넣어 준다. 인자 없는 생성자는 아무것도 하지 않는다.
 /// </summary>
-[OrandaCommand(ExternalAgentConnectCommands.Connect, CommandCategory.Tools, Title = "외부 에이전트 연결…", Placements = ["menu:tools/externalAgent@45"])]
+[OrandaCommand(ExternalAgentConnectCommands.Connect, CommandCategory.Tools, Title = "외부 에이전트 연결…")]
 public sealed class ExternalAgentConnectCommandHandler : ICommandHandler
 {
     private readonly IServiceProvider? _services;
@@ -63,10 +64,11 @@ public static class ExternalAgentConnectCommands
             Label: () => SqlEditorHost.Current.ActiveWorkspace?.Name ?? string.Empty);
     }
 
-    public static async Task ShowAsync(IServiceProvider services, CancellationToken ct)
+    /// <param name="ownerWindow">창을 띄울 주인(설정 「AI」 탭이 설정 창을 넘긴다). null 이면 주 창.</param>
+    public static async Task ShowAsync(IServiceProvider services, CancellationToken ct, Window? ownerWindow = null)
     {
         ArgumentNullException.ThrowIfNull(services);
-        var owner = (services.GetService(typeof(ShellController)) as ShellController)?.MainWindow;
+        var owner = ownerWindow ?? (services.GetService(typeof(ShellController)) as ShellController)?.MainWindow;
         if (owner is null || ServicesFrom(services) is not { } parts)
         {
             return;

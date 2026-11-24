@@ -106,7 +106,7 @@ public sealed partial class ObjectDetailViewModel
             StatusText = reason;
             if (await (AdvisorUnavailableNotice ?? AskOpenSettingsAsync)(reason))
             {
-                (_services?.GetService(typeof(IShellUi)) as IShellUi)?.ShowSettings(vm => vm.SelectedTab = SettingsViewModel.UpdateTabIndex + 1); // AI 모델 탭 = 업데이트 다음
+                (_services?.GetService(typeof(IShellUi)) as IShellUi)?.ShowSettings(vm => vm.SelectedTab = SettingsViewModel.AiTabIndex);
             }
 
             return;

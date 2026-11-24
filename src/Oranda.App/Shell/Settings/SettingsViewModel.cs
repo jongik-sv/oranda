@@ -182,17 +182,24 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>「그리드」 탭의 순서(되돌리기 다음).</summary>
     public const int GridTabIndex = 6;
 
-    /// <summary>「AI 모델」 쪽(시안 1). aiTuning 기능이 꺼져 있으면 탭을 보이지 않는다(<see cref="AiTabVisible"/>).</summary>
     private AiSettings _aiSaved;
 
-    public AiModelSettingsPage AiModel { get; }
+    /// <summary>
+    /// 「AI」 탭(ai-settings-one-place 2026-11-24): 연결 상태·AI 를 쓸 접속·외부 에이전트·「고급」. AI 기능이 꺼져 있거나 조회만 Role 이어도 숨기지 않고
+    /// 그 까닭과 「기능 켜기」·「주 업무 바꾸기」 를 보인다(숨기면 들어갈 길이 없다).
+    /// </summary>
+    public AiSettingsHubPage AiHub { get; }
 
-    public bool AiTabVisible { get; }
+    /// <summary>「고급」 안의 예전 「AI 모델」 쪽. 도우미가 끝나면 <see cref="AiHub"/> 가 새 객체로 바꾼다.</summary>
+    public AiModelSettingsPage AiModel => AiHub.Model;
 
-    /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 업데이트 탭, 그 뒤에 AI 모델 탭).</summary>
+    /// <summary>업데이트 탭의 순서(<c>SettingsWindow.axaml</c> 의 업데이트 탭, 그 뒤에 AI 탭).</summary>
     public const int UpdateTabIndex = 9;
 
-    /// <summary>「드라이버」 탭의 순서(맨 끝, AI 모델 탭 다음). <c>oranda.settings.openDrivers</c> 가 이 탭으로 연다.</summary>
+    /// <summary>「AI」 탭의 순서(업데이트 다음). 「도구 → AI 설정…」·첫 실행 묻기·실패 띠가 이 탭으로 연다.</summary>
+    public const int AiTabIndex = 10;
+
+    /// <summary>「드라이버」 탭의 순서(맨 끝, AI 탭 다음). <c>oranda.settings.openDrivers</c> 가 이 탭으로 연다.</summary>
     public const int DriversTabIndex = 11;
 
     /// <summary>「드라이버」 탭(Tibero 드라이버 위치, 결정25).</summary>
@@ -228,7 +235,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <param name="featureGate">「기능」 탭의 재시작 안내를 읽을 게이트. null 이면 앱 서비스에서 찾는다(앱 밖이면 안내 없음).</param>
     /// <param name="drivers">「드라이버」 탭. null 이면 앱 서비스에서 Tibero 드라이버 상태(로더)·외부 적재 도구 확인을 찾아 만든다(앱 밖이면 둘 다 없음).</param>
     /// <param name="rollback">「되돌리기」 탭. null 이면 앱 서비스에서 원복 저장소·자료 폴더를 찾아 만든다(앱 밖이면 저장소 없음).</param>
-    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null, IFeatureGate? featureGate = null, DriverSettingsPage? drivers = null, RollbackSettingsPage? rollback = null)
+    /// <param name="aiHub">「AI」 탭이 쓰는 부품(도우미·접속·외부 에이전트). null 이면 앱 서비스에서 모은다(앱 밖이면 모두 없음).</param>
+    public SettingsViewModel(SettingsService settings, IShellText text, IEnumerable<string>? installedFonts = null, SqlFormatPage? sqlFormat = null, IFeatureGate? featureGate = null, DriverSettingsPage? drivers = null, RollbackSettingsPage? rollback = null, AiSettingsHubServices? aiHub = null)
     {
         _settings = settings;
         _text = text;
@@ -241,10 +249,21 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var gate = featureGate ?? (Avalonia.Application.Current as App)?.Services?.GetService<IFeatureGate>();
         Rollback = rollback ?? CreateRollbackPage(settings, text);
         _aiSaved = settings.Current.Ai;
-        AiModel = new AiModelSettingsPage(settings.Current.Ai, CreateAiProfileServices(settings, text));
-        // 프로필 관리 창이 이미 기록하고 알렸으면 확인 때 같은 변경을 다시 알리지 않는다.
-        AiModel.ProfilesPersisted += (_, _) => _aiSaved = _settings.Current.Ai;
-        AiTabVisible = gate?.IsEnabled(FeatureIds.AiTuning) ?? false;
+        var profileServices = CreateAiProfileServices(settings, text);
+        AiHub = new AiSettingsHubPage(
+            settings,
+            text,
+            ai => new AiModelSettingsPage(ai, profileServices),
+            aiHub ?? AiSettingsHubServicesFactory.FromApp(settings),
+            gate is null ? null : () => gate.IsEnabled(FeatureIds.AiTuning));
+        // 프로필 관리 창이 이미 기록하고 알렸으면 확인 때 같은 변경을 다시 알리지 않는다. 도우미가 끝나 「고급」 쪽을 새로 만들면 그쪽에 다시 건다.
+        AiModel.ProfilesPersisted += OnAiProfilesPersisted;
+        AiHub.ModelReplaced += (_, _) =>
+        {
+            AiModel.ProfilesPersisted += OnAiProfilesPersisted;
+            _aiSaved = _settings.Current.Ai; // 도우미가 저장하며 이미 알렸다
+        };
+        AiHub.FeaturesRequested += (_, enableAi) => OpenFeaturesForAi(enableAi);
         Themes =
         [
             new ThemeChoice(Theme.System, text.Lookup("Shell.settings.theme.system")),
@@ -335,6 +354,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     /// <summary>시험용: 「자세히…」가 포매터 프로필 화면을 여는 길(기본 = <c>oranda.format.profiles</c> 명령).</summary>
     internal Func<Task>? OpenProfiles { get; init; }
+
+    private void OnAiProfilesPersisted(object? sender, EventArgs e) => _aiSaved = _settings.Current.Ai;
+
+    /// <summary>「AI」 탭의 「기능 켜기」·「주 업무 바꾸기」: 「기능」 탭으로 옮긴다. 켜기면 AI 튜닝을 켠 상태로 둔다(「저장」 해야 적용, 재시작 안내는 그 탭이 보인다).</summary>
+    private void OpenFeaturesForAi(bool enableAi)
+    {
+        if (enableAi && Features.Items.FirstOrDefault(i => i.Id == FeatureIds.AiTuning) is { CanEdit: true, IsChecked: false } item)
+        {
+            item.IsChecked = true;
+        }
+
+        SelectedTab = FeaturesTabIndex;
+    }
 
     private static AiProfileServices CreateAiProfileServices(SettingsService settings, IShellText text)
     {
@@ -656,6 +688,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         _pendingProfileId = null;
         PublishAiChanged();
+        AiHub.RefreshStatus(); // 「연결 상태」 카드는 저장된 값을 본다
         UpdateService.Current?.RefreshSettings(); // 건너뛴 버전을 지웠으면 상태 표시줄 표시도 바로 맞춘다
         Features.AcceptSaved();
         Rollback.AcceptSaved();

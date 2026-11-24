@@ -26,9 +26,33 @@ public partial class SettingsWindow : Window
                 }
             }
         };
-        Opened += (_, _) => FitLargestCategory();
-        Closed += (_, _) => (DataContext as SettingsViewModel)?.Features.Dispose();
+        Opened += (_, _) =>
+        {
+            Current = this;
+            FitLargestCategory();
+            // 첫 실행 묻기·실패 띠·옛 명령이 「도우미로」 열었으면 크기를 정한 뒤 이 창 위에 도우미를 띄운다(닫히면 「AI」 탭이 고른 값을 다시 읽는다).
+            if (DataContext is SettingsViewModel vm)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = vm.AiHub.RunQueuedWizardAsync());
+            }
+        };
+        Closed += (_, _) =>
+        {
+            if (ReferenceEquals(Current, this))
+            {
+                Current = null;
+            }
+
+            if (DataContext is SettingsViewModel vm)
+            {
+                vm.Features.Dispose();
+                vm.AiHub.Dispose();
+            }
+        };
     }
+
+    /// <summary>지금 열린 설정 창(하나만 연다). 도우미를 여는 길이 이 창의 「AI」 탭을 거치는 데 쓴다. 없으면 null.</summary>
+    internal static SettingsWindow? Current { get; private set; }
 
     /// <summary>「드라이버」 탭의 찾아보기: 파일(dll·nupkg) 또는 폴더 하나의 로컬 경로. 취소하거나 로컬 경로가 아니면 null.</summary>
     private async Task<string?> PickDriverAsync(DriverSettingsPage page, bool folder)

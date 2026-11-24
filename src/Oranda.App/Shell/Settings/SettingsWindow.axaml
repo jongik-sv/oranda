@@ -416,9 +416,10 @@
           </Grid>
         </ScrollViewer>
       </TabItem>
-      <TabItem x:Name="AiModelTab" Header="{Binding Strings[tab.ai]}" IsVisible="{Binding AiTabVisible}">
+      <!-- AI: 연결 상태·AI 를 쓸 접속·외부 에이전트·접힌 「고급」(예전 「AI 모델」 쪽). AI 기능이 꺼져도 숨기지 않고 까닭과 켜는 단추를 보인다(ai-settings-one-place). -->
+      <TabItem x:Name="AiModelTab" Header="{Binding Strings[tab.ai]}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <aiSettings:AiModelSettingsView DataContext="{Binding AiModel}" />
+          <aiSettings:AiSettingsHubView x:Name="AiHubView" DataContext="{Binding AiHub}" />
         </ScrollViewer>
       </TabItem>
       <!-- 드라이버: Tibero 드라이버(TDP.NET Core)는 라이선스 때문에 앱에 없다. 위치를 지정하고 [확인] 으로 사전 검사한다. 이 탭은 Tibero 가 보이든 아니든 항상 있다. -->

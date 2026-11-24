@@ -47,7 +47,7 @@ public class AiCommandsTests
         keys.Set("hasSession", true);
 
         Assert.False(keys.Evaluate(AiCommands.TuneEnablement));
-        Assert.Equal("설정에서 AI 모델을 먼저 고르세요", Reason(keys, text));
+        Assert.Equal("설정의 「AI」 탭에서 AI 를 먼저 연결하세요", Reason(keys, text));
 
         keys.Set(AiContextKeys.ConfiguredKey, true);
         Assert.Contains("허용 수준이 「끔」", Reason(keys, text), StringComparison.Ordinal);
@@ -134,18 +134,20 @@ public class AiCommandsTests
         new ServerCapabilities(false, true, true, false, false));
 
     [Fact]
-    public async Task Settings_save_writes_the_ai_model_choice_and_the_tab_hides_without_the_feature()
+    public async Task Settings_save_writes_the_ai_model_choice_and_the_tab_explains_a_missing_feature()
     {
+        // ai-settings-one-place: AI 기능이 꺼져도 탭을 숨기지 않고(들어갈 길이 없어진다) 까닭과 「기능 켜기」 를 보인다.
         var settings = new SettingsService(new MemorySettingsStore());
         var vm = new SettingsViewModel(settings, new ShellText(language: "ko"), featureGate: new FakeGate(aiTuning: false));
-        Assert.False(vm.AiTabVisible);
+        Assert.Equal(Oranda.App.Features.Ai.Settings.AiHubState.Blocked, vm.AiHub.State);
+        Assert.Equal("기능 켜기", vm.AiHub.BlockedActionText);
 
         vm.AiModel.IsClaudeCode = true;
         vm.AiModel.Model = "sonnet";
         await vm.SaveAsync();
 
         Assert.Equal((AiDriverKind.ClaudeCode, "sonnet"), (settings.Current.Ai.Driver, settings.Current.Ai.Model));
-        Assert.True(new SettingsViewModel(settings, new ShellText(language: "ko"), featureGate: new FakeGate(aiTuning: true)).AiTabVisible);
+        Assert.Equal(Oranda.App.Features.Ai.Settings.AiHubState.Connected, new SettingsViewModel(settings, new ShellText(language: "ko"), featureGate: new FakeGate(aiTuning: true)).AiHub.State);
     }
 
     [Fact]

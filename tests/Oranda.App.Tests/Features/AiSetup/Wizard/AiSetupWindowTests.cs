@@ -123,6 +123,36 @@ public sealed class AiSetupWindowTests
     });
 
     [Fact]
+    public Task Launcher_opens_over_the_window_the_settings_tab_gives() => HeadlessHost.Run(async () =>
+    {
+        // ai-settings-one-place: 설정 「AI」 탭의 단추는 설정 창을 주인으로 넘긴다(주 창 위가 아니라 설정 창 위에).
+        var main = new Window();
+        var settingsWindow = new Window();
+        main.Show();
+        settingsWindow.Show();
+        var launcher = new AiSetupLauncher(() => main, (_, _) => Make().Window);
+        try
+        {
+            var shown = launcher.OpenOwnedAsync(settingsWindow, AiSetupEntry.Menu, null);
+            HeadlessHost.Pump(2);
+            Assert.Same(settingsWindow, launcher.OpenWindow!.Owner);
+            launcher.OpenWindow.Close();
+            await HeadlessHost.WaitUntil(() => shown.IsCompleted);
+
+            var fallback = launcher.OpenOwnedAsync(null, AiSetupEntry.Menu, null);
+            HeadlessHost.Pump(2);
+            Assert.Same(main, launcher.OpenWindow!.Owner);
+            launcher.OpenWindow.Close();
+            await HeadlessHost.WaitUntil(() => fallback.IsCompleted);
+        }
+        finally
+        {
+            settingsWindow.Close();
+            main.Close();
+        }
+    });
+
+    [Fact]
     public Task Launcher_without_owner_does_nothing() => HeadlessHost.Run(async () =>
     {
         var made = 0;
