@@ -30,6 +30,16 @@ public sealed record AccessStepServices(
             async ct => (await connections.LoadAsync(ct).ConfigureAwait(true)).Value.Profiles.ToList(),
             (profile, ct) => connections.SaveProfileAsync(profile, password: null, savePassword: profile.CredentialRef is not null, ct));
     }
+
+    /// <summary>
+    /// 공유 허용 수준 서비스로 만든다(ai-settings-one-place): 켬/끔은 그 실효 수준으로 설정 「AI」 탭·외부 에이전트 연결 창과 같은 한 길에 저장한다.
+    /// 저장 꼴은 <see cref="FromConnections"/> 와 같다(켬 = 환경 기본값 = null, 끔 = Off) — 화면·동작은 그대로다.
+    /// </summary>
+    public static AccessStepServices FromShared(SharedAiAccessService shared)
+    {
+        ArgumentNullException.ThrowIfNull(shared);
+        return new(shared.LoadProfilesAsync, (profile, ct) => shared.SaveDesiredAsync(profile, confirmName: null, ct));
+    }
 }
 
 /// <summary>

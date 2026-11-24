@@ -26,7 +26,7 @@ internal static class AiSettingsHubServicesFactory
         var skills = services.GetRegisteredOrDefault<IAgentSkillInstaller>();
         return new AiSettingsHubServices(
             OpenWizard: launcher is null ? null : (owner, entry, reason) => launcher.OpenOwnedAsync(owner, entry, reason),
-            Access: connections is null ? null : AccessStepServices.FromConnections(connections),
+            Access: connections is null ? null : AccessStepServices.FromShared(SharedAiAccessService.FromConnections(connections, bus: null)), // 공유 허용 수준 한 길(도우미·외부 연결 창과 같은 값)
             AgentLink: services.GetRegisteredOrDefault<IExternalAgentLink>(),
             OpenAgentConnect: ExternalAgentConnectCommands.ServicesFrom(services) is null ? null : owner => ExternalAgentConnectCommands.ShowAsync(services, CancellationToken.None, owner),
             OpenSkillInstall: skills is null ? null : owner => owner is null

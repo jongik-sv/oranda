@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Oranda.App.Features.AiSetup.Access;
 using Oranda.App.Features.ConnectionManager;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Shell;
@@ -53,11 +54,12 @@ public static class ExternalAgentConnectCommands
 
         var connections = services.GetService(typeof(IConnectionService)) as IConnectionService;
         var link = services.GetRegisteredOrDefault<IExternalAgentLink>() as ExternalAgentLink;
+        // 「조회 허용」은 접속의 AI 허용 수준(설정 「AI」 탭·도우미와 같은 값)을 공유 한 길로 올린다(ai-settings-one-place). 창 모양은 그대로다.
+        // 버스 없이 만든다: 이 창은 저장만 하고 바뀜을 듣지 않는다(저장은 접속 서비스가 사건으로 알려 「AI」 탭이 따라 바뀐다).
+        var (load, save) = ProfileAccess(connections is null ? null : SharedAiAccessService.FromConnections(connections, bus: null));
         return new ExternalAgentConnectServices(
-            async ct => connections is null ? [] : (IReadOnlyList<ConnectionProfile>)(await connections.LoadAsync(ct).ConfigureAwait(true)).Value.Profiles.ToList(),
-            (profile, ct) => connections is null
-                ? Task.FromResult(profile)
-                : connections.SaveProfileAsync(profile, password: null, savePassword: profile.CredentialRef is not null, ct),
+            load,
+            save,
             grants,
             StartBridge: () => (services.GetService(typeof(IAgentBridgeHost)) as IAgentBridgeHost)?.Start(),
             Bind: () => link?.Bind(),
@@ -65,6 +67,14 @@ public static class ExternalAgentConnectCommands
     }
 
     /// <param name="ownerWindow">창을 띄울 주인(설정 「AI」 탭이 설정 창을 넘긴다). null 이면 주 창.</param>
+    /// <summary>
+    /// 연결 창의 접속 읽기·「조회 허용」 저장 길. 공유 서비스가 있으면 그 한 길(실효 수준으로 저장), 없으면 빈 목록·저장 없음.
+    /// </summary>
+    internal static (Func<CancellationToken, Task<IReadOnlyList<ConnectionProfile>>> Load, Func<ConnectionProfile, CancellationToken, Task<ConnectionProfile>> Save) ProfileAccess(SharedAiAccessService? shared) =>
+        shared is null
+            ? (_ => Task.FromResult<IReadOnlyList<ConnectionProfile>>([]), (profile, _) => Task.FromResult(profile))
+            : (shared.LoadProfilesAsync, (profile, ct) => shared.SaveDesiredAsync(profile, confirmName: null, ct));
+
     public static async Task ShowAsync(IServiceProvider services, CancellationToken ct, Window? ownerWindow = null)
     {
         ArgumentNullException.ThrowIfNull(services);

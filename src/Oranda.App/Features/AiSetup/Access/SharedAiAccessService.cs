@@ -62,6 +62,28 @@ public sealed class SharedAiAccessService : IDisposable
     /// <summary>버스 사건으로 다른 곳의 저장도 알린다.</summary>
     private bool HasBus { get; }
 
+    /// <summary>저장된 접속 목록 그대로(도우미 단계·연결 창이 접속 프로필을 다룰 때).</summary>
+    public Task<IReadOnlyList<ConnectionProfile>> LoadProfilesAsync(CancellationToken ct) => _load(ct);
+
+    /// <summary>
+    /// 화면이 원하는 접속 꼴(<paramref name="desired"/>, 예: 도우미의 켬/끔·연결 창의 「조회 허용」)을 그 <b>실효 수준</b>으로 이 한 길에 저장하고 저장된 접속을 돌려준다.
+    /// 저장 꼴은 <see cref="AiConnectionAccessRules.Apply"/>(환경 기본값이면 null). 이름 재입력이 필요하거나 고를 수 없는 수준·없는 접속이면 <see cref="InvalidOperationException"/>
+    /// (부르는 화면이 저장 실패로 보인다).
+    /// </summary>
+    public async Task<ConnectionProfile> SaveDesiredAsync(ConnectionProfile desired, string? confirmName, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(desired);
+        var (result, profile) = await SaveLevelAsync(desired.Id, AiAccessPolicy.Effective(desired), confirmName, ct).ConfigureAwait(true);
+        return result == AiAccessChange.Saved && profile is not null
+            ? profile
+            : throw new InvalidOperationException(result switch
+            {
+                AiAccessChange.NeedsNameConfirmation => "운영 접속의 AI 허용 수준을 올리려면 접속 이름을 다시 입력해야 합니다.",
+                AiAccessChange.AboveMaximum => "이 접속에서 고를 수 없는 AI 허용 수준입니다.",
+                _ => "접속을 찾지 못했습니다.",
+            });
+    }
+
     /// <summary>접속마다 두 쪽 값(접속 목록 순서).</summary>
     public async Task<IReadOnlyList<AiConnectionAccess>> LoadAsync(CancellationToken ct) =>
         [.. (await _load(ct).ConfigureAwait(true)).Select(AiConnectionAccess.Of)];
@@ -73,6 +95,12 @@ public sealed class SharedAiAccessService : IDisposable
     /// <returns>결과와 (저장했거나 그대로면) 지금 값.</returns>
     public async Task<(AiAccessChange Result, AiConnectionAccess? Access)> SetLevelAsync(Guid profileId, AiAccessLevel level, string? confirmName, CancellationToken ct)
     {
+        var (result, profile) = await SaveLevelAsync(profileId, level, confirmName, ct).ConfigureAwait(true);
+        return (result, profile is null ? null : AiConnectionAccess.Of(profile));
+    }
+
+    private async Task<(AiAccessChange Result, ConnectionProfile? Profile)> SaveLevelAsync(Guid profileId, AiAccessLevel level, string? confirmName, CancellationToken ct)
+    {
         var profile = (await _load(ct).ConfigureAwait(true)).FirstOrDefault(p => p.Id == profileId);
         if (profile is null)
         {
@@ -82,23 +110,22 @@ public sealed class SharedAiAccessService : IDisposable
         var check = AiConnectionAccessRules.Check(profile, level, confirmName);
         if (check != AiAccessChange.Saved)
         {
-            return (check, AiConnectionAccess.Of(profile));
+            return (check, profile);
         }
 
         var next = AiConnectionAccessRules.Apply(profile, level);
         if (ReferenceEquals(next, profile))
         {
-            return (AiAccessChange.Saved, AiConnectionAccess.Of(profile));
+            return (AiAccessChange.Saved, profile);
         }
 
         var saved = await _save(next, ct).ConfigureAwait(true);
-        var access = AiConnectionAccess.Of(saved);
         if (!HasBus)
         {
-            Changed?.Invoke(this, access); // 버스가 있으면 접속 서비스의 저장 사건이 알린다(두 번 내지 않는다)
+            Changed?.Invoke(this, AiConnectionAccess.Of(saved)); // 버스가 있으면 접속 서비스의 저장 사건이 알린다(두 번 내지 않는다)
         }
 
-        return (AiAccessChange.Saved, access);
+        return (AiAccessChange.Saved, saved);
     }
 
     public void Dispose() => _subscription?.Dispose();

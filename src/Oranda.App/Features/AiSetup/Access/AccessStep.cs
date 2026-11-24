@@ -28,13 +28,16 @@ internal sealed class AccessStep : IAiSetupStep
     private readonly AiSetupContext _context;
     private Control? _view;
     private readonly bool _noService;
+    private readonly SharedAiAccessService? _shared;
 
     public AccessStep(AiSetupContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         _context = context;
-        var services = context.Connections is { } connections
-            ? AccessStepServices.FromConnections(connections)
+        // 공유 허용 수준 한 길(설정 「AI」 탭·외부 에이전트 연결 창과 같은 값, ai-settings-one-place). 화면은 그대로다.
+        _shared = context.Connections is { } connections ? SharedAiAccessService.FromConnections(connections, context.Bus) : null;
+        var services = _shared is { } shared
+            ? AccessStepServices.FromShared(shared)
             : new AccessStepServices(_ => Task.FromResult<System.Collections.Generic.IReadOnlyList<Oranda.Core.Connection.ConnectionProfile>>([]), (p, _) => Task.FromResult(p));
         _noService = context.Connections is null;
         ViewModel = new AccessStepViewModel(services, context.Text) { AutoSave = true };
@@ -74,6 +77,7 @@ internal sealed class AccessStep : IAiSetupStep
     {
         ViewModel.PropertyChanged -= OnViewModelChanged;
         ViewModel.Dispose();
+        _shared?.Dispose();
     }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
