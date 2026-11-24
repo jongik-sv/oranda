@@ -68,40 +68,27 @@ public sealed class SharedAiAccessWiringTests
     }
 
     [Fact]
-    public async Task Connect_window_query_allow_raises_the_shared_level_and_the_tab_sees_it()
+    public async Task Connect_window_reads_the_shared_list_and_never_writes_levels()
     {
         var bus = new EventBus();
-        var dev = Dev();
-        var prd = Prd();
-        var connections = new Connections(bus, dev, prd);
-        using var tab = new SharedAiAccessService(connections.LoadAsync, connections.SaveAsync, bus);
-        var seen = new List<AiConnectionAccess>();
-        tab.Changed += (_, a) => seen.Add(a);
-        var (load, save) = ExternalAgentConnectCommands.ProfileAccess(connections.Writer());
+        var dev = Dev(AiAccessLevel.QueryRows);
+        var connections = new Connections(bus, dev, Prd());
         var grants = new AgentGrantStore();
         grants.AttachWriter(new NoFiles());
-        using var vm = new ExternalAgentConnectViewModel(new ExternalAgentConnectServices(load, save, grants));
+        using var vm = new ExternalAgentConnectViewModel(new ExternalAgentConnectServices(ExternalAgentConnectCommands.ProfileAccess(connections.Writer()), grants));
         await vm.LoadAsync();
-        vm.Rows.Single(r => r.Alias == "dev-erp").IsChecked = true;
-        vm.AllowQueryRows = true;
 
+        Assert.Equal(["dev-erp", "prd-erp"], vm.Rows.Select(r => r.Alias).Order(StringComparer.Ordinal));
         Assert.True(await vm.ConnectAsync());
-
-        var raised = Assert.Single(connections.Saved);
-        Assert.Equal(dev.Id, raised.Id);
-        Assert.Equal(AiAccessLevel.QueryRows, raised.AiAccess); // 개발 최대 = 조회 + 행 값
-        var shown = Assert.Single(seen);
-        Assert.Equal((AiAccessLevel.QueryRows, AiAccessLevel.QueryRows), (shown.Level, shown.ExternalLevel)); // ① 목록이 바로 같은 값
+        Assert.Empty(connections.Saved);
         Assert.Equal(AiAccessLevel.QueryRows, Assert.Single(grants.Active).FindConnection("dev-erp")!.Level);
     }
 
     [Fact]
-    public async Task Without_connections_the_window_reads_nothing_and_saves_nothing()
+    public async Task Without_connections_the_window_reads_nothing()
     {
-        var (load, save) = ExternalAgentConnectCommands.ProfileAccess(null);
+        var load = ExternalAgentConnectCommands.ProfileAccess(null);
         Assert.Empty(await load(CancellationToken.None));
-        var profile = Dev();
-        Assert.Same(profile, await save(profile, CancellationToken.None));
     }
 
     [Fact]

@@ -18,7 +18,8 @@ public sealed class ExternalAgentConnectWindow : Window
     private readonly ExternalAgentConnectViewModel _vm;
     private readonly IAgentSkillInstaller? _skills;
 
-    public ExternalAgentConnectWindow(ExternalAgentConnectViewModel vm, IAgentSkillInstaller? skills)
+    /// <param name="openLevels">「수준 바꾸기: 설정 &gt; AI 의 접속 표 열기」: 이 창을 닫은 뒤 부른다(설정 창 위에서 열었으면 그 탭으로 돌아갈 뿐). null 이면 링크를 숨긴다.</param>
+    public ExternalAgentConnectWindow(ExternalAgentConnectViewModel vm, IAgentSkillInstaller? skills, Func<System.Threading.Tasks.Task>? openLevels = null)
     {
         _vm = vm ?? throw new ArgumentNullException(nameof(vm));
         _skills = skills;
@@ -52,7 +53,25 @@ public sealed class ExternalAgentConnectWindow : Window
         var empty = Caption(ExternalAgentText.T("저장된 접속이 없습니다. 접속 없이 연결하면 편집기 도구만 씁니다.", "No saved connections. Without one, only editor tools work."));
         empty.IsVisible = vm.Rows.Count == 0;
 
-        var queryRows = Check(ExternalAgentConnectViewModel.AllowQueriesText, nameof(ExternalAgentConnectViewModel.AllowQueryRows));
+        LevelsLink = new HyperlinkButton { Content = ExternalAgentConnectViewModel.LevelsLinkText, Padding = new Thickness(0), IsVisible = openLevels is not null };
+        Avalonia.Automation.AutomationProperties.SetName(LevelsLink, ExternalAgentConnectViewModel.LevelsLinkText);
+        LevelsLink.Click += async (_, _) =>
+        {
+            Close();
+            if (openLevels is not null)
+            {
+                await openLevels().ConfigureAwait(true);
+            }
+        };
+        var note = new Border
+        {
+            Padding = new Thickness(12, 8),
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(1),
+            Child = new TextBlock { Text = ExternalAgentConnectViewModel.OnlyChooseNote, TextWrapping = TextWrapping.Wrap },
+        };
+        note.Bind(Border.BackgroundProperty, note.GetResourceObservable("OrandaTableSelectionBrush"));
+        note.Bind(Border.BorderBrushProperty, note.GetResourceObservable("OrandaButtonAccentBrush"));
         var localModel = Check(ExternalAgentConnectViewModel.LocalModelText, nameof(ExternalAgentConnectViewModel.LocalModel));
         var localModelWarning = Warning(ExternalAgentConnectViewModel.LocalModelWarningText, nameof(ExternalAgentConnectViewModel.ShowsLocalModelWarning));
         localModelWarning.Margin = new Thickness(28, -6, 0, 0);
@@ -82,11 +101,12 @@ public sealed class ExternalAgentConnectWindow : Window
                 {
                     intro,
                     statusRow,
-                    new TextBlock { Text = ExternalAgentText.T("쓸 접속", "Connections to use"), FontWeight = FontWeight.SemiBold },
+                    new TextBlock { Text = ExternalAgentConnectViewModel.ConnectionsTitle, FontWeight = FontWeight.SemiBold },
                     Caption(ExternalAgentConnectViewModel.ConnectionsCaption),
                     empty,
                     rows,
-                    queryRows,
+                    LevelsLink,
+                    note,
                     localModel,
                     localModelWarning,
                     expire,
@@ -103,6 +123,9 @@ public sealed class ExternalAgentConnectWindow : Window
             },
         };
     }
+
+    /// <summary>「수준 바꾸기」 링크(시험용).</summary>
+    internal HyperlinkButton LevelsLink { get; }
 
     /// <summary>마지막으로 연 스킬 설치 창(시험용).</summary>
     internal AgentSkillInstallWindow? SkillWindow { get; private set; }

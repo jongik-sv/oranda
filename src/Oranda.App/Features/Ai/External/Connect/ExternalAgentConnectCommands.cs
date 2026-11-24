@@ -54,12 +54,9 @@ public static class ExternalAgentConnectCommands
 
         var connections = services.GetService(typeof(IConnectionService)) as IConnectionService;
         var link = services.GetRegisteredOrDefault<IExternalAgentLink>() as ExternalAgentLink;
-        // 「조회 허용」은 접속의 AI 허용 수준(설정 「AI」 탭·도우미와 같은 값)을 공유 한 길로 올린다(ai-settings-one-place). 창 모양은 그대로다.
-        // 버스 없이 만든다: 이 창은 저장만 하고 바뀜을 듣지 않는다(저장은 접속 서비스가 사건으로 알려 「AI」 탭이 따라 바뀐다).
-        var (load, save) = ProfileAccess(connections is null ? null : SharedAiAccessService.FromConnections(connections, bus: null));
+        // 접속 목록은 공유 허용 수준 한 길에서 읽는다. 이 창은 수준을 바꾸지 않는다(설정 「AI」 탭 ① 한곳, ai-settings-one-place).
         return new ExternalAgentConnectServices(
-            load,
-            save,
+            ProfileAccess(connections is null ? null : SharedAiAccessService.FromConnections(connections, bus: null)),
             grants,
             StartBridge: () => (services.GetService(typeof(IAgentBridgeHost)) as IAgentBridgeHost)?.Start(),
             Bind: () => link?.Bind(),
@@ -67,13 +64,9 @@ public static class ExternalAgentConnectCommands
     }
 
     /// <param name="ownerWindow">창을 띄울 주인(설정 「AI」 탭이 설정 창을 넘긴다). null 이면 주 창.</param>
-    /// <summary>
-    /// 연결 창의 접속 읽기·「조회 허용」 저장 길. 공유 서비스가 있으면 그 한 길(실효 수준으로 저장), 없으면 빈 목록·저장 없음.
-    /// </summary>
-    internal static (Func<CancellationToken, Task<IReadOnlyList<ConnectionProfile>>> Load, Func<ConnectionProfile, CancellationToken, Task<ConnectionProfile>> Save) ProfileAccess(SharedAiAccessService? shared) =>
-        shared is null
-            ? (_ => Task.FromResult<IReadOnlyList<ConnectionProfile>>([]), (profile, _) => Task.FromResult(profile))
-            : (shared.LoadProfilesAsync, (profile, ct) => shared.SaveDesiredAsync(profile, confirmName: null, ct));
+    /// <summary>연결 창의 접속 읽기 길. 공유 서비스가 있으면 그 한 길, 없으면 빈 목록.</summary>
+    internal static Func<CancellationToken, Task<IReadOnlyList<ConnectionProfile>>> ProfileAccess(SharedAiAccessService? shared) =>
+        shared is null ? _ => Task.FromResult<IReadOnlyList<ConnectionProfile>>([]) : shared.LoadProfilesAsync;
 
     public static async Task ShowAsync(IServiceProvider services, CancellationToken ct, Window? ownerWindow = null)
     {
@@ -87,7 +80,15 @@ public static class ExternalAgentConnectCommands
         using var vm = new ExternalAgentConnectViewModel(parts);
         await vm.LoadAsync(ct).ConfigureAwait(true);
         var skills = services.GetRegisteredOrDefault<IAgentSkillInstaller>();
-        var window = new ExternalAgentConnectWindow(vm, skills);
+        // 「수준 바꾸기」: 설정 창 위에서 열었으면 창만 닫고(① 표가 밑에 있다), 주 창 위(팔레트)에서 열었으면 설정 「AI」 탭을 연다.
+        Func<Task> openLevels = ownerWindow is Oranda.App.Shell.Settings.SettingsWindow
+            ? () => Task.CompletedTask
+            : () =>
+            {
+                (services.GetService(typeof(Oranda.App.Shell.ShellController)) as Oranda.App.Shell.IShellUi)?.ShowSettings(vm => vm.SelectedTab = Oranda.App.Shell.Settings.SettingsViewModel.AiTabIndex);
+                return Task.CompletedTask;
+            };
+        var window = new ExternalAgentConnectWindow(vm, skills, openLevels);
         await window.ShowDialog(owner).ConfigureAwait(true);
     }
 }

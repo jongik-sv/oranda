@@ -37,14 +37,17 @@ internal static class ExternalAgentText
         "Development is chosen by default. Production is never chosen by default and needs its name typed again.");
 
     /// <summary>「조회 허용」 체크 글: 운영 상한이 메타데이터뿐일 때(개발·시험만 올린다).</summary>
-    public static string AllowQueriesDevTest => T(
-        "조회 허용 — 고른 개발·시험 접속의 AI 허용 수준을 「조회 + 행 값」으로 올려 저장",
-        "Allow queries — raise the chosen development/test connections to \"Query + rows\" and save it");
-
     /// <summary>「조회 허용」 체크 글: 운영도 올릴 때(운영 최대 수준은 「조회 실행」).</summary>
-    public static string AllowQueriesAll => T(
-        "조회 허용 — 고른 접속의 AI 허용 수준을 최대로 올려 저장(개발·시험 「조회 + 행 값」, 운영 「조회 실행」)",
-        "Allow queries — raise the chosen connections to their highest AI access and save it (development/test \"Query + rows\", production \"Query\")");
+    public static string ConnectionsTitle => T("에이전트가 볼 수 있는 접속", "Connections the agent can see");
+
+    public static string LevelsLink => T("수준 바꾸기: 설정 > AI 의 접속 표 열기", "Change levels: open the connection table in Settings > AI");
+
+    public static string OnlyChooseNote => T(
+        "이 창에서는 「이번 연결에 쓸 접속」만 고릅니다. 접속마다 볼 수 있는 수준은 한곳(설정 > AI)에서만 바꿉니다.",
+        "In this window you only choose the connections for this session. What each connection lets AI see is changed in one place: Settings > AI.");
+
+    /// <summary>운영 줄 수준 글 뒤에 붙는 말.</summary>
+    public static string ProductionLevelNote => T(" (외부 상한 · 고르려면 접속 이름을 다시 입력)", " (external cap · type the connection name again to choose it)");
 
     /// <summary>상태 표시줄 띠: 허가에 운영 접속이 들어 있다(§3.2 경고색 띠).</summary>
     public static string StatusProduction => T("운영 포함", "includes production");

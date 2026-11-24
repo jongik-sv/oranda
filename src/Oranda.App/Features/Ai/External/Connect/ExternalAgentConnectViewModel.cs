@@ -13,15 +13,13 @@ using Oranda.Core.Connection;
 namespace Oranda.App.Features.Ai.External.Connect;
 
 /// <summary>연결 창이 쓰는 부품. 앱에서는 <see cref="ExternalAgentConnectCommands"/> 가 컨테이너에서 모은다.</summary>
-/// <param name="LoadProfiles">저장된 접속 목록.</param>
-/// <param name="SaveProfile">「조회 허용」으로 접속의 AI 허용 수준을 올려 저장한다(기존 접속 설정에 저장, 새 칸 없음, E-7).</param>
+/// <param name="LoadProfiles">저장된 접속 목록. 이 창은 접속의 AI 허용 수준을 바꾸지 않는다(수준은 설정 「AI」 탭 ① 한곳, ai-settings-one-place).</param>
 /// <param name="Grants">허가 저장소(A2).</param>
 /// <param name="StartBridge">다리를 연다(이미 열려 있으면 아무 일도 하지 않는다). 없으면 부르지 않는다.</param>
 /// <param name="Bind">상태 표시줄 띠를 허가에 잇는다.</param>
 /// <param name="Label">창 이름(연결 파일의 <c>label</c>).</param>
 public sealed record ExternalAgentConnectServices(
     Func<CancellationToken, Task<IReadOnlyList<ConnectionProfile>>> LoadProfiles,
-    Func<ConnectionProfile, CancellationToken, Task<ConnectionProfile>> SaveProfile,
     IAgentGrants Grants,
     Action? StartBridge = null,
     Action? Bind = null,
@@ -63,21 +61,14 @@ public sealed partial class ExternalAgentConnectionRow : ObservableObject
     /// <summary>외부 연결에서 쓰일 수준 = min(접속 실효 수준, 환경 외부 상한). 운영 상한은 허가 정책 스위치가 정한다(§2.2).</summary>
     public AiAccessLevel ExternalLevel => AgentGrantPolicy.LevelFor(Profile, AgentGrantPolicy.DefaultCap(Profile.Environment));
 
-    /// <summary>「조회 허용」이 이 접속을 올릴 수 있다: 고를 수 있고, 운영이면 운영 조회가 허가 정책에서 켜져 있다.</summary>
-    public bool MayRaise => Usable && ExternalAgentConnectPolicy.MayRaise(Profile.Environment);
-
-    /// <summary>「조회 허용」이 올리는 수준 = 환경 최대(개발·시험 QueryRows, 운영 Query). 운영에 QueryRows 를 쓰면 Plan 으로 읽히므로 환경 최대만 쓴다.</summary>
-    public AiAccessLevel RaisedLevel => AiAccessPolicy.MaxLevel(Profile.Environment);
-
-    /// <summary>「연결」을 누르면 허가에 들어갈 수준: 「조회 허용」이 켜져 있고 올릴 수 있으면 올린 뒤 값, 아니면 <see cref="ExternalLevel"/>.</summary>
-    public AiAccessLevel ExpectedLevel => QueryAllowed && MayRaise && CurrentLevel < RaisedLevel
-        ? AgentGrantPolicy.LevelFor(Profile with { AiAccess = RaisedLevel }, AgentGrantPolicy.DefaultCap(Profile.Environment))
-        : ExternalLevel;
-
-    public string LevelText => LevelName(ExpectedLevel);
+    /// <summary>
+    /// 줄의 수준 글(글자만): 실효 수준 = min(접속 수준, 외부 상한)(<see cref="AiConnectionAccess"/>). 운영 줄은 「(외부 상한 · 고르려면 접속 이름을 다시 입력)」.
+    /// 수준을 바꾸는 곳은 설정 「AI」 탭 ① 하나다(이 창은 「이번 연결에 쓸 접속」 만 고른다).
+    /// </summary>
+    public string LevelText => LevelName(ExternalLevel) + (IsProductionMarked ? ExternalAgentText.ProductionLevelNote : string.Empty);
 
     /// <summary>운영 행 경고 「운영 접속 — LLM 이 SELECT 를 자동 실행합니다」: 운영이고 허가 수준이 조회 실행 이상(스위치를 끄면 Metadata 라 숨는다).</summary>
-    public bool ShowsRunWarning => IsProductionMarked && ExpectedLevel >= AiAccessLevel.Query;
+    public bool ShowsRunWarning => IsProductionMarked && ExternalLevel >= AiAccessLevel.Query;
 
     /// <summary>운영 행 경고 한 줄 더 「운영 값이 가리지 않고 나갑니다」: 고른 운영 접속 + 로컬 모델 + 로컬 모델이 운영도 덮는 정책.</summary>
     public bool ShowsUnmaskedWarning => IsProductionMarked && IsChecked && LocalModel && ExternalAgentConnectPolicy.LocalModelCoversProduction;
@@ -99,21 +90,7 @@ public sealed partial class ExternalAgentConnectionRow : ObservableObject
         }
     }
 
-    /// <summary>연결 창의 「조회 허용」 값(창이 넣는다).</summary>
-    internal bool QueryAllowed
-    {
-        get => _queryAllowed;
-        set
-        {
-            if (SetProperty(ref _queryAllowed, value))
-            {
-                RaiseLevel();
-            }
-        }
-    }
-
     private bool _localModel;
-    private bool _queryAllowed;
 
     [ObservableProperty]
     private bool _isChecked;
@@ -156,7 +133,6 @@ public sealed partial class ExternalAgentConnectionRow : ObservableObject
 
     private void RaiseLevel()
     {
-        OnPropertyChanged(nameof(ExpectedLevel));
         OnPropertyChanged(nameof(LevelText));
         OnPropertyChanged(nameof(ShowsRunWarning));
     }
@@ -170,8 +146,8 @@ public sealed partial class ExternalAgentConnectionRow : ObservableObject
 /// <list type="bullet">
 /// <item>개발만 기본 체크, 시험은 체크 가능, 운영은 기본 체크 해제이고 체크하면 접속 이름을 다시 입력해야 「연결」이 켜진다(SAFE-08).
 /// 운영 수준은 허가 정책 스위치(§2.2)가 정한다: 끄면 「메타데이터」, 켜면 조회 실행 — 그때 행에 빨간 경고가 붙는다(D5, §3.2).</item>
-/// <item>「조회 허용」: 고른 접속의 AI 허용 수준을 환경 최대(개발·시험 「조회 + 행 값」, 운영 「조회 실행」)로 올려 접속 설정에 저장한다.
-/// 운영은 운영 조회가 정책에서 켜져 있을 때만 올린다. 내리지는 않는다.</item>
+/// <item>접속의 AI 허용 수준은 바꾸지 않는다(ai-settings-one-place): 줄마다 실효 수준(min(접속 수준, 외부 상한))을 글자로만 보이고,
+/// 바꾸려면 「수준 바꾸기: 설정 &gt; AI 의 접속 표 열기」 로 간다. 예전 「조회 허용」(개발·시험을 조회+행 값으로 올림)은 그 표에서 한다.</item>
 /// <item>「로컬 모델(가리지 않음)」(기본 끔, D4): 켜면 경고를 보이고, 운영과 함께면 「운영 값이 가리지 않고 나갑니다」를 더한다.</item>
 /// <item>「8시간 뒤 끊기」(기본 켬): 끄면 앱을 끌 때까지.</item>
 /// </list>
@@ -180,9 +156,6 @@ public sealed partial class ExternalAgentConnectViewModel : ObservableObject, ID
 {
     private readonly ExternalAgentConnectServices _services;
     private readonly TimeProvider _time;
-
-    [ObservableProperty]
-    private bool _allowQueryRows;
 
     [ObservableProperty]
     private bool _expireIn8Hours = true;
@@ -257,10 +230,14 @@ public sealed partial class ExternalAgentConnectViewModel : ObservableObject, ID
         ? ExternalAgentText.ConnectionsCaptionProductionRuns
         : ExternalAgentText.ConnectionsCaptionMetadataOnly;
 
-    /// <summary>「조회 허용」 체크 글(운영 조회가 켜져 있으면 운영도 올린다고 적는다).</summary>
-    public static string AllowQueriesText => ExternalAgentConnectPolicy.ProductionRuns
-        ? ExternalAgentText.AllowQueriesAll
-        : ExternalAgentText.AllowQueriesDevTest;
+    /// <summary>표 머리 「에이전트가 볼 수 있는 접속」.</summary>
+    public static string ConnectionsTitle => ExternalAgentText.ConnectionsTitle;
+
+    /// <summary>표 아래 링크 「수준 바꾸기: 설정 &gt; AI 의 접속 표 열기」.</summary>
+    public static string LevelsLinkText => ExternalAgentText.LevelsLink;
+
+    /// <summary>파란 띠: 이 창은 이번 연결에 쓸 접속만 고른다.</summary>
+    public static string OnlyChooseNote => ExternalAgentText.OnlyChooseNote;
 
     private static string EndsAt(string time) => ExternalAgentText.IsEnglish ? "ends at " + time : time + " 에 끊김";
 
@@ -275,36 +252,30 @@ public sealed partial class ExternalAgentConnectViewModel : ObservableObject, ID
         var profiles = await _services.LoadProfiles(ct).ConfigureAwait(true);
         foreach (var profile in profiles.OrderBy(p => p.Environment).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase))
         {
-            var row = new ExternalAgentConnectionRow(profile) { LocalModel = LocalModel, QueryAllowed = AllowQueryRows };
+            var row = new ExternalAgentConnectionRow(profile) { LocalModel = LocalModel };
             row.PropertyChanged += OnRowChanged;
             Rows.Add(row);
         }
 
-        AllowQueryRows = Rows.Where(r => r.IsChecked && r.MayRaise).ToList() is { Count: > 0 } picked
-            && picked.All(r => r.CurrentLevel >= r.RaisedLevel);
         Raise();
     }
 
-    /// <summary>「연결」: (「조회 허용」이면 먼저 접속 수준을 저장하고) 허가를 만든다. 이미 연결돼 있으면 옛 허가를 폐기하고 새 토큰을 준다.</summary>
-    public async Task<bool> ConnectAsync(CancellationToken ct = default)
+    /// <summary>「연결」: 고른 접속으로 허가를 만든다(접속 수준은 바꾸지 않는다). 이미 연결돼 있으면 옛 허가를 폐기하고 새 토큰을 준다.</summary>
+    public Task<bool> ConnectAsync(CancellationToken ct = default) => Task.FromResult(Connect(ct));
+
+    private bool Connect(CancellationToken ct)
     {
         if (!CanConnect)
         {
             return false;
         }
 
+        ct.ThrowIfCancellationRequested();
         IsBusy = true;
         Error = null;
         try
         {
             var picked = Rows.Where(r => r.IsChecked && r.Usable).ToList();
-            if (AllowQueryRows)
-            {
-                foreach (var row in picked.Where(r => r.MayRaise && r.CurrentLevel < r.RaisedLevel))
-                {
-                    row.Replace(await _services.SaveProfile(row.Profile with { AiAccess = row.RaisedLevel }, ct).ConfigureAwait(true));
-                }
-            }
 
             var targets = picked.Select(r => new AgentGrantTarget(r.Profile, AgentGrantPolicy.DefaultCap(r.Profile.Environment))).ToList();
             _services.StartBridge?.Invoke();
@@ -373,14 +344,6 @@ public sealed partial class ExternalAgentConnectViewModel : ObservableObject, ID
 
         OnPropertyChanged(nameof(ShowsLocalModelWarning));
         OnPropertyChanged(nameof(ShowsProductionUnmasked));
-    }
-
-    partial void OnAllowQueryRowsChanged(bool value)
-    {
-        foreach (var row in Rows)
-        {
-            row.QueryAllowed = value;
-        }
     }
 
     private void OnRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

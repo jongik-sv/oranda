@@ -44,16 +44,6 @@ public sealed class ExternalAgentConnectTests
         {
             var services = new ExternalAgentConnectServices(
                 _ => Task.FromResult<IReadOnlyList<ConnectionProfile>>(Profiles),
-                (p, _) =>
-                {
-                    if (SaveFailure is { } failure)
-                    {
-                        throw failure;
-                    }
-
-                    Saved.Add(p);
-                    return Task.FromResult(p);
-                },
                 Grants,
                 StartBridge: () => BridgeStarts++,
                 Bind: () => Binds++,
@@ -78,7 +68,7 @@ public sealed class ExternalAgentConnectTests
         Assert.False(Row(vm, "test-a").IsChecked);
         Assert.False(Row(vm, "prd-a").IsChecked);
         var prd = Row(vm, "prd-a");
-        Assert.Equal(ExternalAgentConnectionRow.LevelName(prd.ExternalLevel), prd.LevelText);
+        Assert.Equal(ExternalAgentConnectionRow.LevelName(prd.ExternalLevel) + " (외부 상한 · 고르려면 접속 이름을 다시 입력)", prd.LevelText);
         Assert.Equal(AgentGrantPolicy.LevelFor(prd.Profile, AgentGrantPolicy.DefaultCap(ConnectionEnvironment.Production)), prd.ExternalLevel);
         Assert.True(prd.IsProductionMarked);
         Assert.False(Row(vm, "dev-a").IsProductionMarked);
@@ -176,56 +166,28 @@ public sealed class ExternalAgentConnectTests
     }
 
     [Fact]
-    public async Task Allow_queries_raises_production_to_query_not_query_rows_and_only_after_the_name_is_typed()
+    public async Task The_window_only_chooses_connections_and_shows_the_shared_level_as_text()
     {
+        // ai-settings-one-place: 수준은 설정 「AI」 탭 ① 한곳에서만 바꾼다. 이 창은 고르기만 하고, 줄에는 min(접속 수준, 외부 상한)을 글자로 보인다.
         var h = new Harness();
-        h.Profiles.Add(Profile("prd-plan", ConnectionEnvironment.Production, AiAccessLevel.Plan));
-        using var vm = h.Create();
-        await vm.LoadAsync();
-        var prd = Row(vm, "prd-plan");
-        prd.IsChecked = true;
-        vm.AllowQueryRows = true;
-
-        // 이름을 다시 입력하지 않으면 「연결」도 저장도 없다.
-        Assert.False(vm.CanConnect);
-        Assert.False(await vm.ConnectAsync());
-        Assert.Empty(h.Saved);
-        Assert.Empty(h.Grants.Active);
-
-        prd.ConfirmName = "prd-plan";
-        Assert.True(await vm.ConnectAsync());
-
-        var savedProduction = h.Saved.Where(p => p.Environment == ConnectionEnvironment.Production).ToList();
-        if (ExternalAgentConnectPolicy.ProductionRuns)
-        {
-            // 운영 최대는 Query. QueryRows 를 쓰면 Plan 으로 읽혀 오히려 내려간다.
-            var saved = Assert.Single(savedProduction);
-            Assert.Equal(AiAccessLevel.Query, saved.AiAccess);
-            Assert.Equal(AiAccessLevel.Query, AiAccessPolicy.Effective(saved));
-            Assert.Equal(AiAccessLevel.Query, Assert.Single(h.Grants.Active).FindConnection("prd-plan")!.Level);
-        }
-        else
-        {
-            Assert.Empty(savedProduction);
-            Assert.Equal(AiAccessLevel.Metadata, Assert.Single(h.Grants.Active).FindConnection("prd-plan")!.Level);
-        }
-    }
-
-    [Fact]
-    public async Task Expected_level_shows_what_allow_queries_will_give_before_connecting()
-    {
-        var h = new Harness();
+        h.Profiles[0] = h.Profiles[0] with { AiAccess = AiAccessLevel.QueryRows };
         using var vm = h.Create();
         await vm.LoadAsync();
         var dev = Row(vm, "dev-a");
-        Assert.Equal(AiAccessLevel.Plan, dev.ExpectedLevel);
+        var prd = Row(vm, "prd-a");
 
-        vm.AllowQueryRows = true;
-        Assert.Equal(AiAccessLevel.QueryRows, dev.ExpectedLevel);
         Assert.Equal("조회 + 행 값", dev.LevelText);
+        Assert.Equal(ExternalAgentConnectionRow.LevelName(prd.ExternalLevel) + " (외부 상한 · 고르려면 접속 이름을 다시 입력)", prd.LevelText);
+        Assert.Equal("에이전트가 볼 수 있는 접속", ExternalAgentConnectViewModel.ConnectionsTitle);
+        Assert.Contains("설정 > AI", ExternalAgentConnectViewModel.LevelsLinkText, StringComparison.Ordinal);
+        Assert.Contains("한곳(설정 > AI)", ExternalAgentConnectViewModel.OnlyChooseNote, StringComparison.Ordinal);
+        Assert.Null(typeof(ExternalAgentConnectViewModel).GetProperty("AllowQueryRows")); // 예전 「조회 허용」 은 없앴다(① 에서 올린다)
 
-        vm.AllowQueryRows = false;
-        Assert.Equal(AiAccessLevel.Plan, dev.ExpectedLevel);
+        prd.IsChecked = true;
+        prd.ConfirmName = "prd-a";
+        Assert.True(await vm.ConnectAsync());
+        Assert.Empty(h.Saved); // 접속 설정을 바꾸지 않는다
+        Assert.Equal(AiAccessLevel.QueryRows, Assert.Single(h.Grants.Active).FindConnection("dev-a")!.Level);
     }
 
     [Fact]
@@ -283,54 +245,6 @@ public sealed class ExternalAgentConnectTests
         Assert.False(grant.AllowUnboundTabText);
         Assert.False(vm.CanExtend);
         Assert.Contains("앱을 끌 때까지", vm.StatusText, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Allow_queries_saves_query_rows_on_chosen_development_and_test_connections_only()
-    {
-        var h = new Harness();
-        using var vm = h.Create();
-        await vm.LoadAsync();
-        Row(vm, "test-a").IsChecked = true;
-        var prd = Row(vm, "prd-a");
-        prd.IsChecked = true;
-        prd.ConfirmName = "prd-a";
-        vm.AllowQueryRows = true;
-
-        await vm.ConnectAsync();
-
-        Assert.Equal(["dev-a", "test-a"], h.Saved.Select(p => p.Name).Order(StringComparer.Ordinal));
-        Assert.All(h.Saved, p => Assert.Equal(AiAccessLevel.QueryRows, p.AiAccess));
-        var grant = Assert.Single(h.Grants.Active);
-        Assert.Equal(AiAccessLevel.QueryRows, grant.FindConnection("dev-a")!.Level);
-        Assert.Equal(ProductionLevel, grant.FindConnection("prd-a")!.Level);
-    }
-
-    [Fact]
-    public async Task Allow_queries_starts_checked_when_the_chosen_connections_already_allow_rows()
-    {
-        var h = new Harness();
-        h.Profiles[0] = h.Profiles[0] with { AiAccess = AiAccessLevel.QueryRows };
-        using var vm = h.Create();
-
-        await vm.LoadAsync();
-
-        Assert.True(vm.AllowQueryRows);
-    }
-
-    [Fact]
-    public async Task A_save_failure_is_shown_and_no_grant_is_made()
-    {
-        var h = new Harness { SaveFailure = new InvalidOperationException("connections.json 이(가) 읽기 전용") };
-        using var vm = h.Create();
-        await vm.LoadAsync();
-        vm.AllowQueryRows = true;
-
-        Assert.False(await vm.ConnectAsync());
-
-        Assert.Empty(h.Grants.Active);
-        Assert.Contains("읽기 전용", vm.Error, StringComparison.Ordinal);
-        Assert.False(vm.IsBusy);
     }
 
     [Fact]
@@ -395,7 +309,7 @@ public sealed class ExternalAgentConnectTests
     public async Task Connect_without_an_open_bridge_shows_the_error_and_keeps_the_window()
     {
         var store = new AgentGrantStore();
-        var services = new ExternalAgentConnectServices(_ => Task.FromResult<IReadOnlyList<ConnectionProfile>>([]), (p, _) => Task.FromResult(p), store);
+        var services = new ExternalAgentConnectServices(_ => Task.FromResult<IReadOnlyList<ConnectionProfile>>([]), store);
         using var vm = new ExternalAgentConnectViewModel(services);
         await vm.LoadAsync();
 
