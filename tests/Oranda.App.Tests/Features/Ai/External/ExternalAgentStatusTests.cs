@@ -207,8 +207,17 @@ public sealed class ExternalAgentStatusTests
             time.Advance(TimeSpan.FromHours(8) - TimeSpan.FromMinutes(5));
             view.ShowDetails();
             HeadlessHost.Pump();
-            var buttons2 = Assert.IsType<StackPanel>(Assert.IsType<StackPanel>(view.DetailsFlyout!.Content).Children[^1]);
+            var flyoutPanel = Assert.IsType<StackPanel>(view.DetailsFlyout!.Content);
+            var buttons2 = Assert.IsType<StackPanel>(flyoutPanel.Children[^2]);
             Assert.Equal(["연장", "끊기"], buttons2.Children.OfType<Button>().Select(b => (string)b.Content!));
+
+            // 맨 아래 링크: 설정 「AI」 탭 ③ 「밖의 AI 에이전트」 로 간다(ai-settings-one-place).
+            var opened = 0;
+            view.OpenSettings = () => opened++;
+            var settingsLink = Assert.IsType<HyperlinkButton>(flyoutPanel.Children[^1]);
+            Assert.Equal("설정 › AI 의 「밖의 AI 에이전트」 열기", settingsLink.Content);
+            settingsLink.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(1, opened);
         }
         finally
         {

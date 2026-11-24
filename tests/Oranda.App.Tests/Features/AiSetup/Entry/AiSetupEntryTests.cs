@@ -314,14 +314,10 @@ public sealed class AiSetupEntryTests
     }
 
     [Fact]
-    public async Task Ai_model_settings_link_opens_the_assistant()
+    public void Advanced_model_settings_no_longer_carry_a_second_assistant_link()
     {
-        var calls = 0;
-        var page = new AiModelSettingsPage { OpenSetup = () => { calls++; return Task.FromResult(true); } };
-        Assert.False(string.IsNullOrWhiteSpace(page.SetupLinkText));
-
-        await page.OpenSetupCommand.ExecuteAsync(null);
-
-        Assert.Equal(1, calls);
+        // ai-settings-one-place 결정 4: 도우미는 탭 ②의 「다시 연결 (도우미)」 한 곳에서 연다.
+        Assert.Null(typeof(AiModelSettingsPage).GetProperty("SetupLinkText"));
+        Assert.Null(typeof(AiModelSettingsPage).GetProperty("OpenSetupCommand"));
     }
 }

@@ -53,6 +53,12 @@ public sealed class ExternalAgentStatusView : UserControl
         };
     }
 
+    /// <summary>「설정 › AI 에서 보기」 글.</summary>
+    internal static string OpenSettingsText => ExternalAgentText.T("설정 › AI 의 「밖의 AI 에이전트」 열기", "Open \"Outside AI agents\" in Settings › AI");
+
+    /// <summary>설정 「AI」 탭 ③을 여는 길(시험이 바꾼다). null 이면 앱의 길.</summary>
+    internal System.Action? OpenSettings { get; set; }
+
     /// <summary>점에 쓴 색 리소스 키(시험용).</summary>
     internal string? DotBrushKey { get; private set; }
 
@@ -120,6 +126,16 @@ public sealed class ExternalAgentStatusView : UserControl
                 await vm.ReinstallSkillsAsync();
             }));
         }
+
+        // 설정 「AI」 탭의 ③ 「밖의 AI 에이전트」 로 간다(ai-settings-one-place: 외부 에이전트 설정의 집).
+        var settings = new HyperlinkButton { Content = OpenSettingsText, Padding = new Thickness(0), Name = "AgentOpenSettings" };
+        Avalonia.Automation.AutomationProperties.SetName(settings, OpenSettingsText);
+        settings.Click += (_, _) =>
+        {
+            flyout.Hide();
+            (OpenSettings ?? Oranda.App.Features.Ai.Settings.AiSettingsNavigation.OpenOutside)();
+        };
+        panel.Children.Add(settings);
 
         DetailsFlyout = flyout;
         flyout.ShowAt(this);

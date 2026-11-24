@@ -140,7 +140,7 @@ public class AiCommandsTests
         var settings = new SettingsService(new MemorySettingsStore());
         var vm = new SettingsViewModel(settings, new ShellText(language: "ko"), featureGate: new FakeGate(aiTuning: false));
         Assert.Equal(Oranda.App.Features.Ai.Settings.AiHubState.Blocked, vm.AiHub.State);
-        Assert.Equal("기능 켜기", vm.AiHub.BlockedActionText);
+        Assert.Equal("기능 탭에서 켜기", vm.AiHub.BlockedActionText);
 
         vm.AiModel.IsClaudeCode = true;
         vm.AiModel.Model = "sonnet";

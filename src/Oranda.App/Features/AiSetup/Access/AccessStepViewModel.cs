@@ -15,9 +15,11 @@ namespace Oranda.App.Features.AiSetup.Access;
 /// <summary>접속 읽기·저장 길. 앱에서는 <see cref="FromConnections"/> 로 만든다(비밀번호는 건드리지 않는다).</summary>
 /// <param name="Load">접속 목록.</param>
 /// <param name="Save">접속 하나 저장(저장된 접속을 돌려준다).</param>
+/// <param name="SaveConfirmed">운영 수준을 직접 올릴 때 다시 입력한 접속 이름과 함께 저장(공유 서비스가 접속 편집과 같은 규칙으로 다시 본다). null 이면 <paramref name="Save"/>.</param>
 public sealed record AccessStepServices(
     Func<CancellationToken, Task<IReadOnlyList<ConnectionProfile>>> Load,
-    Func<ConnectionProfile, CancellationToken, Task<ConnectionProfile>> Save)
+    Func<ConnectionProfile, CancellationToken, Task<ConnectionProfile>> Save,
+    Func<ConnectionProfile, string?, CancellationToken, Task<ConnectionProfile>>? SaveConfirmed = null)
 {
     /// <summary>
     /// 접속 서비스로 만든다. 저장은 비밀번호를 넘기지 않고 「저장된 비밀번호 유지」 여부만 지금대로 둔다
@@ -38,7 +40,7 @@ public sealed record AccessStepServices(
     public static AccessStepServices FromShared(SharedAiAccessService shared)
     {
         ArgumentNullException.ThrowIfNull(shared);
-        return new(shared.LoadProfilesAsync, (profile, ct) => shared.SaveDesiredAsync(profile, confirmName: null, ct));
+        return new(shared.LoadProfilesAsync, (profile, ct) => shared.SaveDesiredAsync(profile, confirmName: null, ct), shared.SaveDesiredAsync);
     }
 }
 
@@ -70,6 +72,15 @@ public sealed partial class AccessStepViewModel : ObservableObject, IDisposable
     public string Title => _t.Title;
 
     public string Intro => _t.Intro;
+
+    /// <summary>표 아래 한 줄 뜻풀이(수준 다섯).</summary>
+    public string Legend => _t.Legend;
+
+    /// <summary>도우미 단계 아래 파란 띠(설정 「AI」 탭 ①과 같은 표).</summary>
+    public string SharedNote => _t.SharedNote;
+
+    /// <summary>표의 글을 만드는 쪽(같은 컨트롤을 쓰는 설정 「AI」 탭이 요약 줄에 쓴다).</summary>
+    internal AccessText Text => _t;
 
     public string SkipNoticeText => HasNoConnections ? _t.NoConnections : _t.SkipNotice;
 
@@ -168,11 +179,16 @@ public sealed partial class AccessStepViewModel : ObservableObject, IDisposable
             // 저장하는 사이 스위치를 또 바꿨으면 그 줄도 저장한다: 바뀐 줄이 남지 않을 때까지 돈다.
             // 저장 결과가 스위치와 끝내 맞지 않는 경우(저장소가 값을 바꿔 돌려줌)에 끝없이 돌지 않게 횟수를 막는다.
             var rounds = (Rows.Count * 2) + 2;
-            while (rounds-- > 0 && Rows.FirstOrDefault(r => r.IsChanged) is { } row)
+            // 운영 수준을 직접 올렸는데 이름을 아직 다시 입력하지 않은 줄은 저장하지 않고 기다린다(이름이 맞으면 그때 저장).
+            while (rounds-- > 0 && Rows.FirstOrDefault(r => r.IsChanged && !r.NeedsName) is { } row)
             {
                 try
                 {
-                    row.Profile = await _services.Save(AccessChoice.Apply(row.Profile, row.IsOn), ct).ConfigureAwait(true);
+                    var desired = Oranda.Core.Ai.Access.AiConnectionAccessRules.Apply(row.Profile, row.Level);
+                    row.Profile = row.ConfirmName.Length > 0 && _services.SaveConfirmed is { } confirmed
+                        ? await confirmed(desired, row.ConfirmName, ct).ConfigureAwait(true)
+                        : await _services.Save(desired, ct).ConfigureAwait(true);
+                    row.ConfirmName = string.Empty;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -186,7 +202,8 @@ public sealed partial class AccessStepViewModel : ObservableObject, IDisposable
             // 넘기는 목록은 저장된 값 기준이다(화면 스위치가 아니라).
             EnabledProfiles = [.. Rows.Where(r => AccessChoice.IsOn(r.Profile)).OrderBy(r => r.IsProduction).Select(r => r.Profile)];
             OnPropertyChanged(nameof(EnabledProfiles));
-            IsComplete = true;
+            OnPropertyChanged(nameof(Rows)); // 요약 줄(설정 「AI」 탭 ②·③)이 저장된 값으로 다시 그린다
+            IsComplete = !Rows.Any(r => r.NeedsName);
             return true;
         }
         finally
@@ -197,7 +214,7 @@ public sealed partial class AccessStepViewModel : ObservableObject, IDisposable
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(AccessRow.IsOn))
+        if (e.PropertyName is nameof(AccessRow.Level) or nameof(AccessRow.ConfirmName))
         {
             IsComplete = false; // 스위치를 바꾸면 다시 저장해야 끝난다
             Notify();
@@ -206,6 +223,46 @@ public sealed partial class AccessStepViewModel : ObservableObject, IDisposable
                 LastSave = SaveAsync(CancellationToken.None); // 저장 중이면 도는 저장이 바뀐 줄까지 저장한다
             }
         }
+    }
+
+    /// <summary>
+    /// 다른 곳(외부 에이전트 연결 창·접속 편집·도우미)에서 저장한 값으로 맞춘다. 바꾸는 중인 줄은 그대로 둔다. 접속이 늘거나 줄었으면 다시 읽는다.
+    /// </summary>
+    public async Task SyncAsync(CancellationToken ct)
+    {
+        if (!_loaded || IsBusy)
+        {
+            return;
+        }
+
+        IReadOnlyList<ConnectionProfile> profiles;
+        try
+        {
+            profiles = await _services.Load(ct).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return; // 다음에 다시 맞춘다
+        }
+
+        if (profiles.Count != Rows.Count || profiles.Select(p => p.Id).Except(Rows.Select(r => r.Profile.Id)).Any())
+        {
+            await LoadAsync(ct).ConfigureAwait(true);
+            return;
+        }
+
+        foreach (var profile in profiles)
+        {
+            if (Rows.First(r => r.Profile.Id == profile.Id) is { IsChanged: false } row)
+            {
+                row.Reset(profile);
+            }
+        }
+
+        EnabledProfiles = [.. Rows.Where(r => AccessChoice.IsOn(r.Profile)).OrderBy(r => r.IsProduction).Select(r => r.Profile)];
+        OnPropertyChanged(nameof(EnabledProfiles));
+        OnPropertyChanged(nameof(Rows));
+        Notify();
     }
 
     private void Notify()
@@ -219,6 +276,8 @@ public sealed partial class AccessStepViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Intro));
+        OnPropertyChanged(nameof(Legend));
+        OnPropertyChanged(nameof(SharedNote));
         OnPropertyChanged(nameof(SkipNoticeText));
         if (_error is { } error)
         {

@@ -39,6 +39,31 @@ public class AiConnectionAccessTests
     }
 
     [Fact]
+    public void A_default_production_connection_gives_query_inside_and_the_capped_value_outside()
+    {
+        // 시안(2026-11-24): 운영 처음 값 = 「조회 실행」, 밖의 에이전트 = min(조회 실행, 외부 상한).
+        // 운영 실행 스위치(AgentGrantPolicy.ProductionRuns, D5)가 켜져 있으면 상한 = 조회+행 값이라 밖도 「조회 실행」(상한 표시 없음),
+        // 끄면 상한 = 메타데이터라 밖은 「메타데이터(외부 상한)」.
+        var prd = AiConnectionAccess.Of(Prd());
+        Assert.Equal(AiAccessLevel.Query, prd.Level);
+        if (AgentGrantPolicy.ProductionRuns)
+        {
+            Assert.Equal(AiAccessLevel.QueryRows, prd.ExternalCap);
+            Assert.Equal(AiAccessLevel.Query, prd.ExternalLevel);
+            Assert.False(prd.ExternalCapped);
+        }
+        else
+        {
+            Assert.Equal(AiAccessLevel.Metadata, prd.ExternalCap);
+            Assert.Equal(AiAccessLevel.Metadata, prd.ExternalLevel);
+            Assert.True(prd.ExternalCapped);
+        }
+
+        // 상한이 메타데이터인 경우의 값은 스위치와 관계없이 같은 계산으로 나온다.
+        Assert.Equal(AiAccessLevel.Metadata, AgentGrantPolicy.LevelFor(Prd(), AiAccessLevel.Metadata));
+    }
+
+    [Fact]
     public void External_level_equals_the_grant_policy_for_every_level_and_environment()
     {
         foreach (var environment in Enum.GetValues<ConnectionEnvironment>())
