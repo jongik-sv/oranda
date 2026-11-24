@@ -129,7 +129,7 @@ public sealed class AiSettingsHubView : UserControl
         // ---- ① AI 가 볼 수 있는 접속 ----
         AccessHost = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
         AccessGroup = Group("AiHubAccess", 1, nameof(AiSettingsHubPage.AccessTitle), nameof(AiSettingsHubPage.AccessCollapsedHint), nameof(AiSettingsHubPage.AccessExpanded),
-            new StackPanel { Spacing = 8, Children = { Plain(nameof(AiSettingsHubPage.AccessNote)), AccessHost } });
+            new StackPanel { Spacing = 8, Children = { Plain(nameof(AiSettingsHubPage.AccessNote)), Help("AiHubAccessHelp", nameof(AiSettingsHubPage.AccessHelp)), AccessHost } });
         AccessGroup.Bind(IsVisibleProperty, new Binding(nameof(AiSettingsHubPage.HasAccess)));
 
         // ---- ② Oranda 안의 AI ----
@@ -164,7 +164,13 @@ public sealed class AiSettingsHubView : UserControl
         var statusBlock = new StackPanel
         {
             Spacing = 8,
-            Children = { pill, lastTest, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { TestButton, ReconnectButton } } },
+            Children =
+            {
+                pill,
+                lastTest,
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { TestButton, ReconnectButton } },
+                Help("AiHubInsideHelp", nameof(AiSettingsHubPage.InsideHelp)),
+            },
         };
         statusBlock.Bind(IsVisibleProperty, new Binding(nameof(AiSettingsHubPage.ShowsInsideStatus)));
         InsideSummary = new TextBlock { Name = "AiHubInsideSummary", TextWrapping = TextWrapping.Wrap };
@@ -172,13 +178,14 @@ public sealed class AiSettingsHubView : UserControl
 
         var advancedTitle = new TextBlock { FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap };
         advancedTitle.Bind(TextBlock.TextProperty, new Binding(nameof(AiSettingsHubPage.AdvancedTitle)));
-        var model = new AiModelSettingsView { Margin = new Thickness(0, 8, 0, 0) };
+        var model = new AiModelSettingsView();
         model.Bind(DataContextProperty, new Binding(nameof(AiSettingsHubPage.Model)));
+        var advancedHint = Help("AiHubAdvancedHint", nameof(AiSettingsHubPage.AdvancedHint));
         Advanced = new Expander
         {
             Name = "AiHubAdvanced",
             Header = advancedTitle,
-            Content = model,
+            Content = new StackPanel { Spacing = 8, Margin = new Thickness(0, 8, 0, 0), Children = { advancedHint, model } },
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
@@ -207,15 +214,30 @@ public sealed class AiSettingsHubView : UserControl
                 Children =
                 {
                     Plain(nameof(AiSettingsHubPage.OutsideSubtitle), dim: true),
+                    Help("AiHubOutsideExample", nameof(AiSettingsHubPage.OutsideExample)),
                     agentStatus,
                     skillStatus,
                     new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { SkillInstallButton, AgentConnectButton } },
+                    Help("AiHubOutsideHelp", nameof(AiSettingsHubPage.OutsideHelp)),
                     GreyBand(OutsideSummary),
                     outsideNote,
                 },
             });
 
-        return new StackPanel { Spacing = 14, Children = { StartBox, AccessGroup, InsideGroup, OutsideGroup } };
+        var intro = Plain(nameof(AiSettingsHubPage.IntroText));
+        intro.Name = "AiHubIntro";
+        intro.LineHeight = 20;
+
+        return new StackPanel { Spacing = 14, Children = { intro, StartBox, AccessGroup, InsideGroup, OutsideGroup } };
+    }
+
+    /// <summary>단추·표 옆의 쉬운 설명 줄(조금 작은 흐린 글, 줄 간격 넉넉히).</summary>
+    private static TextBlock Help(string name, string property)
+    {
+        var block = Plain(property, dim: true);
+        block.Name = name;
+        block.LineHeight = 18;
+        return block;
     }
 
     /// <summary>번호 배지 붙은 묶음. 접히면 머리에 한 줄 안내가 보인다.</summary>

@@ -236,11 +236,33 @@ public sealed partial class AiSettingsHubPage : ObservableObject, IDisposable
     /// <summary>막혔을 때 단추: 조회만이면 「주 업무 바꾸기」, 기능이 꺼졌으면 「기능 탭에서 켜기」.</summary>
     public string BlockedActionText => IsReadOnlyRole ? ChangeRoleText : EnableFeatureText;
 
+    /// <summary>탭 맨 위 안내: 이 탭에서 정하는 세 가지와 처음 쓰는 사람이 할 일.</summary>
+    public string IntroText => _t.T(
+        "이 탭에서는 AI 에 관한 세 가지를 정합니다.\n"
+        + "1  AI 가 어느 DB 접속을 어디까지 볼지\n"
+        + "2  Oranda 안에서 쓰는 AI(SQL 설명 · 튜닝 제안 · AI 대화)\n"
+        + "3  터미널의 AI 가 Oranda 를 쓰게 할지(개발자용)\n"
+        + "처음이면 2 의 연결만 하면 됩니다. 1 과 3 은 처음 값 그대로 둬도 됩니다.",
+        "This tab decides three things about AI.\n"
+        + "1  Which DB connections AI can see, and how much\n"
+        + "2  The AI used inside Oranda (SQL explain · tuning ideas · AI chat)\n"
+        + "3  Whether AI in a terminal may use Oranda (for developers)\n"
+        + "If this is your first time, only connect 2. You can leave 1 and 3 as they are.");
+
     // ---- ① AI 가 볼 수 있는 접속 ---------------------------------------------------------------
 
     public string AccessTitle => _t.T("AI 가 볼 수 있는 접속", "Connections AI can see");
 
     public string AccessNote => _t.T("아래 두 연결(2 · 3)이 모두 이 표를 따릅니다.", "Both connections below (2 and 3) follow this table.");
+
+    /// <summary>① 표 읽는 법: 오른쪽일수록 더 많이 보임, 모르면 그대로, 운영 값은 가지 않음.</summary>
+    public string AccessHelp => _t.T(
+        "단추가 오른쪽으로 갈수록 AI 에 더 많이 보여 줍니다. 잘 모르겠으면 처음 값 그대로 두세요(개발 · 시험은 「계획」, 운영은 「조회 실행」).\n"
+        + "운영 DB 의 실제 데이터 값은 회사 밖 AI(Claude 등)로 보내지 않습니다. 운영에서 SELECT 를 돌려도 그 AI 에는 몇 행이 나왔는지만 갑니다. "
+        + "회사 안 AI 서버를 「로컬 AI」로 표시한 프로필이면 값까지 봅니다.",
+        "The further right the button, the more AI is shown. If unsure, keep the starting value (Development and Test: \"Plan\", Production: \"Run SELECT\").\n"
+        + "Actual data values from a production DB are not sent to AI outside the company (Claude and others). When a SELECT runs on production, that AI only gets the row count. "
+        + "A profile that marks a company AI server as \"Local AI\" sees the values too.");
 
     /// <summary>접혀 있을 때(연결 전·막힘) 머리 옆 한 줄.</summary>
     public string AccessCollapsedHint => _t.T("도우미 마지막 단계에서 정합니다. 지금 바로 정해도 됩니다.", "The assistant sets this in its last step. You can also set it now.");
@@ -249,7 +271,21 @@ public sealed partial class AiSettingsHubPage : ObservableObject, IDisposable
 
     public string InsideTitle => _t.T("Oranda 안의 AI", "AI inside Oranda");
 
-    public string InsideSubtitle => _t.T("AI 튜닝 · AI 대화가 쓰는 연결", "The connection AI tuning and AI chat use");
+    public string InsideSubtitle => _t.T(
+        "편집기의 SQL 설명 · 튜닝 제안 · AI 대화가 쓰는 AI 입니다. 회사 Claude 계정이나 회사 AI 서버로 연결합니다.",
+        "The AI behind SQL explain, tuning ideas and AI chat in the editor. It connects through a company Claude account or a company AI server.");
+
+    /// <summary>② 단추 둘이 하는 일.</summary>
+    public string InsideHelp => _t.T(
+        "연결 시험: AI 에 짧은 질문을 보내 답이 오는지 봅니다(몇 초).\n"
+        + "다시 연결: AI 가 안 되거나 계정 · 서버가 바뀌었을 때 도우미를 다시 엽니다.",
+        "Test connection: sends AI a short question and checks that an answer comes back (a few seconds).\n"
+        + "Connect again: reopens the assistant when AI stops working or your account or server changed.");
+
+    /// <summary>고급 설정을 펼쳤을 때 맨 위 한 줄.</summary>
+    public string AdvancedHint => _t.T(
+        "보통은 바꿀 필요가 없습니다. 담당자가 알려 줄 때만 바꾸고, 바꾼 뒤에는 설정 창의 「저장」을 누르세요.",
+        "You normally don't need to change these. Change them only when your administrator tells you to, then press \"Save\" in the settings window.");
 
     public string InsideCollapsedHint => _t.T("AI 를 연결하면 여기서 연결 시험과 다시 연결을 합니다.", "Once AI is connected, test and reconnect it here.");
 
@@ -333,6 +369,18 @@ public sealed partial class AiSettingsHubPage : ObservableObject, IDisposable
         "The connection that lets Claude Code, Codex or Antigravity started in a terminal work with Oranda");
 
     public string OutsideCollapsedHint => _t.T("필요한 사람만. 터미널에서 AI 를 쓰는 개발자용", "Only if you need it: for developers who use AI in a terminal");
+
+    /// <summary>③ 쓰는 모습 예.</summary>
+    public string OutsideExample => _t.T(
+        "예) 터미널의 Claude Code 에 「어제 포장 실적 조회해 줘」라고 하면, 이 Oranda 에 새 탭을 만들고 SQL 을 넣어 실행합니다. 결과는 Oranda 그리드에 그대로 보입니다.",
+        "Example: tell Claude Code in a terminal \"show yesterday's packing results\" and it opens a new tab in this Oranda, writes the SQL and runs it. The results appear in the Oranda grid.");
+
+    /// <summary>③ 단추 둘이 하는 일.</summary>
+    public string OutsideHelp => _t.T(
+        "스킬 설치: 터미널 AI 에게 Oranda 쓰는 법을 알려 주는 안내 파일을 넣습니다. 처음 한 번, 그리고 「다시 설치가 필요」가 보일 때 누릅니다.\n"
+        + "연결: 이 Oranda 를 터미널 AI 에 열어 줍니다. 정한 시간(기본 8시간)이 지나거나 상태 표시줄에서 「끊기」를 누르면 닫힙니다.",
+        "Install skill: adds a guide file that tells the terminal AI how to use Oranda. Press it once at first, and again when \"needs reinstalling\" shows.\n"
+        + "Connect: opens this Oranda to the terminal AI. It closes after the chosen time (8 hours by default) or when you press \"Disconnect\" in the status bar.");
 
     /// <summary>
     /// 회색 띠(Mac 시안 문구 2026-11-24): 「위 1 의 표를 그대로 따릅니다: dev-erp 계획 · prd-erp 조회 실행」. 수준은 min(접속 수준, 외부 상한)이고
