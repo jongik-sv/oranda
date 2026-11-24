@@ -198,7 +198,7 @@ internal sealed class RoutingAiDriver : IAiDriver
         // 손상 복구 직후 첫 실행: 활성 프로필 선택이 기본값으로 돌아가 있을 수 있으므로 한 번 멈추고 사용자가 확인하게 한다.
         if (_settings is IAiSettingsResetSignal reset && reset.TryTakeReset())
         {
-            return Selection.Fail("설정 파일이 손상되어 기본값으로 복구되었습니다. 설정의 「AI 모델」 을 확인한 뒤 다시 실행하세요.", "settings_reset");
+            return Selection.Fail("설정 파일이 손상되어 기본값으로 복구되었습니다. 설정의 「AI」 탭을 확인한 뒤 다시 실행하세요.", "settings_reset");
         }
 
         var active = AiActiveProfile.Find(settings, SystemClis);
