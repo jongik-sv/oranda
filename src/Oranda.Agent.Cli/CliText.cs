@@ -8,7 +8,7 @@ internal static class CliText
     public const string NotRunning = "Oranda is not running, or its agent connection is not open.";
 
     public const string NoEndpoint =
-        "No Oranda window has the external agent connection turned on. In Oranda, open Tools > AI > External agent connection and press Connect.";
+        "No Oranda window has the external agent connection turned on. In Oranda, open Tools > AI Settings…, then press Connect… under Outside AI agents.";
 
     public const string MultipleInstances =
         "More than one Oranda window is connected. Choose one with --instance <pid|label> or the ORANDA_INSTANCE environment variable.";

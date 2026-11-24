@@ -132,7 +132,7 @@ public static partial class OrandaManual
         },
         new("AI 모델 설정", "AI 튜닝과 대화에 쓸 주 모델과 가벼운 일 모델을 고르고, LLM 프로필, 시스템 CLI, 기타 CLI를 설정하는 방법을 안내합니다.", "https://jongik-sv.github.io/oranda/ai/models/", "ai")
         {
-            Headings = ["설정 창의 AI 탭", "고급", "주 모델과 가벼운 일 모델", "LLM 프로필", "시스템 CLI", "기타 CLI", "조인 문법", "운영 벤치마크 제한 시간", "문제가 생길 때"],
+            Headings = ["설정 창의 AI 탭", "고급 설정", "주 모델과 가벼운 일 모델", "LLM 프로필", "시스템 CLI", "기타 CLI", "조인 문법", "운영 벤치마크 제한 시간", "문제가 생길 때"],
         },
         new("외부 에이전트", "Claude Code, Codex, Antigravity, opencode 같은 LLM CLI가 실행 중인 Oranda를 orandactl 명령과 스킬로 다루는 방법과 상태 표시줄 띠를 안내합니다.", "https://jongik-sv.github.io/oranda/ai/external-agents/", "ai")
         {

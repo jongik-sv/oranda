@@ -104,7 +104,7 @@ public sealed class ManualAiScreens
     private static async Task<(AiSettingsHubView View, Window Window)> ShowHubAsync(AiSettingsHubPage hub, double height)
     {
         var view = new AiSettingsHubView { DataContext = hub, Margin = new Thickness(24) };
-        var window = Show(view, 700, height);
+        var window = Show(view, 760, height);
         await HeadlessHost.WaitUntil(() => hub.Access!.Rows.Count == ExampleConnections.Length);
         Pump();
         window.UpdateLayout();
@@ -126,18 +126,20 @@ public sealed class ManualAiScreens
             Model = "sonnet",
             Setup = new AiSetupSettings { LastTest = new AiConnectionTestRecord(new DateTimeOffset(2026, 11, 24, 9, 30, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 11, 24))), true, "Claude Code", 2300) },
         });
-        var (view, window) = await ShowHubAsync(hub, 740);
+        var (view, window) = await ShowHubAsync(hub, 1060);
         var overlay = ManualCapture.AddOverlay(window);
         Pump();
 
+        // 묶음 번호 1·2·3 은 화면 자체의 배지다. 겹침 번호는 4 부터.
         ManualCapture.SaveOverlaid(window, overlay, "ai-settings-tab",
         [
-            new(view.StatusCard, 1, 560, 10),
-            new(view.TestButton, 2, -10),
-            new(view.ReconnectButton, 3, -10),
-            new(Named<Border>(view, "AiHubAccess"), 4, 560, 10),
-            new(Named<Border>(view, "AiHubAgent"), 5, 560, 10),
-            new(view.Advanced, 6, 560, 6),
+            new(window.GetVisualDescendants().OfType<Button>().First(b => b.DataContext is Oranda.App.Features.AiSetup.Access.AccessLevelButton { Level: AiAccessLevel.QueryRows, Row.IsProduction: true }), 4, 60, -6),
+            new(view.TestButton, 5, -10),
+            new(view.ReconnectButton, 6, -10),
+            new(view.InsideSummary, 7, 560, 0),
+            new(view.Advanced, 8, 600, 6),
+            new(view.OutsideSummary, 9, 560, 0),
+            new(view.AgentConnectButton, 10, -10),
         ]);
         window.Close();
     });
@@ -150,28 +152,15 @@ public sealed class ManualAiScreens
             return;
         }
 
+        // 연결 전: 큰 칸 + 한 줄로 접힌 세 묶음(배지 1·2·3). 겹침 번호는 4 부터.
         var none = Hub(new AiSettings { Driver = AiDriverKind.None });
-        var (view, window) = await ShowHubAsync(none, 420);
-        foreach (var other in ((StackPanel)view.Content!).Children.Where(c => !ReferenceEquals(c, view.StatusCard)))
-        {
-            other.IsVisible = false; // 이 그림은 카드만 보인다
-        }
-
-        window.Height = 222;
-        Pump();
-        ManualCapture.Save(window, "ai-settings-start", [new(view.StatusCard, 1, 560, 10), new(view.StartWizardButton, 2, -10)]);
+        var (view, window) = await ShowHubAsync(none, 470);
+        ManualCapture.Save(window, "ai-settings-start", [new(view.StartBox, 4, 600, 10), new(view.StartWizardButton, 5, -10)]);
         window.Close();
 
         var off = Hub(new AiSettings { Driver = AiDriverKind.ClaudeCode }, aiOn: false);
-        (view, window) = await ShowHubAsync(off, 420);
-        foreach (var other in ((StackPanel)view.Content!).Children.Where(c => !ReferenceEquals(c, view.StatusCard)))
-        {
-            other.IsVisible = false;
-        }
-
-        window.Height = 192;
-        Pump();
-        ManualCapture.Save(window, "ai-settings-blocked", [new(view.StatusCard, 1, 560, 10), new(view.BlockedButton, 2, -10)]);
+        (view, window) = await ShowHubAsync(off, 430);
+        ManualCapture.Save(window, "ai-settings-blocked", [new(view.StartBox, 4, 600, 10), new(view.BlockedButton, 5, -10)]);
         window.Close();
     });
 

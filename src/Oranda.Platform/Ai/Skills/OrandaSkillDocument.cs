@@ -49,7 +49,7 @@ public static class OrandaSkillDocument
             .Append("5 several Oranda windows (pass `--instance <pid>`).\n\n");
 
         b.Append("## Start\n");
-        b.Append("1. `orandactl status` — which window, which connections, which levels. Exit 3 = Oranda is not connected; ask the user to turn on 「외부 에이전트 연결」 (External agent connection) in Oranda.\n");
+        b.Append("1. `orandactl status` — which window, which connections, which levels. Exit 3 = Oranda is not connected; ask the user to open Tools > 「AI 설정…」 (AI Settings…) in Oranda and press 「연결…」 (Connect…) under 「밖의 AI 에이전트」 (Outside AI agents).\n");
         b.Append("2. `orandactl tabs`, then `orandactl tab get --tab <id> --scope statement`.\n\n");
 
         b.Append("## Rules\n");

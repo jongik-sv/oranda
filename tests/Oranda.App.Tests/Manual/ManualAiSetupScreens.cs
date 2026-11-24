@@ -354,11 +354,13 @@ public sealed class ManualAiSetupScreens
             // 목록 줄은 내용을 옮겨 붙이면 새로 만들어지므로 겹침판을 먼저 얹고 줄을 찾는다.
             var overlay = ManualCapture.AddOverlay(window);
             var rows = window.StepHost.GetVisualDescendants().OfType<Border>().ToList();
+            var production = rows.First(b => b.Classes.Contains("ai-setup-production"));
             ManualCapture.SaveOverlaid(window, overlay, "ai-setup-access",
             [
                 new(rows.First(b => b.Classes.Contains("ai-setup-connection")), 1, 8, 8),
-                new(rows.First(b => b.Classes.Contains("ai-setup-production")), 2, 8, 8),
-                new(ManualCapture.Find<ToggleSwitch>(rows.First(b => b.Classes.Contains("ai-setup-production"))), 3),
+                new(production, 2, 8, 8),
+                new(production.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains(Oranda.App.Features.AiSetup.Access.AccessTableView.SelectedClass)), 3, -10),
+                new(rows.First(b => b.Classes.Contains("ai-info-band")), 4, 8, 8),
             ]);
         }
         finally
