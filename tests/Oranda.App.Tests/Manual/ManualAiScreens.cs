@@ -78,6 +78,103 @@ public sealed class ManualAiScreens
         window.Close();
     });
 
+    // ---- 설정 「AI」 탭(ai-settings-one-place 2026-11-24) ----
+
+    private static readonly ConnectionProfile[] ExampleConnections =
+    [
+        new("dev-erp", "scott", "db.example.com:1521/DEV", Id: Guid.Parse("11111111-1111-1111-1111-111111111111")),
+        new("tst-erp", "scott", "db.example.com:1521/TST", Id: Guid.Parse("22222222-2222-2222-2222-222222222222"), Environment: ConnectionEnvironment.Test),
+        new("prd-erp", "scott", "db.example.com:1521/PRD", Id: Guid.Parse("33333333-3333-3333-3333-333333333333"), Environment: ConnectionEnvironment.Production, AiAccess: AiAccessLevel.Off),
+    ];
+
+    private static AiSettingsHubPage Hub(AiSettings ai, bool aiOn = true)
+    {
+        var settings = new SettingsService(new MemorySettingsStore());
+        settings.UpdateAsync(s => s with { Ai = ai }).GetAwaiter().GetResult();
+        var services = new AiSettingsHubServices(
+            OpenWizard: (_, _, _) => Task.CompletedTask,
+            Access: new Oranda.App.Features.AiSetup.Access.AccessStepServices(_ => Task.FromResult<IReadOnlyList<ConnectionProfile>>(ExampleConnections), (p, _) => Task.FromResult(p)),
+            OpenAgentConnect: _ => Task.CompletedTask,
+            OpenSkillInstall: _ => Task.CompletedTask,
+            Test: () => new Oranda.App.Features.AiSetup.Contract.AiSetupContext(settings));
+        return new AiSettingsHubPage(settings, new Oranda.App.Shell.ShellText(language: "ko"),
+            a => new AiModelSettingsPage(a, new AiProfileServices(settings, CustomCliInstalled: _ => false), installCheckDelay: TimeSpan.Zero), services, () => aiOn);
+    }
+
+    private static async Task<(AiSettingsHubView View, Window Window)> ShowHubAsync(AiSettingsHubPage hub, double height)
+    {
+        var view = new AiSettingsHubView { DataContext = hub, Margin = new Thickness(24) };
+        var window = Show(view, 700, height);
+        await HeadlessHost.WaitUntil(() => hub.Access!.Rows.Count == ExampleConnections.Length);
+        Pump();
+        window.UpdateLayout();
+        Pump();
+        return (view, window);
+    }
+
+    [Fact]
+    public Task Ai_settings_tab() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var hub = Hub(new AiSettings
+        {
+            Driver = AiDriverKind.ClaudeCode,
+            Model = "sonnet",
+            Setup = new AiSetupSettings { LastTest = new AiConnectionTestRecord(new DateTimeOffset(2026, 11, 24, 9, 30, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 11, 24))), true, "Claude Code", 2300) },
+        });
+        var (view, window) = await ShowHubAsync(hub, 740);
+        var overlay = ManualCapture.AddOverlay(window);
+        Pump();
+
+        ManualCapture.SaveOverlaid(window, overlay, "ai-settings-tab",
+        [
+            new(view.StatusCard, 1, 560, 10),
+            new(view.TestButton, 2, -10),
+            new(view.ReconnectButton, 3, -10),
+            new(Named<Border>(view, "AiHubAccess"), 4, 560, 10),
+            new(Named<Border>(view, "AiHubAgent"), 5, 560, 10),
+            new(view.Advanced, 6, 560, 6),
+        ]);
+        window.Close();
+    });
+
+    [Fact]
+    public Task Ai_settings_not_connected_and_blocked() => HeadlessHost.Run(async () =>
+    {
+        if (!ManualCapture.Enabled)
+        {
+            return;
+        }
+
+        var none = Hub(new AiSettings { Driver = AiDriverKind.None });
+        var (view, window) = await ShowHubAsync(none, 420);
+        foreach (var other in ((StackPanel)view.Content!).Children.Where(c => !ReferenceEquals(c, view.StatusCard)))
+        {
+            other.IsVisible = false; // 이 그림은 카드만 보인다
+        }
+
+        window.Height = 222;
+        Pump();
+        ManualCapture.Save(window, "ai-settings-start", [new(view.StatusCard, 1, 560, 10), new(view.StartWizardButton, 2, -10)]);
+        window.Close();
+
+        var off = Hub(new AiSettings { Driver = AiDriverKind.ClaudeCode }, aiOn: false);
+        (view, window) = await ShowHubAsync(off, 420);
+        foreach (var other in ((StackPanel)view.Content!).Children.Where(c => !ReferenceEquals(c, view.StatusCard)))
+        {
+            other.IsVisible = false;
+        }
+
+        window.Height = 192;
+        Pump();
+        ManualCapture.Save(window, "ai-settings-blocked", [new(view.StatusCard, 1, 560, 10), new(view.BlockedButton, 2, -10)]);
+        window.Close();
+    });
+
     [Fact]
     public Task Model_dropdown() => HeadlessHost.Run(() =>
     {

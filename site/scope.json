@@ -4,6 +4,7 @@
     {"id": "oranda.ai.explainPlan", "page": "ai/commands"},
     {"id": "oranda.ai.explainSql", "page": "ai/commands"},
     {"id": "oranda.ai.fixError", "page": "ai/commands"},
+    {"id": "oranda.ai.settings.open", "page": "ai/models"},
     {"id": "oranda.ai.setup.open", "page": "ai/setup"},
     {"id": "oranda.ai.tune", "page": "ai/commands"},
     {"id": "oranda.ai.tuneStatement", "page": "ai/commands"},
