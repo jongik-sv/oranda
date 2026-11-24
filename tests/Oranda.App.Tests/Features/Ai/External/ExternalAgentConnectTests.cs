@@ -78,6 +78,27 @@ public sealed class ExternalAgentConnectTests
     }
 
     [Fact]
+    public async Task Production_set_in_the_shared_table_is_chosen_without_typing_the_name_again()
+    {
+        // 2026-11-24 사용자 요청: ① 표에서 운영 수준을 직접 정했으면(그때 이름을 다시 입력했다) 연결 창은 다시 묻지 않는다.
+        var h = new Harness();
+        h.Profiles.Add(Profile("prd-set", ConnectionEnvironment.Production, AiAccessLevel.QueryRows));
+        using var vm = h.Create();
+        await vm.LoadAsync();
+        var prd = Row(vm, "prd-set");
+
+        Assert.True(prd.SetInTable);
+        Assert.DoesNotContain("다시 입력", prd.LevelText, StringComparison.Ordinal);
+        prd.IsChecked = true;
+        Assert.False(prd.NeedsConfirmation);
+        Assert.True(vm.CanConnect);
+        Assert.True(prd.ShowsRunWarning); // 경고는 그대로
+
+        Assert.True(await vm.ConnectAsync());
+        Assert.NotNull(Assert.Single(h.Grants.Active).FindConnection("prd-set"));
+    }
+
+    [Fact]
     public async Task Choosing_production_needs_the_connection_name_typed_again()
     {
         var h = new Harness();

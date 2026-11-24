@@ -121,7 +121,7 @@ public sealed class AiSettingsHubTests
         Assert.Equal("위 1 의 표를 그대로 따릅니다: dev-erp 계획 · prd-erp 계획", hub.InsideSummary);
         var prdOut = AiConnectionAccess.Of(Prd with { AiAccess = AiAccessLevel.Plan });
         var prdText = hub.Access!.Text.LevelName(prdOut.ExternalLevel) + (prdOut.ExternalCapped ? " (외부 상한)" : string.Empty);
-        Assert.Equal("위 1 의 표를 그대로 따릅니다: dev-erp 계획 · prd-erp " + prdText + "\n운영 접속은 연결할 때 접속 이름을 한 번 더 입력해야 고를 수 있습니다.", hub.OutsideSummary);
+        Assert.Equal("위 1 의 표를 그대로 따릅니다: dev-erp 계획 · prd-erp " + prdText, hub.OutsideSummary); // 운영을 표에서 직접 정했으면 이름 재입력 줄이 없다
         Assert.Equal("외부 에이전트는 자기 프로그램과 자기 로그인을 씁니다. Oranda 는 어느 접속을 어디까지 볼지만 정합니다.", hub.OutsideNote);
 
         hub.Access.Rows[0].Level = AiAccessLevel.QueryRows; // ① 에서 바꾸면 두 줄이 같이 바뀐다
@@ -387,7 +387,7 @@ public sealed class AiSettingsHubTests
             Assert.Contains(view.AccessGroup.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "운영은 올릴 때 접속 이름을 다시 입력");
             Assert.StartsWith("위 1 의 표를 그대로 따릅니다", view.InsideSummary.Text, StringComparison.Ordinal);
             Assert.StartsWith("위 1 의 표를 그대로 따릅니다", view.OutsideSummary.Text, StringComparison.Ordinal);
-            Assert.EndsWith("운영 접속은 연결할 때 접속 이름을 한 번 더 입력해야 고를 수 있습니다.", view.OutsideSummary.Text, StringComparison.Ordinal);
+            Assert.EndsWith("위 표에서 직접 정하지 않은 운영 접속은 연결할 때 접속 이름을 한 번 더 입력해야 고를 수 있습니다.", view.OutsideSummary.Text, StringComparison.Ordinal);
             Assert.True(view.TestButton.IsVisible);
             Assert.True(view.ReconnectButton.IsVisible);
 

@@ -73,11 +73,15 @@ public sealed class ExternalAgentStatusView : UserControl
             return;
         }
 
-        var panel = new StackPanel { Spacing = 6, MinWidth = 320, MaxWidth = 460 };
+        // 폭은 플라이아웃 틀의 최대 폭(테마 기본 약 456, 안쪽 여백 포함)보다 작게 고정한다 — 넘으면 글이 왼쪽에서 잘렸다(2026-11-24 Windows 화면).
+        var panel = new StackPanel { Spacing = 6, Width = 380 };
         var flyout = new Flyout { Placement = PlacementMode.TopEdgeAlignedRight, Content = panel };
 
         if (vm.IsConnected)
         {
+            var intro = new TextBlock { Text = ExternalAgentStatusViewModel.DetailsIntro, TextWrapping = TextWrapping.Wrap };
+            intro.Classes.Add("panel-caption");
+            panel.Children.Add(intro);
             var title = new TextBlock { Text = ExternalAgentStatusViewModel.RecentCallsTitle, FontWeight = FontWeight.SemiBold };
             panel.Children.Add(title);
             if (vm.RecentCalls.Count == 0)
@@ -117,7 +121,7 @@ public sealed class ExternalAgentStatusView : UserControl
 
         if (vm.SkillReinstallNeeded)
         {
-            var notice = new TextBlock { Text = vm.ToolTip, TextWrapping = TextWrapping.Wrap };
+            var notice = new TextBlock { Text = ExternalAgentStatusViewModel.ReinstallNotice, TextWrapping = TextWrapping.Wrap };
             notice.Classes.Add("panel-caption");
             panel.Children.Add(notice);
             panel.Children.Add(ActionButton(ExternalAgentStatusViewModel.ReinstallText, async () =>
@@ -182,7 +186,8 @@ public sealed class ExternalAgentStatusView : UserControl
         _text.Text = text;
         _disconnect.Content = ExternalAgentStatusViewModel.DisconnectText;
         _disconnect.IsVisible = _vm?.IsConnected == true;
-        Avalonia.Automation.AutomationProperties.SetName(_disconnect, ExternalAgentStatusViewModel.DisconnectText);
+        Avalonia.Automation.AutomationProperties.SetName(_disconnect, ExternalAgentStatusViewModel.DisconnectTip);
+        ToolTip.SetTip(_disconnect, ExternalAgentStatusViewModel.DisconnectTip);
         ToolTip.SetTip(this, _vm?.ToolTip);
         Avalonia.Automation.AutomationProperties.SetName(this, text);
         // 운영이 허가에 들면 만료 임박보다 앞서 운영 색(§3.2). 만료 임박은 「N분 남음」 글과 「연장」 단추로 여전히 보인다.
@@ -195,15 +200,11 @@ public sealed class ExternalAgentStatusView : UserControl
         };
         _dot.Bind(Border.BackgroundProperty, _dot.GetResourceObservable(brush));
         DotBrushKey = brush;
-        if (_vm is { IsConnected: true, IncludesProduction: true })
-        {
-            _text.Bind(TextBlock.ForegroundProperty, _text.GetResourceObservable("OrandaDangerForegroundBrush"));
-            _text.FontWeight = FontWeight.SemiBold;
-        }
-        else
-        {
-            _text.ClearValue(TextBlock.ForegroundProperty);
-            _text.FontWeight = FontWeight.Normal;
-        }
+        // 운영이 허가에 들면 굵게만 한다. 상태 표시줄 자체가 운영 색(빨강)일 때 빨간 글·빨간 점이 바탕에 묻혀 띠가 비어 보였다(2026-11-24):
+        // 글은 표시줄 글색을 그대로 따르고, 점에는 밝은 테두리를 둘러 어느 바탕에서도 보이게 한다.
+        _text.ClearValue(TextBlock.ForegroundProperty);
+        _text.FontWeight = _vm is { IsConnected: true, IncludesProduction: true } ? FontWeight.SemiBold : FontWeight.Normal;
+        _dot.BorderThickness = new Thickness(1);
+        _dot.Bind(Border.BorderBrushProperty, _dot.GetResourceObservable("OrandaEnvProductionForegroundBrush"));
     }
 }

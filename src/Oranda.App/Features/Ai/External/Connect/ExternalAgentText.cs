@@ -49,6 +49,9 @@ internal static class ExternalAgentText
     /// <summary>운영 줄 수준 글 뒤에 붙는 말(Mac 시안 문구: 「조회 실행 (고르려면 접속 이름을 다시 입력)」).</summary>
     public static string ProductionLevelNote => T(" (고르려면 접속 이름을 다시 입력)", " (type the connection name again to choose it)");
 
+    /// <summary>외부 상한이 실제로 낮췄지만 ① 표에서 이미 정한 운영 줄의 말.</summary>
+    public static string CappedLevelNote => T(" (외부 상한)", " (external cap)");
+
     /// <summary>외부 상한이 실제로 수준을 낮춘 운영 줄의 말.</summary>
     public static string ProductionCappedLevelNote => T(" (외부 상한 · 고르려면 접속 이름을 다시 입력)", " (external cap · type the connection name again to choose it)");
 

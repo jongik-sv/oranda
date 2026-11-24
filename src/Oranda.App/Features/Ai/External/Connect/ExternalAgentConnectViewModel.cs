@@ -66,8 +66,15 @@ public sealed partial class ExternalAgentConnectionRow : ObservableObject
     /// 수준을 바꾸는 곳은 설정 「AI」 탭 ① 하나다(이 창은 「이번 연결에 쓸 접속」 만 고른다).
     /// </summary>
     public string LevelText => LevelName(ExternalLevel) + (!IsProductionMarked ? string.Empty
-        : ExternalLevel < CurrentLevel ? ExternalAgentText.ProductionCappedLevelNote
+        : ExternalLevel < CurrentLevel ? (SetInTable ? ExternalAgentText.CappedLevelNote : ExternalAgentText.ProductionCappedLevelNote)
+        : SetInTable ? string.Empty
         : ExternalAgentText.ProductionLevelNote);
+
+    /// <summary>
+    /// 설정 「AI」 탭 ① 표에서 이 접속의 수준을 직접 정해 두었다(저장 값이 환경 기본값이 아니고 끔도 아님). 운영 수준을 올릴 때 그 표에서 이미 접속 이름을 다시 입력했으므로
+    /// 연결 창에서는 다시 묻지 않는다(사용자 요청 2026-11-24). 기본값 그대로인 운영 접속은 지금처럼 묻는다.
+    /// </summary>
+    public bool SetInTable => Profile.AiAccess is not null && CurrentLevel != AiAccessLevel.Off;
 
     /// <summary>운영 행 경고 「운영 접속 — LLM 이 SELECT 를 자동 실행합니다」: 운영이고 허가 수준이 조회 실행 이상(스위치를 끄면 Metadata 라 숨는다).</summary>
     public bool ShowsRunWarning => IsProductionMarked && ExternalLevel >= AiAccessLevel.Query;
@@ -101,7 +108,7 @@ public sealed partial class ExternalAgentConnectionRow : ObservableObject
     [ObservableProperty]
     private string _confirmName = string.Empty;
 
-    public bool NeedsConfirmation => IsProduction && IsChecked;
+    public bool NeedsConfirmation => IsProduction && IsChecked && !SetInTable;
 
     public bool Confirmed => !NeedsConfirmation || string.Equals(ConfirmName, Alias, StringComparison.Ordinal);
 
@@ -123,6 +130,9 @@ public sealed partial class ExternalAgentConnectionRow : ObservableObject
         OnPropertyChanged(nameof(Profile));
         OnPropertyChanged(nameof(CurrentLevel));
         OnPropertyChanged(nameof(ExternalLevel));
+        OnPropertyChanged(nameof(SetInTable));
+        OnPropertyChanged(nameof(NeedsConfirmation));
+        OnPropertyChanged(nameof(Confirmed));
         RaiseLevel();
     }
 

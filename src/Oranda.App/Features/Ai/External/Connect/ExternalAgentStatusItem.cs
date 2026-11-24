@@ -103,7 +103,7 @@ public sealed class ExternalAgentStatusViewModel : ViewModelBase, IStatusBarItem
                 return SkillReinstallNeeded ? ReinstallNeededText : string.Empty;
             }
 
-            var parts = new List<string> { UiText.Get("AgentLink.status.connected", "에이전트 연결됨") };
+            var parts = new List<string> { UiText.Get("AgentLink.status.connected", "밖의 AI 에이전트 연결됨") };
             if (state.Production)
             {
                 parts.Add(ExternalAgentText.StatusProduction);
@@ -152,7 +152,20 @@ public sealed class ExternalAgentStatusViewModel : ViewModelBase, IStatusBarItem
 
     public static string NoCallsText => UiText.Get("AgentLink.status.noCall", "호출 없음");
 
-    private static string ReinstallNeededText => UiText.Get("AgentLink.status.reinstallNeeded", "에이전트 스킬 다시 설치 필요");
+    private static string ReinstallNeededText => UiText.Get("AgentLink.status.reinstallNeeded", "밖의 AI 에이전트 스킬 다시 설치 필요");
+
+    /// <summary>자세히 보기 맨 위 한 줄: 이 띠가 무엇인지.</summary>
+    public static string DetailsIntro => ExternalAgentText.T(
+        "터미널의 AI(Claude Code · Codex · Antigravity)가 이 Oranda 창에 연결되어 있습니다. 「끊기」를 누르면 바로 끊깁니다.",
+        "An AI in a terminal (Claude Code · Codex · Antigravity) is connected to this Oranda window. Press \"Disconnect\" to cut it off now.");
+
+    /// <summary>자세히 보기의 스킬 다시 설치 안내(「눌러서」 없이).</summary>
+    public static string ReinstallNotice => ExternalAgentText.T(
+        "Oranda 위치나 판이 바뀌어, 설치된 에이전트 스킬이 옛 경로를 가리킵니다. 아래 단추로 다시 설치하세요.",
+        "Oranda moved or was updated, so the installed agent skill points to the old path. Reinstall it with the button below.");
+
+    /// <summary>띠의 「끊기」 단추 화면 읽기 이름·풍선 도움말.</summary>
+    public static string DisconnectTip => ExternalAgentText.T("밖의 AI 에이전트 연결 끊기", "Disconnect the outside AI agent");
 
     private DateTimeOffset Now => _time.GetUtcNow();
 

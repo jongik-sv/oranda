@@ -396,8 +396,8 @@ public sealed partial class AiSettingsHubPage : ObservableObject, IDisposable
     /// </summary>
     public string OutsideSummary => _t.T("위 1 의 표를 그대로 따릅니다: ", "Follows table 1 as is: ")
         + Levels(a => (a.ExternalLevel, a.ExternalCapped))
-        + (Access?.Rows.Any(r => r.IsProduction) == true
-            ? "\n" + _t.T("운영 접속은 연결할 때 접속 이름을 한 번 더 입력해야 고를 수 있습니다.", "Production connections can be chosen only after typing the connection name once more when connecting.")
+        + (Access?.Rows.Any(r => r.IsProduction && r.Profile.AiAccess is null) == true
+            ? "\n" + _t.T("위 표에서 직접 정하지 않은 운영 접속은 연결할 때 접속 이름을 한 번 더 입력해야 고를 수 있습니다.", "Production connections not set in the table above can be chosen only after typing the connection name once more when connecting.")
             : string.Empty);
 
     public string OutsideNote => _t.T("외부 에이전트는 자기 프로그램과 자기 로그인을 씁니다. Oranda 는 어느 접속을 어디까지 볼지만 정합니다.",

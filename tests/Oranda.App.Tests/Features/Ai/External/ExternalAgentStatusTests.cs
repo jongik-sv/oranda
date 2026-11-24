@@ -53,13 +53,13 @@ public sealed class ExternalAgentStatusTests
 
         link.Connect(["Claude Code"], Start.AddHours(8));
         Assert.True(vm.IsVisible);
-        Assert.Equal("에이전트 연결됨 · Claude Code · 호출 없음 · 8시간 0분 남음", vm.Text);
+        Assert.Equal("밖의 AI 에이전트 연결됨 · Claude Code · 호출 없음 · 8시간 0분 남음", vm.Text);
 
         time.Advance(TimeSpan.FromMinutes(20));
         link.Call("list_tabs", AiToolJudgement.Allowed, 812);
         time.Advance(TimeSpan.FromSeconds(12));
 
-        Assert.Equal("에이전트 연결됨 · Claude Code · 최근 호출 12초 전 · 7시간 40분 남음", vm.Text);
+        Assert.Equal("밖의 AI 에이전트 연결됨 · Claude Code · 최근 호출 12초 전 · 7시간 40분 남음", vm.Text);
         vm.Dispose();
     }
 
@@ -70,7 +70,7 @@ public sealed class ExternalAgentStatusTests
 
         link.Connect(["Claude Code", "Codex"], expiresAt: null);
 
-        Assert.Equal("에이전트 연결됨 · Claude Code, Codex · 호출 없음", vm.Text);
+        Assert.Equal("밖의 AI 에이전트 연결됨 · Claude Code, Codex · 호출 없음", vm.Text);
         Assert.False(vm.CanExtend);
         vm.Dispose();
     }
@@ -151,7 +151,7 @@ public sealed class ExternalAgentStatusTests
 
         Assert.True(vm.IsVisible);
         Assert.True(vm.SkillReinstallNeeded);
-        Assert.Equal("에이전트 스킬 다시 설치 필요", vm.Text);
+        Assert.Equal("밖의 AI 에이전트 스킬 다시 설치 필요", vm.Text);
 
         await vm.ReinstallSkillsAsync();
 
@@ -169,7 +169,7 @@ public sealed class ExternalAgentStatusTests
 
         link.Connect(["Claude Code"], Start.AddHours(8));
 
-        Assert.StartsWith("에이전트 연결됨", vm.Text, StringComparison.Ordinal);
+        Assert.StartsWith("밖의 AI 에이전트 연결됨", vm.Text, StringComparison.Ordinal);
         Assert.Contains("스킬", vm.ToolTip, StringComparison.Ordinal);
         vm.Dispose();
     }
@@ -192,9 +192,11 @@ public sealed class ExternalAgentStatusTests
             view.ShowDetails();
             HeadlessHost.Pump();
             var panel = Assert.IsType<StackPanel>(view.DetailsFlyout!.Content);
-            var rows = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(panel.Children[1]).Content);
+            Assert.Equal(ExternalAgentStatusViewModel.DetailsIntro, Assert.IsType<TextBlock>(panel.Children[0]).Text); // 맨 위 = 이 띠가 무엇인지
+            Assert.Equal(380, panel.Width); // 플라이아웃 틀보다 좁게 고정(넘으면 글이 잘렸다)
+            var rows = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(panel.Children[2]).Content);
             Assert.Equal(2, rows.Children.Count);
-            var buttons = Assert.IsType<StackPanel>(panel.Children[2]);
+            var buttons = Assert.IsType<StackPanel>(panel.Children[3]);
             var disconnect = Assert.IsType<Button>(Assert.Single(buttons.Children));
             Assert.Equal("끊기", disconnect.Content);
 
@@ -245,7 +247,7 @@ public sealed class ExternalAgentStatusTests
             link.Connect(["Codex"], Start.AddHours(8), production: true);
             HeadlessHost.Settle(window);
             Assert.True(vm.IncludesProduction);
-            Assert.StartsWith("에이전트 연결됨 · 운영 포함 · Codex", vm.Text, StringComparison.Ordinal);
+            Assert.StartsWith("밖의 AI 에이전트 연결됨 · 운영 포함 · Codex", vm.Text, StringComparison.Ordinal);
             Assert.Equal("OrandaEnvProductionBrush", view.DotBrushKey);
 
             // 만료 임박이어도 운영 색이 앞선다(「N분 남음」·「연장」은 그대로).
