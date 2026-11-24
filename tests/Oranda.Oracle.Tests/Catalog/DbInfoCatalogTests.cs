@@ -84,6 +84,24 @@ public partial class DbInfoCatalogTests
         Assert.True(sql.IndexOf("FETCH FIRST :max_rows ROWS ONLY) r", StringComparison.Ordinal) > sql.IndexOf("FROM @PFX@_tab_columns", StringComparison.Ordinal));
     }
 
+    /// <summary>V$ 뷰를 읽을 권한이 없는 계정용 대신 질의: 11g·19c 이후 모두 있고 V$ 뷰를 쓰지 않는다. CON_NAME 은 12c 이후라 11 변형에 없다.</summary>
+    [Theory]
+    [InlineData("dbinfo.instance_basic")]
+    [InlineData("dbinfo.database_basic")]
+    [InlineData("dbinfo.version_basic")]
+    [InlineData("dbinfo.nls_session")]
+    public void Fallback_queries_exist_for_every_version_and_need_no_v_dollar_view(string id)
+    {
+        foreach (var version in new[] { 11, 12, 19, 23, 26 })
+        {
+            var sql = Catalog.Get(id, version).Sql;
+            Assert.DoesNotContain("v$", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(CatalogLicense.None, Catalog.Get(id, version).Header.License);
+        }
+
+        Assert.DoesNotContain("CON_NAME", Catalog.Get(id, 11).Sql, StringComparison.Ordinal);
+    }
+
     [GeneratedRegex(@":([a-z_]+)")]
     private static partial Regex BindName();
 }

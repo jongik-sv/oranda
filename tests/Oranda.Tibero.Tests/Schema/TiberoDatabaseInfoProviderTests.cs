@@ -1,3 +1,5 @@
+using Oranda.Core.Connection;
+using Oranda.Core.Metadata;
 using Oranda.Tibero.Schema;
 using static Oranda.Tibero.Tests.Schema.SchemaFakes;
 
@@ -44,8 +46,56 @@ public class TiberoDatabaseInfoProviderTests
 
         var failed = sections.Single(x => x.Title == "파라미터");
         Assert.Equal(["오류"], failed.Columns);
-        Assert.Equal("TBR-17004: no privilege line 2", Assert.Single(failed.Rows)[0]);
+        Assert.Equal("TBR-17004: no privilege line 2", failed.Rows[0][0]);
+        Assert.Equal(DatabaseInfoSections.PrivilegeHint(Dbms.Tibero), failed.Rows[1][0]); // 권한 오류면 필요한 권한을 안내한다
         Assert.Equal(6, sections.Count);
+    }
+
+    [Fact]
+    public async Task Without_v_dollar_views_instance_and_database_fall_back_to_sys_context_and_version_to_the_session()
+    {
+        var asked = new List<string>();
+        var provider = new TiberoDatabaseInfoProvider((_, id, _, _) =>
+        {
+            asked.Add(id);
+            return id switch
+            {
+                "dbinfo.instance" or "dbinfo.database" or "dbinfo.version" or "dbinfo.parameters" or "dbinfo.nls"
+                    => throw new InvalidOperationException("ODP-8033:Specified schema object was not found.\n at line 14, column 9 of null:\n FROM v$instance i"),
+                "dbinfo.instance_basic" => Task.FromResult(Table(["INSTANCE_NAME", "DB_NAME"], ["tb", "D"])),
+                "dbinfo.database_basic" => Task.FromResult(Table(["NAME"], ["D"])),
+                "dbinfo.nls_session" => Task.FromResult(Table(["SCOPE", "PARAMETER", "VALUE"], ["SESSION", "NLS_SORT", "BINARY"])),
+                _ => Task.FromResult(Table(["A"], ["1"])),
+            };
+        });
+        await using var session = Session();
+
+        var sections = await provider.GetAsync(session, CancellationToken.None);
+
+        Assert.Equal(["dbinfo.instance", "dbinfo.instance_basic", "dbinfo.database", "dbinfo.database_basic", "dbinfo.version", "dbinfo.parameters", "dbinfo.nls", "dbinfo.nls_session"], asked);
+        var note = DatabaseInfoSections.Note(Dbms.Tibero, new InvalidOperationException("ODP-8033: x"));
+        Assert.Equal([["instance_name", "tb"], ["db_name", "D"], ["안내", note]], sections[0].Rows.Select(r => r.ToArray()));
+        Assert.Equal([["name", "D"], ["안내", note]], sections[1].Rows.Select(r => r.ToArray()));
+        Assert.Equal([["version", "Tibero 6"], ["안내", note]], sections[2].Rows.Select(r => r.ToArray()));
+        Assert.Equal(["오류"], sections[4].Columns); // 파라미터는 대신할 것이 없다
+        Assert.Equal(["SCOPE", "PARAMETER", "VALUE"], sections[5].Columns); // NLS 는 세션 값만, 끝에 안내 줄
+        Assert.Equal(["SESSION", "NLS_SORT", "BINARY"], sections[5].Rows[0]);
+        Assert.Equal("(안내) " + note, sections[5].Rows[1][0]);
+        Assert.DoesNotContain(sections.Take(3), x => x.Columns is ["오류"]);
+    }
+
+    [Fact]
+    public async Task A_failing_fallback_shows_the_original_error()
+    {
+        var provider = new TiberoDatabaseInfoProvider((_, id, _, _) => id.StartsWith("dbinfo.instance", StringComparison.Ordinal)
+            ? throw new InvalidOperationException(id == "dbinfo.instance" ? "ODP-8033: first" : "ODP-11006: second")
+            : Task.FromResult(Table(["X"], ["1"])));
+        await using var session = Session();
+
+        var sections = await provider.GetAsync(session, CancellationToken.None);
+
+        Assert.Equal(["오류"], sections[0].Columns);
+        Assert.Equal("ODP-8033: first", sections[0].Rows[0][0]);
     }
 
     [Fact]
@@ -59,10 +109,13 @@ public class TiberoDatabaseInfoProviderTests
 
     [Theory]
     [InlineData("dbinfo.instance")]
+    [InlineData("dbinfo.instance_basic")]
     [InlineData("dbinfo.database")]
+    [InlineData("dbinfo.database_basic")]
     [InlineData("dbinfo.version")]
     [InlineData("dbinfo.parameters")]
     [InlineData("dbinfo.nls")]
+    [InlineData("dbinfo.nls_session")]
     public async Task Every_section_query_resolves_in_the_tibero_catalog(string id)
     {
         await using var session = Session();
