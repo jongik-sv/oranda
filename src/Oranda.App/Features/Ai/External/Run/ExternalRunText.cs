@@ -89,6 +89,9 @@ internal static class ExternalRunText
     public static string UnknownBind(string name) =>
         $"The tab has no bind :{name}; nothing was set. Use the names listed by get_binds (orandactl tab binds).";
 
+    public static string BindTypeConflict(string name, string rowType, string givenType) =>
+        $"The bind :{name} is {rowType} in the tab's bind list, not {givenType}; nothing was set. Send the value without type, or ask the user to change the type in the bind list.";
+
     public static string BindTwice(string name) => $"The bind :{name} is given twice; nothing was set.";
 
     public static string BindTakesNoValue(string name) => $"The bind :{name} is an OUT bind or a ref cursor and takes no value; nothing was set.";
