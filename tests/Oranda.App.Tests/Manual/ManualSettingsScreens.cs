@@ -167,6 +167,7 @@ public sealed class ManualSettingsScreens
             new(ManualCapture.FindByText(window, "스크립트 오류 시 (기본값)"), 3, -14),
             new(ManualCapture.FindByText(window, "문장 나누기"), 4, -14),
             new(ManualCapture.FindByText(window, "실제 계획"), 5, -14),
+            new(ManualCapture.FindByText(window, "PL/SQL 컴파일 대기(초)"), 6, -14),
         ]);
         window.Close();
     });
