@@ -43,10 +43,22 @@ public sealed class OracleSessionBusyTests
             session.CommandGate.Release();
         }
 
+        // 상한을 넘겨 취소한 늦은 커밋·롤백이, 취소 정리(SemaphoreSlim 의 기다리는 쪽 빼기)보다 먼저 놓은 잠금을 넘겨받을 수 있다(부하에서).
+        // 그 일은 열지 않은 연결에 보내다 곧 실패하고 잠금을 놓는다: 놓을 때까지 기다린다(시각 대신 상태를 본다, PHC-10).
+        await WaitUntilAsync(() => !session.IsCommandRunning, Generous);
         Assert.False(session.IsCommandRunning);
         session.SetBusy(true); // 실행 서비스가 실행을 알린다
         Assert.True(session.IsCommandRunning);
         session.SetBusy(false);
         Assert.False(session.IsCommandRunning);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan limit)
+    {
+        var watch = Stopwatch.StartNew();
+        while (!condition() && watch.Elapsed < limit)
+        {
+            await Task.Delay(10);
+        }
     }
 }

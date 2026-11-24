@@ -21,7 +21,7 @@ namespace Oranda.Tibero.Sessions;
 /// <see cref="ReportFailure"/> 로 넘겨 끊김이면 세션을 Broken 으로 돌린다. DML 뒤·커밋 뒤에는 <see cref="SetPending"/>, 작업 시작·끝에는 <see cref="SetBusy"/>.
 /// </para>
 /// </summary>
-internal sealed class TiberoSession : ISession
+internal sealed class TiberoSession : ISession, IAbandonableSession
 {
     internal const string KeepAliveSql = "SELECT 1 FROM DUAL";
 
@@ -169,9 +169,24 @@ internal sealed class TiberoSession : ISession
     internal void ReportStalled(ServerStallException stall)
     {
         ArgumentNullException.ThrowIfNull(stall);
+        GiveUp("ORANDA-STALL", stall.Message, "응답 없는 Tibero 세션 ");
+    }
+
+    /// <summary>
+    /// 돌아오지 않는 명령을 버린다(PHC-7, <see cref="IAbandonableSession"/>): 취소를 보냈는데 드라이버가 돌아오지 않을 때 부르는 쪽이 부른다.
+    /// 행 진행이 멈춘 때(<see cref="ReportStalled"/>)와 같은 길이다 — Broken 으로 알리고, 잠금 없이 시간 제한을 둔 닫기를 백그라운드에서 시작한다.
+    /// </summary>
+    public void Abandon(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        GiveUp("ORANDA-ABANDONED", reason, "버린 세션 ");
+    }
+
+    private void GiveUp(string code, string message, string closeLabel)
+    {
         Volatile.Write(ref _stalled, true);
-        MarkBroken(new DbError("ORANDA-STALL", stall.Message) { Dbms = Dbms.Tibero, Kind = DbErrorKind.Disconnected });
-        _ = TimedClose.RunAsync(CloseConnectionOnce, "응답 없는 Tibero 세션 " + Id.ToString("N")[..8]).ContinueWith(
+        MarkBroken(new DbError(code, message) { Dbms = Dbms.Tibero, Kind = DbErrorKind.Disconnected });
+        _ = TimedClose.RunAsync(CloseConnectionOnce, closeLabel + Id.ToString("N")[..8]).ContinueWith(
             static t => _ = t.Exception,
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted,
@@ -232,6 +247,8 @@ internal sealed class TiberoSession : ISession
                 await Rollback.BeforeEndAsync(this, ct).ConfigureAwait(false);
             }
 
+            // 그만두기로 한 커밋·롤백(닫는 경로의 상한 등)은 잠금을 잡은 뒤라도 서버로 보내지 않는다(PHC-11).
+            ct.ThrowIfCancellationRequested();
             try
             {
                 await SendAsync(sql, ct).ConfigureAwait(false);

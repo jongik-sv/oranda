@@ -52,6 +52,14 @@ public class AppSqlCatalogTests
     }
 
     [Fact]
+    public void Session_sid_reads_this_sessions_sid_for_the_compile_blocker_lookup()
+    {
+        // PHC-8: 컴파일 세션의 SID(plsql.compile_blocker 의 :sid). 앱 시험의 가짜 실행 엔진은 「AS sid FROM DUAL」 로 이 문장을 알아본다.
+        Assert.Equal("SELECT TO_NUMBER(SYS_CONTEXT('USERENV', 'SID')) AS sid FROM DUAL", EmbeddedCatalog.Text("plsql.session_sid"));
+        Assert.Contains(":sid", EmbeddedCatalog.Text("plsql.compile_blocker"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Object_users_local_fallback_keeps_the_v_access_statement()
     {
         // GV_$ACCESS 없이 V_$ACCESS 만 받은 계정이 쓰는 대체 문장: 예전 글 그대로.

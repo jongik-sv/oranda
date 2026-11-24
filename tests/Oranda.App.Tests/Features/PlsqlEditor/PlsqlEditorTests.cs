@@ -1024,6 +1024,15 @@ public sealed class PlsqlEditorTests : IDisposable
         /// <summary>다른 세션 수 질의가 이 오류로 실패한다(권한 없음 등). null 이면 <see cref="OtherSessions"/>.</summary>
         public DbError? UsersQueryError { get; set; }
 
+        /// <summary>CREATE 가 토큰 취소와 상관없이 <see cref="Release"/> 될 때까지 돌아오지 않는다(break 가 닿지 않는 경로, PHC-7).</summary>
+        public bool IgnoreCancel { get; set; }
+
+        /// <summary><see cref="IgnoreCancel"/> 인 CREATE 를 풀어 준다.</summary>
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>SID 질의(<c>plsql.session_sid</c>)의 답.</summary>
+        public int SessionSid { get; set; } = 101;
+
         /// <summary>RAC 질의(gv$access)만 권한이 없다(V_$ACCESS 만 받은 계정).</summary>
         public bool GvAccessDenied { get; set; }
 
@@ -1056,6 +1065,11 @@ public sealed class PlsqlEditorTests : IDisposable
             if (stmt.Kind == StatementKind.Query)
             {
                 Queries.Add(stmt.Text);
+                if (stmt.Text.Contains("AS sid FROM DUAL", StringComparison.Ordinal))
+                {
+                    return new ExecutionResult(stmt, ExecutionStatus.Succeeded) { ResultSet = new RowResultSet(SessionSid) };
+                }
+
                 if (stmt.Text.Contains("CURRENT_SCHEMA", StringComparison.Ordinal))
                 {
                     return new ExecutionResult(stmt, ExecutionStatus.Succeeded) { ResultSet = new RowResultSet(SessionSchema.Schema, SessionSchema.User) };
@@ -1105,6 +1119,13 @@ public sealed class PlsqlEditorTests : IDisposable
             }
 
             options?.Sending?.Invoke(); // 실제 엔진처럼 명령 잠금을 잡은 뒤 드라이버로 보내기 직전에 알린다
+
+            if (IgnoreCancel)
+            {
+                // break 가 닿지 않는 경로: 토큰을 취소해도 드라이버가 돌아오지 않는다(명령 잠금을 쥔 채). 시험이 풀어 줄 때까지.
+                await Release.Task;
+                return new ExecutionResult(stmt, ExecutionStatus.Cancelled);
+            }
 
             if (BlockCreate)
             {

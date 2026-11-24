@@ -50,6 +50,27 @@ public sealed partial class PlsqlEditorViewModel
     internal TimeSpan PrecheckLimit { get; set; } = DefaultPrecheckLimit;
 
     /// <summary>
+    /// 취소(단추·탭 닫기·대기 상한·실행 취소)를 보낸 뒤 드라이버가 돌아오기를 기다리는 시간(PHC-7). 넘으면 그 세션을 버린다(<see cref="IAbandonableSession"/>).
+    /// 서버 OOB 가 막혔거나 긴급 데이터가 사라지는 경로에서는 break 가 닿지 않아 드라이버가 영영 돌아오지 않는다(실측, phc-it).
+    /// </summary>
+    internal TimeSpan CancelGrace { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>CREATE 를 보낸 뒤 이만큼 지나도 끝나지 않으면 막는 세션을 찾는다(PHC-8).</summary>
+    internal TimeSpan BlockerDelay { get; set; } = TimeSpan.FromSeconds(3);
+
+    private ICompileBlockerProbe? _blockerProbe;
+
+    /// <summary>막는 세션 찾기(PHC-8). 시험은 직접 넣는다. 앱 조립이 없으면 null(찾지 않는다).</summary>
+    internal ICompileBlockerProbe? BlockerProbe
+    {
+        get => _blockerProbe ??= _services is null ? null : new SessionCompileBlockerProbe(_services);
+        set => _blockerProbe = value;
+    }
+
+    /// <summary>세션마다 한 번 읽어 둔 SID(<c>plsql.session_sid</c>). 컴파일 세션은 CREATE 가 막힌 동안 다른 문장을 보낼 수 없어서 미리 읽는다.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ISession, object> SessionSids = [];
+
+    /// <summary>
     /// 지금 컴파일을 취소한다(「컴파일 취소」 단추·실행 취소 <c>oranda.exec.cancel</c>·탭이나 작업 공간 문서 닫기). 컴파일 중이 아니면 아무것도 안 한다.
     /// 서버에는 드라이버 중단(break, ORA-01013)이 간다. 결과는 <see cref="PlsqlCompileStatus.Cancelled"/>.
     /// </summary>
@@ -106,6 +127,20 @@ public sealed partial class PlsqlEditorViewModel
         }
 
         Session ??= ResolveSession();
+        if (_session is { State: SessionState.Broken or SessionState.Closed } dead)
+        {
+            // 끊긴(버린) 세션: 그 자리에 다시 연 세션이 있을 때만 그 세션으로 이어 간다(같은 DB 라 서버 기준은 그대로 쓴다).
+            // 같은 프로필의 다른 살아 있는 세션(예: 추가 세션이 끊겼을 때의 첫 세션)으로 옮기지 않는다: 그 세션의 미커밋을 CREATE 가 커밋해 버린다.
+            if (ReplacementFor(_services?.GetService(typeof(ConnectionManager.IConnectionService)) as ConnectionManager.IConnectionService, dead) is { } fresh)
+            {
+                Session = fresh;
+            }
+            else
+            {
+                return Report(PlsqlCompileStatus.NoSession, UiText.Get("Plsql.compile.sessionBroken", "세션이 끊겼다 — 다시 접속한 뒤 컴파일한다"));
+            }
+        }
+
         if (_session is not { } session)
         {
             return Report(PlsqlCompileStatus.NoSession, _restoredProfileId is null ? "접속이 없다" : "이 탭을 연 접속이 아직 열리지 않았다 — 그 접속을 열면 컴파일한다");
@@ -156,6 +191,7 @@ public sealed partial class PlsqlEditorViewModel
         var cancelHook = state?.RegisterCancel(session.Id, CancelCompile); // 실행 취소(Ctrl+Break·세션 바쁨 막대)도 이 컴파일을 끊는다
         TimeSpan? waitLimit = null;
         CancellationTokenSource? wait = null;
+        BlockerWatch? blocker = null;
         var notes = new List<string>();
         var usersUnknown = false;
         try
@@ -224,6 +260,8 @@ public sealed partial class PlsqlEditorViewModel
             WarningText = string.Join(Environment.NewLine, notes);
             DiffText = string.Empty;
             await ArchiveServerSourceAsync(meta, effective, token).ConfigureAwait(true);
+            var probe = BlockerProbe;
+            var sid = probe is null ? null : await ReadSessionSidAsync(exec, session, token).ConfigureAwait(true);
             var stmt = new SqlStatement(text, default, StatementKind.Ddl) { Verb = "CREATE" };
 
             // CREATE 는 다른 세션이 이 객체를 실행 중이면 잠금을 기다린다: 상한을 넘으면 끊고 「시간 초과」로 알린다(취소와 구분).
@@ -231,14 +269,51 @@ public sealed partial class PlsqlEditorViewModel
             waitLimit = CompileWait();
             var timer = wait = new CancellationTokenSource();
             var limitToArm = waitLimit.Value;
+            var sent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             using var both = CancellationTokenSource.CreateLinkedTokenSource(token, timer.Token);
             var sendToken = both.Token;
             var options = new ExecutionOptions
             {
                 Source = HistorySource.Editor,
-                Sending = limitToArm == Timeout.InfiniteTimeSpan ? null : () => timer.CancelAfter(limitToArm),
+                Sending = () =>
+                {
+                    if (limitToArm != Timeout.InfiniteTimeSpan)
+                    {
+                        timer.CancelAfter(limitToArm);
+                    }
+
+                    sent.TrySetResult();
+                },
             };
-            var result = await OffUi(() => exec.ExecuteAsync(session, stmt, new Dictionary<string, BindValue>(), options, sendToken)).ConfigureAwait(true);
+            var send = OffUi(() => exec.ExecuteAsync(session, stmt, new Dictionary<string, BindValue>(), options, sendToken));
+            blocker = new BlockerWatch();
+#pragma warning disable CA2000 // 아래 finally 가 스레드 풀에서 취소한 뒤 Dispose 한다.
+            var watchStop = new CancellationTokenSource();
+#pragma warning restore CA2000
+            var watch = probe is not null && sid is { } mine ? WatchBlockerAsync(probe, session, mine, sent.Task, notes, blocker, watchStop.Token) : Task.CompletedTask;
+            ExecutionResult? result;
+            try
+            {
+                result = await AwaitOrAbandonAsync(send, session, sent.Task, token, timer.Token).ConfigureAwait(true);
+            }
+            finally
+            {
+                // 찾기는 기다리지 않는다(다른 연결이 늦어도 컴파일 결과를 붙잡지 않게): 끝났다고 적어 두고(UI 스레드, 이 뒤로 띠를 바꾸지 않는다)
+                // 취소는 스레드 풀에서 보낸다(찾는 질의의 드라이버 취소가 같은 나쁜 경로에서 막혀도 UI 가 기다리지 않게).
+                blocker.Finished = true;
+                _ = Task.Run(() =>
+                {
+                    watchStop.Cancel();
+                    watchStop.Dispose();
+                }, CancellationToken.None);
+                _ = watch;
+            }
+
+            if (result is null)
+            {
+                return AbandonedReport(session, wait, waitLimit, blocker.LastText, token);
+            }
+
             if (result.ResultSet is not null)
             {
                 await result.ResultSet.DisposeAsync().ConfigureAwait(true);
@@ -251,7 +326,7 @@ public sealed partial class PlsqlEditorViewModel
                 case ExecutionStatus.Denied:
                     return Report(PlsqlCompileStatus.Blocked, "정책이 컴파일을 막았다");
                 case ExecutionStatus.Cancelled:
-                    return StoppedReport(wait, waitLimit, token);
+                    return StoppedReport(wait, waitLimit, token, blocker?.LastText);
                 case ExecutionStatus.Failed when !serverReportedErrors:
                     return Report(PlsqlCompileStatus.Failed, FailureMessage(result.Error, privilegeNote));
             }
@@ -295,7 +370,7 @@ public sealed partial class PlsqlEditorViewModel
         }
         catch (OperationCanceledException)
         {
-            return StoppedReport(wait, waitLimit, token);
+            return StoppedReport(wait, waitLimit, token, blocker?.LastText);
         }
         catch (Exception ex)
         {
@@ -313,19 +388,174 @@ public sealed partial class PlsqlEditorViewModel
         }
     }
 
+    /// <summary>끊긴 세션 <paramref name="dead"/> 의 자리에 다시 연 작업 세션(열려 있고 쓸 수 있을 때). 같은 프로필의 다른 세션은 고르지 않는다. 없으면 null.</summary>
+    internal static ISession? ReplacementFor(ConnectionManager.IConnectionService? connections, ISession dead) =>
+        connections?.ReopenedAs(dead) is { Purpose: SessionPurpose.Work, State: SessionState.Idle or SessionState.Busy } fresh && connections.IsOpen(fresh) ? fresh : null;
+
     /// <summary>CREATE 가 멈췄다: 대기 상한이면 「시간 초과」(안내 글은 경고 띠에), 아니면 취소.</summary>
-    private PlsqlCompileOutcome StoppedReport(CancellationTokenSource? wait, TimeSpan? waitLimit, CancellationToken token)
+    private PlsqlCompileOutcome StoppedReport(CancellationTokenSource? wait, TimeSpan? waitLimit, CancellationToken token, string? blockerText = null)
     {
         if (wait is { IsCancellationRequested: true } && !token.IsCancellationRequested && waitLimit is { } limit)
         {
-            WarningText = UiText.Format("Plsql.compile.timeout",
+            var timeout = UiText.Format("Plsql.compile.timeout",
                 "{0}초 안에 컴파일이 끝나지 않아 멈췄습니다. 다른 세션이 이 객체를 실행 중이면 컴파일이 잠금을 기다립니다 — 그 실행이 끝난 뒤 다시 컴파일하세요. 대기 상한은 설정 ▸ 실행에서 바꿉니다.",
                 Seconds(limit));
-            return Report(PlsqlCompileStatus.Timeout, WarningText);
+            Report(PlsqlCompileStatus.Timeout, timeout);
+            WarningText = blockerText is null ? timeout : timeout + Environment.NewLine + blockerText; // 막는 세션(SID)은 DBA 에게 알릴 때 쓰므로 남긴다
+            return new PlsqlCompileOutcome(PlsqlCompileStatus.Timeout, [], timeout);
         }
 
         WarningText = string.Empty;
         return Report(PlsqlCompileStatus.Cancelled, "컴파일이 취소됐다");
+    }
+
+    /// <summary>
+    /// CREATE 결과를 기다린다. 버릴 수 있는 세션(<see cref="IAbandonableSession"/>)이면 드라이버로 보낸 뒤(<paramref name="sent"/>) 취소가 났는데
+    /// <see cref="CancelGrace"/> 안에 돌아오지 않을 때 기다리기를 그만두고 null(부르는 쪽이 세션을 버린다). 보내기 전의 취소(확인 창·명령 잠금 대기)는 엔진이 곧 돌려주므로 기다린다.
+    /// </summary>
+    private async Task<ExecutionResult?> AwaitOrAbandonAsync(Task<ExecutionResult> send, ISession session, Task sent, CancellationToken token, CancellationToken timer)
+    {
+        if (session is not IAbandonableSession)
+        {
+            return await send.ConfigureAwait(true);
+        }
+
+        using var done = new CancellationTokenSource();
+        var stuck = StuckAfterCancelAsync(sent, CancelGrace, token, timer, done.Token);
+        var first = await Task.WhenAny(send, stuck).ConfigureAwait(true);
+        if (!ReferenceEquals(first, send) && stuck.IsCompletedSuccessfully && !send.IsCompleted) // 유예가 끝나는 순간 돌아왔으면 버리지 않는다
+        {
+            // 버린 CREATE 가 나중에 돌아오면(연결을 닫아 깨어남) 결과 집합을 닫고 예외는 관찰만 한다.
+            _ = send.ContinueWith(static t =>
+            {
+                if (t.IsCompletedSuccessfully)
+                {
+                    _ = t.Result.ResultSet?.DisposeAsync().AsTask();
+                }
+                else
+                {
+                    _ = t.Exception;
+                }
+            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            return null;
+        }
+
+        await done.CancelAsync().ConfigureAwait(true);
+        return await send.ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 드라이버로 보낸 뒤 취소가 났고 <paramref name="grace"/> 가 지났다(true). <paramref name="done"/> 이면 취소 예외로 끝난다.
+    /// 취소는 보내는 토큰(연결 토큰)이 아니라 그 원천 둘(<paramref name="token"/>·<paramref name="timer"/>)에서 본다: 토큰 콜백은 나중에 단 것부터 돌므로
+    /// 보내는 토큰에 달면 드라이버 취소(<c>OracleCommand.Cancel</c>, 나쁜 경로에서 막힐 수 있다)가 먼저 돌아 유예 시계가 늦게 시작한다.
+    /// </summary>
+    private static async Task<bool> StuckAfterCancelAsync(Task sent, TimeSpan grace, CancellationToken token, CancellationToken timer, CancellationToken done)
+    {
+        var cancelSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (token.Register(() => cancelSeen.TrySetResult()))
+        using (timer.Register(() => cancelSeen.TrySetResult()))
+        using (done.Register(() => cancelSeen.TrySetCanceled(done)))
+        {
+            await cancelSeen.Task.ConfigureAwait(false);
+        }
+
+        await sent.WaitAsync(done).ConfigureAwait(false);
+        await Task.Delay(grace, done).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>취소가 돌아오지 않아 세션을 버렸다(PHC-7): 끊김으로 알리고 연결 닫기를 시작한 뒤, 시간 초과·취소 글에 그 사실을 덧붙인다.</summary>
+    private PlsqlCompileOutcome AbandonedReport(ISession session, CancellationTokenSource? wait, TimeSpan? waitLimit, string? blockerText, CancellationToken token)
+    {
+        var reason = UiText.Get("Plsql.compile.abandoned",
+            "서버가 취소에 답하지 않아 연결을 끊었습니다. 서버 쪽 컴파일은 막는 실행이 끝날 때까지 남고 그 뒤 반영될 수 있습니다. 다시 열어 서버 소스를 확인하세요.");
+        (session as IAbandonableSession)?.Abandon(reason);
+        var stopped = StoppedReport(wait, waitLimit, token);
+        var message = stopped.Message + Environment.NewLine + reason;
+        Report(stopped.Status, message);
+        WarningText = blockerText is null ? message : message + Environment.NewLine + blockerText;
+        return new PlsqlCompileOutcome(stopped.Status, [], message);
+    }
+
+    /// <summary>
+    /// CREATE 를 보내고 <see cref="BlockerDelay"/> 가 지나도 끝나지 않으면 다른 연결에서 막는 세션을 찾아 경고 띠에 보인다(PHC-8). 예외를 내지 않는다.
+    /// 컴파일이 끝나면(<paramref name="stop"/>) 띠를 바꾸지 않는다.
+    /// </summary>
+    private async Task WatchBlockerAsync(ICompileBlockerProbe probe, ISession session, int sid, Task sent, IReadOnlyList<string> notes, BlockerWatch watch, CancellationToken stop)
+    {
+        try
+        {
+            await sent.WaitAsync(stop).ConfigureAwait(true);
+            await Task.Delay(BlockerDelay, stop).ConfigureAwait(true);
+            var found = await OffUi(() => probe.FindAsync(session, sid, stop)).ConfigureAwait(true);
+            if (!watch.Finished)
+            {
+                watch.LastText = BlockerText(found);
+                WarningText = string.Join(Environment.NewLine, [.. notes, watch.LastText]);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 컴파일이 먼저 끝났다.
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 찾기는 덧붙이는 안내다: 실패해도 컴파일 흐름은 그대로.
+        }
+    }
+
+    /// <summary>막는 세션 안내 글.</summary>
+    internal static string BlockerText(CompileBlockerResult found)
+    {
+        if (found.Blocker is { Sid: { } blockerSid } b)
+        {
+            var who = string.Join("·", new[] { b.User, b.Program, b.Machine }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            var running = b.RunningObject is { } obj ? UiText.Format("Plsql.compile.blockerRunning", " — {0} 실행 중", obj) : string.Empty;
+            return UiText.Format("Plsql.compile.blocker", "SID {0}({1})이 이 객체를 실행 중이라 컴파일이 잠금을 기다립니다{2}. 그 실행이 끝나거나 DBA 가 그 세션을 처리하면 컴파일이 이어집니다.",
+                blockerSid.ToString(CultureInfo.InvariantCulture), who.Length > 0 ? who : "-", running);
+        }
+
+        return UiText.Format("Plsql.compile.blockerUnknown",
+            "컴파일이 끝나지 않고 있습니다. 다른 세션이 이 객체를 실행 중이면 컴파일이 잠금을 기다립니다(막는 세션을 찾지 못함: {0}). DBA 에게 막는 세션 처리를 부탁할 수 있습니다.",
+            found.Unknown ?? UiText.Get("Plsql.compile.blockerServerUnknown", "서버가 막는 세션을 알려 주지 않음"));
+    }
+
+    /// <summary>이 세션의 SID(<c>plsql.session_sid</c>, 세션마다 한 번 읽어 둔다). 문장이 없거나 못 읽으면 null(막는 세션을 찾지 않는다).</summary>
+    private async Task<int?> ReadSessionSidAsync(IExecutionService exec, ISession session, CancellationToken ct)
+    {
+        if (SessionSids.TryGetValue(session, out var known))
+        {
+            return (int)known;
+        }
+
+        var sql = CatalogRouting.Text(_services, session, "plsql.session_sid");
+        if (sql is null)
+        {
+            return null;
+        }
+
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(PrecheckLimit);
+        try
+        {
+            var (row, _) = await QueryFirstRowAsync(exec, session, sql, limit.Token).ConfigureAwait(true);
+            if (row is [{ } value, ..])
+            {
+                var sid = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+                SessionSids.AddOrUpdate(session, sid);
+                return sid;
+            }
+
+            return null;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
     }
 
     private static string Seconds(TimeSpan span) => ((int)Math.Round(span.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
@@ -506,5 +736,13 @@ public sealed partial class PlsqlEditorViewModel
         {
             return null;
         }
+    }
+
+    /// <summary>막는 세션 찾기 한 번의 상태(UI 스레드에서만 읽고 쓴다): 컴파일이 끝났는지, 마지막으로 띠에 보인 막는 세션 글.</summary>
+    private sealed class BlockerWatch
+    {
+        public bool Finished { get; set; }
+
+        public string? LastText { get; set; }
     }
 }

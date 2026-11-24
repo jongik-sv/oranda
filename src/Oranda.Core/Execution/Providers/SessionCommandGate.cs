@@ -34,12 +34,27 @@ public sealed class SessionCommandGate
                 throw new SessionBusyException();
             }
 
+            GiveBackIfCancelled(ct);
             SessionWait.NoteEntered();
             return;
         }
 
         await _semaphore.WaitAsync(ct).ConfigureAwait(false);
+        GiveBackIfCancelled(ct);
         SessionWait.NoteEntered();
+    }
+
+    /// <summary>
+    /// 잡은 직후 취소를 다시 본다(PHC-11). <see cref="SemaphoreSlim"/> 은 취소된 대기자를 줄에서 빼기 전에 놓인 잠금을 그 대기자에게 넘겨줄 수 있다:
+    /// 그러면 그만두기로 한 일(상한으로 그만둔 커밋·롤백 등)이 나중에 서버로 간다. 취소됐으면 바로 놓고 취소로 끝낸다.
+    /// </summary>
+    private void GiveBackIfCancelled(CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested)
+        {
+            _semaphore.Release();
+            ct.ThrowIfCancellationRequested();
+        }
     }
 
     /// <summary>
@@ -54,11 +69,13 @@ public sealed class SessionCommandGate
                 throw new SessionBusyException();
             }
 
+            GiveBackIfCancelled(ct);
             SessionWait.NoteEntered();
             return;
         }
 
         _semaphore.Wait(ct);
+        GiveBackIfCancelled(ct);
         SessionWait.NoteEntered();
     }
 

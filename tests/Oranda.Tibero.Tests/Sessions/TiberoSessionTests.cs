@@ -76,6 +76,13 @@ public class TiberoSessionTests
             session.CommandGate.Release();
         }
 
+        // 상한으로 그만둔 커밋·롤백의 기다림 정리가 놓은 잠금보다 늦으면 그 일이 잠깐 잠금을 넘겨받았다 곧 놓는다(PHC-10·11): 시각 대신 상태를 기다린다.
+        var settle = System.Diagnostics.Stopwatch.StartNew();
+        while (session.IsCommandRunning && settle.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            await Task.Delay(10);
+        }
+
         Assert.False(session.IsCommandRunning);
         session.SetBusy(true);
         Assert.True(session.IsCommandRunning);

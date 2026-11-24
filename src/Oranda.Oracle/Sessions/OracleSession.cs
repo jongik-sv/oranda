@@ -11,7 +11,7 @@ using Oranda.Oracle.Rollback;
 namespace Oranda.Oracle.Sessions;
 
 /// <summary>물리 연결 1개. Pooling=false 이므로 이 객체를 닫으면 서버 세션이 끝난다. 소유: TSK-03-03.</summary>
-internal sealed class OracleSession : ISession
+internal sealed class OracleSession : ISession, IAbandonableSession
 {
     /// <summary>연결이 끊겼음을 뜻하는 ORA 번호(CONN-11).</summary>
     private static readonly HashSet<int> BrokenCodes =
@@ -146,9 +146,24 @@ internal sealed class OracleSession : ISession
     internal void ReportStalled(ServerStallException stall)
     {
         ArgumentNullException.ThrowIfNull(stall);
+        GiveUp("ORANDA-STALL", stall.Message, "응답 없는 세션 ");
+    }
+
+    /// <summary>
+    /// 돌아오지 않는 명령을 버린다(PHC-7, <see cref="IAbandonableSession"/>): 취소를 보냈는데 드라이버가 돌아오지 않을 때 부르는 쪽이 부른다.
+    /// 행 진행이 멈춘 때(<see cref="ReportStalled"/>)와 같은 길이다 — Broken 으로 알리고, 잠금 없이 시간 제한을 둔 닫기를 백그라운드에서 시작한다.
+    /// </summary>
+    public void Abandon(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        GiveUp("ORANDA-ABANDONED", reason, "버린 세션 ");
+    }
+
+    private void GiveUp(string code, string message, string closeLabel)
+    {
         Volatile.Write(ref _stalled, true);
-        MarkBroken(new DbError("ORANDA-STALL", stall.Message) { Dbms = Dbms.Oracle, Kind = DbErrorKind.Disconnected });
-        _ = TimedClose.RunAsync(CloseConnectionOnce, "응답 없는 세션 " + Id.ToString("N")[..8]).ContinueWith(
+        MarkBroken(new DbError(code, message) { Dbms = Dbms.Oracle, Kind = DbErrorKind.Disconnected });
+        _ = TimedClose.RunAsync(CloseConnectionOnce, closeLabel + Id.ToString("N")[..8]).ContinueWith(
             static t => _ = t.Exception,
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted,
@@ -268,6 +283,8 @@ internal sealed class OracleSession : ISession
                 await Rollback.BeforeEndAsync(this, ct);
             }
 
+            // 그만두기로 한 커밋·롤백(닫는 경로의 상한 등)은 잠금을 잡은 뒤라도 서버로 보내지 않는다(PHC-11).
+            ct.ThrowIfCancellationRequested();
             try
             {
                 await SendAsync(sql, ct);
