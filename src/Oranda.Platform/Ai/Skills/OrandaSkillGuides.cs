@@ -54,7 +54,9 @@ public static class OrandaSkillGuides
         "- Binds (`:NAME` in the SQL; `binds` of `sql check`, or `orandactl tab binds --tab <id>`): pass the values yourself, do not ask the user to type them into the bind list. "
             + "`orandactl tab run --tab <id> --base-version <version> --binds-json '{\"FROM_DT\":\"20261101\",\"DEPT\":10}'` puts them in the tab's bind list, where the user sees them, and runs; "
             + "`orandactl tab binds set --tab <id> --binds-json '…'` only fills them. Use the bind names of the tab and values that fit each bind's `type` (string, number, true/false, null = NULL). "
-            + "`bind_invalid` (exit 2) means an unknown name or a value that does not fit the type; nothing was set. "
+            + "Send dates with type date: `{\"FROM_DT\":{\"value\":\"20261101\",\"type\":\"date\"}}` (types: varchar2, number, date, timestamp); a type different from the one the user chose in the bind list is refused. "
+            + "`bind_invalid` (exit 2) means an unknown name, a value that does not fit the type or a type conflict; nothing was set. "
+            + "If the tab cannot be read under this grant (a production tab with a cloud model), bind values are refused like `tab get` (exit 4); ask the user to set them. "
             + "When a value is not clear from the request (which date or period, a code, a format such as YYYYMMDD), ask the user to confirm only that value, then pass it. "
             + "If quoting the JSON fails in your shell, pipe it instead: `printf '%s' '{\"tab\":\"<id>\",\"binds\":{…}}' | orandactl call set_binds -`.",
         "- No rows come back from `tab run`, only `fetched` (rows in the grid) and `more`. Read a few with `orandactl result get --tab <id> --index <result_index> --limit 5`.",

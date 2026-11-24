@@ -180,7 +180,8 @@ public sealed class OrandaSkillDocumentTests
         var run = Section(OrandaSkillDocument.Render(Ctl), OrandaSkillGuides.RunHeading);
 
         foreach (var phrase in new[] { "--binds-json", "`orandactl tab binds set --tab <id>", "do not ask the user to type them into the bind list",
-                     "`bind_invalid` (exit 2)", "ask the user to confirm only that value", "orandactl call set_binds -" })
+                     "`bind_invalid` (exit 2)", "ask the user to confirm only that value", "orandactl call set_binds -",
+                     "Send dates with type date", "\"type\":\"date\"", "refused like `tab get`" })
         {
             Assert.Contains(phrase, run, StringComparison.Ordinal);
         }

@@ -228,3 +228,10 @@ JSON-RPC 오류(hello 단계)는 `AgentRpc.ErrorCodes.ToErrorCode` 로 위 글�
 
 - 상수 = `AgentErrorCodes.BindInvalid`(`All` 에 있음). 종료 2 인 까닭: `path_invalid` 처럼 에이전트가 보낸 값이 틀렸고 고쳐 다시 부르면 된다(허가 거부가 아니다).
 - `run_tab` 에 `binds` 없이 목록에도 값이 없으면 기존처럼 `invalid_arguments`(글이 `--binds-json` 을 알려 준다).
+
+### 9.4 결정 ①~③ (2026-11-24, 사용자 「권장대로」)
+
+- ① 형식 지정: 값 자리에 `{"value": …, "type": "varchar2|number|date|timestamp"}`(대소문자 무시). 줄이 없거나 「형식을 아직 고르지 않은 줄」(값이 비고 형식이 VARCHAR2 그대로 — 실행이 처음 보는 이름으로 만든 줄)이면 그 형식으로 만들거나 바꾼다. 사람이 다른 형식을 골라 둔 줄이면 `bind_invalid`(말없이 바꾸지 않음). 객체에 다른 칸이 있거나 형식이 넷 밖이면 `invalid_arguments`. 형식이 없으면 지금 규칙(글 VARCHAR2·숫자 NUMBER). 스킬은 날짜를 `type: date` 로 보내라고 적는다. 스키마 설명(`AppTools.BindsArg`)에도 적었다.
+- ② 감사: 게이트 인자 요약(`AgentGate.SummarizeArguments`)이 운영 접속의 `binds` 를 값 없이 `{이름:형식}` 으로 적는다(`binds={PAK_PST_DD:date}`, 형식 = 준 type 또는 값의 꼴 varchar2·number·boolean·null). 외부 앱 도구(`set_binds`·`run_tab`)는 감사 접속이 운영이거나 **접속을 모를 때**(없는 탭·허가 밖 탭 — 운영일 수 있다) 이름만. `query --binds-json`(Db 도구)도 운영 세션이면 같은 규칙(같은 함수). 개발·시험은 예전대로 값까지(100자).
+- ③ 이름 노출: `set_binds` 와 `binds` 가 있는 `run_tab` 은 탭 글을 읽을 수 없는 허가(`GrantTabAccess.CanReadText` 거짓)면 `get_tab` 과 같은 거부(`GrantTabAccess.Refusal`: 운영+클라우드 `environment`, 끔 `level`, 접속 없는 탭을 막은 허가 `not_allowed`)를 이름 검사보다 먼저 돌려준다(`ExternalBindFill.RefuseUnreadable`). 있는 이름·없는 이름이 같은 답이라 `bind_invalid` 로 바인드 이름을 더듬을 수 없다. `binds` 없는 `run_tab` 은 그대로.
+- 9.2 의 「읽을 수 없는 허가면 보낸 이름만 돌려준다」 는 ③ 으로 없어졌다(그 허가는 거부된다).
