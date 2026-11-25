@@ -374,6 +374,7 @@ public sealed class Oracle11gTests : IAsyncLifetime
             "advisor/predicate_plans.sql [@MAX@]", "advisor/top_values.sql [@COL@ @SAMPLE@ @TABLE@ @TOP@]",
             "app/fk_index_check.sql [@OWNER_FILTER@ @TABLE@]", "app/locked_row_select.sql [@ROWID@ @TABLE@]",
             "dbinfo/flashback_versions.sql [@COLUMNS@ @CONDITIONS@ @RANGE@ @TABLE@]", "meta/object_users.sql [@NAME@ @OWNER@]",
+            "meta/object_users_local.sql [@NAME@ @OWNER@]", // GV_$SESSION 없는 계정의 대체 문장(PHC-4)
             // 테이블 편집기 검사 읽기(계획 Task 3). 실제 질의는 Schema/TableEditIntegrationTests 가 11g·26ai 에서 돌린다.
             "tableedit/check_violations.sql [@CONDITION@ @TABLE@]",
             "tableedit/conversion_check_violations.sql [@COL@ @COLUMNS@ @CONDITION@ @EXPRESSION@ @TABLE@]", // 형식 변환(T17)
