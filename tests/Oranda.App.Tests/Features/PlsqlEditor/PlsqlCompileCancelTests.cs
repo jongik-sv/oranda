@@ -301,7 +301,7 @@ public sealed class PlsqlCompileCancelTests : IDisposable
     });
 
     [Fact]
-    public Task Account_with_only_local_v_access_still_gets_the_in_use_warning() => Ui.Run(async () =>
+    public Task Account_with_only_local_v_session_still_gets_the_in_use_warning() => Ui.Run(async () =>
     {
         var exec = new FakeExec { GvAccessDenied = true, OtherSessions = 2 };
         var (vm, _, _, _) = await OpenAsync(exec);
@@ -309,8 +309,9 @@ public sealed class PlsqlCompileCancelTests : IDisposable
         var outcome = await vm.CompileAsync();
 
         Assert.Equal(PlsqlCompileStatus.InUse, outcome.Status);
-        Assert.Contains(exec.Queries, q => q.Contains("gv$access", StringComparison.Ordinal));
-        Assert.Contains(exec.Queries, q => q.Contains("FROM v$access", StringComparison.Ordinal));
+        Assert.Contains(exec.Queries, q => q.Contains("gv$session", StringComparison.Ordinal));
+        Assert.Contains(exec.Queries, q => q.Contains("FROM v$session", StringComparison.Ordinal));
+        Assert.DoesNotContain(exec.Queries, q => q.Contains("v$access", StringComparison.OrdinalIgnoreCase));
     });
 
     [Fact]

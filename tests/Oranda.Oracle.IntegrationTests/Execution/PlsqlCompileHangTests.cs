@@ -522,6 +522,41 @@ public sealed class PlsqlCompileHangTests : IClassFixture<PlsqlCompileHangFixtur
         await Task.WhenAny(compile, Task.Delay(TimeSpan.FromSeconds(40)));
     }
 
+    [SafetyDbFact]
+    public async Task Object_users_precheck_counts_the_session_running_the_procedure_from_v_session()
+    {
+        if (!_db.Enabled)
+        {
+            return;
+        }
+
+        // 컴파일 전 사전 확인(meta.object_users). v$access 는 공유 풀이 큰 서버에서 한 번에 수 분~15분 걸렸다: v$session 으로 센다.
+        var sql = EmbeddedCatalog.Text("meta.object_users", ("owner", _db.User), ("name", "P_PHC_SLEEP"));
+        Assert.DoesNotContain("v$access", sql, StringComparison.OrdinalIgnoreCase);
+
+        await using var admin = new OracleConnection(PlsqlCompileHangFixture.AdminConnectionString);
+        await admin.OpenAsync();
+
+        async Task<(int Count, long Ms)> CountAsync()
+        {
+            var sw = Stopwatch.StartNew();
+            await using var cmd = admin.CreateCommand();
+            cmd.CommandText = sql;
+            var n = Convert.ToInt32(await cmd.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+            return (n, sw.ElapsedMilliseconds);
+        }
+
+        var (before, _) = await CountAsync();
+        Assert.Equal(0, before);
+
+        await StartSleeperAsync(20);
+        var (running, ms) = await CountAsync();
+        Report("object_users.running", running);
+        Report("object_users.ms", ms);
+        Assert.Equal(1, running);
+        Assert.True(ms < 5000, $"사전 확인이 {ms} ms 걸렸다(상한 5 s)");
+    }
+
     private static async Task DisposeResultAsync(ExecutionResult r)
     {
         if (r.ResultSet is not null)

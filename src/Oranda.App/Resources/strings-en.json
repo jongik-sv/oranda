@@ -1035,7 +1035,7 @@
   "Plsql.compile.usersNoQuery": "no check statement for this server",
   "Plsql.compile.usersNoRow": "no result",
   "Plsql.compile.usersTimeout": "no answer within {0} seconds",
-  "Plsql.compile.usersNoAccess": "no privilege to read V$ACCESS: {0}",
+  "Plsql.compile.usersNoAccess": "no privilege to read other sessions: {0}",
   "Plsql.compile.errorsUnread": "Compiled, but the error list could not be read: {0}",
   "Plsql.compile.errorsEmpty": "Compiled, but the server reported errors (the error list is empty)",
   "Plsql.compile.timeout": "The compile did not finish within {0} seconds and was stopped. While another session is running this object, the compile waits for its lock. Compile again after that run ends. Change the wait limit in Settings > Execution.",

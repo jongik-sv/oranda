@@ -194,8 +194,8 @@ public sealed class EmbeddedCatalogCharacterizationTests
         await vm.CompileAsync();
 
         var query = Assert.Single(exec.Queries);
-        // RAC 의 다른 인스턴스 세션도 센다(PHC-4): gv$access, 내 세션 = 이 인스턴스의 내 SID.
-        Assert.Equal("SELECT COUNT(*) FROM (SELECT DISTINCT inst_id, sid FROM gv$access WHERE owner = 'SCOTT' AND object = 'PK' AND NOT (inst_id = TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AND sid = TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))))", query);
+        // 이 객체를 실행 중인 세션을 v$session 으로 센다(v$access 는 큰 공유 풀에서 수 분 걸림). RAC 의 다른 인스턴스 세션도 센다(PHC-4), 내 세션 = 이 인스턴스의 내 SID.
+        Assert.Equal("SELECT COUNT(*) FROM (SELECT DISTINCT s.inst_id, s.sid FROM gv$session s WHERE (s.plsql_entry_object_id IN (SELECT o.object_id FROM all_objects o WHERE o.owner = 'SCOTT' AND o.object_name = 'PK') OR s.plsql_object_id IN (SELECT o.object_id FROM all_objects o WHERE o.owner = 'SCOTT' AND o.object_name = 'PK')) AND NOT (s.inst_id = TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AND s.sid = TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))))", query);
     }
 
     /// <summary>질의로 분류된 문장의 글을 모으고 나머지는 안쪽 가짜 실행 엔진에 맡긴다.</summary>

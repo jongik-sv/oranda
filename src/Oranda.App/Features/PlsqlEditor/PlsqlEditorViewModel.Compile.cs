@@ -629,7 +629,7 @@ public sealed partial class PlsqlEditorViewModel
     }
 
     /// <summary>
-    /// 이 객체를 쓰고 있는 다른 세션 수(<c>meta.object_users</c>, Oracle 은 RAC 의 모든 인스턴스). 모르면 Count = null 이고 그 이유
+    /// 이 객체를 지금 실행하고 있는 다른 세션 수(<c>meta.object_users</c>, Oracle 은 v$session 기준·RAC 의 모든 인스턴스). 모르면 Count = null 이고 그 이유
     /// (이 서버에 확인 문장 없음·권한 없음·시간 초과·오류). 상한은 <see cref="PrecheckLimit"/>.
     /// </summary>
     private async Task<(int? Count, string? UnknownReason)> CountOtherUsersAsync(IExecutionService exec, ISession session, DbObjectRef target, CancellationToken ct)
@@ -650,14 +650,14 @@ public sealed partial class PlsqlEditorViewModel
             if (error.IsNoAccess()
                 && CatalogRouting.Text(_services, session, "meta.object_users_local", ("owner", Lit(target.Owner)), ("name", Lit(target.Name))) is { } local)
             {
-                // GV_$ACCESS 권한은 없고 V_$ACCESS 만 받은 계정: 접속한 인스턴스만이라도 센다.
+                // GV_$SESSION 권한은 없고 V_$SESSION 만 받은 계정: 접속한 인스턴스만이라도 센다.
                 (row, error) = await QueryFirstRowAsync(exec, session, local, limit.Token).ConfigureAwait(true);
             }
 
             if (error is not null)
             {
                 return (null, error.IsNoAccess()
-                    ? UiText.Format("Plsql.compile.usersNoAccess", "V$ACCESS 를 읽을 권한이 없음: {0}", error.Code)
+                    ? UiText.Format("Plsql.compile.usersNoAccess", "다른 세션 정보를 읽을 권한이 없음: {0}", error.Code)
                     : $"{error.Code} {error.Message}");
             }
 

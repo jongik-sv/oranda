@@ -33,8 +33,8 @@ public class AppSqlCatalogTests
     public void Placeholder_values_are_not_expanded_again()
     {
         var sql = EmbeddedCatalog.Text("meta.object_users", ("owner", "@NAME@"), ("name", "X"));
-        Assert.Contains("owner = '@NAME@'", sql, StringComparison.Ordinal);
-        Assert.Contains("object = 'X'", sql, StringComparison.Ordinal);
+        Assert.Contains("o.owner = '@NAME@'", sql, StringComparison.Ordinal);
+        Assert.Contains("o.object_name = 'X'", sql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -43,12 +43,15 @@ public class AppSqlCatalogTests
         var query = EmbeddedCatalog.Load().Get("meta.object_users", 19);
 
         Assert.Equal(Oranda.Core.Catalog.CatalogRac.Gv, query.Header.Rac);
-        Assert.Contains("gv$access", query.Header.Requires);
-        Assert.Contains("FROM gv$access", query.Sql, StringComparison.Ordinal);
-        Assert.DoesNotContain(" v$access", query.Sql, StringComparison.Ordinal);
+        Assert.Contains("gv$session", query.Header.Requires);
+        Assert.Contains("FROM gv$session s", query.Sql, StringComparison.Ordinal);
+        // v$access 는 공유 풀이 큰 서버에서 한 번에 수 분~15분 걸려 컴파일이 시작되지 않았다: 쓰지 않는다.
+        Assert.DoesNotContain("v$access", query.Sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("s.plsql_entry_object_id IN (", query.Sql, StringComparison.Ordinal);
+        Assert.Contains("s.plsql_object_id IN (", query.Sql, StringComparison.Ordinal);
         // 같은 SID 라도 다른 인스턴스의 세션은 남이다: 내 세션은 인스턴스와 SID 가 둘 다 같을 때만 뺀다.
-        Assert.Contains("NOT (inst_id = TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AND sid = TO_NUMBER(SYS_CONTEXT('USERENV', 'SID')))", query.Sql, StringComparison.Ordinal);
-        Assert.Contains("SELECT DISTINCT inst_id, sid", query.Sql, StringComparison.Ordinal);
+        Assert.Contains("NOT (s.inst_id = TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AND s.sid = TO_NUMBER(SYS_CONTEXT('USERENV', 'SID')))", query.Sql, StringComparison.Ordinal);
+        Assert.Contains("SELECT DISTINCT s.inst_id, s.sid", query.Sql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -60,10 +63,10 @@ public class AppSqlCatalogTests
     }
 
     [Fact]
-    public void Object_users_local_fallback_keeps_the_v_access_statement()
+    public void Object_users_local_fallback_counts_this_instance_from_v_session()
     {
-        // GV_$ACCESS 없이 V_$ACCESS 만 받은 계정이 쓰는 대체 문장: 예전 글 그대로.
-        Assert.Equal("SELECT COUNT(DISTINCT sid) FROM v$access WHERE owner = 'SCOTT' AND object = 'PK' AND sid <> TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))",
+        // GV_$SESSION 없이 V_$SESSION 만 받은 계정이 쓰는 대체 문장: 접속한 인스턴스만.
+        Assert.Equal("SELECT COUNT(DISTINCT s.sid) FROM v$session s WHERE (s.plsql_entry_object_id IN (SELECT o.object_id FROM all_objects o WHERE o.owner = 'SCOTT' AND o.object_name = 'PK') OR s.plsql_object_id IN (SELECT o.object_id FROM all_objects o WHERE o.owner = 'SCOTT' AND o.object_name = 'PK')) AND s.sid <> TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))",
             EmbeddedCatalog.Text("meta.object_users_local", ("owner", "SCOTT"), ("name", "PK")));
         Assert.Equal(Oranda.Core.Catalog.CatalogRac.V, EmbeddedCatalog.Load().Get("meta.object_users_local", 19).Header.Rac);
     }

@@ -1,8 +1,11 @@
--- 이 객체를 쓰고 있는 다른 세션 수. @OWNER@·@NAME@ = 이스케이프한 리터럴 글.
--- RAC 면 다른 인스턴스의 세션도 센다(gv$access, 내 세션 = 이 인스턴스의 내 SID). RAC 가 아니면 gv$ 는 v$ 와 같다.
+-- 이 객체를 지금 실행하고 있는 다른 세션 수. @OWNER@·@NAME@ = 이스케이프한 리터럴 글.
+-- 세션이 맨 처음 부른 PL/SQL(plsql_entry_object_id) 또는 지금 실행 중인 PL/SQL(plsql_object_id)이 이 이름의 객체(명세·본문 모두)인 세션을 센다.
+-- 부른 단위 안에서 다시 부른 중간 단계는 세지 못한다(그때는 컴파일 중 막는 세션 띠가 보인다).
+-- v$access 를 쓰지 않는다: 공유 풀이 큰 서버에서 한 번에 수 분~15분 걸려 컴파일이 시작되지 않았다(v$session 은 1초 안).
+-- RAC 면 다른 인스턴스의 세션도 센다(gv$session, 내 세션 = 이 인스턴스의 내 SID). RAC 가 아니면 gv$ 는 v$ 와 같다.
 -- id: meta.object_users
 -- min-version: 11
--- requires: gv$access
+-- requires: gv$session
 -- license: none
 -- rac: gv
-SELECT COUNT(*) FROM (SELECT DISTINCT inst_id, sid FROM gv$access WHERE owner = '@OWNER@' AND object = '@NAME@' AND NOT (inst_id = TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AND sid = TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))))
+SELECT COUNT(*) FROM (SELECT DISTINCT s.inst_id, s.sid FROM gv$session s WHERE (s.plsql_entry_object_id IN (SELECT o.object_id FROM all_objects o WHERE o.owner = '@OWNER@' AND o.object_name = '@NAME@') OR s.plsql_object_id IN (SELECT o.object_id FROM all_objects o WHERE o.owner = '@OWNER@' AND o.object_name = '@NAME@')) AND NOT (s.inst_id = TO_NUMBER(SYS_CONTEXT('USERENV', 'INSTANCE')) AND s.sid = TO_NUMBER(SYS_CONTEXT('USERENV', 'SID'))))

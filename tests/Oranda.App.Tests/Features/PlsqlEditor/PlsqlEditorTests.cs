@@ -1033,7 +1033,7 @@ public sealed class PlsqlEditorTests : IDisposable
         /// <summary>SID 질의(<c>plsql.session_sid</c>)의 답.</summary>
         public int SessionSid { get; set; } = 101;
 
-        /// <summary>RAC 질의(gv$access)만 권한이 없다(V_$ACCESS 만 받은 계정).</summary>
+        /// <summary>RAC 질의(gv$session)만 권한이 없다(V_$SESSION 만 받은 계정).</summary>
         public bool GvAccessDenied { get; set; }
 
         /// <summary>CREATE 가 드라이버로 가기 전에 이만큼 머문다(실행 확인 창을 읽는 시간, 토큰과 무관).</summary>
@@ -1092,7 +1092,7 @@ public sealed class PlsqlEditorTests : IDisposable
                     return new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = denied };
                 }
 
-                if (GvAccessDenied && stmt.Text.Contains("gv$access", StringComparison.Ordinal))
+                if (GvAccessDenied && stmt.Text.Contains("gv$session", StringComparison.Ordinal))
                 {
                     return new ExecutionResult(stmt, ExecutionStatus.Failed) { Error = new DbError("ORA-00942", "table or view does not exist") { Number = 942, Kind = DbErrorKind.ObjectNotFound } };
                 }
