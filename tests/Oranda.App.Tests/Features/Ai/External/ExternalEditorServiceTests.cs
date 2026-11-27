@@ -1,5 +1,6 @@
 using Oranda.App.Features.Ai.External.Editor;
 using Oranda.App.Features.SqlEditor;
+using Oranda.App.Tests.TestSupport;
 using Oranda.Core.Text;
 
 namespace Oranda.App.Tests.Features.Ai.External;
@@ -460,14 +461,65 @@ public class ExternalEditorServiceTests
         Assert.True(service.NewTab(Access, "SELECT 12 FROM dual").IsOk);
     }
 
+    // ---- 바인드 목록 채우기 ---------------------------------------------------------------------
+
+    /// <summary>
+    /// 에이전트가 넣은 글(<c>tab new --file</c>)의 바인드 이름은 탭을 열 때 「바인드 변수」 목록에 채운다(빈 값 = NULL).
+    /// 예전에는 실행·「바인드 변수 창」 명령 때만 채워져 사용자가 접속을 정해도 목록이 비어 있었다.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void New_tab_fills_the_bind_list_with_the_names_its_text_uses(bool withConnection)
+    {
+        var (service, host, _, _) = Create();
+
+        var opened = service.NewTab(Access, "SELECT * FROM t WHERE a >= :END_DH AND b < :END_DH AND c = :st_dt", "기간", withConnection ? DevProfile : null).Value!;
+
+        var tab = host.Tabs.Single(t => t.TabId == opened.TabId);
+        Assert.Equal(["END_DH", "ST_DT"], tab.Binds.Rows.Select(r => r.Name));
+        Assert.All(tab.Binds.Rows, r => Assert.Equal(string.Empty, r.Text)); // 빈 값 = NULL
+    }
+
+    /// <summary>탭 접속을 정하거나 바꾸면 그 탭 글의 바인드 이름을 목록에 채운다. 있는 줄의 값·자료형은 그대로, 글에 없는 줄도 지우지 않는다.</summary>
+    [Fact]
+    public void Changing_the_tab_connection_fills_missing_bind_names_and_keeps_existing_rows()
+    {
+        var host = new SqlEditorHost(dialogs: new FakeDialogs());
+        var tab = host.NewDocument("SELECT * FROM t WHERE a = :a AND b = :b");
+        var a = tab.Binds.Add("A");
+        a.Text = "7";
+        a.Type = Oranda.Core.Execution.BindDataType.Number;
+        tab.Binds.Add("KEEP").Text = "x";
+
+        tab.ConnectionProfileId = DevProfile;
+
+        Assert.Equal(["A", "KEEP", "B"], tab.Binds.Rows.Select(r => r.Name));
+        Assert.Equal("7", tab.Binds.Find("A")!.Text);
+        Assert.Equal(Oranda.Core.Execution.BindDataType.Number, tab.Binds.Find("A")!.Type);
+        Assert.Equal("x", tab.Binds.Find("KEEP")!.Text);
+    }
+
+    /// <summary>에이전트 제안을 받아들여 글이 바뀌면 새 글의 바인드 이름도 목록에 채운다.</summary>
+    [Fact]
+    public async Task Accepting_a_proposal_fills_the_bind_names_of_the_new_text()
+    {
+        var (service, _, _, tab) = Create();
+        Propose(service, tab, "SELECT * FROM sample_orders WHERE status = :status;");
+
+        await tab.AgentBar!.AcceptCommand.ExecuteAsync(null);
+
+        Assert.Equal(["STATUS"], tab.Binds.Rows.Select(r => r.Name));
+    }
+
     // ---- 바인드·저장 ----------------------------------------------------------------------------
 
     [Fact]
     public void Binds_give_values_only_when_allowed_and_never_for_secret_names()
     {
         var (service, host, _, tab) = Create("SELECT * FROM sample_users WHERE id = :id AND pwd = :user_pwd AND c = :code");
-        tab.Binds.Add("id").Text = "7";
-        tab.Binds.Add("user_pwd").Text = "s3cret";
+        tab.Binds.Row("id").Text = "7";
+        tab.Binds.Row("user_pwd").Text = "s3cret";
 
         var binds = service.GetBinds(Access, tab.TabId).Value!;
 
@@ -478,7 +530,7 @@ public class ExternalEditorServiceTests
         Assert.False(binds[2].HasValue);
 
         var free = host.NewDocument("SELECT :id FROM dual"); // 접속 없는 탭: 글은 읽어도 값은 주지 않는다
-        free.Binds.Add("id").Text = "7";
+        free.Binds.Row("id").Text = "7";
         var noValue = Assert.Single(service.GetBinds(Access, free.TabId).Value!);
         Assert.True(noValue.HasValue);
         Assert.Null(noValue.Value);

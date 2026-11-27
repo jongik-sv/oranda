@@ -714,6 +714,68 @@ public sealed class StatementReferenceExtractor
         }
 
         /// <summary>
+        /// GROUP BY 목록의 그룹 구문 자리(<c>GROUP BY ROLLUP (…)</c>·<c>, CUBE (…)</c>·<c>GROUPING SETS (…)</c>, GROUPING SETS 바로 안의 ROLLUP·CUBE)인가.
+        /// 이 자리의 낱말은 Oracle 이 늘 구문으로 읽어 같은 이름의 사용자 함수가 있어도 불리지 않는다. 식 안(<c>NVL(cube(a), 0)</c>·<c>a + rollup(b)</c>)이나
+        /// ROLLUP·CUBE 의 식 목록 안은 함수 호출일 수 있어 거짓이다.
+        /// </summary>
+        private bool IsGroupingConstruct(int first)
+        {
+            var word = t[first].Upper;
+            if (first == 0)
+            {
+                return false;
+            }
+
+            if (word == "SETS")
+            {
+                return t[first - 1].Upper == "GROUPING" && IsGroupingItemStart(first - 1);
+            }
+
+            return word is "ROLLUP" or "CUBE" && IsGroupingItemStart(first);
+        }
+
+        /// <summary><paramref name="at"/> 가 GROUP BY 목록의 한 항목 첫 낱말인가(<c>BY</c>·목록의 <c>,</c> 뒤, 또는 GROUPING SETS 괄호 바로 안의 <c>(</c>·<c>,</c> 뒤).</summary>
+        private bool IsGroupingItemStart(int at)
+        {
+            var prev = t[at - 1].Upper;
+            if (prev == "BY")
+            {
+                return at >= 2 && t[at - 2].Upper == "GROUP";
+            }
+
+            if (prev is not ("," or "("))
+            {
+                return false;
+            }
+
+            // 감싼 괄호를 찾는다: 없으면(GROUP BY 까지 닿으면) 목록의 맨 바깥, 있으면 그 괄호가 GROUPING SETS 의 것이어야 한다.
+            var d = 0;
+            for (var k = at - 1; k >= 0; k--)
+            {
+                var u = t[k].Upper;
+                if (u == ")")
+                {
+                    d++;
+                }
+                else if (u == "(")
+                {
+                    if (d == 0)
+                    {
+                        return k >= 2 && t[k - 1].Upper == "SETS" && t[k - 2].Upper == "GROUPING";
+                    }
+
+                    d--;
+                }
+                else if (d == 0 && u == "BY" && k >= 1 && t[k - 1].Upper == "GROUP")
+                {
+                    return prev == ",";
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// 식별자 사슬(<c>a</c>, <c>t.a</c>, <c>o.t.a</c>)을 읽어 열 사용으로 적는다. 함수 호출·별칭·예약어는 적지 않는다.
         /// </summary>
         /// <returns>다음 낱말이 식 뒤에 붙는 별칭 자리인지(이 사슬이 식의 끝이었는지).</returns>
@@ -748,7 +810,7 @@ public sealed class StatementReferenceExtractor
 
             if (Is(_i, "(") && !(Is(_i + 1, "+") && Is(_i + 2, ")")))
             {
-                if (!(parts.Count == 1 && !quoted && NotColumn.Contains(parts[0])))
+                if (!(parts.Count == 1 && !quoted && (NotColumn.Contains(parts[0]) || (clause == ColumnClause.Group && IsGroupingConstruct(first)))))
                 {
                     AddCall(parts, first);
                 }

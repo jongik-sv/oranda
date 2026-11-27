@@ -4,6 +4,7 @@ using Oranda.App.Features.Ai.External.Run;
 using Oranda.App.Tests.Features.Ai.External;
 using Oranda.App.Tests.Features.Execution;
 using Oranda.App.Tests.Shell.Headless;
+using Oranda.App.Tests.TestSupport;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Protocol;
@@ -39,7 +40,7 @@ public sealed class AgentCliBindsRoundTripTests
         var tab = exec.Host.NewDocument(Sql);
         tab.ConnectionProfileId = dev.Id;
         tab.Title = "주문 조회";
-        tab.Binds.Add("DEPT").Type = BindDataType.Number; // 사람이 형식만 골라 둔 줄
+        tab.Binds.Row("DEPT").Type = BindDataType.Number; // 사람이 형식만 골라 둔 줄
         var locked = exec.Host.NewDocument("SELECT 1 FROM dual WHERE x = :X");
         locked.ConnectionProfileId = other.Id; // 허가 밖 접속의 탭
 
@@ -72,7 +73,7 @@ public sealed class AgentCliBindsRoundTripTests
         var wrong = await rig.RunAsync(["tab", "run", "--tab", id, "--binds-json", """{"BASE_DT":"20261101","DEPT":"sales"}"""], client: "Claude Code");
         Assert.Equal(AgentCliExit.Usage, wrong.ExitCode);
         Assert.Equal(AgentErrorCodes.BindInvalid, (string?)wrong.Json["code"]);
-        Assert.Null(tab.Binds.Find("BASE_DT"));
+        Assert.Null(tab.Binds.FindSet("BASE_DT")); // 미리 채운 빈 줄만 남는다
         Assert.Empty(exec.Exec.Statements);
 
         // 4) 모르는 이름도 bind_invalid
@@ -84,14 +85,14 @@ public sealed class AgentCliBindsRoundTripTests
         var lockedRun = await rig.RunAsync(["tab", "run", "--tab", locked.TabId.ToString("D"), "--binds-json", """{"X":1}"""]);
         Assert.Equal(AgentCliExit.Denied, lockedRun.ExitCode);
         Assert.Equal(AgentErrorCodes.Locked, (string?)lockedRun.Json["code"]);
-        Assert.Empty(locked.Binds.Rows);
+        Assert.DoesNotContain(locked.Binds.Rows, r => r.Text.Length > 0);
 
         // 6) 낡은 판: 사람이 고친 뒤 옛 판으로 부르면 stale(종료 0), 채우지 않는다
         tab.Document.Insert(0, " ");
         var stale = await rig.RunAsync(["tab", "binds", "set", "--tab", id, "--base-version", version, "--binds-json", """{"BASE_DT":"20261101"}"""]);
         Assert.True(stale.ExitCode == 0, stale.ToString());
         Assert.Equal("stale", (string?)stale.Json["status"]);
-        Assert.Null(tab.Binds.Find("BASE_DT"));
+        Assert.Null(tab.Binds.FindSet("BASE_DT")); // 미리 채운 빈 줄만 남는다
         version = ((long)stale.Json["version"]!).ToString(CultureInfo.InvariantCulture);
 
         // 7) 채우기만(set): get_binds 모양으로 돌아오고, 사람이 보는 바인드 목록에 값이 있다

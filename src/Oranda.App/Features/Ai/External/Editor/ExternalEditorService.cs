@@ -188,6 +188,7 @@ public sealed partial class ExternalEditorService
         var host = Host;
         var previous = host.Active;
         var tab = host.OpenTextTab(text, AiTitle(title), connectionProfileId);
+        tab.EnsureReferencedBinds(); // 접속 없는 탭도 「바인드 변수」 창에 이름이 바로 보이게(빈 값 = NULL)
         if (previous is not null && host.Tabs.Contains(previous))
         {
             host.Active = previous;

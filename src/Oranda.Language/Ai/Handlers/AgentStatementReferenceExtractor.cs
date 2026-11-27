@@ -21,7 +21,7 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
     /// <summary>사용자 함수로 보지 않는 흔한 내장 함수·구문 이름. 여기에 없는 호출은 사용자 함수일 수 있다고 본다(보수적).</summary>
     private static readonly FrozenSet<string> BuiltIns = (
         "ABS ACOS ADD_MONTHS ASCII ASIN ATAN ATAN2 AVG BITAND CAST CEIL CHR COALESCE CONCAT CORR COS COSH COUNT COVAR_POP COVAR_SAMP " +
-        "CUME_DIST CURRENT_DATE CURRENT_TIMESTAMP DECODE DENSE_RANK EXP EXTRACT FIRST_VALUE FLOOR GREATEST GROUPING HEXTORAW INITCAP " +
+        "CUME_DIST CURRENT_DATE CURRENT_TIMESTAMP DECODE DENSE_RANK EXP EXTRACT FIRST_VALUE FLOOR GREATEST GROUPING GROUPING_ID GROUP_ID HEXTORAW INITCAP " +
         "INSTR LAG LAST_DAY LAST_VALUE LEAD LEAST LENGTH LENGTHB LISTAGG LN LNNVL LOCALTIMESTAMP LOG LOWER LPAD LTRIM MAX MEDIAN MIN MOD " +
         "MONTHS_BETWEEN NEXT_DAY NTILE NULLIF NUMTODSINTERVAL NUMTOYMINTERVAL NVL NVL2 PERCENT_RANK PERCENTILE_CONT PERCENTILE_DISC " +
         "POWER RANK RATIO_TO_REPORT RAWTOHEX REGEXP_COUNT REGEXP_INSTR REGEXP_LIKE REGEXP_REPLACE REGEXP_SUBSTR REPLACE ROUND " +
@@ -36,8 +36,9 @@ internal sealed partial class AgentStatementReferenceExtractor(ILanguageService 
         "XMLSERIALIZE XMLPARSE XMLCAST").Split(' ').ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
-    /// 내장 함수가 아니거나(구문 낱말 GROUP BY ROLLUP/CUBE/GROUPING SETS, PIVOT/UNPIVOT) 버전에 따라 없는(11.2 의 JSON_*·ANY_VALUE 등) 이름.
+    /// 내장 함수가 아니거나(구문 낱말 ROLLUP/CUBE/SETS, PIVOT/UNPIVOT) 버전에 따라 없는(11.2 의 JSON_*·ANY_VALUE 등) 이름.
     /// 같은 이름의 사용자 함수가 있으면 그것이 불리므로 사용자 함수 후보로 넘기되, 확인기는 그런 객체가 없으면 문제 삼지 않는다.
+    /// GROUP BY 목록의 그룹 구문 자리(<c>GROUP BY ROLLUP (…)</c>·<c>GROUPING SETS (…)</c>)는 추출기가 호출로 내지 않는다(그 자리는 늘 구문이다).
     /// </summary>
     internal static readonly FrozenSet<string> MaybeUserFunctions = (
         "ROLLUP CUBE SETS PIVOT UNPIVOT ANY_VALUE APPROX_COUNT_DISTINCT STANDARD_HASH JSON_VALUE JSON_QUERY JSON_EXISTS JSON_OBJECT " +

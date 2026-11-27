@@ -293,6 +293,17 @@ public sealed partial class SqlEditorViewModel : ToolPanelViewModelBase, IBindOw
 
     partial void OnIsDirtyChanged(bool value) => OnPropertyChanged(nameof(DisplayTitle));
 
+    /// <summary>접속을 정하거나 바꾸면 글이 쓰는 바인드 이름을 목록에 채운다(<see cref="EnsureReferencedBinds"/>).</summary>
+    partial void OnConnectionProfileIdChanged(Guid? value) => EnsureReferencedBinds();
+
+    /// <summary>
+    /// 글 전체가 쓰는 바인드 이름(<see cref="ReferencedBindNames"/>) 중 「바인드 변수」 목록에 없는 것을 빈 값의 미리 채운 줄로 더한다
+    /// (<see cref="BindVariableStore.Suggest"/>). 있는 줄의 값·자료형은 그대로 두고, 글에 없는 줄도 지우지 않는다(지우기는 실행 때 <see cref="BindVariableStore.Prune"/>).
+    /// 미리 채운 줄은 실행 때 처음 보는 이름처럼 한 번 멈춘다(값을 넣거나 다시 실행하면 빈 값 = NULL).
+    /// 탭 접속을 정할 때와 밖의 에이전트가 글을 넣을 때(새 탭·제안 받아들이기) 부른다. 사람이 칠 때마다 채우지는 않는다.
+    /// </summary>
+    public void EnsureReferencedBinds() => Binds.Suggest(ReferencedBindNames);
+
     partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(DisplayTitle));
 
     partial void OnSelectionLengthChanged(int value) => OnPropertyChanged(nameof(HasSelection));

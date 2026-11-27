@@ -50,13 +50,46 @@ public class AgentExtractorBuiltInTests
     }
 
     /// <summary>
-    /// 구문 낱말(ROLLUP·CUBE·SETS·PIVOT·UNPIVOT)은 같은 이름의 사용자 함수가 있으면 그것이 불리므로 사용자 함수 후보로 넘긴다.
+    /// GROUP BY 의 ROLLUP·CUBE·GROUPING SETS 자리는 Oracle 이 늘 그룹 구문으로 읽는다(같은 이름의 사용자 함수가 있어도 불리지 않는다).
+    /// 그래서 호출 후보로 넘기지 않는다 — query 도구가 사용자 함수로 보고 sql_unsafe 로 거부하던 원인. GROUPING·GROUPING_ID·GROUP_ID 는 내장 함수다.
+    /// </summary>
+    [Theory]
+    [InlineData("WITH A AS (  /**/  SELECT g, SUM(v) s FROM t1 GROUP BY ROLLUP (g)), B AS (SELECT k FROM t2 WHERE z = :v1) SELECT * FROM A JOIN B ON A.g = B.k")]
+    [InlineData("SELECT g, SUM(v) FROM t1 GROUP BY CUBE (g, h)")]
+    [InlineData("SELECT g, SUM(v) FROM t1 GROUP BY GROUPING SETS ((g), (h))")]
+    [InlineData("SELECT g, h, SUM(v) FROM t1 GROUP BY g, ROLLUP (h, k), CUBE (m)")]
+    [InlineData("SELECT g, SUM(v) FROM t1 GROUP BY GROUPING SETS (ROLLUP (g, h), CUBE (k), ())")]
+    [InlineData("SELECT g, GROUPING(g), GROUPING_ID(g, h), GROUP_ID() FROM t1 GROUP BY ROLLUP (g, h) HAVING GROUPING(g) = 0")]
+    public async Task Group_by_rollup_cube_and_grouping_sets_are_not_user_functions(string sql)
+    {
+        var x = new AgentStatementReferenceExtractor(new LanguageService(), new AnyTable());
+
+        var info = await x.AnalyzeAsync(new FakeSession(), sql, null, CancellationToken.None);
+
+        Assert.False(info.CallsUserFunction, string.Join(",", info.UserFunctions ?? []));
+        Assert.False(info.IsUncertain);
+    }
+
+    /// <summary>그룹 구문 자리가 아닌 ROLLUP·CUBE 호출(선택 목록·식 안)은 사용자 함수일 수 있어 계속 후보로 넘긴다.</summary>
+    [Theory]
+    [InlineData("SELECT rollup(a) FROM t1", "ROLLUP")]
+    [InlineData("SELECT a FROM t1 GROUP BY NVL(cube(a), 0)", "CUBE")]
+    [InlineData("SELECT a FROM t1 GROUP BY a + rollup(b)", "ROLLUP")]
+    [InlineData("SELECT a FROM t1 GROUP BY ROLLUP (a, cube(b))", "CUBE")]
+    public async Task Rollup_and_cube_outside_the_grouping_position_are_still_candidates(string sql, string word)
+    {
+        var x = new AgentStatementReferenceExtractor(new LanguageService(), new AnyTable());
+
+        var info = await x.AnalyzeAsync(new FakeSession(), sql, null, CancellationToken.None);
+
+        Assert.Contains(word, info.UserFunctions ?? []);
+    }
+
+    /// <summary>
+    /// 구문 낱말 PIVOT·UNPIVOT 은 같은 이름의 사용자 함수가 있으면 그것이 불리므로 사용자 함수 후보로 넘긴다.
     /// 확인기는 그런 객체가 없으면 문제 삼지 않는다(UserFunctionGraphWalkerTests). 분류는 확실하다.
     /// </summary>
     [Theory]
-    [InlineData("WITH A AS (  /**/  SELECT g, SUM(v) s FROM t1 GROUP BY ROLLUP (g)), B AS (SELECT k FROM t2 WHERE z = :v1) SELECT * FROM A JOIN B ON A.g = B.k", "ROLLUP")]
-    [InlineData("SELECT g, SUM(v) FROM t1 GROUP BY CUBE (g, h)", "CUBE")]
-    [InlineData("SELECT g, SUM(v) FROM t1 GROUP BY GROUPING SETS ((g), (h))", "SETS")]
     [InlineData("SELECT * FROM t1 PIVOT (SUM(a) FOR b IN ('x' AS x, 'y' AS y))", "PIVOT")]
     [InlineData("SELECT * FROM t1 UNPIVOT (v FOR k IN (a, b))", "UNPIVOT")]
     public async Task Clause_words_are_passed_as_candidates_the_checker_may_find_absent(string sql, string word)

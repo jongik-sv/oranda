@@ -204,9 +204,11 @@ public sealed partial class ExternalEditorService
         switch (outcome.Status)
         {
             case EditProposalStatus.Accepted:
+                tab.EnsureReferencedBinds(); // 넣은 글의 바인드 이름을 목록에(있는 줄은 그대로)
                 Finish(proposal, ExternalProposalStatus.Accepted, outcome.Version, outcome.FinalText);
                 return null;
             case EditProposalStatus.Modified:
+                tab.EnsureReferencedBinds();
                 Finish(proposal, ExternalProposalStatus.Modified, outcome.Version, outcome.FinalText);
                 return null;
             case EditProposalStatus.Stale:

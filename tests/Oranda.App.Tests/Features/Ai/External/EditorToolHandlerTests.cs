@@ -3,6 +3,7 @@ using Oranda.App.Features.Ai.External.Editor;
 using Oranda.App.Features.Navigation;
 using Oranda.App.Features.SqlEditor;
 using Oranda.App.Tests.Features.ColumnReorder;
+using Oranda.App.Tests.TestSupport;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Ai.Protocol;
@@ -38,7 +39,7 @@ public class EditorToolHandlerTests
             Service = new ExternalEditorService { HostSource = () => Host };
             DevTab = Host.NewDocument("SELECT * FROM sample_orders WHERE id = :id");
             DevTab.ConnectionProfileId = Dev;
-            DevTab.Binds.Add("id").Text = "7";
+            DevTab.Binds.Row("id").Text = "7";
             ProdTab = Host.NewDocument("SELECT 1 FROM dual");
             ProdTab.ConnectionProfileId = Prod;
             OtherTab = Host.NewDocument("SELECT 2 FROM dual");

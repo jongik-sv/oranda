@@ -117,12 +117,14 @@ internal sealed class MyBatisBindSync : IDisposable
                 }
 
                 var row = _store.Find(rowName);
-                if (row is null)
+                if (row is null || row.IsSuggested)
                 {
-                    row = _store.Add(rowName);
+                    // 없는 줄은 만들고, 글의 이름으로 미리 채운 빈 줄은 동기화가 만든 줄처럼 맡는다(추정 형식·지금 값).
+                    row ??= _store.Add(rowName);
                     Created.AddOrUpdate(row, Created);
                     row.Type = _eval.TypeOf(p.Name);
                     row.Text = CellOf(p.Name);
+                    row.IsSuggested = false;
                 }
                 else if (!_managed.ContainsKey(row))
                 {

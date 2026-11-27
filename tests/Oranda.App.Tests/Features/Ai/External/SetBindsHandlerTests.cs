@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Oranda.App.Features.Ai.External.Run;
 using Oranda.App.Tests.Features.SqlEditor;
+using Oranda.App.Tests.TestSupport;
 using Oranda.Core.Ai.Access;
 using Oranda.Core.Ai.Gate;
 using Oranda.Core.Connection;
@@ -69,8 +70,8 @@ public sealed class SetBindsHandlerTests
     public Task Values_follow_the_type_of_the_existing_row() => Ui.Run(async () =>
     {
         using var env = Env("SELECT n FROM sample_orders WHERE order_dt >= :FROM_DT AND dept = :DEPT AND code = :CODE");
-        env.Tab.Binds.Add("FROM_DT").Type = BindDataType.Date;
-        env.Tab.Binds.Add("DEPT").Type = BindDataType.Number;
+        env.Tab.Binds.Row("FROM_DT").Type = BindDataType.Date;
+        env.Tab.Binds.Row("DEPT").Type = BindDataType.Number;
 
         var output = await SetAsync(env, new JsonObject { ["FROM_DT"] = "20261101", ["DEPT"] = "1,000", ["CODE"] = 7 });
 
@@ -86,8 +87,8 @@ public sealed class SetBindsHandlerTests
     public Task A_value_that_does_not_fit_the_row_type_is_bind_invalid_and_changes_nothing() => Ui.Run(async () =>
     {
         using var env = Env("SELECT n FROM sample_orders WHERE order_dt >= :FROM_DT AND dept = :DEPT");
-        env.Tab.Binds.Add("FROM_DT").Type = BindDataType.Date;
-        var dept = env.Tab.Binds.Add("DEPT");
+        env.Tab.Binds.Row("FROM_DT").Type = BindDataType.Date;
+        var dept = env.Tab.Binds.Row("DEPT");
         dept.Type = BindDataType.Number;
         dept.Text = "10";
 
@@ -113,7 +114,7 @@ public sealed class SetBindsHandlerTests
 
         var unknown = await SetAsync(env, new JsonObject { ["FROM_DATE"] = "20261101" });
         var twice = await SetAsync(env, new JsonObject { ["FROM_DT"] = "20261101", ["from_dt"] = "20261102" });
-        env.Tab.Binds.Add("FROM_DT").Direction = BindDirection.Out;
+        env.Tab.Binds.Row("FROM_DT").Direction = BindDirection.Out;
         var outBind = await SetAsync(env, new JsonObject { ["FROM_DT"] = "20261101" });
         var shape = await SetAsync(env, new JsonObject { ["FROM_DT"] = new JsonArray(1) });
 
@@ -132,7 +133,7 @@ public sealed class SetBindsHandlerTests
         using var locked = Env();
         locked.Grant = new AgentGrantView("g1", [], DateTimeOffset.UnixEpoch, null, ["Claude Code"]);
         Assert.Equal("locked", (await SetAsync(locked, new JsonObject { ["FROM_DT"] = "20261101" })).ErrorCode);
-        Assert.Empty(locked.Tab.Binds.Rows);
+        Assert.DoesNotContain(locked.Tab.Binds.Rows, r => r.Text.Length > 0);
 
         using var stale = Env();
         var old = stale.Tab.Version;
@@ -141,7 +142,7 @@ public sealed class SetBindsHandlerTests
         Assert.False(staleOutput.IsError, staleOutput.ErrorMessage);
         Assert.Equal("stale", staleOutput.Result!["status"]!.GetValue<string>());
         Assert.Equal(stale.Tab.Version, staleOutput.Result["version"]!.GetValue<long>());
-        Assert.Empty(stale.Tab.Binds.Rows);
+        Assert.DoesNotContain(stale.Tab.Binds.Rows, r => r.Text.Length > 0);
 
         using var current = Env();
         var ok = await SetAsync(current, new JsonObject { ["FROM_DT"] = "20261101" }, a => a["base_version"] = current.Tab.Version);
@@ -149,7 +150,7 @@ public sealed class SetBindsHandlerTests
 
         using var low = Env(level: AiAccessLevel.Plan);
         Assert.Equal("level", (await SetAsync(low, new JsonObject { ["FROM_DT"] = "20261101" })).ErrorCode);
-        Assert.Empty(low.Tab.Binds.Rows);
+        Assert.DoesNotContain(low.Tab.Binds.Rows, r => r.Text.Length > 0);
 
         using var bare = Env();
         bare.Tab.ConnectionProfileId = null;
@@ -172,7 +173,7 @@ public sealed class SetBindsHandlerTests
         Assert.Equal("environment", probe.ErrorCode);
         Assert.Equal("environment", known.ErrorCode); // 있는 이름과 없는 이름이 같은 답
         Assert.Equal(probe.ErrorMessage, known.ErrorMessage);
-        Assert.Empty(prod.Tab.Binds.Rows);
+        Assert.DoesNotContain(prod.Tab.Binds.Rows, r => r.Text.Length > 0);
 
         var run = await prod.RunAsync(a => a["binds"] = new JsonObject { ["FROM_DT"] = "20261101" });
         Assert.Equal("environment", run.ErrorCode); // run_tab --binds-json 도 같다
@@ -184,9 +185,9 @@ public sealed class SetBindsHandlerTests
     {
         // 결정 ①: {"value": …, "type": "varchar2|number|date|timestamp"}.
         using var env = Env("SELECT n FROM sample_orders WHERE d1 = :NEW_DT AND d2 = :BLANK_DT AND d3 = :DATE_DT AND n1 = :NUM");
-        env.Tab.Binds.Add("BLANK_DT"); // 실행이 만든 줄: 빈 값·VARCHAR2 = 아직 형식을 고르지 않음
-        env.Tab.Binds.Add("DATE_DT").Type = BindDataType.Date;
-        var num = env.Tab.Binds.Add("NUM");
+        env.Tab.Binds.Row("BLANK_DT"); // 실행이 만든 줄: 빈 값·VARCHAR2 = 아직 형식을 고르지 않음
+        env.Tab.Binds.Row("DATE_DT").Type = BindDataType.Date;
+        var num = env.Tab.Binds.Row("NUM");
         num.Type = BindDataType.Number;
         num.Text = "10";
 
@@ -233,7 +234,7 @@ public sealed class SetBindsHandlerTests
     public Task Run_tab_with_binds_fills_the_list_then_runs_with_those_values_as_agent() => Ui.Run(async () =>
     {
         using var env = Env();
-        env.Tab.Binds.Add("FROM_DT").Type = BindDataType.Date;
+        env.Tab.Binds.Row("FROM_DT").Type = BindDataType.Date;
 
         var output = await env.RunAsync(a => a["binds"] = new JsonObject { ["FROM_DT"] = "20261101" });
 
@@ -264,7 +265,7 @@ public sealed class SetBindsHandlerTests
     public Task Run_tab_sets_nothing_when_binds_are_wrong_stale_or_the_guard_refuses() => Ui.Run(async () =>
     {
         using var wrong = Env();
-        wrong.Tab.Binds.Add("FROM_DT").Type = BindDataType.Number;
+        wrong.Tab.Binds.Row("FROM_DT").Type = BindDataType.Number;
         var wrongOutput = await wrong.RunAsync(a => a["binds"] = new JsonObject { ["FROM_DT"] = "20261101x" });
         Assert.Equal("bind_invalid", wrongOutput.ErrorCode);
         Assert.Empty(wrong.Rig.Exec.Statements);
@@ -280,17 +281,17 @@ public sealed class SetBindsHandlerTests
             a["binds"] = new JsonObject { ["FROM_DT"] = "20261101" };
         });
         Assert.Equal("stale", staleOutput.Result!["status"]!.GetValue<string>());
-        Assert.Empty(stale.Tab.Binds.Rows);
+        Assert.DoesNotContain(stale.Tab.Binds.Rows, r => r.Text.Length > 0);
 
         using var refused = Env();
         refused.Guard.Refusal = ExternalSelectRefusal.Unsafe;
         var refusedOutput = await refused.RunAsync(a => a["binds"] = new JsonObject { ["FROM_DT"] = "20261101" });
         Assert.Equal("sql_unsafe", refusedOutput.ErrorCode);
-        Assert.Empty(refused.Tab.Binds.Rows); // 실행하지 않을 문장에는 값도 넣지 않는다
+        Assert.DoesNotContain(refused.Tab.Binds.Rows, r => r.Text.Length > 0); // 실행하지 않을 문장에는 값도 넣지 않는다
 
         using var locked = Env();
         locked.Grant = new AgentGrantView("g1", [], DateTimeOffset.UnixEpoch, null, ["Claude Code"]);
         Assert.Equal("locked", (await locked.RunAsync(a => a["binds"] = new JsonObject { ["FROM_DT"] = "20261101" })).ErrorCode);
-        Assert.Empty(locked.Tab.Binds.Rows);
+        Assert.DoesNotContain(locked.Tab.Binds.Rows, r => r.Text.Length > 0);
     });
 }

@@ -103,7 +103,9 @@ internal static class ExternalBindFill
                 return BindFillPlan.Refuse(AgentErrorCodes.BindInvalid, ExternalRunText.BindTypeConflict(name, TypeName(row.Type), TypeName(wanted)));
             }
 
-            var type = given ?? row?.Type ?? NewRowType(raw);
+            // 미리 채운 줄(탭을 열 때·접속을 정할 때 글의 이름으로 채운 줄)은 없는 줄처럼 값으로 형식을 정한다.
+            var fresh = row is null or { IsSuggested: true };
+            var type = given ?? (fresh ? NewRowType(raw) : row!.Type);
             var direction = row?.Direction ?? BindDirection.In;
             if (direction == BindDirection.Out || type == BindDataType.RefCursor)
             {
@@ -117,7 +119,7 @@ internal static class ExternalBindFill
                 return BindFillPlan.Refuse(AgentErrorCodes.BindInvalid, ExternalRunText.BindWrongType(name, TypeName(type), type is BindDataType.Date or BindDataType.Timestamp));
             }
 
-            items.Add(new BindFillItem(name, normalized, row is null || (given is not null && row.Type != type) ? type : null));
+            items.Add(new BindFillItem(name, normalized, row is null || (row.Type != type && (given is not null || fresh)) ? type : null));
         }
 
         return new BindFillPlan(items, null);
@@ -150,6 +152,7 @@ internal static class ExternalBindFill
             }
 
             row.Text = item.Text;
+            row.IsSuggested = false; // 에이전트가 값을 정했다(빈 값 = NULL 이라도)
         }
 
         var names = plan.Items.Select(i => i.Name).ToList();

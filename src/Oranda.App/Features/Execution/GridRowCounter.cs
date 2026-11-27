@@ -102,7 +102,7 @@ public sealed class GridRowCounter(ExecutionState state, BindVariableStore binds
             {
                 kept[name] = cell;
             }
-            else if (store.Find(name) is null && fallback is not null && fallback.TryGetValue(name, out var ran))
+            else if (store.FindSet(name) is null && fallback is not null && fallback.TryGetValue(name, out var ran))
             {
                 kept[name] = ran;
             }

@@ -28,7 +28,7 @@ internal static class ExportBinds
             {
                 binds[name] = used;
             }
-            else if (list?.Find(name) is { } row)
+            else if (list?.FindSet(name) is { } row) // 미리 채운 줄(아직 값을 정하지 않음)은 없는 것과 같다
             {
                 if (row.ToBindValue(out var error) is { } value)
                 {

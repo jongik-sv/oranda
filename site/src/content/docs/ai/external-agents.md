@@ -116,7 +116,8 @@ orandactl result export --tab <탭 id> --format xlsx --out <절대 경로>
 ```
 
 - `tab run`은 탭의 SELECT(또는 WITH로 시작하는 조회) 한 문장을 사용자가 F5를 누른 것처럼 그 탭의 결과 그리드에서 실행합니다. 실행하는 글은 에이전트가 보낸 글이 아니라 탭의 글입니다.
-- INSERT·UPDATE·DELETE·DDL·PL/SQL은 실행하지 않습니다. `FOR UPDATE`, DB 링크, 시퀀스, Oracle 제공 패키지를 쓰는 문장도 실행하지 않습니다. 사용자 함수는 읽기만 하는 것으로 확인된 것만 실행합니다.
+- INSERT·UPDATE·DELETE·DDL·PL/SQL은 실행하지 않습니다. `FOR UPDATE`, DB 링크, 시퀀스, Oracle 제공 패키지를 쓰는 문장도 실행하지 않습니다. 사용자 함수는 읽기만 하는 것으로 확인된 것만 실행합니다. `GROUP BY ROLLUP`, `CUBE`, `GROUPING SETS`와 `GROUPING`, `GROUPING_ID`는 내장 구문이라 사용자 함수로 보지 않습니다.
+- `tab new`로 연 탭의 바인드 변수 이름은 「바인드 변수」 창에 빈 값(NULL)으로 바로 들어옵니다.
 - 문장에 바인드 변수(`:BASE_DT` 같은)가 있으면 에이전트가 값을 함께 넘깁니다. 사용자가 「바인드 변수」 창에 값을 직접 넣을 필요가 없습니다. 날짜·기간·코드처럼 요청에서 값이 분명하지 않을 때만 에이전트가 그 값이 맞는지 묻습니다.
 
   ```text

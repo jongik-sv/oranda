@@ -90,16 +90,28 @@ public sealed partial class BindVariableRow : ObservableObject
 
     public bool HasValueError => ValueError is not null;
 
-    partial void OnTextChanged(string value) => ValueError = BindValueFormatter.Validate(Type, Direction, value);
+    /// <summary>
+    /// 글의 이름으로 미리 채운 줄(<see cref="BindVariableStore.Suggest"/>): 아직 누구도 값을 정하지 않았다. 실행은 이 줄을 처음 보는 이름처럼 다뤄
+    /// 한 번 멈추고 값을 넣게 한다(값 없이 INSERT·UPDATE 가 NULL 로 실행되지 않게). 값·자료형·방향을 고치면 풀린다.
+    /// </summary>
+    public bool IsSuggested { get; internal set; }
+
+    partial void OnTextChanged(string value)
+    {
+        IsSuggested = false;
+        ValueError = BindValueFormatter.Validate(Type, Direction, value);
+    }
 
     partial void OnTypeChoiceChanged(BindTypeChoice value)
     {
+        IsSuggested = false;
         OnPropertyChanged(nameof(Type));
         ValueError = BindValueFormatter.Validate(value.Type, Direction, Text);
     }
 
     partial void OnDirectionChoiceChanged(BindDirectionChoice value)
     {
+        IsSuggested = false;
         OnPropertyChanged(nameof(Direction));
         ValueError = BindValueFormatter.Validate(Type, value.Direction, Text);
     }
@@ -173,8 +185,36 @@ public sealed class BindVariableStore
     public BindVariableRow? Find(string name) =>
         Rows.FirstOrDefault(r => string.Equals(r.Name.Trim(), name, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>목록에 없는 이름을 더하고, 새로 더한 이름을 돌려준다.</summary>
+    /// <summary>
+    /// 목록에 없는 이름을 더하고, 새로 더한 이름을 돌려준다. 미리 채운 줄(<see cref="BindVariableRow.IsSuggested"/>)도 처음 보는 이름처럼
+    /// 돌려주고 확정한다(실행은 그 이름에서 한 번 멈춘다. 다음 실행부터는 빈 값 = NULL).
+    /// </summary>
     public IReadOnlyList<string> Ensure(IEnumerable<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        var added = new List<string>();
+        foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (Find(name) is not { } row)
+            {
+                Add(name);
+                added.Add(name);
+            }
+            else if (row.IsSuggested)
+            {
+                row.IsSuggested = false;
+                added.Add(name);
+            }
+        }
+
+        return added;
+    }
+
+    /// <summary>
+    /// 목록에 없는 이름을 빈 값의 미리 채운 줄(<see cref="BindVariableRow.IsSuggested"/>)로 더한다. 있는 줄은 값·자료형 모두 그대로 둔다.
+    /// 탭을 열거나 접속을 정할 때 글의 이름을 「바인드 변수」 창에 보이려고 쓴다. 더한 이름을 돌려준다.
+    /// </summary>
+    public IReadOnlyList<string> Suggest(IEnumerable<string> names)
     {
         ArgumentNullException.ThrowIfNull(names);
         var added = new List<string>();
@@ -182,13 +222,16 @@ public sealed class BindVariableStore
         {
             if (Find(name) is null)
             {
-                Add(name);
+                Add(name).IsSuggested = true;
                 added.Add(name);
             }
         }
 
         return added;
     }
+
+    /// <summary>값을 정한 줄(<see cref="Find"/> 중 미리 채운 줄이 아닌 것). 실행 값을 만드는 쪽이 쓴다.</summary>
+    public BindVariableRow? FindSet(string name) => Find(name) is { IsSuggested: false } row ? row : null;
 
     public BindVariableRow Add(string name)
     {
@@ -316,7 +359,7 @@ public sealed class BindVariableStore
         error = null;
         foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (Find(name) is not { } row)
+            if (FindSet(name) is not { } row)
             {
                 error = $"바인드 변수 :{name} 이(가) 목록에 없습니다.";
                 return false;

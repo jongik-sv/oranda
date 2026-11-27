@@ -1226,6 +1226,28 @@ public sealed class ExecutionTests
         Assert.Null(rig.Exec.LastBinds["b"].Value);
     });
 
+    /// <summary>
+    /// 접속을 정할 때 글의 이름으로 미리 채운 줄(빈 값)은 처음 보는 이름처럼 첫 실행에서 한 번 멈춘다. 값을 넣은 줄은 바로 실행되고,
+    /// 빈 줄 그대로 다시 실행하면 NULL 로 실행된다(예전 처음 보는 이름과 같은 흐름).
+    /// </summary>
+    [Fact]
+    public Task Names_filled_when_the_connection_is_set_still_stop_the_first_run() => Ui.Run(async () =>
+    {
+        using var rig = new Rig();
+        var tab = rig.Host.NewDocument("select :a, :b from dual");
+        tab.ConnectionProfileId = Guid.NewGuid();
+        Assert.Equal(["A", "B"], tab.Binds.Rows.Select(r => r.Name));
+        tab.Binds.Find("a")!.Text = "x";
+
+        Assert.False(await rig.Controller.RunAsync(RunMode.Statement));
+        Assert.Empty(rig.Exec.Statements);
+        Assert.Contains(rig.Log.Messages, m => m.Kind == MessageKind.Warning && m.Text.Contains(":b", StringComparison.Ordinal) && !m.Text.Contains(":a", StringComparison.Ordinal));
+
+        Assert.True(await rig.Controller.RunAsync(RunMode.Statement));
+        Assert.Equal("x", rig.Exec.LastBinds!["a"].Value);
+        Assert.Null(rig.Exec.LastBinds["b"].Value);
+    });
+
     [Fact]
     public Task Invalid_bind_value_stops_with_a_message_and_shows_the_list() => Ui.Run(async () =>
     {
